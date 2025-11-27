@@ -448,7 +448,21 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   }
 
   // OEM schedule from DataOne API
-  const localOe = await getMaintenanceSchedule(vin);
+  const oemSchedule = await getMaintenanceSchedule(vin);
+  
+  // Map DataOne API response to client format
+  const localOe = {
+    ok: oemSchedule.ok,
+    count: oemSchedule.count,
+    items: oemSchedule.items.map((item: any) => ({
+      category: item.maintenance_category || "General",
+      name: item.maintenance_name || "Unknown",
+      notes: item.maintenance_notes,
+      miles: item.miles,
+      months: item.months,
+    })),
+    error: oemSchedule.error,
+  };
 
   return (
     <VehicleDetailClient
