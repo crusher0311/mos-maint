@@ -181,7 +181,12 @@ export default function VehicleDetailClient({
                       onClick={() => toggleCategory(category)}
                       className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
                     >
-                      <span className="font-medium text-gray-900">{category}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{category}</span>
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                          OEM
+                        </span>
+                      </div>
                       <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${
                         expandedCategories.has(category) ? 'rotate-180' : ''
                       }`} />
@@ -190,7 +195,16 @@ export default function VehicleDetailClient({
                       <div className="px-6 pb-4 space-y-2">
                         {items.map((item: any, idx: number) => (
                           <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
-                            <span className="text-sm text-gray-700">{item.name}</span>
+                            <div className="flex-1">
+                              <span className="text-sm text-gray-700">{item.name}</span>
+                              {(item.miles || item.months) && (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {item.miles && <span>Every {item.miles.toLocaleString()} mi</span>}
+                                  {item.miles && item.months && <span> · </span>}
+                                  {item.months && <span>Every {item.months} mo</span>}
+                                </div>
+                              )}
+                            </div>
                             <div className="flex items-center gap-3">
                               <input 
                                 type="checkbox" 
@@ -224,7 +238,12 @@ export default function VehicleDetailClient({
                     <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-medium text-gray-900">{cat.name || "Category"}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-gray-900">{cat.name || "Category"}</h3>
+                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
+                              DVI
+                            </span>
+                          </div>
                           {cat.video && (
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                               Has Video
