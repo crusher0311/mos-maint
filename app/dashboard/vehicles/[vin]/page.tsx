@@ -410,14 +410,19 @@ export default async function VehicleDetailPage({ params }: PageProps) {
 
   const latestRoNumber = ros[0]?.roNumber ?? null;
 
-  // Autoflow
+  // Autoflow - fetch DVI for the latest RO
   const cfg = await resolveAutoflowConfig(shopId);
-  const dvi =
-    latestRoNumber && cfg.configured
-      ? await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000)
-      : latestRoNumber
-      ? { ok: false, error: "AutoFlow not connected." as const }
-      : { ok: false, error: "No RO found for this vehicle." as const };
+  console.log(`[DVI Debug] shopId=${shopId}, latestRoNumber=${latestRoNumber}, cfg.configured=${cfg.configured}`);
+  
+  let dvi: any;
+  if (!latestRoNumber) {
+    dvi = { ok: false, error: "No RO found for this vehicle." };
+  } else if (!cfg.configured) {
+    dvi = { ok: false, error: "AutoFlow not connected." };
+  } else {
+    dvi = await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000);
+    console.log(`[DVI Debug] fetchDviWithCache result: ok=${dvi.ok}, error=${dvi.error}, categories=${dvi.categories?.length || 0}`);
+  }
 
   // CARFAX
   const carfaxCfg = await resolveCarfaxConfig(shopId);
@@ -478,32 +483,42 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // OEM schedule from DataOne API (with timeout to prevent slow page loads)
+  // OEM schedule - try DataOne API first, fall back to local MongoDB data
   let localOe: any = { ok: false, count: 0, items: [], error: "Loading..." };
+  
+  // Try DataOne API with increased timeout (8 seconds)
   try {
     const oemPromise = getMaintenanceSchedule(vin);
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Timeout")), 3000)
+      setTimeout(() => reject(new Error("Timeout")), 8000)
     );
     
     const oemSchedule = await Promise.race([oemPromise, timeoutPromise]) as any;
     
-    // Map DataOne API response to client format
-    localOe = {
-      ok: oemSchedule.ok,
-      count: oemSchedule.count,
-      items: (oemSchedule.items || []).map((item: any) => ({
-        category: item.maintenance_category || "General",
-        name: item.maintenance_name || "Unknown",
-        notes: item.maintenance_notes,
-        miles: item.miles,
-        months: item.months,
-      })),
-      error: oemSchedule.error,
-    };
+    if (oemSchedule.ok && oemSchedule.count > 0) {
+      // Map DataOne API response to client format
+      localOe = {
+        ok: oemSchedule.ok,
+        count: oemSchedule.count,
+        items: (oemSchedule.items || []).map((item: any) => ({
+          category: item.maintenance_category || "General",
+          name: item.maintenance_name || "Unknown",
+          notes: item.maintenance_notes,
+          miles: item.miles,
+          months: item.months,
+        })),
+        error: oemSchedule.error,
+      };
+    } else {
+      // Fall back to local MongoDB data
+      const mongoOe = await getLocalOeFromMongo(vin);
+      localOe = mongoOe;
+    }
   } catch (e) {
-    console.log("DataOne API timeout or error, continuing without OEM data");
-    localOe = { ok: false, count: 0, items: [], error: "OEM data unavailable" };
+    console.log("DataOne API timeout or error, trying local MongoDB fallback");
+    // Fall back to local MongoDB data
+    const mongoOe = await getLocalOeFromMongo(vin);
+    localOe = mongoOe.ok ? mongoOe : { ok: false, count: 0, items: [], error: "OEM data unavailable" };
   }
 
   return (
