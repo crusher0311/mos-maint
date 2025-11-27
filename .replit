@@ -30,6 +30,10 @@ outputType = "webview"
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 42821
+externalPort = 3000
+
 [nix]
 channel = "stable-25_05"
 packages = ["mongodb"]
@@ -44,3 +48,4 @@ build = ["npm", "run", "build"]
 [userenv.shared]
 DATAONE_API_URL = "http://3.144.191.161:3000"
 CARFAX_POST_URL = "https://servicesocket.carfax.com/data/1"
+CARFAX_PDI = "207625C61DD1C38E"
