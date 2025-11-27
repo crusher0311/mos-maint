@@ -9,7 +9,7 @@ import {
   resolveCarfaxConfig, 
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
-import { getMaintenanceSchedule } from "@/lib/integrations/dataone-api";
+import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,102 +101,6 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
   // Return the highest valid mileage
   const candidates = [mRO, mAF, mVeh].filter((x): x is number => x != null);
   return candidates.length > 0 ? Math.max(...candidates) : null;
-}
-
-/* ---------------- Local OEM schedule (Mongo) ---------------- */
-async function getLocalOeFromMongo(vin: string) {
-  const db = await getDb();
-  const SQUISH = toSquish(vin);
-
-  const pipeline = [
-    { $match: { squish: SQUISH } },
-    { $project: { _id: 0, squish: 1, vin_maintenance_id: 1, maintenance_id: 1 } },
-    { $limit: 200 },
-    {
-      $lookup: {
-        from: "dataone_lkp_maintenance_interval",
-        localField: "maintenance_id",
-        foreignField: "maintenance_id",
-        as: "intervals",
-      },
-    },
-    { $unwind: "$intervals" },
-    {
-      $lookup: {
-        from: "dataone_lkp_maintenance",
-        localField: "maintenance_id", 
-        foreignField: "maintenance_id",
-        as: "maintenance",
-      },
-    },
-    { $unwind: "$maintenance" },
-    {
-      $group: {
-        _id: { maintenance_id: "$maintenance_id" },
-        maintenance_name: { $first: "$maintenance.maintenance_name" },
-        maintenance_category: { $first: "$maintenance.maintenance_category" },
-        maintenance_notes: { $first: "$maintenance.maintenance_notes" },
-        intervals: {
-          $push: {
-            interval_id: "$intervals.interval_id",
-            type: "$intervals.interval_type",
-            value: "$intervals.value",
-            units: "$intervals.units",
-            initial_value: "$intervals.initial_value",
-          },
-        },
-      },
-    },
-    {
-      $addFields: {
-        miles: {
-          $let: {
-            vars: { m: { $filter: { input: "$intervals", as: "i", cond: { $eq: ["$$i.units", "Miles"] } } } },
-            in: {
-              $cond: [
-                { $gt: [{ $size: "$$m" }, 0] },
-                { $arrayElemAt: [{ $map: { input: "$$m", as: "x", in: "$$x.value" } }, 0] },
-                null,
-              ],
-            },
-          },
-        },
-        months: {
-          $let: {
-            vars: { m: { $filter: { input: "$intervals", as: "i", cond: { $eq: ["$$i.units", "Months"] } } } },
-            in: {
-              $cond: [
-                { $gt: [{ $size: "$$m" }, 0] },
-                { $arrayElemAt: [{ $map: { input: "$$m", as: "x", in: "$$x.value" } }, 0] },
-                null,
-              ],
-            },
-          },
-        },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        maintenance_id: "$_id.maintenance_id",
-        name: "$maintenance_name",
-        category: "$maintenance_category",
-        notes: "$maintenance_notes",
-        miles: 1,
-        months: 1,
-        intervals: 1,
-      },
-    },
-    { $sort: { category: 1, name: 1 } },
-    { $limit: 200 },
-  ];
-
-  const items = await db
-    .collection("dataone_lkp_vin_maintenance")
-    .aggregate(pipeline, { allowDiskUse: true, hint: "squish_1" })
-    .toArray();
-
-  return { ok: true as const, vin, squish: SQUISH, count: items.length, items };
 }
 
 /* ---------------- Normalization / rules engine ---------------- */
@@ -526,8 +430,9 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   // Get current miles from all sources (same as detail page)
   const currentMiles = await getLatestMilesForVin(db, vin);
 
-  // OEM schedule - use local MongoDB directly (DataOne API is slow/unreliable)
-  const localOe = await getLocalOeFromMongo(vin);
+  // OEM schedule - use cached API (first call fetches from DataOne API, subsequent calls use cache)
+  const oemData = await getMaintenanceScheduleCached(vin);
+  console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
 
   // Build normalized inputs
 
@@ -547,11 +452,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
         )
       : [];
 
-  const oemItems: OEMItem[] = (localOe.items as any[]).map((x) => ({
+  const oemItems: OEMItem[] = (oemData.items as any[]).map((x) => ({
     maintenance_id: x.maintenance_id,
-    name: x.name,
-    category: x.category,
-    notes: x.notes,
+    name: x.maintenance_name || x.name,
+    category: x.maintenance_category || x.category,
+    notes: x.maintenance_notes || x.notes,
     miles: x.miles ?? null,
     months: x.months ?? null,
   }));
