@@ -6,7 +6,7 @@ This is a Next.js-based automotive maintenance management system that helps shop
 ## Tech Stack
 - **Frontend**: Next.js 14.2.5 with React 18
 - **Backend**: Next.js API Routes (serverless functions)
-- **Database**: MongoDB (local instance on port 27017)
+- **Database**: MongoDB Atlas (cloud-hosted)
 - **Styling**: Tailwind CSS
 - **Language**: TypeScript/JavaScript
 
@@ -28,7 +28,8 @@ This is a Next.js-based automotive maintenance management system that helps shop
 
 ### Optional Integrations
 - `OPENAI_API_KEY` - For AI-powered maintenance recommendations
-- AutoFlow, CARFAX, and DataOne integrations (see .env.example for details)
+- `DATAONE_API_URL` - External DataOne API for VIN decoding and OEM maintenance schedules (default: http://3.144.191.161:3000)
+- AutoFlow and CARFAX integrations (see .env.example for details)
 
 ## Development
 
@@ -37,9 +38,6 @@ The dev server runs on port 5000 (configured for Replit):
 ```bash
 npm run dev
 ```
-
-### MongoDB
-MongoDB runs locally on port 27017. The `.replitrc` script automatically starts MongoDB on boot.
 
 ### Key Features
 1. **Vehicle Analysis** - AI-powered maintenance recommendations based on vehicle history
@@ -77,6 +75,16 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: DataOne API Integration
+  - Created lib/integrations/dataone-api.ts with VIN decoding and maintenance schedule functions
+  - Enhanced vehicle detail page to use DataOne API for OEM maintenance schedules
+  - Added fallback VIN decoding when vehicle data is incomplete
+  - Set DATAONE_API_URL environment variable
+
+- **2024-11-27**: MongoDB Atlas Migration
+  - Connected app to live MongoDB Atlas database (cloud-hosted)
+  - Fixed vehicle detail page to pull data from events collection when not found in vehicles collection
+
 - **2024-11-27**: UI Modernization
   - Redesigned login page with centered card layout and blue icon branding
   - Added dark sidebar navigation component with expandable settings menu
@@ -87,7 +95,5 @@ The application uses a modern SaaS-style design with:
   
 - **2024-11-27**: Initial Replit setup
   - Configured Next.js to run on port 5000 with host 0.0.0.0
-  - Set up MongoDB local instance
   - Added experimental.allowedOrigins configuration for Replit proxy
   - Configured deployment settings for autoscale
-  - Added .replitrc for automatic MongoDB startup
