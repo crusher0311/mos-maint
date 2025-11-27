@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
+import { getMaintenanceSchedule, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -338,6 +339,19 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     );
   }
 
+  // Enhance vehicle data with DataOne VIN decoding if missing key info
+  if (!vehicle.year || !vehicle.make || !vehicle.model) {
+    const enhanced = await getEnhancedVehicleData(vin);
+    if (enhanced.ok && enhanced.vehicle) {
+      vehicle = {
+        ...vehicle,
+        year: vehicle.year || enhanced.vehicle.year,
+        make: vehicle.make || enhanced.vehicle.make,
+        model: vehicle.model || enhanced.vehicle.model,
+      };
+    }
+  }
+
   // ✅ Resolve current miles (used in header and to patch the latest RO row if it's 0)
   const resolvedMiles = await getLatestMilesForVin(db, vin);
 
@@ -433,8 +447,8 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // Local OEM schedule (from Mongo)
-  const localOe = await getLocalOeFromMongo(vin);
+  // OEM schedule from DataOne API
+  const localOe = await getMaintenanceSchedule(vin);
 
   return (
     <VehicleDetailClient
