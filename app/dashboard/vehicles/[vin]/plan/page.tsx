@@ -9,6 +9,7 @@ import {
   resolveCarfaxConfig, 
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
+import { getMaintenanceSchedule } from "@/lib/integrations/dataone-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,63 @@ function parseCarfaxDate(d?: string | null): Date | null {
 function toSquish(vin: string) {
   const v = String(vin).toUpperCase().trim();
   return v.slice(0, 8) + v.slice(9, 11);
+}
+
+/* ---------------- Get latest miles from multiple sources ---------------- */
+async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | null> {
+  const vin = String(vinRaw || "").toUpperCase();
+  const toPos = (v: unknown) => {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  // Latest RO mileage
+  const ro = await db.collection("repair_orders").findOne(
+    { vin },
+    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1 } }
+  );
+  const mRO = toPos(ro?.mileage);
+
+  // Latest event with mileage
+  const af = await db.collection("events").aggregate([
+    {
+      $match: {
+        $expr: {
+          $eq: [
+            { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+            vin,
+          ],
+        },
+      },
+    },
+    { $sort: { createdAt: -1 } },
+    { $limit: 10 },
+    {
+      $project: {
+        mileage: {
+          $ifNull: [
+            "$payload.ticket.mileage",
+            {
+              $ifNull: [
+                "$payload.mileage",
+                { $ifNull: ["$payload.vehicle.mileage", { $ifNull: ["$payload.vehicle.miles", "$payload.vehicle.odometer"] }] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ]).toArray();
+  const mAF = af.map((x: any) => toPos(x?.mileage)).find((x: any) => x != null) ?? null;
+
+  // Vehicle-level odometer/lastMileage
+  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1 } });
+  const mVeh = toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
+
+  // Return the highest valid mileage
+  const candidates = [mRO, mAF, mVeh].filter((x): x is number => x != null);
+  return candidates.length > 0 ? Math.max(...candidates) : null;
 }
 
 /* ---------------- Local OEM schedule (Mongo) ---------------- */
@@ -404,11 +462,44 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     mpdBlended = fromToday != null && fromTwo != null ? (fromToday + fromTwo) / 2 : fromTwo ?? fromToday ?? null;
   }
 
-  // OEM schedule (local Mongo)
-  const localOe = await getLocalOeFromMongo(vin);
+  // Get current miles from all sources (same as detail page)
+  const currentMiles = await getLatestMilesForVin(db, vin);
+
+  // OEM schedule - try DataOne API first, fall back to local MongoDB
+  let localOe: any = { ok: false, count: 0, items: [], error: "Loading..." };
+  try {
+    const oemPromise = getMaintenanceSchedule(vin);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Timeout")), 8000)
+    );
+    
+    const oemSchedule = await Promise.race([oemPromise, timeoutPromise]) as any;
+    
+    if (oemSchedule.ok && oemSchedule.count > 0) {
+      // Map DataOne API response to local format
+      localOe = {
+        ok: oemSchedule.ok,
+        count: oemSchedule.count,
+        items: (oemSchedule.items || []).map((item: any) => ({
+          maintenance_id: item.maintenance_id || 0,
+          category: item.maintenance_category || "General",
+          name: item.maintenance_name || "Unknown",
+          notes: item.maintenance_notes,
+          miles: item.miles,
+          months: item.months,
+        })),
+        error: oemSchedule.error,
+      };
+    } else {
+      // Fall back to local MongoDB data
+      localOe = await getLocalOeFromMongo(vin);
+    }
+  } catch (e) {
+    console.log("[Plan] DataOne API timeout or error, trying local MongoDB fallback");
+    localOe = await getLocalOeFromMongo(vin);
+  }
 
   // Build normalized inputs
-  const currentMiles = typeof vehicle?.lastMileage === "number" ? vehicle.lastMileage : null;
 
   const carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }> =
     (carfax as any).ok && Array.isArray((carfax as any).serviceRecords)
