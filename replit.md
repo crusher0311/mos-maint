@@ -81,7 +81,8 @@ The application uses a modern SaaS-style design with:
   - Auto-prefetches top 10 vehicles when Plan Launcher opens
   - Prioritizes work-in-progress vehicles (those without completed DVI)
   - Rate limited: max 2 concurrent requests with 300ms pacing
-  - 10-minute TTL on prefetched data to avoid stale cache
+  - 3-day TTL on cached data matches typical vehicle board duration
+  - DVI cache auto-refreshes via webhook when technician completes inspection
   - Green lightning bolt icon shows vehicles with cached data
   - Queue continuously drains until empty while respecting concurrency limits
 
