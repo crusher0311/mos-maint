@@ -80,6 +80,8 @@ The application uses a modern SaaS-style design with:
   - Enhanced CARFAX settings page with status indicators (API URL, Product Data ID, Location ID)
   - Each shop can self-configure their CARFAX Location ID via Settings > CARFAX
   - Form disabled if environment not configured (CARFAX_POST_URL, CARFAX_PDI)
+  - **Admin Panel**: Added /admin/integrations/carfax for centralized management of all shop Location IDs
+  - Admins can view/edit CARFAX Location IDs for any shop from one page
 
 - **2024-11-27**: DataOne API Integration
   - Created lib/integrations/dataone-api.ts with VIN decoding and maintenance schedule functions
