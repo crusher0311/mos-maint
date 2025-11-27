@@ -76,6 +76,15 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: Background Prefetch Queue System
+  - Created lib/plan-prefetch.ts with intelligent queue-based prefetching
+  - Auto-prefetches top 10 vehicles when Plan Launcher opens
+  - Prioritizes work-in-progress vehicles (those without completed DVI)
+  - Rate limited: max 2 concurrent requests with 300ms pacing
+  - 10-minute TTL on prefetched data to avoid stale cache
+  - Green lightning bolt icon shows vehicles with cached data
+  - Queue continuously drains until empty while respecting concurrency limits
+
 - **2024-11-27**: Plan Launcher - Quick Access for Advisors
   - Added blue "Open Plan" button at top of sidebar for 1-click access
   - VIN search panel with autocomplete - searches customer, vehicle, or VIN
