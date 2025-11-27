@@ -76,6 +76,18 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: Configurable "Due Soon" Thresholds
+  - Added Settings > Maintenance Thresholds page for shop-specific configuration
+  - Shops can set custom miles (default: 1,000) and days (default: 30) thresholds
+  - Quick presets: Conservative (1,000mi/30d), Standard (3,000mi/90d), Extended (5,000mi/180d)
+  - Plan page reads shop's thresholds and uses them for triage categorization
+  - Settings stored in `shops.maintenance.dueSoonMiles` and `shops.maintenance.dueSoonDays`
+
+- **2024-11-27**: Plan Page Loading Indicator
+  - Added loading.tsx for Plan and Vehicle Detail pages
+  - Shows animated loading state during API calls with progress indicators
+  - "Searching history, schedules, inspections..." message with color-coded status dots
+
 - **2024-11-27**: DataOne API Caching Implementation
   - Added MongoDB Atlas caching layer for DataOne API responses in lib/integrations/dataone-api.ts
   - New `getMaintenanceScheduleCached()` function: checks Atlas cache first, falls back to API on miss
