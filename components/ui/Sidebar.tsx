@@ -78,7 +78,9 @@ export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarPr
         { name: "Maintenance Intervals", href: "/dashboard/settings/intervals" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Extension Abilities", href: "/dashboard/settings/extensions" },
-        { name: "Customer Workflows", href: "/dashboard/settings/workflows" }
+        { name: "Customer Workflows", href: "/dashboard/settings/workflows" },
+        { name: "CARFAX", href: "/dashboard/settings/carfax" },
+        { name: "AutoFlow", href: "/dashboard/settings/autoflow" }
       ]
     }
   ];
