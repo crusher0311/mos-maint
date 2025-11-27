@@ -440,15 +440,31 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     ros = eventRos.filter((r: any) => r.roNumber);
   }
   
-  const latestRoNumber = ros[0]?.roNumber ?? null;
-  console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, ROs found: ${ros.length}`);
+  console.log(`[Plan Debug] ROs found: ${ros.length}, first few:`, ros.slice(0, 5).map((r: any) => r.roNumber));
 
   const autoCfg = await resolveAutoflowConfig(shopId);
-  // Use shorter cache (1 minute) to get fresh DVI data
-  const dvi =
-    latestRoNumber && autoCfg.configured
-      ? await fetchDviWithCache(shopId, String(latestRoNumber), 1 * 60 * 1000)
-      : { ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." };
+  
+  // Try to find the RO with DVI data - check recent ROs until we find one with categories
+  let dvi: any = { ok: false, error: "No DVI found" };
+  let usedRoNumber: string | null = null;
+  
+  if (autoCfg.configured && ros.length > 0) {
+    // Check up to 5 most recent ROs to find one with DVI data
+    for (const ro of ros.slice(0, 5)) {
+      const roNum = String(ro.roNumber);
+      const testDvi = await fetchDviWithCache(shopId, roNum, 1 * 60 * 1000);
+      console.log(`[Plan Debug] Checking RO ${roNum}: ok=${(testDvi as any).ok}, categories=${(testDvi as any).categories?.length || 0}`);
+      
+      if ((testDvi as any).ok && Array.isArray((testDvi as any).categories) && (testDvi as any).categories.length > 0) {
+        // Found a DVI with actual data
+        dvi = testDvi;
+        usedRoNumber = roNum;
+        break;
+      }
+    }
+  }
+  
+  console.log(`[Plan Debug] Using RO ${usedRoNumber} for DVI data`);
 
   // CARFAX
   const carfaxCfg = await resolveCarfaxConfig(shopId);
