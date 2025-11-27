@@ -370,11 +370,17 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     .find({ 
       $and: [
         { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-        { $or: [{ vehicleId: vehicle._id }, { vin }] }
+        { $or: [
+          { vehicleId: vehicle._id }, 
+          { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+          { vin: vin.toUpperCase() },
+          { vin: vin.toLowerCase() }
+        ]}
       ]
     })
-    .project({ roNumber: 1, status: 1, mileage: 1, updatedAt: 1, createdAt: 1 })
+    .project({ roNumber: 1, status: 1, mileage: 1, updatedAt: 1, createdAt: 1, vin: 1 })
     .sort({ updatedAt: -1, createdAt: -1 })
+    .limit(50)
     .toArray();
 
   const latestRoNumber = ros[0]?.roNumber ?? null;
@@ -447,22 +453,33 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // OEM schedule from DataOne API
-  const oemSchedule = await getMaintenanceSchedule(vin);
-  
-  // Map DataOne API response to client format
-  const localOe = {
-    ok: oemSchedule.ok,
-    count: oemSchedule.count,
-    items: oemSchedule.items.map((item: any) => ({
-      category: item.maintenance_category || "General",
-      name: item.maintenance_name || "Unknown",
-      notes: item.maintenance_notes,
-      miles: item.miles,
-      months: item.months,
-    })),
-    error: oemSchedule.error,
-  };
+  // OEM schedule from DataOne API (with timeout to prevent slow page loads)
+  let localOe: any = { ok: false, count: 0, items: [], error: "Loading..." };
+  try {
+    const oemPromise = getMaintenanceSchedule(vin);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Timeout")), 3000)
+    );
+    
+    const oemSchedule = await Promise.race([oemPromise, timeoutPromise]) as any;
+    
+    // Map DataOne API response to client format
+    localOe = {
+      ok: oemSchedule.ok,
+      count: oemSchedule.count,
+      items: (oemSchedule.items || []).map((item: any) => ({
+        category: item.maintenance_category || "General",
+        name: item.maintenance_name || "Unknown",
+        notes: item.maintenance_notes,
+        miles: item.miles,
+        months: item.months,
+      })),
+      error: oemSchedule.error,
+    };
+  } catch (e) {
+    console.log("DataOne API timeout or error, continuing without OEM data");
+    localOe = { ok: false, count: 0, items: [], error: "OEM data unavailable" };
+  }
 
   return (
     <VehicleDetailClient
