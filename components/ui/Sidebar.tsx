@@ -48,7 +48,7 @@ export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarPr
   };
 
   const isActive = (href: string) => {
-    return pathname === href || pathname.startsWith(href + "/");
+    return pathname === href || pathname?.startsWith(href + "/");
   };
 
   const navItems: NavItem[] = [

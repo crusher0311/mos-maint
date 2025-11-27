@@ -165,18 +165,25 @@ type TriagedItem = {
 
 type Buckets = { overdue: TriagedItem[]; dueSoon: TriagedItem[]; upcoming: TriagedItem[] };
 
+const DEFAULT_SOON_MILES = 1000;
+const DEFAULT_SOON_DAYS = 30;
+
 function triage({
   oemItems,
   carfaxRecords,
   currentMiles,
   today = new Date(),
   dviFindings,
+  soonMiles = DEFAULT_SOON_MILES,
+  soonDays = DEFAULT_SOON_DAYS,
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
   currentMiles: number | null;
   today?: Date;
   dviFindings: Array<{ name?: string; status?: string | number }>;
+  soonMiles?: number;
+  soonDays?: number;
 }): Buckets {
   // last-done map from CARFAX
   const lastMap = new Map<string, LastDone>();
@@ -274,10 +281,6 @@ function triage({
     });
   }
 
-  // thresholds
-  const SOON_MILES = 1000;
-  const SOON_DAYS = 30;
-
   const overdue: TriagedItem[] = [];
   const dueSoon: TriagedItem[] = [];
   const upcoming: TriagedItem[] = [];
@@ -285,8 +288,8 @@ function triage({
   for (const t of triaged) {
     const mOver = t.milesToGo != null && t.milesToGo <= 0;
     const dOver = t.daysToGo != null && t.daysToGo <= 0;
-    const mSoon = t.milesToGo != null && t.milesToGo > 0 && t.milesToGo <= SOON_MILES;
-    const dSoon = t.daysToGo != null && t.daysToGo > 0 && t.daysToGo <= SOON_DAYS;
+    const mSoon = t.milesToGo != null && t.milesToGo > 0 && t.milesToGo <= soonMiles;
+    const dSoon = t.daysToGo != null && t.daysToGo > 0 && t.daysToGo <= soonDays;
 
     // DVI bump forces severity
     if (t.bump === "red") {
@@ -334,6 +337,13 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
+
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { maintenance: 1 } }
+  );
+  const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
+  const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
@@ -482,8 +492,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     carfaxRecords,
     currentMiles,
     dviFindings,
+    soonMiles,
+    soonDays,
   });
 
+  console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
   console.log(`[Plan Debug] Buckets: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length}`);
 
   const counts = {
