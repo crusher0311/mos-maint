@@ -306,8 +306,16 @@ export default function VehicleDetailClient({
           {activeTab === "history" && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="font-semibold text-gray-900">Repair Orders</h3>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-900">Repair Orders</h3>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                      Shop
+                    </span>
+                  </div>
+                  {ros.length > 0 && (
+                    <span className="text-xs text-gray-500">{ros.length} records</span>
+                  )}
                 </div>
                 {ros.length > 0 ? (
                   <div className="divide-y divide-gray-200">
@@ -344,7 +352,12 @@ export default function VehicleDetailClient({
               {carfax?.ok && Array.isArray(carfax.serviceRecords) && carfax.serviceRecords.length > 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">CARFAX Service History</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-gray-900">Service History</h3>
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                        CARFAX
+                      </span>
+                    </div>
                     <span className="text-xs text-gray-500">
                       {carfax.serviceRecords.length} records
                     </span>
