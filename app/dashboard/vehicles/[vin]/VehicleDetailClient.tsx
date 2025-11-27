@@ -282,13 +282,15 @@ export default function VehicleDetailClient({
                   <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <FileText className="w-6 h-6 text-gray-400" />
                   </div>
-                  <h3 className="font-medium text-gray-900 mb-2">No DVI Results</h3>
+                  <h3 className="font-medium text-gray-900 mb-2">No DVI Inspection</h3>
                   <p className="text-sm text-gray-500 mb-4">
                     {!cfg.configured 
                       ? "AutoFlow is not connected. Connect it to view DVI results."
                       : !latestRoNumber
                       ? "No repair orders found for this vehicle."
-                      : "Unable to load DVI results."}
+                      : dvi?.ok
+                      ? "No inspection was performed for the latest repair order."
+                      : dvi?.error || "Unable to load DVI results."}
                   </p>
                   {!cfg.configured && (
                     <Link
@@ -362,8 +364,8 @@ export default function VehicleDetailClient({
                       {carfax.serviceRecords.length} records
                     </span>
                   </div>
-                  <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
-                    {carfax.serviceRecords.slice(0, 20).map((record: any, i: number) => (
+                  <div className="divide-y divide-gray-200">
+                    {carfax.serviceRecords.map((record: any, i: number) => (
                       <div key={i} className="px-6 py-3 flex items-start justify-between">
                         <div className="flex-1">
                           <div className="text-sm text-gray-900">{record.description || "Service"}</div>
