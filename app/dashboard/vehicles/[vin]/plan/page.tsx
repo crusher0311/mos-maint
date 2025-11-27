@@ -290,23 +290,27 @@ function triage({
     }
   }
 
-  // DVI bumps
-  const dviMap = new Map<string, "red" | "yellow">();
+  // DVI bumps - track which items we've seen
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string }>();
   for (const it of dviFindings || []) {
     const key = it?.name ? toKeyFromName(String(it.name)) : null;
     if (!key) continue;
     const s = String(it.status ?? "");
-    if (s === "0") dviMap.set(key, "red");
-    else if (s === "1" && dviMap.get(key) !== "red") dviMap.set(key, "yellow");
+    if (s === "0") dviMap.set(key, { status: "red", name: String(it.name) });
+    else if (s === "1" && dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: String(it.name) });
   }
 
   const triaged: TriagedItem[] = [];
+  const usedDviKeys = new Set<string>();
 
   for (const o of oemItems) {
     const key = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
     const last = lastMap.get(key) ?? null;
     const intervalMiles = o.miles ?? null;
     const intervalMonths = o.months ?? null;
+
+    // Track that we've used this DVI key
+    if (dviMap.has(key)) usedDviKeys.add(key);
 
     let dueAtMiles: number | null = null;
     let dueAtDate: Date | null = null;
@@ -332,6 +336,7 @@ function triage({
     const daysToGo =
       dueAtDate != null ? Math.ceil((dueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
+    const dviInfo = dviMap.get(key);
     triaged.push({
       key,
       title: o.name,
@@ -343,7 +348,25 @@ function triage({
       dueAtDate,
       milesToGo,
       daysToGo,
-      bump: dviMap.get(key) ?? null,
+      bump: dviInfo?.status ?? null,
+    });
+  }
+
+  // Add standalone DVI findings (red/yellow items not matched to OEM)
+  for (const [key, dviInfo] of dviMap) {
+    if (usedDviKeys.has(key)) continue; // already matched to OEM item
+    triaged.push({
+      key: `dvi_${key}`,
+      title: dviInfo.name,
+      category: "DVI Finding",
+      intervalMiles: null,
+      intervalMonths: null,
+      last: undefined,
+      dueAtMiles: null,
+      dueAtDate: null,
+      milesToGo: null,
+      daysToGo: null,
+      bump: dviInfo.status,
     });
   }
 
@@ -503,39 +526,8 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   // Get current miles from all sources (same as detail page)
   const currentMiles = await getLatestMilesForVin(db, vin);
 
-  // OEM schedule - try DataOne API first, fall back to local MongoDB
-  let localOe: any = { ok: false, count: 0, items: [], error: "Loading..." };
-  try {
-    const oemPromise = getMaintenanceSchedule(vin);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Timeout")), 8000)
-    );
-    
-    const oemSchedule = await Promise.race([oemPromise, timeoutPromise]) as any;
-    
-    if (oemSchedule.ok && oemSchedule.count > 0) {
-      // Map DataOne API response to local format
-      localOe = {
-        ok: oemSchedule.ok,
-        count: oemSchedule.count,
-        items: (oemSchedule.items || []).map((item: any) => ({
-          maintenance_id: item.maintenance_id || 0,
-          category: item.maintenance_category || "General",
-          name: item.maintenance_name || "Unknown",
-          notes: item.maintenance_notes,
-          miles: item.miles,
-          months: item.months,
-        })),
-        error: oemSchedule.error,
-      };
-    } else {
-      // Fall back to local MongoDB data
-      localOe = await getLocalOeFromMongo(vin);
-    }
-  } catch (e) {
-    console.log("[Plan] DataOne API timeout or error, trying local MongoDB fallback");
-    localOe = await getLocalOeFromMongo(vin);
-  }
+  // OEM schedule - use local MongoDB directly (DataOne API is slow/unreliable)
+  const localOe = await getLocalOeFromMongo(vin);
 
   // Build normalized inputs
 
