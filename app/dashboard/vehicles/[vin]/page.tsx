@@ -267,7 +267,10 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const vin = String(vinParam || "").toUpperCase();
 
   const vehicle = await db.collection("vehicles").findOne(
-    { shopId, vin },
+    { 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+      vin 
+    },
     {
       projection: {
         year: 1,
@@ -314,7 +317,12 @@ export default async function VehicleDetailPage({ params }: PageProps) {
 
   const ros = await db
     .collection("repair_orders")
-    .find({ shopId, $or: [{ vehicleId: vehicle._id }, { vin }] })
+    .find({ 
+      $and: [
+        { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+        { $or: [{ vehicleId: vehicle._id }, { vin }] }
+      ]
+    })
     .project({ roNumber: 1, status: 1, mileage: 1, updatedAt: 1, createdAt: 1 })
     .sort({ updatedAt: -1, createdAt: -1 })
     .toArray();
