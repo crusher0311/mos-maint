@@ -31,7 +31,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 42285
+localPort = 45867
 externalPort = 3000
 
 [nix]
@@ -42,3 +42,8 @@ packages = ["mongodb"]
 deploymentTarget = "autoscale"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
+
+[userenv]
+
+[userenv.shared]
+DATAONE_API_URL = "http://3.144.191.161:3000"
