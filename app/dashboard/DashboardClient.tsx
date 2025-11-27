@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, TrendingUp, Search, Filter, MoreVertical, ExternalLink, ChevronRight, HelpCircle } from "lucide-react";
 
 type DashboardData = {
@@ -172,9 +173,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   return (
                     <tr key={vin} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
-                        <a href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors">
+                        <Link href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors">
                           {r.displayName || "Unknown"}
-                        </a>
+                        </Link>
                       </td>
                       <td className="px-6 py-4 text-gray-600">
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
@@ -219,13 +220,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           : "—"}
                       </td>
                       <td className="px-6 py-4">
-                        <a
+                        <Link
                           href={VEHICLE_HREF(vin)}
                           className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
                         >
                           View
                           <ChevronRight className="w-4 h-4" />
-                        </a>
+                        </Link>
                       </td>
                     </tr>
                   );
