@@ -76,6 +76,14 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: Plan Launcher - Quick Access for Advisors
+  - Added blue "Open Plan" button at top of sidebar for 1-click access
+  - VIN search panel with autocomplete - searches customer, vehicle, or VIN
+  - Recent Plans list shows last 5 vehicles (stored in browser localStorage)
+  - Hover prefetch warms all caches (DataOne, AutoFlow DVI, CARFAX) before navigation
+  - Client-side vehicle cache (5-min TTL) makes search instant after first load
+  - Created /api/plan-prefetch endpoint that pre-loads all Plan page data sources
+
 - **2024-11-27**: Configurable "Due Soon" Thresholds
   - Added Settings > Maintenance Thresholds page for shop-specific configuration
   - Shops can set custom miles (default: 1,000) and days (default: 30) thresholds
