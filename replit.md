@@ -60,6 +60,7 @@ The app is configured for Replit autoscale deployment:
 - `shops` - Shop configurations
 - `sessions` - User sessions
 - `ai_analysis_cache` - Cached AI analysis results
+- `dataone_cache` - Cached DataOne API responses (OEM maintenance schedules, 7-day TTL)
 
 ## UI Design System
 The application uses a modern SaaS-style design with:
@@ -75,6 +76,15 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: DataOne API Caching Implementation
+  - Added MongoDB Atlas caching layer for DataOne API responses in lib/integrations/dataone-api.ts
+  - New `getMaintenanceScheduleCached()` function: checks Atlas cache first, falls back to API on miss
+  - Cache stored in `dataone_cache` collection with 7-day TTL (OEM data rarely changes)
+  - Both Plan and Attributes pages now use cached service - first load fetches from API, subsequent loads use cache
+  - Removed legacy `getLocalOeFromMongo()` functions that queried non-existent local MongoDB collections
+  - Significantly improved page load times - cache hits return instantly vs 8+ second API calls
+  - Cache includes: squish (VIN pattern), items array, fetchedAt/expiresAt timestamps, source indicator
+
 - **2024-11-27**: AutoFlow DVI Integration Fix
   - Fixed DVI inspection items not displaying on vehicle detail page
   - Updated DVI selection logic to prioritize sheets with category data

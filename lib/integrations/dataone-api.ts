@@ -1,7 +1,11 @@
 // lib/integrations/dataone-api.ts
 // Integration with external DataOne API for VIN decoding and maintenance schedules
+// Includes MongoDB Atlas caching to avoid repeated API calls
+
+import { getDb } from "@/lib/mongo";
 
 const DATAONE_API_BASE = process.env.DATAONE_API_URL || "http://3.144.191.161:3000";
+const CACHE_TTL_HOURS = 24 * 7; // Cache for 7 days (OEM data rarely changes)
 
 interface VinReferenceData {
   vin_id: number;
@@ -145,8 +149,8 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
       intervalDefs = intervalDefsData.data;
     }
 
-    const maintenanceDefMap = new Map(maintenanceDefs.data.map((d: any) => [d.maintenance_id, d]));
-    const intervalDefMap = new Map(intervalDefs.map((d: any) => [d.maintenance_interval_id, d]));
+    const maintenanceDefMap = new Map<number, any>(maintenanceDefs.data.map((d: any) => [d.maintenance_id, d]));
+    const intervalDefMap = new Map<number, any>(intervalDefs.map((d: any) => [d.maintenance_interval_id, d]));
     
     const vinMaintenanceMap = new Map<number, any>();
     for (const vm of vinMaintenanceData.data) {
@@ -256,4 +260,141 @@ export async function getEnhancedVehicleData(vin: string): Promise<{
       doors: d.doors,
     },
   };
+}
+
+// ============================================================================
+// CACHING LAYER - MongoDB Atlas cache for DataOne API responses
+// ============================================================================
+
+interface CachedMaintenanceData {
+  squish: string;
+  vin: string;
+  data: {
+    ok: boolean;
+    count: number;
+    items: MaintenanceItem[];
+    error?: string;
+  };
+  fetchedAt: Date;
+  expiresAt: Date;
+  source: "api" | "cache";
+}
+
+export async function getMaintenanceScheduleCached(vin: string): Promise<{
+  ok: boolean;
+  vin: string;
+  squish: string;
+  count: number;
+  items: MaintenanceItem[];
+  error?: string;
+  source: "api" | "cache";
+  cachedAt?: Date;
+}> {
+  const squish = toSquish(vin);
+  const now = new Date();
+  
+  try {
+    const db = await getDb();
+    const cacheCollection = db.collection<CachedMaintenanceData>("dataone_cache");
+    
+    // Check for cached data
+    const cached = await cacheCollection.findOne({ squish });
+    
+    if (cached && cached.expiresAt > now) {
+      // Cache hit - return cached data
+      console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
+      return {
+        ok: cached.data.ok,
+        vin,
+        squish,
+        count: cached.data.count,
+        items: cached.data.items,
+        error: cached.data.error,
+        source: "cache",
+        cachedAt: cached.fetchedAt,
+      };
+    }
+    
+    // Cache miss or expired - fetch from API
+    console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from API...`);
+    const apiResult = await getMaintenanceSchedule(vin);
+    
+    // Store in cache (even if API failed, to avoid hammering)
+    const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
+    
+    await cacheCollection.updateOne(
+      { squish },
+      {
+        $set: {
+          squish,
+          vin,
+          data: {
+            ok: apiResult.ok,
+            count: apiResult.count,
+            items: apiResult.items,
+            error: apiResult.error,
+          },
+          fetchedAt: now,
+          expiresAt,
+          source: "api",
+        },
+      },
+      { upsert: true }
+    );
+    
+    console.log(`[DataOne Cache] Stored ${apiResult.count} items for squish ${squish}, expires ${expiresAt.toISOString()}`);
+    
+    return {
+      ok: apiResult.ok,
+      vin,
+      squish,
+      count: apiResult.count,
+      items: apiResult.items,
+      error: apiResult.error,
+      source: "api",
+    };
+  } catch (error) {
+    console.error("[DataOne Cache] Error:", error);
+    // Fallback to direct API call if cache layer fails
+    const apiResult = await getMaintenanceSchedule(vin);
+    return {
+      ...apiResult,
+      source: "api",
+    };
+  }
+}
+
+export async function invalidateMaintenanceCache(vin: string): Promise<boolean> {
+  try {
+    const squish = toSquish(vin);
+    const db = await getDb();
+    const result = await db.collection("dataone_cache").deleteOne({ squish });
+    console.log(`[DataOne Cache] Invalidated cache for squish ${squish}`);
+    return result.deletedCount > 0;
+  } catch (error) {
+    console.error("[DataOne Cache] Failed to invalidate:", error);
+    return false;
+  }
+}
+
+export async function getCacheStats(): Promise<{
+  totalCached: number;
+  expiredCount: number;
+  recentHits: number;
+}> {
+  try {
+    const db = await getDb();
+    const cacheCollection = db.collection("dataone_cache");
+    const now = new Date();
+    
+    const [totalCached, expiredCount] = await Promise.all([
+      cacheCollection.countDocuments(),
+      cacheCollection.countDocuments({ expiresAt: { $lte: now } }),
+    ]);
+    
+    return { totalCached, expiredCount, recentHits: 0 };
+  } catch (error) {
+    console.error("[DataOne Cache] Stats error:", error);
+    return { totalCached: 0, expiredCount: 0, recentHits: 0 };
+  }
 }

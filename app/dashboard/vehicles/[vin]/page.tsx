@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
-import { getMaintenanceSchedule, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
+import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -117,143 +117,6 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
   const mVeh = toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
 
   return mRO ?? mAF ?? mVeh ?? null;
-}
-
-/* ---------- local OEM schedule directly from Mongo (unchanged) ---------- */
-async function getLocalOeFromMongo(vin: string) {
-  const db = await getDb();
-  const SQUISH = toSquish(vin);
-
-  const pipeline = [
-    { $match: { squish: SQUISH } },
-    { $project: { _id: 0, squish: 1, vin_maintenance_id: 1, maintenance_id: 1 } },
-
-    // join intervals via vin_maintenance_id
-    {
-      $lookup: {
-        from: "dataone_lkp_vin_maintenance_interval",
-        let: { vmi: "$vin_maintenance_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$vin_maintenance_id", "$$vmi"] } } },
-          { $project: { _id: 0, maintenance_interval_id: 1 } },
-        ],
-        as: "intervals",
-      },
-    },
-    { $unwind: "$intervals" },
-
-    // interval definitions
-    {
-      $lookup: {
-        from: "dataone_def_maintenance_interval",
-        localField: "intervals.maintenance_interval_id",
-        foreignField: "maintenance_interval_id",
-        as: "intDef",
-      },
-    },
-    { $unwind: "$intDef" },
-
-    // maintenance definitions
-    {
-      $lookup: {
-        from: "dataone_def_maintenance",
-        localField: "maintenance_id",
-        foreignField: "maintenance_id",
-        as: "def",
-      },
-    },
-    { $unwind: "$def" },
-
-    // dedupe per (maintenance_id, interval_id)
-    {
-      $group: {
-        _id: {
-          maintenance_id: "$maintenance_id",
-          interval_id: "$intervals.maintenance_interval_id",
-        },
-        squish: { $first: "$squish" },
-        maintenance_name: { $first: "$def.maintenance_name" },
-        maintenance_category: { $first: "$def.maintenance_category" },
-        maintenance_notes: { $first: "$def.maintenance_notes" },
-        interval_type: { $first: "$intDef.interval_type" },
-        value: { $first: "$intDef.value" },
-        units: { $first: "$intDef.units" },
-        initial_value: { $first: "$intDef.initial_value" },
-      },
-    },
-
-    // roll up one doc per maintenance_id
-    {
-      $group: {
-        _id: "$_id.maintenance_id",
-        squish: { $first: "$squish" },
-        maintenance_name: { $first: "$maintenance_name" },
-        maintenance_category: { $first: "$maintenance_category" },
-        maintenance_notes: { $first: "$maintenance_notes" },
-        intervals: {
-          $push: {
-            interval_id: "$_id.interval_id",
-            type: "$interval_type",
-            value: "$value",
-            units: "$units",
-            initial_value: "$initial_value",
-          },
-        },
-      },
-    },
-
-    // extract first Miles/Months into columns
-    {
-      $addFields: {
-        miles: {
-          $let: {
-            vars: { m: { $filter: { input: "$intervals", as: "i", cond: { $eq: ["$$i.units", "Miles"] } } } },
-            in: {
-              $cond: [
-                { $gt: [{ $size: "$$m" }, 0] },
-                { $arrayElemAt: [{ $map: { input: "$$m", as: "x", in: "$$x.value" } }, 0] },
-                null,
-              ],
-            },
-          },
-        },
-        months: {
-          $let: {
-            vars: { m: { $filter: { input: "$intervals", as: "i", cond: { $eq: ["$$i.units", "Months"] } } } },
-            in: {
-              $cond: [
-                { $gt: [{ $size: "$$m" }, 0] },
-                { $arrayElemAt: [{ $map: { input: "$$m", as: "x", in: "$$x.value" } }, 0] },
-                null,
-              ],
-            },
-          },
-        },
-      },
-    },
-
-    {
-      $project: {
-        _id: 0,
-        maintenance_id: "$_id",
-        name: "$maintenance_name",
-        category: "$maintenance_category",
-        notes: "$maintenance_notes",
-        miles: 1,
-        months: 1,
-        intervals: 1,
-      },
-    },
-    { $sort: { category: 1, name: 1 } },
-    { $limit: 200 },
-  ];
-
-  const items = await db
-    .collection("dataone_lkp_vin_maintenance")
-    .aggregate(pipeline, { allowDiskUse: true, hint: "squish_1" })
-    .toArray();
-
-  return { ok: true as const, vin, squish: SQUISH, count: items.length, items };
 }
 
 /* ---------- page ---------- */
@@ -487,43 +350,23 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // OEM schedule - try DataOne API first, fall back to local MongoDB data
-  let localOe: any = { ok: false, count: 0, items: [], error: "Loading..." };
+  // OEM schedule - uses MongoDB Atlas cache (first call fetches from DataOne API, subsequent calls use cache)
+  const oemData = await getMaintenanceScheduleCached(vin);
+  console.log(`[Vehicle Detail] OEM data source: ${oemData.source}, count: ${oemData.count}`);
   
-  // Try DataOne API with increased timeout (8 seconds)
-  try {
-    const oemPromise = getMaintenanceSchedule(vin);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Timeout")), 8000)
-    );
-    
-    const oemSchedule = await Promise.race([oemPromise, timeoutPromise]) as any;
-    
-    if (oemSchedule.ok && oemSchedule.count > 0) {
-      // Map DataOne API response to client format
-      localOe = {
-        ok: oemSchedule.ok,
-        count: oemSchedule.count,
-        items: (oemSchedule.items || []).map((item: any) => ({
-          category: item.maintenance_category || "General",
-          name: item.maintenance_name || "Unknown",
-          notes: item.maintenance_notes,
-          miles: item.miles,
-          months: item.months,
-        })),
-        error: oemSchedule.error,
-      };
-    } else {
-      // Fall back to local MongoDB data
-      const mongoOe = await getLocalOeFromMongo(vin);
-      localOe = mongoOe;
-    }
-  } catch (e) {
-    console.log("DataOne API timeout or error, trying local MongoDB fallback");
-    // Fall back to local MongoDB data
-    const mongoOe = await getLocalOeFromMongo(vin);
-    localOe = mongoOe.ok ? mongoOe : { ok: false, count: 0, items: [], error: "OEM data unavailable" };
-  }
+  const localOe = {
+    ok: oemData.ok,
+    count: oemData.count,
+    items: (oemData.items || []).map((item: any) => ({
+      category: item.maintenance_category || "General",
+      name: item.maintenance_name || "Unknown",
+      notes: item.maintenance_notes,
+      miles: item.miles,
+      months: item.months,
+    })),
+    error: oemData.error,
+    source: oemData.source,
+  };
 
   return (
     <VehicleDetailClient
