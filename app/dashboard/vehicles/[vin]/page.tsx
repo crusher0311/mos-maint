@@ -412,7 +412,6 @@ export default async function VehicleDetailPage({ params }: PageProps) {
 
   // Autoflow - fetch DVI for the latest RO
   const cfg = await resolveAutoflowConfig(shopId);
-  console.log(`[DVI Debug] shopId=${shopId}, latestRoNumber=${latestRoNumber}, cfg.configured=${cfg.configured}`);
   
   let dvi: any;
   if (!latestRoNumber) {
@@ -421,7 +420,6 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     dvi = { ok: false, error: "AutoFlow not connected." };
   } else {
     dvi = await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000);
-    console.log(`[DVI Debug] fetchDviWithCache result: ok=${dvi.ok}, error=${dvi.error}, categories=${dvi.categories?.length || 0}`);
   }
 
   // CARFAX
