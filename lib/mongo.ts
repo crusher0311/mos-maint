@@ -3,10 +3,27 @@ import { MongoClient, Db } from "mongodb";
 
 let clientPromise: Promise<MongoClient> | undefined;
 
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing ${name} in environment variables`);
-  return v;
+function getMongoUri(): string {
+  // First check for a complete MONGODB_URI
+  if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('localhost')) {
+    return process.env.MONGODB_URI;
+  }
+  
+  // Build URI from individual credentials for MongoDB Atlas
+  const username = process.env.MONGODB_USERNAME;
+  const password = process.env.MONGODB_PASSWORD;
+  
+  if (username && password) {
+    const encodedPassword = encodeURIComponent(password);
+    return `mongodb+srv://${username}:${encodedPassword}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority`;
+  }
+  
+  // Fallback to MONGODB_URI or throw error
+  if (process.env.MONGODB_URI) {
+    return process.env.MONGODB_URI;
+  }
+  
+  throw new Error("Missing MongoDB credentials. Set MONGODB_USERNAME and MONGODB_PASSWORD, or provide MONGODB_URI");
 }
 
 declare global {
@@ -18,7 +35,7 @@ declare global {
 export async function getMongoClient(): Promise<MongoClient> {
   if (clientPromise) return clientPromise;
 
-  const uri = requireEnv("MONGODB_URI");
+  const uri = getMongoUri();
 
   if (process.env.NODE_ENV === "development") {
     if (!global._mongoClientPromise) {
