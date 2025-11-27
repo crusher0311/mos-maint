@@ -75,11 +75,18 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: CARFAX Shop Configuration
+  - Added CARFAX and AutoFlow links to Settings sidebar menu
+  - Enhanced CARFAX settings page with status indicators (API URL, Product Data ID, Location ID)
+  - Each shop can self-configure their CARFAX Location ID via Settings > CARFAX
+  - Form disabled if environment not configured (CARFAX_POST_URL, CARFAX_PDI)
+
 - **2024-11-27**: DataOne API Integration
   - Created lib/integrations/dataone-api.ts with VIN decoding and maintenance schedule functions
   - Enhanced vehicle detail page to use DataOne API for OEM maintenance schedules
   - Added fallback VIN decoding when vehicle data is incomplete
   - Set DATAONE_API_URL environment variable
+  - Increased timeout to 8 seconds with MongoDB fallback
 
 - **2024-11-27**: MongoDB Atlas Migration
   - Connected app to live MongoDB Atlas database (cloud-hosted)
@@ -90,6 +97,7 @@ The application uses a modern SaaS-style design with:
   - Added dark sidebar navigation component with expandable settings menu
   - Updated dashboard with stat cards, search functionality, and modern table design
   - Created tabbed vehicle detail page with Attributes, Recs, and History tabs
+  - Data source badges: OEM (blue), DVI (orange), CARFAX (purple), Shop (green)
   - Standardized design patterns across all updated components
   - Fixed Tailwind CSS v4 configuration (@import syntax)
   
