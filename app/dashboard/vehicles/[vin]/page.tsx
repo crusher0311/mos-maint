@@ -365,23 +365,48 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const ownerName =
     [customer?.firstName, customer?.lastName].filter(Boolean).join(" ").trim() || (customer?.name || "");
 
-  const ros = await db
-    .collection("repair_orders")
-    .find({ 
-      $and: [
-        { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-        { $or: [
-          { vehicleId: vehicle._id }, 
-          { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
-          { vin: vin.toUpperCase() },
-          { vin: vin.toLowerCase() }
-        ]}
-      ]
-    })
-    .project({ roNumber: 1, status: 1, mileage: 1, updatedAt: 1, createdAt: 1, vin: 1 })
-    .sort({ updatedAt: -1, createdAt: -1 })
-    .limit(50)
-    .toArray();
+  // Get repair orders from events collection (AutoFlow webhooks store RO data here)
+  const eventRos = await db.collection("events").aggregate([
+    {
+      $match: {
+        $and: [
+          { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+          { provider: "autoflow" },
+          {
+            $expr: {
+              $eq: [
+                { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+                vin.toUpperCase()
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      $addFields: {
+        roNumber: { $ifNull: ["$payload.ticket.invoice", { $ifNull: ["$payload.ticket.id", "$roNumber"] }] },
+        status: { $ifNull: ["$payload.ticket.status", "$status"] },
+        mileage: { $ifNull: ["$payload.ticket.mileage", { $ifNull: ["$payload.vehicle.mileage", null] }] }
+      }
+    },
+    { $match: { roNumber: { $ne: null } } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: "$roNumber",
+        roNumber: { $first: "$roNumber" },
+        status: { $first: "$status" },
+        mileage: { $first: "$mileage" },
+        updatedAt: { $first: "$createdAt" },
+        createdAt: { $first: "$createdAt" }
+      }
+    },
+    { $sort: { updatedAt: -1 } },
+    { $limit: 20 }
+  ]).toArray();
+
+  const ros = eventRos;
 
   const latestRoNumber = ros[0]?.roNumber ?? null;
 
