@@ -31,5 +31,14 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 39813
+localPort = 37283
 externalPort = 3000
+
+[nix]
+channel = "stable-25_05"
+packages = ["mongodb"]
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["npm", "run", "start"]
+build = ["npm", "run", "build"]

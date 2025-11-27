@@ -78,3 +78,7 @@ node_modules/
 .next/
 *.log
 .DS_Store
+
+# MongoDB data directory (Replit)
+data/db/
+data/mongodb.log

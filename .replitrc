@@ -1,0 +1,13 @@
+#!/bin/bash
+# Replit initialization script
+
+# Create MongoDB data directory if it doesn't exist
+mkdir -p /home/runner/${REPL_SLUG}/data/db
+
+# Start MongoDB in the background
+if ! pgrep -f "mongod.*--dbpath" > /dev/null; then
+  echo "Starting MongoDB..."
+  mongod --dbpath /home/runner/${REPL_SLUG}/data/db --bind_ip 127.0.0.1 --port 27017 --fork --logpath /home/runner/${REPL_SLUG}/data/mongodb.log
+else
+  echo "MongoDB is already running"
+fi
