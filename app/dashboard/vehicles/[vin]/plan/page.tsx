@@ -413,32 +413,49 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1 } }
   );
 
-  // RO & DVI - also check events collection for RO data
-  let ros = await db
-    .collection("repair_orders")
-    .find({ shopId, $or: [{ vin }, { vehicleId: vehicle?._id }] })
-    .project({ roNumber: 1, status: 1, mileage: 1, updatedAt: 1, createdAt: 1 })
-    .sort({ updatedAt: -1, createdAt: -1 })
-    .toArray();
-  
-  // If no ROs in repair_orders, check events collection (AutoFlow webhook data)
-  if (ros.length === 0) {
-    const eventRos = await db.collection("events").aggregate([
-      { $match: { 
-        $expr: { 
-          $eq: [{ $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } }, vin] 
-        }
-      }},
-      { $sort: { createdAt: -1 } },
-      { $limit: 10 },
-      { $project: { 
-        roNumber: { $ifNull: ["$payload.ticket.invoice", "$payload.invoice"] },
-        mileage: { $ifNull: ["$payload.ticket.mileage", "$payload.vehicle.mileage"] },
-        updatedAt: "$createdAt"
-      }}
-    ]).toArray();
-    ros = eventRos.filter((r: any) => r.roNumber);
-  }
+  // Get repair orders from events collection (AutoFlow webhooks store RO data here)
+  // This matches the detail page logic exactly
+  const eventRos = await db.collection("events").aggregate([
+    {
+      $match: {
+        $and: [
+          { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+          { provider: "autoflow" },
+          {
+            $expr: {
+              $eq: [
+                { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+                vin.toUpperCase()
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      $addFields: {
+        roNumber: { $ifNull: ["$payload.ticket.invoice", { $ifNull: ["$payload.ticket.id", "$roNumber"] }] },
+        status: { $ifNull: ["$payload.ticket.status", "$status"] },
+        mileage: { $ifNull: ["$payload.ticket.mileage", { $ifNull: ["$payload.vehicle.mileage", null] }] }
+      }
+    },
+    { $match: { roNumber: { $ne: null } } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: "$roNumber",
+        roNumber: { $first: "$roNumber" },
+        status: { $first: "$status" },
+        mileage: { $first: "$mileage" },
+        updatedAt: { $first: "$createdAt" },
+        createdAt: { $first: "$createdAt" }
+      }
+    },
+    { $sort: { updatedAt: -1 } },
+    { $limit: 20 }
+  ]).toArray();
+
+  const ros = eventRos;
   
   const latestRoNumber = ros[0]?.roNumber ?? null;
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
