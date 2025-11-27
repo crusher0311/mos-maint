@@ -440,63 +440,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     ros = eventRos.filter((r: any) => r.roNumber);
   }
   
-  console.log(`[Plan Debug] ROs found: ${ros.length}, first few:`, ros.slice(0, 5).map((r: any) => r.roNumber));
+  const latestRoNumber = ros[0]?.roNumber ?? null;
+  console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
 
   const autoCfg = await resolveAutoflowConfig(shopId);
-  
-  // Try to find the RO with DVI data - check recent ROs until we find one with categories
-  let dvi: any = { ok: false, error: "No DVI found" };
-  let usedRoNumber: string | null = null;
-  
-  if (autoCfg.configured && ros.length > 0) {
-    // Helper to check if DVI has actionable items (red/yellow status)
-    const hasActionableItems = (testDvi: any) => {
-      if (!testDvi?.ok || !Array.isArray(testDvi?.categories)) return false;
-      for (const cat of testDvi.categories) {
-        if (!Array.isArray(cat?.items)) continue;
-        for (const item of cat.items) {
-          const status = String(item?.status ?? "");
-          if (status === "0" || status === "1") return true; // red or yellow
-        }
-      }
-      return false;
-    };
-    
-    // Check up to 10 most recent ROs to find one with actionable DVI items
-    let bestDvi: any = null;
-    let bestRoNumber: string | null = null;
-    
-    for (const ro of ros.slice(0, 10)) {
-      const roNum = String(ro.roNumber);
-      const testDvi = await fetchDviWithCache(shopId, roNum, 1 * 60 * 1000);
-      const catCount = (testDvi as any).categories?.length || 0;
-      const hasActions = hasActionableItems(testDvi);
-      console.log(`[Plan Debug] Checking RO ${roNum}: ok=${(testDvi as any).ok}, categories=${catCount}, hasActionableItems=${hasActions}`);
-      
-      // Prefer DVI with actionable items (red/yellow)
-      if (hasActions) {
-        dvi = testDvi;
-        usedRoNumber = roNum;
-        console.log(`[Plan Debug] Found DVI with actionable items on RO ${roNum}`);
-        break;
-      }
-      
-      // Keep first valid DVI as fallback
-      if (!bestDvi && (testDvi as any).ok && catCount > 0) {
-        bestDvi = testDvi;
-        bestRoNumber = roNum;
-      }
-    }
-    
-    // Use fallback if no actionable items found
-    if (!usedRoNumber && bestDvi) {
-      dvi = bestDvi;
-      usedRoNumber = bestRoNumber;
-      console.log(`[Plan Debug] Using fallback DVI from RO ${usedRoNumber} (no actionable items found)`);
-    }
-  }
-  
-  console.log(`[Plan Debug] Using RO ${usedRoNumber} for DVI data`);
+  const dvi =
+    latestRoNumber && autoCfg.configured
+      ? await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000)
+      : { ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." };
 
   // CARFAX
   const carfaxCfg = await resolveCarfaxConfig(shopId);
