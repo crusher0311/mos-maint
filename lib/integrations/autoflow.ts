@@ -213,6 +213,19 @@ export async function fetchDviByInvoice(
   const rawCategories = primary?.dvi_category || primary?.categories || primary?.dvi_items || [];
   console.log(`[DVI API Debug] Primary DVI: ${sheetName}, raw categories length: ${Array.isArray(rawCategories) ? rawCategories.length : 'not an array'}`);
   
+  // Debug: Log the actual categories content
+  if (Array.isArray(rawCategories) && rawCategories.length > 0) {
+    console.log(`[DVI API Debug] Category details:`);
+    for (const cat of rawCategories) {
+      console.log(`  - Category: ${cat.category_name}, items: ${cat.dvi_items?.length || 0}`);
+      if (Array.isArray(cat.dvi_items)) {
+        for (const item of cat.dvi_items.slice(0, 3)) { // Log first 3 items per category
+          console.log(`    - Item: ${item.item_name}, status: ${item.item_status}, notes: ${item.item_notes?.substring(0, 50) || 'none'}`);
+        }
+      }
+    }
+  }
+  
   const categories = Array.isArray(rawCategories)
     ? rawCategories.map((c: any) => {
         const items = Array.isArray(c?.dvi_items)
