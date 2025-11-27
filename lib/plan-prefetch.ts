@@ -1,6 +1,6 @@
 const PREFETCH_QUEUE: string[] = [];
 const PREFETCHED_VINS = new Set<string>();
-const PREFETCH_TTL = 10 * 60 * 1000;
+const PREFETCH_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days - matches typical vehicle board duration
 const MAX_CONCURRENT = 2;
 const PREFETCH_DELAY = 300;
 
