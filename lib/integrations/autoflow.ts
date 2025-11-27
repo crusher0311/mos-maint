@@ -180,8 +180,28 @@ export async function fetchDviByInvoice(
     : null;
 
   const dvis = Array.isArray(content.dvis) ? content.dvis : [];
+  
+  // Debug: Log all DVIs and their full structure
+  console.log(`[DVI API Debug] Found ${dvis.length} DVI sheets`);
+  for (const d of dvis) {
+    console.log(`[DVI API Debug] Sheet: ${d.dvi_name}, id: ${d.dvi_id}, status_id: ${d.status_id}`);
+    console.log(`[DVI API Debug] All keys in this DVI:`, Object.keys(d));
+    if (d.dvi_category) {
+      console.log(`[DVI API Debug] dvi_category is array: ${Array.isArray(d.dvi_category)}, length: ${d.dvi_category?.length}`);
+    }
+    // Check for any other keys that might contain inspection items
+    for (const key of Object.keys(d)) {
+      if (typeof d[key] === 'object' && d[key] !== null && !['dvi_category'].includes(key)) {
+        console.log(`[DVI API Debug] Field ${key} type: ${Array.isArray(d[key]) ? 'array' : 'object'}`);
+      }
+    }
+  }
+  
+  // Find the primary DVI - prefer one with categories, then completed, then first
   const primary =
-    dvis.find((d: any) => normalizeTime(d?.completed_datetime)) || dvis[0] || null;
+    dvis.find((d: any) => Array.isArray(d?.dvi_category) && d.dvi_category.length > 0) ||
+    dvis.find((d: any) => normalizeTime(d?.completed_datetime)) || 
+    dvis[0] || null;
 
   const sheetName = nonEmpty(primary?.dvi_name);
   const completedAt = normalizeTime(primary?.completed_datetime);
@@ -189,8 +209,12 @@ export async function fetchDviByInvoice(
   const pdfUrl = nonEmpty(primary?.pdf_url);
 
   // ---- Category & item mapping with fallbacks ----
-  const categories = Array.isArray(primary?.dvi_category)
-    ? primary.dvi_category.map((c: any) => {
+  // Also check for alternative field names like 'categories' or 'dvi_items'
+  const rawCategories = primary?.dvi_category || primary?.categories || primary?.dvi_items || [];
+  console.log(`[DVI API Debug] Primary DVI: ${sheetName}, raw categories length: ${Array.isArray(rawCategories) ? rawCategories.length : 'not an array'}`);
+  
+  const categories = Array.isArray(rawCategories)
+    ? rawCategories.map((c: any) => {
         const items = Array.isArray(c?.dvi_items)
           ? c.dvi_items.map((it: any) => {
               // Status key can be "item_status" or "status"

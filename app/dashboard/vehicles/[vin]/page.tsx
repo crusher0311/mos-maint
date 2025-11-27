@@ -419,7 +419,13 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   } else if (!cfg.configured) {
     dvi = { ok: false, error: "AutoFlow not connected." };
   } else {
-    dvi = await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000);
+    // Force fresh fetch to debug
+    dvi = await fetchDviWithCache(shopId, String(latestRoNumber), 1000);
+    // Debug: Log the full raw response
+    if (dvi.raw) {
+      console.log(`[DVI Debug] Full raw response keys:`, JSON.stringify(Object.keys(dvi.raw)));
+      console.log(`[DVI Debug] dvis array:`, JSON.stringify(dvi.raw?.content?.dvis?.map((d: any) => ({ name: d.dvi_name, catCount: d.dvi_category?.length }))));
+    }
   }
 
   // CARFAX
