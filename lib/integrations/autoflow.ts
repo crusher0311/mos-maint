@@ -181,22 +181,6 @@ export async function fetchDviByInvoice(
 
   const dvis = Array.isArray(content.dvis) ? content.dvis : [];
   
-  // Debug: Log all DVIs and their full structure
-  console.log(`[DVI API Debug] Found ${dvis.length} DVI sheets`);
-  for (const d of dvis) {
-    console.log(`[DVI API Debug] Sheet: ${d.dvi_name}, id: ${d.dvi_id}, status_id: ${d.status_id}`);
-    console.log(`[DVI API Debug] All keys in this DVI:`, Object.keys(d));
-    if (d.dvi_category) {
-      console.log(`[DVI API Debug] dvi_category is array: ${Array.isArray(d.dvi_category)}, length: ${d.dvi_category?.length}`);
-    }
-    // Check for any other keys that might contain inspection items
-    for (const key of Object.keys(d)) {
-      if (typeof d[key] === 'object' && d[key] !== null && !['dvi_category'].includes(key)) {
-        console.log(`[DVI API Debug] Field ${key} type: ${Array.isArray(d[key]) ? 'array' : 'object'}`);
-      }
-    }
-  }
-  
   // Find the primary DVI - prefer one with categories, then completed, then first
   const primary =
     dvis.find((d: any) => Array.isArray(d?.dvi_category) && d.dvi_category.length > 0) ||
@@ -209,22 +193,7 @@ export async function fetchDviByInvoice(
   const pdfUrl = nonEmpty(primary?.pdf_url);
 
   // ---- Category & item mapping with fallbacks ----
-  // Also check for alternative field names like 'categories' or 'dvi_items'
   const rawCategories = primary?.dvi_category || primary?.categories || primary?.dvi_items || [];
-  console.log(`[DVI API Debug] Primary DVI: ${sheetName}, raw categories length: ${Array.isArray(rawCategories) ? rawCategories.length : 'not an array'}`);
-  
-  // Debug: Log the actual categories content
-  if (Array.isArray(rawCategories) && rawCategories.length > 0) {
-    console.log(`[DVI API Debug] Category details:`);
-    for (const cat of rawCategories) {
-      console.log(`  - Category: ${cat.category_name}, items: ${cat.dvi_items?.length || 0}`);
-      if (Array.isArray(cat.dvi_items)) {
-        for (const item of cat.dvi_items.slice(0, 3)) { // Log first 3 items per category
-          console.log(`    - Item: ${item.item_name}, status: ${item.item_status}, notes: ${item.item_notes?.substring(0, 50) || 'none'}`);
-        }
-      }
-    }
-  }
   
   const categories = Array.isArray(rawCategories)
     ? rawCategories.map((c: any) => {
