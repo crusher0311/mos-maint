@@ -435,12 +435,30 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     months: x.months ?? null,
   }));
 
+  // Debug: Log what data we have
+  console.log(`[Plan Debug] VIN: ${vin}`);
+  console.log(`[Plan Debug] Current Miles: ${currentMiles}`);
+  console.log(`[Plan Debug] OEM Items count: ${oemItems.length}`);
+  console.log(`[Plan Debug] CARFAX Records count: ${carfaxRecords.length}`);
+  console.log(`[Plan Debug] DVI Findings count: ${dviFindings.length}`);
+  if (oemItems.length > 0) {
+    console.log(`[Plan Debug] Sample OEM items:`, oemItems.slice(0, 3).map(o => o.name));
+  }
+  if (carfaxRecords.length > 0) {
+    console.log(`[Plan Debug] Sample CARFAX records:`, carfaxRecords.slice(0, 3).map(r => r.description?.substring(0, 50)));
+  }
+  if (dviFindings.length > 0) {
+    console.log(`[Plan Debug] Sample DVI findings:`, dviFindings.slice(0, 5).map(d => ({ name: d.name, status: d.status })));
+  }
+
   const buckets = triage({
     oemItems,
     carfaxRecords,
     currentMiles,
     dviFindings,
   });
+
+  console.log(`[Plan Debug] Buckets: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length}`);
 
   const counts = {
     overdue: buckets.overdue.length,
