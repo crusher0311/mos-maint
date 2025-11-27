@@ -413,19 +413,41 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1 } }
   );
 
-  // RO & DVI
-  const ros = await db
+  // RO & DVI - also check events collection for RO data
+  let ros = await db
     .collection("repair_orders")
     .find({ shopId, $or: [{ vin }, { vehicleId: vehicle?._id }] })
     .project({ roNumber: 1, status: 1, mileage: 1, updatedAt: 1, createdAt: 1 })
     .sort({ updatedAt: -1, createdAt: -1 })
     .toArray();
+  
+  // If no ROs in repair_orders, check events collection (AutoFlow webhook data)
+  if (ros.length === 0) {
+    const eventRos = await db.collection("events").aggregate([
+      { $match: { 
+        $expr: { 
+          $eq: [{ $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } }, vin] 
+        }
+      }},
+      { $sort: { createdAt: -1 } },
+      { $limit: 10 },
+      { $project: { 
+        roNumber: { $ifNull: ["$payload.ticket.invoice", "$payload.invoice"] },
+        mileage: { $ifNull: ["$payload.ticket.mileage", "$payload.vehicle.mileage"] },
+        updatedAt: "$createdAt"
+      }}
+    ]).toArray();
+    ros = eventRos.filter((r: any) => r.roNumber);
+  }
+  
   const latestRoNumber = ros[0]?.roNumber ?? null;
+  console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, ROs found: ${ros.length}`);
 
   const autoCfg = await resolveAutoflowConfig(shopId);
+  // Use shorter cache (1 minute) to get fresh DVI data
   const dvi =
     latestRoNumber && autoCfg.configured
-      ? await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000)
+      ? await fetchDviWithCache(shopId, String(latestRoNumber), 1 * 60 * 1000)
       : { ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." };
 
   // CARFAX
