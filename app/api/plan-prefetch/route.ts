@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
           if (latestRoNumber) {
             const autoCfg = await resolveAutoflowConfig(shopId);
             if (autoCfg.configured) {
-              await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000);
+              const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days - webhook updates on DVI completion
+              await fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL);
               results.dvi = "cached";
             } else {
               results.dvi = "not_configured";

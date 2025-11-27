@@ -398,9 +398,10 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
 
   const autoCfg = await resolveAutoflowConfig(shopId);
+  const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days - webhook updates cache on DVI completion
   const dvi =
     latestRoNumber && autoCfg.configured
-      ? await fetchDviWithCache(shopId, String(latestRoNumber), 10 * 60 * 1000)
+      ? await fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
       : { ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." };
 
   // CARFAX
