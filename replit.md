@@ -75,6 +75,13 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-11-27**: AutoFlow DVI Integration Fix
+  - Fixed DVI inspection items not displaying on vehicle detail page
+  - Updated DVI selection logic to prioritize sheets with category data
+  - AutoFlow API returns multiple DVI sheets; code now finds the one with actual inspection items
+  - Status mapping: 0 (red/needs attention), 1 (yellow/caution), 2 (green/good)
+  - Inspection categories include Interior, Exterior, Engine/Drivetrain, Tire Inspection
+
 - **2024-11-27**: CARFAX Shop Configuration
   - Added CARFAX and AutoFlow links to Settings sidebar menu
   - Enhanced CARFAX settings page with status indicators (API URL, Product Data ID, Location ID)
