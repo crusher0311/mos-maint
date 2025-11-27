@@ -10,13 +10,17 @@ import {
   Car,
   Loader2,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from "lucide-react";
+import { queueMultiplePrefetch, queuePrefetch, isPrefetched } from "@/lib/plan-prefetch";
 
 interface Vehicle {
   displayVin: string;
   displayName: string;
   displayVehicle: string;
+  dviDone?: boolean;
+  displayStatus?: string;
 }
 
 interface RecentPlan {
@@ -39,7 +43,6 @@ export function PlanLauncher() {
   const [allVehicles, setAllVehicles] = useState<Vehicle[]>([]);
   const [filteredVehicles, setFilteredVehicles] = useState<Vehicle[]>([]);
   const [isLoadingCache, setIsLoadingCache] = useState(false);
-  const [isPrefetching, setIsPrefetching] = useState<string | null>(null);
   const [recentPlans, setRecentPlans] = useState<RecentPlan[]>([]);
   const [cacheStatus, setCacheStatus] = useState<"stale" | "loading" | "ready">("stale");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,6 +66,12 @@ export function PlanLauncher() {
         vehicleCache = { data: vehicles, fetchedAt: now };
         setAllVehicles(vehicles);
         setCacheStatus("ready");
+
+        const vehiclesToPrefetch = vehicles.map((v: Vehicle) => ({
+          vin: v.displayVin,
+          inProgress: !v.dviDone,
+        }));
+        queueMultiplePrefetch(vehiclesToPrefetch, 10);
       }
     } catch (error) {
       console.error("Failed to load vehicle cache:", error);
@@ -137,20 +146,6 @@ export function PlanLauncher() {
     localStorage.setItem(RECENT_PLANS_KEY, JSON.stringify(updated));
   };
 
-  const prefetchPlan = async (vin: string) => {
-    setIsPrefetching(vin);
-    try {
-      await fetch(`/api/plan-prefetch?vin=${encodeURIComponent(vin)}`, {
-        method: "POST",
-      });
-      router.prefetch(`/dashboard/vehicles/${vin}/plan`);
-    } catch (error) {
-      console.error("Prefetch failed:", error);
-    } finally {
-      setIsPrefetching(null);
-    }
-  };
-
   const navigateToPlan = (vehicle: Vehicle | RecentPlan) => {
     const vin = "displayVin" in vehicle ? vehicle.displayVin : vehicle.vin;
     
@@ -171,8 +166,8 @@ export function PlanLauncher() {
   };
 
   const handleVehicleHover = (vin: string) => {
-    if (isPrefetching !== vin) {
-      prefetchPlan(vin);
+    if (!isPrefetched(vin)) {
+      queuePrefetch(vin, "high");
     }
   };
 
@@ -243,8 +238,8 @@ export function PlanLauncher() {
                         {vehicle.displayVin}
                       </p>
                     </div>
-                    {isPrefetching === vehicle.displayVin && (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500 flex-shrink-0" />
+                    {isPrefetched(vehicle.displayVin) && (
+                      <Zap className="w-4 h-4 text-green-500 flex-shrink-0" title="Data cached" />
                     )}
                   </button>
                 ))}
@@ -280,8 +275,8 @@ export function PlanLauncher() {
                         {plan.vin}
                       </p>
                     </div>
-                    {isPrefetching === plan.vin && (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500 flex-shrink-0" />
+                    {isPrefetched(plan.vin) && (
+                      <Zap className="w-4 h-4 text-green-500 flex-shrink-0" title="Data cached" />
                     )}
                   </button>
                 ))}
