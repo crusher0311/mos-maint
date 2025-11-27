@@ -15,3 +15,8 @@ export {
 } from "./Table";
 export { Modal, ConfirmModal } from "./Modal";
 export { Layout, DashboardLayout } from "./Layout";
+export { Sidebar } from "./Sidebar";
+export { AppLayout } from "./AppLayout";
+export { Toggle } from "./Toggle";
+export { Tabs } from "./Tabs";
+export { Checkbox } from "./Checkbox";

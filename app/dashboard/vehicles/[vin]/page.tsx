@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
+import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -392,382 +393,33 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const localOe = await getLocalOeFromMongo(vin);
 
   return (
-    <main className="mx-auto max-w-5xl p-6 space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}
-        </h1>
-        <div className="flex items-center gap-4">
-          <Link href={`/dashboard/vehicles/${vin}/plan`} className="text-sm underline">
-            Customer Plan
-          </Link>
-          <Link href="/dashboard/customers" className="text-sm underline">
-            ← Back to Customers
-          </Link>
-        </div>
-      </div>
-
-      {/* Vehicle details */}
-      <section className="space-y-1 text-sm">
-        <div>
-          <span className="font-medium">VIN:</span> <code>{vehicle.vin}</code>
-        </div>
-        {vehicle.license && (
-          <div>
-            <span className="font-medium">Plate:</span> {vehicle.license}
-          </div>
-        )}
-        <div>
-          <span className="font-medium">Last Miles:</span>{" "}
-          {fmtMiles(
-            (() => {
-              const m = (resolvedMiles ?? vehicle.lastMileage) as number | null | undefined;
-              return typeof m === "number" && m > 0 ? m : null;
-            })()
-          )}
-        </div>
-        <div className="text-neutral-600">
-          Updated: {vehicle.updatedAt ? new Date(vehicle.updatedAt).toLocaleString() : ""}
-        </div>
-      </section>
-
-      {/* Repair Orders */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Repair Orders</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="py-2 pr-4">RO #</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Miles</th>
-                <th className="py-2 pr-4">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ros.map((r: any, i: number) => {
-                const isLatest = i === 0;
-                const rawMiles = typeof r.mileage === "number" ? r.mileage : null;
-                const displayMiles =
-                  isLatest && (!rawMiles || rawMiles <= 0) && resolvedMiles != null ? resolvedMiles : rawMiles;
-                const needsHighlight = isLatest && (!rawMiles || rawMiles <= 0);
-
-                return (
-                  <tr key={`${r._id}-${i}`} className="border-b last:border-b-0">
-                    <td className="py-2 pr-4">
-                      <code>{r.roNumber || ""}</code>
-                    </td>
-                    <td className="py-2 pr-4">{r.status || ""}</td>
-                    <td className="py-2 pr-4">
-                      <span className={needsHighlight ? "bg-red-100 px-1 rounded" : undefined}>
-                        {fmtMiles(displayMiles)}
-                      </span>
-                      {needsHighlight && resolvedMiles != null && (
-                        <span className="ml-2 text-[11px] text-neutral-500">(resolved)</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-4">{r.updatedAt ? new Date(r.updatedAt).toLocaleString() : ""}</td>
-                  </tr>
-                );
-              })}
-              {ros.length === 0 && (
-                <tr>
-                  <td className="py-6 text-neutral-600" colSpan={4}>
-                    No repair orders for this vehicle yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Autoflow DVI */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">DVI Results {latestRoNumber ? `(RO ${latestRoNumber})` : ""}</h2>
-          {!cfg.configured && (
-            <Link href="/dashboard/settings/autoflow" className="text-sm underline">
-              Connect AutoFlow
-            </Link>
-          )}
-        </div>
-
-        {!latestRoNumber && <p className="text-sm text-neutral-600">No RO found for this vehicle.</p>}
-
-        {latestRoNumber && !(dvi as any).ok && (
-          <div className="text-sm text-red-600">Failed to load DVI: {(dvi as any).error}</div>
-        )}
-
-        {(dvi as any).ok && (
-          <div className="rounded-2xl border p-4 space-y-4 text-sm">
-            <div className="grid gap-1">
-              <div>
-                <span className="font-medium">Sheet:</span> {(dvi as any).sheetName || "(unknown sheet)"}
-              </div>
-              <div>
-                <span className="font-medium">Time:</span>{" "}
-                {(dvi as any).timestamp ? new Date((dvi as any).timestamp).toLocaleString() : "(unknown)"}
-              </div>
-              {((dvi as any).advisor || (dvi as any).technician) && (
-                <div>
-                  <span className="font-medium">Advisor/Tech:</span>{" "}
-                  {[(dvi as any).advisor, (dvi as any).technician].filter(Boolean).join(" / ")}
-                </div>
-              )}
-              <div className="flex gap-4 flex-wrap">
-                {(dvi as any).pdfUrl && (
-                  <a href={(dvi as any).pdfUrl} target="_blank" rel="noopener noreferrer" className="underline">
-                    Open DVI PDF
-                  </a>
-                )}
-                {(dvi as any).shopUrl && (
-                  <a href={(dvi as any).shopUrl} target="_blank" rel="noopener noreferrer" className="underline">
-                    Shop View
-                  </a>
-                )}
-                {(dvi as any).customerUrl && (
-                  <a href={(dvi as any).customerUrl} target="_blank" rel="noopener noreferrer" className="underline">
-                    Customer View
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {Array.isArray((dvi as any).categories) && (dvi as any).categories.length > 0 ? (
-              <div className="space-y-4">
-                {(dvi as any).categories.map((cat: any, i: number) => (
-                  <div key={i} className="rounded-xl border p-3">
-                    <div className="font-medium">
-                      {cat.name || "(Category)"}
-                      {cat.video ? " • has video" : ""}
-                    </div>
-                    {cat.videoNotes && <div className="text-neutral-600 text-xs">{cat.videoNotes}</div>}
-                    <div className="mt-2">
-                      {Array.isArray(cat.items) && cat.items.length > 0 ? (
-                        <table className="w-full border-collapse text-xs">
-                          <thead>
-                            <tr className="text-left border-b">
-                              <th className="py-1 pr-3">Item</th>
-                              <th className="py-1 pr-3">Status</th>
-                              <th className="py-1 pr-3">Notes</th>
-                              <th className="py-1 pr-3">Media</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {cat.items.map((it: any, j: number) => (
-                              <tr key={j} className="border-b last:border-b-0 align-top">
-                                <td className="py-1 pr-3">{it.name || ""}</td>
-                                <td className="py-1 pr-3">
-                                  <StatusChip value={it.status} />
-                                </td>
-                                <td className="py-1 pr-3 whitespace-pre-wrap">{it.notes || ""}</td>
-                                <td className="py-1 pr-3">
-                                  <div className="flex gap-2 flex-wrap">
-                                    {Array.isArray(it.pictures) &&
-                                      it.pictures.map((u: string, k: number) =>
-                                        u ? (
-                                          <a key={`p-${k}`} href={u} target="_blank" rel="noopener noreferrer" className="underline">
-                                            photo {k + 1}
-                                          </a>
-                                        ) : null
-                                      )}
-                                    {Array.isArray(it.videos) &&
-                                      it.videos.map((u: string, k: number) =>
-                                        u ? (
-                                          <a key={`v-${k}`} href={u} target="_blank" rel="noopener noreferrer" className="underline">
-                                            video {k + 1}
-                                          </a>
-                                        ) : null
-                                      )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      ) : (
-                        <div className="text-neutral-600 text-xs">No items.</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-neutral-600 text-sm">No DVI categories/items found.</div>
-            )}
-
-            <details className="mt-2">
-              <summary className="cursor-pointer">Raw JSON</summary>
-              <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-auto max-h-72">
-                {JSON.stringify((dvi as any).raw, null, 2)}
-              </pre>
-            </details>
-          </div>
-        )}
-      </section>
-
-      {/* CARFAX */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">CARFAX</h2>
-          {!carfaxCfg.configured && (
-            <Link href="/dashboard/settings/carfax" className="text-sm underline">
-              Connect CARFAX
-            </Link>
-          )}
-        </div>
-
-        {!(carfax as any).ok && <div className="text-sm text-red-600">Failed to load CARFAX: {(carfax as any).error}</div>}
-
-        {(carfax as any).ok && (
-          <div className="rounded-2xl border p-4 space-y-4 text-sm">
-            <div className="grid gap-1">
-              <div>
-                <span className="font-medium">VIN:</span> {(carfax as any).vin}
-              </div>
-              {(carfax as any).reportDate && (
-                <div>
-                  <span className="font-medium">Report Date:</span> {(carfax as any).reportDate}
-                </div>
-              )}
-              {(carfax as any).lastReportedMileage != null && (
-                <div>
-                  <span className="font-medium">Last Reported Miles:</span>{" "}
-                  {fmtMiles((carfax as any).lastReportedMileage)}
-                </div>
-              )}
-            </div>
-
-            {(mpd.mpdFromToday != null || mpd.mpdFromTwo != null) && (
-              <div className="rounded-xl border p-3 bg-neutral-50">
-                <div className="font-medium mb-1">Miles per day (estimated)</div>
-                <ul className="list-disc ml-5 space-y-1">
-                  {mpd.mpdFromToday != null && (
-                    <li>
-                      From today vs last CARFAX{" "}
-                      {mpd.latestDate ? `(${mpd.latestDate.toLocaleDateString()} → today)` : ""}:{" "}
-                      <strong>{mpd.mpdFromToday.toFixed(1)}</strong> mi/day
-                      {mpd.latestMiles != null ? ` • last miles: ${fmtMiles(mpd.latestMiles)}` : ""}
-                      {typeof (resolvedMiles ?? vehicle.lastMileage) === "number"
-                        ? ` • today miles: ${fmtMiles((resolvedMiles ?? vehicle.lastMileage) as number)}`
-                        : ""}
-                    </li>
-                  )}
-                  {mpd.mpdFromTwo != null && (
-                    <li>
-                      From two latest CARFAX entries{" "}
-                      {mpd.latestDate && mpd.prevDate
-                        ? `(${mpd.prevDate.toLocaleDateString()} → ${mpd.latestDate.toLocaleDateString()})`
-                        : ""}
-                      : <strong>{mpd.mpdFromTwo.toFixed(1)}</strong> mi/day
-                    </li>
-                  )}
-                  {mpd.mpdBlended != null && (
-                    <li>
-                      Blended estimate: <strong>{mpd.mpdBlended.toFixed(1)}</strong> mi/day
-                    </li>
-                  )}
-                </ul>
-              </div>
-            )}
-
-            {Array.isArray((carfax as any).serviceRecords) && (carfax as any).serviceRecords.length > 0 ? (
-              <div className="space-y-2">
-                <h3 className="font-medium">Service Records</h3>
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="text-left border-b">
-                      <th className="py-1 pr-3">Date</th>
-                      <th className="py-1 pr-3">Miles</th>
-                      <th className="py-1 pr-3">Description</th>
-                      <th className="py-1 pr-3">Location</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(carfax as any).serviceRecords.map((r: any, i: number) => (
-                      <tr key={i} className="border-b last:border-b-0">
-                        <td className="py-1 pr-3">{r.date || ""}</td>
-                        <td className="py-1 pr-3">{fmtMiles(r.odometer)}</td>
-                        <td className="py-1 pr-3">{r.description || ""}</td>
-                        <td className="py-1 pr-3">{r.location || ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-neutral-600 text-sm">No service history records returned.</div>
-            )}
-
-            <details className="mt-2">
-              <summary className="cursor-pointer">Raw JSON</summary>
-              <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-auto max-h-72">
-                {JSON.stringify((carfax as any).raw, null, 2)}
-              </pre>
-            </details>
-          </div>
-        )}
-      </section>
-
-      {/* OEM Services (Local Mongo) */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">OEM Services</h2>
-
-        <div className="rounded-2xl border p-4 space-y-3 text-sm">
-          <div className="text-neutral-700">
-            Using local schedule for <code>{vin}</code>{" "}
-            {typeof (resolvedMiles ?? vehicle.lastMileage) === "number"
-              ? `(current miles: ${fmtMiles((resolvedMiles ?? vehicle.lastMileage) as number)})`
-              : ""}
-          </div>
-
-          {localOe.ok && Array.isArray(localOe.items) && localOe.items.length > 0 ? (
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="text-left border-b">
-                  <th className="py-1 pr-3">Service</th>
-                  <th className="py-1 pr-3">Category</th>
-                  <th className="py-1 pr-3">Interval</th>
-                  <th className="py-1 pr-3">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {localOe.items.map((s: any, i: number) => (
-                  <tr key={`${s.maintenance_id || i}`} className="border-b last:border-b-0 align-top">
-                    <td className="py-1 pr-3">
-                      <div className="font-medium">{s.name || "(service)"}</div>
-                      <div className="text-neutral-500 text-[11px]">#{s.maintenance_id}</div>
-                    </td>
-                    <td className="py-1 pr-3">{s.category || ""}</td>
-                    <td className="py-1 pr-3">
-                      {s.miles || s.months ? (
-                        <>
-                          {s.miles ? `${fmtMiles(s.miles)} mi` : ""}
-                          {s.miles && s.months ? " / " : ""}
-                          {s.months ? `${s.months} mo` : ""}
-                        </>
-                      ) : (
-                        <span className="text-neutral-500">—</span>
-                      )}
-                    </td>
-                    <td className="py-1 pr-3">{s.notes || ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="text-neutral-600">No OEM services returned.</div>
-          )}
-
-          <details className="mt-2">
-            <summary className="cursor-pointer">Raw JSON</summary>
-            <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-auto max-h-72">
-              {JSON.stringify(localOe, null, 2)}
-            </pre>
-          </details>
-        </div>
-      </section>
-    </main>
+    <VehicleDetailClient
+      vehicle={{
+        vin: vehicle.vin,
+        year: vehicle.year,
+        make: vehicle.make,
+        model: vehicle.model,
+        license: vehicle.license,
+        lastMileage: vehicle.lastMileage,
+        odometer: vehicle.odometer,
+        updatedAt: vehicle.updatedAt
+      }}
+      ownerName={ownerName}
+      ros={ros.map((r: any) => ({
+        roNumber: r.roNumber,
+        status: r.status,
+        mileage: r.mileage,
+        updatedAt: r.updatedAt,
+        createdAt: r.createdAt
+      }))}
+      resolvedMiles={resolvedMiles}
+      dvi={dvi}
+      carfax={carfax}
+      localOe={localOe}
+      mpd={mpd}
+      latestRoNumber={latestRoNumber}
+      cfg={{ configured: cfg.configured }}
+      carfaxCfg={{ configured: carfaxCfg.configured }}
+    />
   );
 }
