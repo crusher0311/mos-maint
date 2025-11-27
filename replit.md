@@ -63,7 +63,28 @@ The app is configured for Replit autoscale deployment:
 - `sessions` - User sessions
 - `ai_analysis_cache` - Cached AI analysis results
 
+## UI Design System
+The application uses a modern SaaS-style design with:
+- **Dark sidebar navigation** (slate-900 background) with expandable sections
+- **Light content areas** (gray-50/white backgrounds) with card-based layouts
+- **Blue accents** (#3B82F6 / blue-600) for primary actions and highlights
+- **Tailwind CSS v4** with @import syntax instead of @tailwind directives
+
+### Key UI Components
+- `components/ui/Sidebar.tsx` - Dark navigation sidebar with search and expandable menus
+- `components/ui/AppLayout.tsx` - Main layout wrapper with sidebar integration
+- `app/login/LoginForm.tsx` - Modern login form with icons and validation
+- `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
+
 ## Recent Changes
+- **2024-11-27**: UI Modernization
+  - Redesigned login page with centered card layout and blue icon branding
+  - Added dark sidebar navigation component with expandable settings menu
+  - Updated dashboard with stat cards, search functionality, and modern table design
+  - Created tabbed vehicle detail page with Attributes, Recs, and History tabs
+  - Standardized design patterns across all updated components
+  - Fixed Tailwind CSS v4 configuration (@import syntax)
+  
 - **2024-11-27**: Initial Replit setup
   - Configured Next.js to run on port 5000 with host 0.0.0.0
   - Set up MongoDB local instance
