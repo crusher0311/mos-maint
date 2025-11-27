@@ -75,6 +75,7 @@ export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarPr
         { name: "Configurations", href: "/dashboard/settings" },
         { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
+        { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Maintenance Intervals", href: "/dashboard/settings/intervals" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Extension Abilities", href: "/dashboard/settings/extensions" },
