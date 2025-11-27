@@ -1,14 +1,15 @@
-import type { ReactNode } from "react";
-import DashboardHeader from "./Header";
+"use client";
 
-export const dynamic = "force-dynamic";
+import type { ReactNode } from "react";
+import { Sidebar } from "@/components/ui/Sidebar";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <>
-      <DashboardHeader />
-      <div className="mx-auto max-w-5xl p-6">{children}</div>
-    </>
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar shopName="My Auto Shop" userInitials="MS" />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {children}
+      </div>
+    </div>
   );
 }
-

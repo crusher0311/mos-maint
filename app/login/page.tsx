@@ -2,16 +2,30 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import LoginForm from "./LoginForm";
+import { Wrench } from "lucide-react";
 
 export default async function LoginPage() {
   return (
-    <main className="mx-auto max-w-md p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Sign in</h1>
-      <p className="text-sm text-gray-600">
-        Enter your email and password to access your dashboard.
-      </p>
-      <LoginForm />
-    </main>
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="flex justify-center">
+          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+            <Wrench className="w-7 h-7 text-white" />
+          </div>
+        </div>
+        <h1 className="mt-6 text-center text-3xl font-bold text-gray-900">
+          Welcome back
+        </h1>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Sign in to your MOS Maintenance account
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-6 shadow-sm rounded-xl border border-gray-200">
+          <LoginForm />
+        </div>
+      </div>
+    </div>
   );
 }
-
