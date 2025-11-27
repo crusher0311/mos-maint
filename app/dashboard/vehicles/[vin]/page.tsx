@@ -266,7 +266,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
 
-  const vehicle = await db.collection("vehicles").findOne(
+  let vehicle = await db.collection("vehicles").findOne(
     { 
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
       vin 
@@ -286,13 +286,49 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   );
 
+  // If not in vehicles collection, try to build from events (AutoFlow data)
+  if (!vehicle) {
+    const eventVehicle = await db.collection("events").findOne(
+      {
+        $and: [
+          { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+          { 
+            $or: [
+              { vehicleVin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+              { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+              { "payload.vehicle.vin": { $regex: new RegExp(`^${vin}$`, 'i') } }
+            ]
+          }
+        ]
+      },
+      { sort: { createdAt: -1 } }
+    );
+
+    if (eventVehicle) {
+      const payload = eventVehicle.payload || {};
+      const veh = payload.vehicle || {};
+      vehicle = {
+        _id: null,
+        vin: vin,
+        year: veh.year || null,
+        make: veh.make || null,
+        model: veh.model || null,
+        license: veh.license || veh.plate || null,
+        lastMileage: veh.mileage || veh.miles || veh.odometer || payload.ticket?.mileage || null,
+        odometer: veh.odometer || veh.mileage || veh.miles || null,
+        updatedAt: eventVehicle.createdAt || new Date(),
+        customerId: null,
+      };
+    }
+  }
+
   if (!vehicle) {
     return (
       <main className="mx-auto max-w-5xl p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Vehicle</h1>
-          <Link href="/dashboard/customers" className="text-sm underline">
-            ← Back to Customers
+          <Link href="/dashboard" className="text-sm underline">
+            ← Back to Dashboard
           </Link>
         </div>
         <p className="text-sm">
