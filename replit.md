@@ -89,6 +89,9 @@ The application uses a modern SaaS-style design with:
   - Webhook handler at /api/webhooks/protractor/[token] for real-time updates
   - Protractor data cached in MongoDB collections: protractor_vehicles, protractor_work_orders, protractor_invoices, protractor_deferred_work
   - Cache TTL: 6 hours with webhook-triggered refresh
+  - **Plan Page Integration**: Protractor deferred work shows as shop recommendations with purple "Protractor" badge
+  - Deferred work items appear in Due Soon bucket with reason displayed
+  - Prefetch endpoint warms Protractor cache alongside DataOne, AutoFlow, and CARFAX
 
 - **2024-11-27**: Background Prefetch Queue System
   - Created lib/plan-prefetch.ts with intelligent queue-based prefetching
