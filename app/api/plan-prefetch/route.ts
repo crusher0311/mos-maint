@@ -3,6 +3,11 @@ import { getDb } from "@/lib/mongo";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import {
+  resolveProtractorConfig,
+  fetchVehicleWithCache as fetchProtractorVehicle,
+  fetchDeferredWorkWithCache as fetchProtractorDeferredWork,
+} from "@/lib/integrations/protractor";
 import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -121,6 +126,32 @@ export async function POST(req: NextRequest) {
         { projection: { maintenance: 1 } }
       ).then(() => { results.shop = "cached"; })
        .catch((err) => { results.shop = `error: ${err.message}`; })
+    );
+
+    prefetchPromises.push(
+      (async () => {
+        try {
+          const protractorCfg = await resolveProtractorConfig(shopId);
+          if (protractorCfg.configured) {
+            const protractorVehicle = await fetchProtractorVehicle(shopId, vin, 6 * 60 * 60 * 1000);
+            if (protractorVehicle.ok && protractorVehicle.vehicle?.ID) {
+              await fetchProtractorDeferredWork(
+                shopId,
+                vin,
+                protractorVehicle.vehicle.ID,
+                6 * 60 * 60 * 1000
+              );
+              results.protractor = "cached";
+            } else {
+              results.protractor = "no_vehicle";
+            }
+          } else {
+            results.protractor = "not_configured";
+          }
+        } catch (err: any) {
+          results.protractor = `error: ${err.message}`;
+        }
+      })()
     );
 
     await Promise.allSettled(prefetchPromises);
