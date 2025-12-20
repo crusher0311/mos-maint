@@ -1,7 +1,7 @@
 # MOS Maintenance MVP
 
 ## Overview
-This is a Next.js-based automotive maintenance management system that helps shops manage vehicle maintenance recommendations, customer data, and integrations with third-party services like AutoFlow and CARFAX.
+This is a Next.js-based automotive maintenance management system that helps shops manage vehicle maintenance recommendations, customer data, and integrations with third-party services like AutoFlow, CARFAX, DataOne, and Protractor.
 
 ## Tech Stack
 - **Frontend**: Next.js 14.2.5 with React 18
@@ -61,6 +61,11 @@ The app is configured for Replit autoscale deployment:
 - `sessions` - User sessions
 - `ai_analysis_cache` - Cached AI analysis results
 - `dataone_cache` - Cached DataOne API responses (OEM maintenance schedules, 7-day TTL)
+- `protractor_vehicles` - Cached Protractor ServiceItems (vehicles)
+- `protractor_work_orders` - Cached Protractor work orders
+- `protractor_invoices` - Cached Protractor invoices
+- `protractor_deferred_work` - Cached Protractor deferred work (maintenance recommendations)
+- `protractor_events` - Raw webhook events from Protractor
 
 ## UI Design System
 The application uses a modern SaaS-style design with:
@@ -76,6 +81,15 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-12-20**: Protractor Integration
+  - Created lib/integrations/protractor.ts with HMAC-SHA1 authentication (verified against official sample)
+  - API client supports: Locations, Contacts, ServiceItems (vehicles), WorkOrders, Invoices, DeferredWork
+  - Settings page at /dashboard/settings/protractor for shop configuration
+  - Test connection feature validates credentials before saving
+  - Webhook handler at /api/webhooks/protractor/[token] for real-time updates
+  - Protractor data cached in MongoDB collections: protractor_vehicles, protractor_work_orders, protractor_invoices, protractor_deferred_work
+  - Cache TTL: 6 hours with webhook-triggered refresh
+
 - **2024-11-27**: Background Prefetch Queue System
   - Created lib/plan-prefetch.ts with intelligent queue-based prefetching
   - Auto-prefetches top 10 vehicles when Plan Launcher opens
