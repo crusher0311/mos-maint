@@ -10,6 +10,12 @@ import {
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
+import {
+  resolveProtractorConfig,
+  fetchVehicleWithCache as fetchProtractorVehicle,
+  fetchDeferredWorkWithCache as fetchProtractorDeferredWork,
+  type ProtractorDeferredWork,
+} from "@/lib/integrations/protractor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -161,6 +167,8 @@ type TriagedItem = {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
+  source?: "oem" | "dvi" | "protractor";
+  reason?: string;
 };
 
 type Buckets = { overdue: TriagedItem[]; dueSoon: TriagedItem[]; upcoming: TriagedItem[] };
@@ -174,6 +182,7 @@ function triage({
   currentMiles,
   today = new Date(),
   dviFindings,
+  protractorDeferredWork = [],
   soonMiles = DEFAULT_SOON_MILES,
   soonDays = DEFAULT_SOON_DAYS,
 }: {
@@ -182,6 +191,7 @@ function triage({
   currentMiles: number | null;
   today?: Date;
   dviFindings: Array<{ name?: string; status?: string | number }>;
+  protractorDeferredWork?: ProtractorDeferredWork[];
   soonMiles?: number;
   soonDays?: number;
 }): Buckets {
@@ -260,6 +270,7 @@ function triage({
       milesToGo,
       daysToGo,
       bump: dviInfo?.status ?? null,
+      source: "oem",
     });
   }
 
@@ -278,6 +289,26 @@ function triage({
       milesToGo: null,
       daysToGo: null,
       bump: dviInfo.status,
+      source: "dvi",
+    });
+  }
+
+  // Add Protractor deferred work (shop recommendations)
+  for (const dw of protractorDeferredWork || []) {
+    triaged.push({
+      key: `protractor_${dw.ID}`,
+      title: dw.Title || dw.Description || "Deferred Service",
+      category: "Shop Recommendation",
+      intervalMiles: null,
+      intervalMonths: null,
+      last: undefined,
+      dueAtMiles: null,
+      dueAtDate: null,
+      milesToGo: null,
+      daysToGo: null,
+      bump: "yellow",
+      source: "protractor",
+      reason: dw.Reason || undefined,
     });
   }
 
@@ -410,6 +441,24 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     ? await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000)
     : { ok: false, error: "CARFAX not configured." as const };
 
+
+  // Protractor Deferred Work (shop recommendations)
+  const protractorCfg = await resolveProtractorConfig(shopId);
+  let protractorDeferredWork: ProtractorDeferredWork[] = [];
+  if (protractorCfg.configured) {
+    const protractorVehicle = await fetchProtractorVehicle(shopId, vin, 6 * 60 * 60 * 1000);
+    if (protractorVehicle.ok && protractorVehicle.vehicle?.ID) {
+      const deferredResult = await fetchProtractorDeferredWork(
+        shopId,
+        vin,
+        protractorVehicle.vehicle.ID,
+        6 * 60 * 60 * 1000
+      );
+      if (deferredResult.ok && deferredResult.deferredWork) {
+        protractorDeferredWork = deferredResult.deferredWork;
+      }
+    }
+  }
   // Miles/day (same “today miles” guard as detail page)
   let mpdBlended: number | null = null;
   if ((carfax as any).ok && Array.isArray((carfax as any).serviceRecords)) {
@@ -487,12 +536,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   if (dviFindings.length > 0) {
     console.log(`[Plan Debug] Sample DVI findings:`, dviFindings.slice(0, 5).map(d => ({ name: d.name, status: d.status })));
   }
+  console.log(`[Plan Debug] Protractor deferred work count: ${protractorDeferredWork.length}`);
 
   const buckets = triage({
     oemItems,
     carfaxRecords,
     currentMiles,
     dviFindings,
+    protractorDeferredWork,
     soonMiles,
     soonDays,
   });
@@ -567,7 +618,8 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
                         )}
-                        {t.bump === "red" && <span className="rounded-full bg-red-600 text-white px-2 py-0.5">DVI 🔴</span>}
+                        {t.bump === "red" && t.source !== "protractor" && <span className="rounded-full bg-red-600 text-white px-2 py-0.5">DVI 🔴</span>}
+                        {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
                       </div>
                     </div>
                   </div>
@@ -613,9 +665,15 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.dueAtMiles != null ? `${fmtMiles(t.dueAtMiles)} mi` : "—"}
                         {t.dueAtDate ? ` or ${t.dueAtDate.toLocaleDateString()}` : ""}
                       </div>
-                      {t.bump && (
+                      {t.bump && t.source !== "protractor" && (
                         <div>
                           <span className="font-medium">DVI:</span> {t.bump === "red" ? "🔴 flagged" : "🟡 caution"}
+                        </div>
+                      )}
+                      {t.source === "protractor" && (
+                        <div>
+                          <span className="font-medium">Source:</span> Protractor deferred work
+                          {t.reason && <> - {t.reason}</>}
                         </div>
                       )}
                     </div>
@@ -648,12 +706,16 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
                     )}
-                    {t.bump === "yellow" && (
+                    {t.bump === "yellow" && t.source !== "protractor" && (
                       <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DVI 🟡</span>
                     )}
+                    {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
                   </div>
 
                   <div className="text-sm mt-2">
+                    {t.source === "protractor" && t.reason && (
+                      <div className="text-neutral-600">{t.reason}</div>
+                    )}
                     {t.milesToGo != null && t.milesToGo > 0 && (
                       <>
                         In ~<strong>{fmtMiles(t.milesToGo)}</strong> mi
