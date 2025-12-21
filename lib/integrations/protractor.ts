@@ -797,7 +797,17 @@ export async function applyCannedJobToWorkOrder(
   }
 
   const newPackageId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  
+  const laborLineId = crypto.randomUUID();
   const newServicePackage: any = {
+    Header: {
+      ID: newPackageId,
+      CreationTime: now,
+      DeletionTime: "0001-01-01T00:00:00",
+      DeletionTimeSpecified: true,
+      LastModifiedTime: now
+    },
     ID: newPackageId,
     Code: cannedJobCode,
     Status: "Pending",
@@ -807,13 +817,30 @@ export async function applyCannedJobToWorkOrder(
       Title: cannedJobTitle || cannedJobCode,
       Description: `Added via MOS Maintenance`
     },
-    ServicePackageLines: [],
+    ServicePackageLines: [
+      {
+        Header: {
+          ID: laborLineId,
+          CreationTime: now,
+          DeletionTime: "0001-01-01T00:00:00",
+          DeletionTimeSpecified: true,
+          LastModifiedTime: now
+        },
+        ID: laborLineId,
+        LineType: "Labor",
+        Description: cannedJobTitle || cannedJobCode,
+        Quantity: 1,
+        Status: "Pending"
+      }
+    ],
     ServicePackageInspectionLines: [],
     ServicePackageFooter: {
       Title: "",
       Description: ""
     }
   };
+  
+  console.log(`[Protractor] New service package:`, JSON.stringify(newServicePackage));
 
   const updatedServicePackages = [
     ...(existingWorkOrder.ServicePackages || []),
@@ -825,40 +852,41 @@ export async function applyCannedJobToWorkOrder(
     ServicePackages: updatedServicePackages
   };
 
-  console.log(`[Protractor] Attempting to add service package to work order`);
+  console.log(`[Protractor] POSTing work order update with new service package`);
+  console.log(`[Protractor] Total service packages in payload: ${updatedServicePackages.length}`);
 
-  const endpointsToTry = [
-    { method: "POST", endpoint: `/WorkOrder/${workOrderGuid}/ServicePackage`, body: newServicePackage },
-    { method: "POST", endpoint: `/WorkOrder/${workOrderGuid}/ServicePackage/Code/${encodeURIComponent(cannedJobCode)}`, body: null },
-    { method: "PUT", endpoint: `/WorkOrder/${workOrderGuid}`, body: updatePayload },
-    { method: "POST", endpoint: `/WorkOrder/${workOrderGuid}`, body: updatePayload },
-  ];
-
-  for (const attempt of endpointsToTry) {
-    console.log(`[Protractor] Trying ${attempt.method} ${attempt.endpoint}`);
-    
-    const result = await protractorFetch<any>(
-      attempt.endpoint,
-      config,
-      {
-        method: attempt.method,
-        body: attempt.body ? JSON.stringify(attempt.body) : undefined
-      }
-    );
-
-    if (result.ok) {
-      console.log(`[Protractor] Success with ${attempt.method} ${attempt.endpoint}`);
-      console.log(`[Protractor] Response:`, JSON.stringify(result.data).slice(0, 500));
-      return { ok: true, servicePackage: newServicePackage };
+  const result = await protractorFetch<any>(
+    `/WorkOrder/${workOrderGuid}`,
+    config,
+    {
+      method: "POST",
+      body: JSON.stringify(updatePayload)
     }
-    
-    console.log(`[Protractor] Failed: ${result.error}`);
+  );
+
+  if (!result.ok) {
+    console.log(`[Protractor] Failed to update work order: ${result.error}`);
+    return { ok: false, error: result.error || "Failed to update work order" };
   }
 
-  console.log(`[Protractor] All endpoints failed for adding service package`);
+  console.log(`[Protractor] Work order update response received`);
+  
+  const returnedServicePackages = result.data?.ServicePackages || [];
+  console.log(`[Protractor] Response has ${returnedServicePackages.length} service packages`);
+  
+  const addedPackage = returnedServicePackages.find((sp: any) => sp.ID === newPackageId);
+  if (addedPackage) {
+    console.log(`[Protractor] SUCCESS: Service package ${newPackageId} was added`);
+    return { ok: true, servicePackage: addedPackage };
+  }
+  
+  console.log(`[Protractor] WARNING: Response received but new service package not found in response`);
+  console.log(`[Protractor] Response ServicePackage IDs:`, returnedServicePackages.map((sp: any) => sp.ID));
+  
   return { 
-    ok: false, 
-    error: `Could not add service package to work order. The Protractor API may not support this operation, or additional permissions may be required.` 
+    ok: true, 
+    servicePackage: newServicePackage,
+    warning: "Service package may not have been added - check Protractor directly"
   };
 }
 
