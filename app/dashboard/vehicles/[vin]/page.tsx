@@ -146,6 +146,8 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         odometer: 1,
         updatedAt: 1,
         customerId: 1,
+        hasComponents: 1,
+        declinedServices: 1,
       },
     }
   );
@@ -378,7 +380,9 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         license: vehicle.license,
         lastMileage: vehicle.lastMileage,
         odometer: vehicle.odometer,
-        updatedAt: vehicle.updatedAt
+        updatedAt: vehicle.updatedAt,
+        hasComponents: vehicle.hasComponents || {},
+        declinedServices: vehicle.declinedServices || [],
       }}
       ownerName={ownerName}
       ros={ros.map((r: any) => ({

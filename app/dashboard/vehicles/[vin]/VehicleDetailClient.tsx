@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { 
   ArrowLeft, 
@@ -15,11 +15,32 @@ import {
   Calendar,
   ExternalLink,
   ChevronDown,
-  Edit2
+  Edit2,
+  XCircle,
+  Ban
 } from "lucide-react";
 
+interface DeclinedService {
+  serviceKey: string;
+  serviceName: string;
+  mileage?: number | null;
+  reason?: string | null;
+  declinedAt: string;
+}
+
 interface VehicleDetailClientProps {
-  vehicle: any;
+  vehicle: {
+    vin: string;
+    year?: number;
+    make?: string;
+    model?: string;
+    license?: string;
+    lastMileage?: number;
+    odometer?: number;
+    updatedAt?: string;
+    hasComponents?: Record<string, boolean>;
+    declinedServices?: DeclinedService[];
+  };
   ownerName: string;
   ros: any[];
   resolvedMiles: number | null;
@@ -49,6 +70,10 @@ export default function VehicleDetailClient({
 }: VehicleDetailClientProps) {
   const [activeTab, setActiveTab] = useState<TabId>("attributes");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [hasComponents, setHasComponents] = useState<Record<string, boolean>>(
+    vehicle.hasComponents || {}
+  );
+  const [savingComponent, setSavingComponent] = useState<string | null>(null);
 
   const toggleCategory = (cat: string) => {
     const next = new Set(expandedCategories);
@@ -59,6 +84,32 @@ export default function VehicleDetailClient({
     }
     setExpandedCategories(next);
   };
+
+  const toComponentKey = (itemName: string): string => {
+    return itemName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  };
+
+  const toggleComponent = useCallback(async (itemName: string, currentValue: boolean) => {
+    const componentKey = toComponentKey(itemName);
+    setSavingComponent(componentKey);
+    const newValue = !currentValue;
+    
+    setHasComponents(prev => ({ ...prev, [componentKey]: newValue }));
+    
+    try {
+      await fetch(`/api/vehicles/${vehicle.vin}/components`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ componentKey, hasComponent: newValue }),
+      });
+    } catch (err) {
+      setHasComponents(prev => ({ ...prev, [componentKey]: currentValue }));
+      console.error("Failed to save component:", err);
+    } finally {
+      setSavingComponent(null);
+    }
+  }, [vehicle.vin]);
 
   const miles = resolvedMiles ?? vehicle.lastMileage ?? vehicle.odometer ?? null;
   const vehicleTitle = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle";
@@ -207,8 +258,11 @@ export default function VehicleDetailClient({
                             </div>
                             <div className="flex items-center gap-3">
                               <input 
-                                type="checkbox" 
-                                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                type="checkbox"
+                                checked={hasComponents[toComponentKey(item.name)] ?? false}
+                                onChange={() => toggleComponent(item.name, hasComponents[toComponentKey(item.name)] ?? false)}
+                                disabled={savingComponent === toComponentKey(item.name)}
+                                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
                               />
                               <button className="p-1 text-gray-400 hover:text-gray-600">
                                 <User className="w-4 h-4" />
@@ -234,7 +288,10 @@ export default function VehicleDetailClient({
             <div className="space-y-6">
               {dvi?.ok && Array.isArray(dvi.categories) && dvi.categories.length > 0 ? (
                 <div className="space-y-4">
-                  {dvi.categories.map((cat: any, i: number) => (
+                  {dvi.categories.map((cat: any, i: number) => {
+                    const redCount = cat.items?.filter((it: any) => it.status === "0").length || 0;
+                    const yellowCount = cat.items?.filter((it: any) => it.status === "1").length || 0;
+                    return (
                     <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between">
@@ -244,27 +301,60 @@ export default function VehicleDetailClient({
                               DVI
                             </span>
                           </div>
-                          {cat.video && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                              Has Video
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {redCount > 0 && (
+                              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                                {redCount} Need Attention
+                              </span>
+                            )}
+                            {yellowCount > 0 && (
+                              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">
+                                {yellowCount} Caution
+                              </span>
+                            )}
+                            {cat.video && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                                Has Video
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="divide-y divide-gray-100">
                         {Array.isArray(cat.items) && cat.items.map((item: any, j: number) => (
-                          <div key={j} className="px-6 py-3 flex items-center justify-between">
+                          <div 
+                            key={j} 
+                            className={`px-6 py-3 flex items-center justify-between ${
+                              item.status === "0" ? "bg-red-50 border-l-4 border-red-500" :
+                              item.status === "1" ? "bg-yellow-50 border-l-4 border-yellow-400" :
+                              ""
+                            }`}
+                          >
                             <div className="flex items-center gap-3">
                               {item.status === "2" ? (
                                 <CheckCircle className="w-5 h-5 text-green-500" />
                               ) : item.status === "1" ? (
                                 <AlertCircle className="w-5 h-5 text-yellow-500" />
                               ) : item.status === "0" ? (
-                                <AlertCircle className="w-5 h-5 text-red-500" />
+                                <XCircle className="w-5 h-5 text-red-600" />
                               ) : (
                                 <Clock className="w-5 h-5 text-gray-400" />
                               )}
-                              <span className="text-sm text-gray-700">{item.name}</span>
+                              <div>
+                                <span className={`text-sm ${item.status === "0" ? "font-medium text-red-800" : "text-gray-700"}`}>
+                                  {item.name}
+                                </span>
+                                {item.status === "0" && (
+                                  <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-medium">
+                                    NEEDS ATTENTION
+                                  </span>
+                                )}
+                                {item.status === "1" && (
+                                  <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded-full font-medium">
+                                    CAUTION
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             {item.notes && (
                               <span className="text-xs text-gray-500 max-w-xs truncate">
@@ -275,7 +365,7 @@ export default function VehicleDetailClient({
                         ))}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               ) : (
                 <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
@@ -350,6 +440,39 @@ export default function VehicleDetailClient({
                   </div>
                 )}
               </div>
+
+              {vehicle.declinedServices && vehicle.declinedServices.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-gray-900">Declined Services</h3>
+                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                        DECLINED
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {vehicle.declinedServices.length} items
+                    </span>
+                  </div>
+                  <div className="divide-y divide-gray-200">
+                    {vehicle.declinedServices.map((declined: DeclinedService, i: number) => (
+                      <div key={i} className="px-6 py-3 flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <Ban className="w-4 h-4 text-red-500 flex-shrink-0" />
+                          <div className="flex-1">
+                            <div className="text-sm text-gray-900">{declined.serviceName}</div>
+                            <div className="text-xs text-gray-500">
+                              {declined.declinedAt ? new Date(declined.declinedAt).toLocaleDateString() : ""}
+                              {declined.mileage && ` at ${declined.mileage.toLocaleString()} mi`}
+                              {declined.reason && ` - ${declined.reason}`}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {carfax?.ok && Array.isArray(carfax.serviceRecords) && carfax.serviceRecords.length > 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

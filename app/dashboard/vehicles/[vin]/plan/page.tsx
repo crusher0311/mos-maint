@@ -155,6 +155,14 @@ function toKeyFromFreeText(desc: string): string[] {
   return Array.from(new Set(hits));
 }
 
+type DeclinedServiceEntry = {
+  serviceKey: string;
+  serviceName: string;
+  mileage?: number | null;
+  reason?: string | null;
+  declinedAt: string;
+};
+
 type TriagedItem = {
   key: string;
   title: string;
@@ -169,6 +177,7 @@ type TriagedItem = {
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor";
   reason?: string;
+  declined?: DeclinedServiceEntry | null;
 };
 
 type Buckets = { overdue: TriagedItem[]; dueSoon: TriagedItem[]; upcoming: TriagedItem[] };
@@ -183,6 +192,7 @@ function triage({
   today = new Date(),
   dviFindings,
   protractorDeferredWork = [],
+  declinedServices = [],
   soonMiles = DEFAULT_SOON_MILES,
   soonDays = DEFAULT_SOON_DAYS,
 }: {
@@ -192,6 +202,7 @@ function triage({
   today?: Date;
   dviFindings: Array<{ name?: string; status?: string | number }>;
   protractorDeferredWork?: ProtractorDeferredWork[];
+  declinedServices?: DeclinedServiceEntry[];
   soonMiles?: number;
   soonDays?: number;
 }): Buckets {
@@ -219,6 +230,14 @@ function triage({
     const s = String(it.status ?? "");
     if (s === "0") dviMap.set(key, { status: "red", name: String(it.name) });
     else if (s === "1" && dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: String(it.name) });
+  }
+
+  // Declined services map - key is the serviceKey
+  const declinedMap = new Map<string, DeclinedServiceEntry>();
+  for (const d of declinedServices || []) {
+    if (d.serviceKey) {
+      declinedMap.set(d.serviceKey, d);
+    }
   }
 
   const triaged: TriagedItem[] = [];
@@ -258,6 +277,7 @@ function triage({
       dueAtDate != null ? Math.ceil((dueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
     const dviInfo = dviMap.get(key);
+    const declinedInfo = declinedMap.get(key) || null;
     triaged.push({
       key,
       title: o.name,
@@ -271,6 +291,7 @@ function triage({
       daysToGo,
       bump: dviInfo?.status ?? null,
       source: "oem",
+      declined: declinedInfo,
     });
   }
 
@@ -378,7 +399,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
-    { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1 } }
+    { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1 } }
   );
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
@@ -538,12 +559,21 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   }
   console.log(`[Plan Debug] Protractor deferred work count: ${protractorDeferredWork.length}`);
 
+  const declinedServices: DeclinedServiceEntry[] = (vehicle?.declinedServices || []).map((d: any) => ({
+    serviceKey: d.serviceKey,
+    serviceName: d.serviceName,
+    mileage: d.mileage ?? null,
+    reason: d.reason ?? null,
+    declinedAt: d.declinedAt,
+  }));
+
   const buckets = triage({
     oemItems,
     carfaxRecords,
     currentMiles,
     dviFindings,
     protractorDeferredWork,
+    declinedServices,
     soonMiles,
     soonDays,
   });
@@ -620,6 +650,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         )}
                         {t.bump === "red" && t.source !== "protractor" && <span className="rounded-full bg-red-600 text-white px-2 py-0.5">DVI 🔴</span>}
                         {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
+                        {t.declined && (
+                          <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
+                            Previously declined
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -643,6 +678,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <div className="text-xs text-neutral-600 mt-1">
                       Last done at {fmtMiles(t.last.miles)} mi
                       {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                    </div>
+                  )}
+
+                  {t.declined && (
+                    <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
+                      Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
+                      {t.declined.mileage && ` at ${fmtMiles(t.declined.mileage)} mi`}
+                      {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
                   )}
 
@@ -710,6 +753,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DVI 🟡</span>
                     )}
                     {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
+                    {t.declined && (
+                      <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
+                        Previously declined
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -733,6 +781,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <div className="text-xs text-neutral-600 mt-1">
                       Last done at {fmtMiles(t.last.miles)} mi
                       {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                    </div>
+                  )}
+
+                  {t.declined && (
+                    <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
+                      Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
+                      {t.declined.mileage && ` at ${fmtMiles(t.declined.mileage)} mi`}
+                      {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
                   )}
 
@@ -785,6 +841,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
                     )}
+                    {t.declined && (
+                      <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
+                        Previously declined
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -800,6 +861,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       </>
                     )}
                   </div>
+
+                  {t.declined && (
+                    <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
+                      Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
+                      {t.declined.mileage && ` at ${fmtMiles(t.declined.mileage)} mi`}
+                      {t.declined.reason && ` - ${t.declined.reason}`}
+                    </div>
+                  )}
 
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs underline">Show details</summary>
