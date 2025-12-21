@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import {
   applyCannedJobToWorkOrder,
@@ -7,21 +7,17 @@ import {
   fetchWorkOrdersForVehicle,
 } from "@/lib/integrations/protractor";
 
-export async function POST(req: NextRequest) {
-  const cookieStore = cookies();
-  const sessionToken = cookieStore.get("session")?.value;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-  if (!sessionToken) {
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const db = await getDb();
-  const session = await db.collection("sessions").findOne({ token: sessionToken });
-  if (!session) {
-    return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-  }
-
-  const shopId = session.shopId;
+  const shopId = Number(session.shopId);
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
   }
@@ -96,7 +92,7 @@ export async function POST(req: NextRequest) {
     cannedJobId,
     servicePackageId: result.servicePackage?.ID || null,
     appliedAt: new Date(),
-    appliedBy: session.userId || null,
+    appliedBy: session.email || null,
   });
 
   return NextResponse.json({
