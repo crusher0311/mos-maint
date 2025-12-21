@@ -81,6 +81,17 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-12-21**: Shop Maintenance Intervals & CARFAX Mileage Interpolation
+  - **Shop Intervals Override**: New Settings > Shop Intervals page allows shops to define custom maintenance schedules that override OEM recommendations
+  - Shops can set custom miles/months intervals for common services (oil, tire rotation, brakes, etc.)
+  - Toggle "Use Shop" checkbox to enable custom interval for each service
+  - Plan page shows green "Shop" badge when using shop intervals instead of OEM
+  - Data stored in `shops.maintenance.intervals` as a map keyed by service slug
+  - **CARFAX Mileage Interpolation**: Smart algorithm to estimate mileage for CARFAX service records missing odometer readings
+  - Interpolates between surrounding records with known mileage instead of simple backward calculation
+  - Falls back to extrapolation if only one side has known mileage
+  - Results in much more accurate "last done at X miles" estimates
+
 - **2024-12-21**: Vehicle Component Tracking & Declined Services
   - **Vehicle Attribute Checkboxes**: Advisors can mark which components a vehicle has (e.g., cabin filter, timing belt) via checkboxes in the Attributes tab. Data stored in `vehicles.hasComponents` as normalized key-value pairs.
   - **Declined Services Tracking**: Track services customers have declined with reason, mileage, and date. Displayed in History tab with red "DECLINED" badge.
