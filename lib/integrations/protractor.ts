@@ -797,20 +797,22 @@ export async function applyCannedJobToWorkOrder(
   }
 
   const newPackageId = crypto.randomUUID();
-  const newServicePackage: ProtractorServicePackage = {
+  const newServicePackage: any = {
     ID: newPackageId,
-    Title: cannedJobTitle || cannedJobCode,
-    Description: `Added via MOS Maintenance - ${cannedJobCode}`,
+    Code: cannedJobCode,
     Status: "Pending",
-    ServicePackageLines: [
-      {
-        ID: crypto.randomUUID(),
-        LineType: "Labor",
-        Description: cannedJobTitle || cannedJobCode,
-        Quantity: 1,
-        Status: "Pending",
-      }
-    ]
+    Chapter: "Service",
+    Rank: (existingWorkOrder.ServicePackages?.length || 0) + 1,
+    ServicePackageHeader: {
+      Title: cannedJobTitle || cannedJobCode,
+      Description: `Added via MOS Maintenance`
+    },
+    ServicePackageLines: [],
+    ServicePackageInspectionLines: [],
+    ServicePackageFooter: {
+      Title: "",
+      Description: ""
+    }
   };
 
   const updatedServicePackages = [
