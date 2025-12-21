@@ -199,6 +199,7 @@ function triage({
   declinedServices = [],
   soonMiles = DEFAULT_SOON_MILES,
   soonDays = DEFAULT_SOON_DAYS,
+  milesPerDay = null,
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -209,12 +210,29 @@ function triage({
   declinedServices?: DeclinedServiceEntry[];
   soonMiles?: number;
   soonDays?: number;
+  milesPerDay?: number | null;
 }): Buckets {
+  // Helper to estimate mileage from date if we have miles/day rate
+  const estimateMilesFromDate = (date: Date): number | null => {
+    if (milesPerDay == null || currentMiles == null) return null;
+    const daysAgo = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysAgo < 0) return null;
+    // Estimate: current mileage - (days ago * miles per day)
+    const estimated = Math.round(currentMiles - (daysAgo * milesPerDay));
+    return estimated > 0 ? estimated : null;
+  };
+
   // last-done map from CARFAX
   const lastMap = new Map<string, LastDone>();
   for (const r of carfaxRecords || []) {
     const date = parseCarfaxDate(r.date ?? null);
-    const miles = typeof r.odometer === "number" ? r.odometer : null;
+    let miles = typeof r.odometer === "number" ? r.odometer : null;
+    
+    // If we have a date but no mileage, estimate from miles/day
+    if (miles == null && date != null) {
+      miles = estimateMilesFromDate(date);
+    }
+    
     const desc = String(r.description || "").trim();
     const keys = toKeyFromFreeText(desc);
     for (const k of keys) {
@@ -592,6 +610,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     declinedServices,
     soonMiles,
     soonDays,
+    milesPerDay: mpdBlended,
   });
 
   console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
