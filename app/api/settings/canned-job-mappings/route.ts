@@ -20,17 +20,24 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { "protractor.cannedJobMappings": 1 } }
+      { projection: { "protractor.cannedJobMappings": 1, "protractor.manualCannedJobs": 1 } }
     );
 
     return NextResponse.json({
       mappings: shop?.protractor?.cannedJobMappings || {},
+      manualJobs: shop?.protractor?.manualCannedJobs || [],
     });
   } catch (err: any) {
     console.error("[Canned Job Mappings] GET Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+type ManualJob = {
+  id: string;
+  title: string;
+  description?: string;
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,27 +51,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No shop associated" }, { status: 400 });
     }
 
-    let body: { mappings?: Record<string, string[]> };
+    let body: { mappings?: Record<string, string[]>; manualJobs?: ManualJob[] };
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { mappings } = body;
+    const { mappings, manualJobs } = body;
     if (!mappings || typeof mappings !== "object") {
       return NextResponse.json({ error: "Invalid mappings format" }, { status: 400 });
     }
 
     const db = await getDb();
+    const updateFields: Record<string, any> = {
+      "protractor.cannedJobMappings": mappings,
+      "protractor.cannedJobMappingsUpdatedAt": new Date(),
+    };
+
+    if (Array.isArray(manualJobs)) {
+      updateFields["protractor.manualCannedJobs"] = manualJobs;
+    }
+
     await db.collection("shops").updateOne(
       { shopId },
-      {
-        $set: {
-          "protractor.cannedJobMappings": mappings,
-          "protractor.cannedJobMappingsUpdatedAt": new Date(),
-        },
-      }
+      { $set: updateFields }
     );
 
     return NextResponse.json({ ok: true });
