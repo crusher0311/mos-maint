@@ -1,0 +1,259 @@
+ "sampleDeferredWork": {
+    "serviceItemId": "da6a5d95-c0fb-4ff3-b12a-f5359cbf95d8",
+    "vin": "1GKFK63867J378762",
+    "items": [
+      {
+        "Header": {
+          "ID": "73c902d4-7b89-43f0-b153-ef24da580e5f",
+          "CreationTime": "2024-12-10T11:06:22.65-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2024-12-10T15:06:47.927-05:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "73c902d4-7b89-43f0-b153-ef24da580e5f",
+        "Chapter": "DeferredService",
+        "Rank": 4,
+        "Code": "AF",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "Air Filter",
+          "Description": "Remove and Replace components as required to access and install materials, and/or perform needed service.  Retest and verify repair as required.  Perform final road test where applicable."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "",
+          "Description": ""
+        },
+        "URL": "",
+        "Flag": "",
+        "InspectionReferenceID": "0001f52f-e95f-41f1-814a-b42f04bfd29f",
+        "ServicePackageTemplateID": "d33f43b5-dacd-402b-b2e9-da67fe4ae9fc",
+        "ServiceCategoryID": "9858a0bb-be9b-432c-bcae-4ccc47d39483",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      },
+      {
+        "Header": {
+          "ID": "5d9d2074-9b52-4999-95a0-54c784e69e7f",
+          "CreationTime": "2024-12-10T11:08:58.323-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2025-03-13T15:23:42.687-04:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "5d9d2074-9b52-4999-95a0-54c784e69e7f",
+        "Chapter": "DeferredService",
+        "Rank": 5,
+        "Code": "BG Coolant Flush",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "BG Cooling System Fluid Flush",
+          "Description": "Connect flush equipment to remove existing fluid.  Additional flush and cleaning chemicals may be added to assist in cleaning system contamination.  Fill system fluid(s) to proper capacity with new fluid.  Fluid additives and/or conditioners may be added to system.  Leak test vehicle system.  Perform final road test where applicable."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "",
+          "Description": ""
+        },
+        "URL": "",
+        "Flag": "HideLinePricing",
+        "InspectionReferenceID": "1843a258-fec9-4823-8373-fc8a332bee49",
+        "ServicePackageTemplateID": "555f726d-2e43-4c22-b24c-e9f2d84374ab",
+        "ServiceCategoryID": "0e1ab5f1-f5d8-4bb6-861d-2d897ffc9825",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      },
+      {
+        "Header": {
+          "ID": "92b043d1-17a3-4359-a2bd-994e289c9ec9",
+          "CreationTime": "2024-12-10T11:09:10.837-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2024-12-10T17:44:46.4-05:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "92b043d1-17a3-4359-a2bd-994e289c9ec9",
+        "Chapter": "DeferredService",
+        "Rank": 6,
+        "Code": "",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "Master Cylinder",
+          "Description": "Remove and Replace components as required to access and install materials, and/or perform needed service, adjustments as required.  Additional fluids may be required to complete this service.  Retest and verify repair as required.  Perform final road test where applicable."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "",
+          "Description": ""
+        },
+        "URL": "",
+        "Flag": "",
+        "InspectionReferenceID": "dcfcf334-2655-46e0-9988-c16683736554",
+        "ServicePackageTemplateID": "44960fdb-ac07-4baf-84e1-423e1afe9dae",
+        "ServiceCategoryID": "34d55ba0-8fbc-4f30-9636-e5cdf40e6c1a",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      },
+      {
+        "Header": {
+          "ID": "a75274d2-f7ca-4b39-a935-802fe66c619a",
+          "CreationTime": "2024-12-10T11:37:50.473-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2024-12-10T15:06:47.927-05:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "a75274d2-f7ca-4b39-a935-802fe66c619a",
+        "Chapter": "DeferredService",
+        "Rank": 9,
+        "Code": "BG Transfer Case",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "BG Transfer Case Fluid Exchange",
+          "Description": "Drain and refill system fluid(s) to proper capacity with new fluid.  Fluid additives and/or conditioners may be required.  Leak test vehicle system.  Perform final road test where applicable."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "",
+          "Description": ""
+        },
+        "URL": "",
+        "Flag": "",
+        "InspectionReferenceID": "fdcd520e-ff09-464e-bc7f-711374de39e1",
+        "ServicePackageTemplateID": "3fba4068-428c-4f4e-af1b-380ab6092af2",
+        "ServiceCategoryID": "c9320644-cad4-4d30-99ec-897ea4661274",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      },
+      {
+        "Header": {
+          "ID": "bb67bbce-1b37-4a67-89fe-54332d5bb991",
+          "CreationTime": "2024-12-10T15:06:47.927-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2024-12-10T17:44:46.413-05:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "bb67bbce-1b37-4a67-89fe-54332d5bb991",
+        "Chapter": "DeferredService",
+        "Rank": 12,
+        "Code": "BG Diff",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "BG Differential Fluid Exchange (3Qt)",
+          "Description": "Remove and Replace components as required to access and install materials, and/or perform needed service, adjustments as required.  Additional fluids may be required to complete this service.  Retest and verify repair as required.  Perform final road test where applicable."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "",
+          "Description": ""
+        },
+        "URL": "",
+        "Flag": "HideLinePricing",
+        "InspectionReferenceID": "00000000-0000-0000-0000-000000000000",
+        "ServicePackageTemplateID": "9ba3be69-cb63-4ced-87cc-c3f0526eff76",
+        "ServiceCategoryID": "c9320644-cad4-4d30-99ec-897ea4661274",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      },
+      {
+        "Header": {
+          "ID": "9b27f240-f411-4297-9e20-2f82e3ea0d6c",
+          "CreationTime": "2024-12-10T15:06:47.943-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2024-12-10T17:44:46.413-05:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "9b27f240-f411-4297-9e20-2f82e3ea0d6c",
+        "Chapter": "DeferredService",
+        "Rank": 13,
+        "Code": "BG Diff",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "BG Differential Fluid Exchange (3Qt)",
+          "Description": "Remove and Replace components as required to access and install materials, and/or perform needed service, adjustments as required.  Additional fluids may be required to complete this service.  Retest and verify repair as required.  Perform final road test where applicable."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "",
+          "Description": ""
+        },
+        "URL": "",
+        "Flag": "HideLinePricing",
+        "InspectionReferenceID": "00000000-0000-0000-0000-000000000000",
+        "ServicePackageTemplateID": "9ba3be69-cb63-4ced-87cc-c3f0526eff76",
+        "ServiceCategoryID": "c9320644-cad4-4d30-99ec-897ea4661274",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      },
+      {
+        "Header": {
+          "ID": "59308272-c2ac-4c13-a1c9-adb64d0c71ea",
+          "CreationTime": "2024-12-23T18:45:19.613-05:00",
+          "DeletionTime": "0001-01-01T00:00:00",
+          "DeletionTimeSpecified": true,
+          "LastModifiedTime": "2024-12-30T17:54:34.45-05:00",
+          "LastModifiedBy": "Pro_AB1369.AACE\\Mason Banta"
+        },
+        "ID": "59308272-c2ac-4c13-a1c9-adb64d0c71ea",
+        "Chapter": "DeferredService",
+        "Rank": 14,
+        "Code": "",
+        "Status": "",
+        "ServicePackageHeader": {
+          "Title": "Mount, Install & Balance 4 Tires \u003E19.5\"",
+          "Description": "Install tire and new valve stem where applicable, clean and seal tire to wheel seat, set tire pressure to proper inflation.  Computer spin balance tire and wheel.  Mount and torque wheel lug nuts to manufacturers torque specifications.  Perform final road test as required."
+        },
+        "ServicePackageLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageInspectionLines": {
+          "ItemCollection": []
+        },
+        "ServicePackageFooter": {
+          "Title": "Please Note",
+          "Description": "Some wheels require lug nut re-torque.  Ask your Service Consultant for details.\r\nKeeping your tires properly inflated and rotated will assist in maximizing tire wear life and vehicle handling.  \r\n"
+        },
+        "URL": "",
+        "Flag": "",
+        "InspectionReferenceID": "00000000-0000-0000-0000-000000000000",
+        "ServicePackageTemplateID": "046eb65b-b91d-49b6-be3b-25b744ac39fd",
+        "ServiceCategoryID": "03abb60e-b59a-4513-b0cb-2caa383ff24a",
+        "ContactID": "96939734-5972-4536-9a9f-bc061a021c3f",
+        "IsInvoicing": false
+      }
+    ]
+  }
+}

@@ -130,6 +130,18 @@ export type ProtractorDeferredWork = {
   CreatedDate?: string;
   OriginalWorkOrderID?: string;
   EstimatedCost?: number;
+  Chapter?: string;
+  Code?: string;
+  Status?: string;
+  Rank?: number;
+  ServicePackageHeader?: {
+    Title?: string;
+    Description?: string;
+  };
+  Header?: {
+    CreationTime?: string;
+    LastModifiedTime?: string;
+  };
 };
 
 export function computeAuthentication(connectionId: string, apiKey: string): string {
