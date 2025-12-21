@@ -4,11 +4,13 @@ import { getDb } from "@/lib/mongo";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
+  fetchWorkOrderById,
   upsertProtractorVehicleSnapshot,
   upsertProtractorWorkOrderSnapshot,
   fetchDeferredWork,
   upsertProtractorDeferredWorkSnapshot,
 } from "@/lib/integrations/protractor";
+import pLimit from "p-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,20 +50,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const workOrders = workOrdersResult.workOrders || [];
+  const workOrdersFromList = workOrdersResult.workOrders || [];
   const results = {
-    workOrdersFound: workOrders.length,
+    workOrdersFound: workOrdersFromList.length,
     vehiclesSynced: 0,
     deferredWorkSynced: 0,
     vehicleDetails: [] as Array<{ vin: string; year?: number; make?: string; model?: string; odometer?: number; woOdometer?: number }>,
     errors: [] as string[],
   };
 
-  for (const wo of workOrders) {
+  // Fetch individual work orders to get complete data (including Odometer)
+  // Rate limit to 3 concurrent requests to avoid overwhelming the API
+  const limit = pLimit(3);
+  
+  const detailedWorkOrders = await Promise.all(
+    workOrdersFromList.map((wo) =>
+      limit(async () => {
+        const detailResult = await fetchWorkOrderById(shopId, wo.ID);
+        if (detailResult.ok && detailResult.workOrder) {
+          return detailResult.workOrder;
+        }
+        // Fallback to list data if detail fetch fails
+        return wo;
+      })
+    )
+  );
+
+  for (const wo of detailedWorkOrders) {
     try {
       if (wo.ServiceItem) {
         const vehicle = wo.ServiceItem;
         const vin = vehicle.VIN?.toUpperCase();
+        
+        // Use work order odometer (more current) or fall back to vehicle odometer
+        const currentOdometer = wo.Odometer ?? vehicle.Odometer;
         
         if (vin) {
           await upsertProtractorVehicleSnapshot(shopId, vin, vehicle);
@@ -82,7 +104,7 @@ export async function POST(req: NextRequest) {
                 make: vehicle.Make,
                 model: vehicle.Model,
                 license: vehicle.LicensePlate,
-                lastMileage: vehicle.Odometer,
+                lastMileage: currentOdometer,
                 updatedAt: new Date(),
                 protractorId: vehicle.ID,
               },
