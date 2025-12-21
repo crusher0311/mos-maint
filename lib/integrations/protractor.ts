@@ -648,3 +648,202 @@ export async function fetchDeferredWorkWithCache(
 
   return { ...result, source: "api" };
 }
+
+export type ProtractorCannedJob = {
+  ID: string;
+  Title?: string;
+  Description?: string;
+  Chapter?: string;
+  Code?: string;
+  LaborHours?: number;
+  LaborRate?: number;
+  FixedPrice?: number;
+  ServicePackageLines?: ProtractorServicePackageLine[];
+  Header?: {
+    CreationTime?: string;
+    LastModifiedTime?: string;
+  };
+};
+
+export async function fetchCannedJobs(
+  shopId: number
+): Promise<{ ok: boolean; cannedJobs?: ProtractorCannedJob[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+    "/ServicePackage/CannedJob",
+    config
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, cannedJobs: result.data?.ItemCollection || [] };
+}
+
+export async function fetchCannedJobById(
+  shopId: number,
+  cannedJobId: string
+): Promise<{ ok: boolean; cannedJob?: ProtractorCannedJob; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const result = await protractorFetch<ProtractorCannedJob>(
+    `/ServicePackage/CannedJob/${cannedJobId}`,
+    config
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, cannedJob: result.data };
+}
+
+export async function applyCannedJobToWorkOrder(
+  shopId: number,
+  workOrderId: string,
+  cannedJobId: string
+): Promise<{ ok: boolean; servicePackage?: ProtractorServicePackage; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const result = await protractorFetch<ProtractorServicePackage>(
+    `/WorkOrder/${workOrderId}/ServicePackage/CannedJob/${cannedJobId}`,
+    config,
+    { method: "POST" }
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, servicePackage: result.data };
+}
+
+export async function fetchWorkOrdersForVehicle(
+  shopId: number,
+  serviceItemId: string,
+  options?: { includeOpen?: boolean }
+): Promise<{ ok: boolean; workOrders?: ProtractorWorkOrder[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
+    `/ServiceItem/${serviceItemId}/WorkOrder`,
+    config
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  let workOrders = result.data?.ItemCollection || [];
+  
+  if (options?.includeOpen) {
+    workOrders = workOrders.filter(wo => !wo.Completed);
+  }
+
+  return { ok: true, workOrders };
+}
+
+export async function upsertCannedJobsCache(
+  shopId: number,
+  cannedJobs: ProtractorCannedJob[]
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
+  
+  await db.collection("protractor_canned_jobs").updateOne(
+    { shopId },
+    {
+      $set: {
+        shopId,
+        items: cannedJobs.map(job => ({
+          id: job.ID,
+          title: job.Title ?? "",
+          description: job.Description ?? "",
+          chapter: job.Chapter ?? "",
+          code: job.Code ?? "",
+          laborHours: job.LaborHours ?? null,
+          laborRate: job.LaborRate ?? null,
+          fixedPrice: job.FixedPrice ?? null,
+          lineCount: job.ServicePackageLines?.length ?? 0,
+        })),
+        fetchedAt: now,
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
+}
+
+export async function getCannedJobsFromCache(
+  shopId: number
+): Promise<{ ok: boolean; cannedJobs?: any[]; fetchedAt?: Date }> {
+  const db = await getDb();
+  const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
+  
+  if (!cached) {
+    return { ok: false };
+  }
+  
+  return {
+    ok: true,
+    cannedJobs: cached.items || [],
+    fetchedAt: cached.fetchedAt,
+  };
+}
+
+export async function fetchCannedJobsWithCache(
+  shopId: number,
+  maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
+): Promise<{ ok: boolean; cannedJobs?: any[]; error?: string; source?: "cache" | "api" }> {
+  const db = await getDb();
+  const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
+
+  const now = Date.now();
+  const fresh = cached?.fetchedAt
+    ? now - new Date(cached.fetchedAt).getTime() <= maxAgeMs
+    : false;
+
+  if (fresh && cached) {
+    return {
+      ok: true,
+      cannedJobs: cached.items || [],
+      source: "cache",
+    };
+  }
+
+  const result = await fetchCannedJobs(shopId);
+  if (result.ok && result.cannedJobs) {
+    await upsertCannedJobsCache(shopId, result.cannedJobs);
+    return {
+      ok: true,
+      cannedJobs: result.cannedJobs.map(job => ({
+        id: job.ID,
+        title: job.Title ?? "",
+        description: job.Description ?? "",
+        chapter: job.Chapter ?? "",
+        code: job.Code ?? "",
+        laborHours: job.LaborHours ?? null,
+        laborRate: job.LaborRate ?? null,
+        fixedPrice: job.FixedPrice ?? null,
+        lineCount: job.ServicePackageLines?.length ?? 0,
+      })),
+      source: "api",
+    };
+  }
+
+  return { ok: false, error: result.error };
+}

@@ -14,8 +14,10 @@ import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
   fetchDeferredWorkWithCache as fetchProtractorDeferredWork,
+  getCannedJobsFromCache,
   type ProtractorDeferredWork,
 } from "@/lib/integrations/protractor";
+import { AddToROButton } from "@/components/ui/AddToROButton";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -559,11 +561,20 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
   const shop = await db.collection("shops").findOne(
     { shopId },
-    { projection: { maintenance: 1 } }
+    { projection: { maintenance: 1, protractor: 1 } }
   );
   const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
   const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
   const shopIntervals: Record<string, ShopIntervalOverride> = shop?.maintenance?.intervals ?? {};
+  const cannedJobMappings: Record<string, string> = shop?.protractor?.cannedJobMappings ?? {};
+  
+  const cannedJobsCache = await getCannedJobsFromCache(shopId);
+  const cannedJobsById: Record<string, { id: string; title: string }> = {};
+  if (cannedJobsCache.ok && cannedJobsCache.cannedJobs) {
+    for (const job of cannedJobsCache.cannedJobs) {
+      cannedJobsById[job.id] = { id: job.id, title: job.title };
+    }
+  }
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
@@ -828,6 +839,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         )}
                       </div>
                     </div>
+                    {cannedJobMappings[t.key] && cannedJobsById[cannedJobMappings[t.key]] && (
+                      <AddToROButton
+                        vin={vin}
+                        serviceKey={t.key}
+                        cannedJobId={cannedJobMappings[t.key]}
+                        cannedJobTitle={cannedJobsById[cannedJobMappings[t.key]].title}
+                      />
+                    )}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -930,6 +949,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
+                    {cannedJobMappings[t.key] && cannedJobsById[cannedJobMappings[t.key]] && (
+                      <AddToROButton
+                        vin={vin}
+                        serviceKey={t.key}
+                        cannedJobId={cannedJobMappings[t.key]}
+                        cannedJobTitle={cannedJobsById[cannedJobMappings[t.key]].title}
+                      />
+                    )}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -1018,6 +1045,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
                         Previously declined
                       </span>
+                    )}
+                    {cannedJobMappings[t.key] && cannedJobsById[cannedJobMappings[t.key]] && (
+                      <AddToROButton
+                        vin={vin}
+                        serviceKey={t.key}
+                        cannedJobId={cannedJobMappings[t.key]}
+                        cannedJobTitle={cannedJobsById[cannedJobMappings[t.key]].title}
+                      />
                     )}
                   </div>
 
