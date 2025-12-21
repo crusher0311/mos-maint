@@ -12,9 +12,10 @@ type Props = {
   vin: string;
   serviceKey: string;
   cannedJobOptions: CannedJobOption[];
+  workOrderId?: string;
 };
 
-export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
+export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -44,17 +45,19 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
     }
   }, [status]);
 
-  async function handleApply(cannedJobId: string, cannedJobTitle: string, workOrderId?: string) {
+  async function handleApply(cannedJobId: string, cannedJobTitle: string, manualWorkOrderId?: string) {
     if (status === "loading" || status === "success") return;
 
     setStatus("loading");
     setErrorMsg(null);
     setShowDropdown(false);
 
+    const effectiveWorkOrderId = manualWorkOrderId || propWorkOrderId;
+
     try {
       const body: Record<string, string> = { vin, cannedJobId };
-      if (workOrderId) {
-        body.workOrderId = workOrderId;
+      if (effectiveWorkOrderId) {
+        body.workOrderId = effectiveWorkOrderId;
       }
 
       const res = await fetch("/api/protractor/apply-canned-job", {
