@@ -648,7 +648,24 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
   const ros = eventRos;
   
-  const latestRoNumber = ros[0]?.roNumber ?? null;
+  let latestRoNumber = ros[0]?.roNumber ?? null;
+  
+  // Also check Protractor for active work orders if no AutoFlow RO found
+  if (!latestRoNumber) {
+    const protractorWO = await db.collection("protractor_work_orders").findOne(
+      { 
+        shopId, 
+        "data.ServiceItem.VIN": { $regex: new RegExp(`^${vin}$`, 'i') },
+        "data.Completed": { $ne: true }
+      },
+      { sort: { "data.Header.LastModifiedTime": -1 } }
+    );
+    if (protractorWO?.data?.WorkOrderNumber) {
+      latestRoNumber = String(protractorWO.data.WorkOrderNumber);
+      console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}`);
+    }
+  }
+  
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
 
   const autoCfg = await resolveAutoflowConfig(shopId);
