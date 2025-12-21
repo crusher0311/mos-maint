@@ -45,3 +45,8 @@ build = ["npm", "run", "build"]
 DATAONE_API_URL = "http://3.144.191.161:3000"
 CARFAX_POST_URL = "https://servicesocket.carfax.com/data/1"
 CARFAX_PDI = "207625C61DD1C38E"
+
+[userenv.development]
+DEV_AUTO_LOGIN = "true"
+DEV_SHOP_ID = "1"
+DEV_USER_EMAIL = "dev@example.com"
