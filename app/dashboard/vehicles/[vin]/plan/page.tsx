@@ -122,15 +122,19 @@ type LastDone = { miles?: number | null; date?: Date | null };
 
 const SERVICE_KEYS: Record<string, string[]> = {
   oil: ["oil and filter", "engine oil", "oil change", "replace engine oil and filter"],
-  tire_rotation: ["rotate tires", "tire rotation", "rotate tyre"],
+  tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated"],
   brake_fluid: ["brake fluid", "brake flush"],
-  coolant: ["engine coolant", "coolant flush", "replace coolant"],
-  trans_fluid: ["automatic transmission fluid", "transmission fluid", "transmission flush"],
+  coolant: ["engine coolant", "coolant flush", "replace coolant", "cooling system"],
+  trans_fluid: ["automatic transmission fluid", "transmission fluid", "transmission flush", "transfer case fluid"],
   engine_air: ["engine air filter", "air filter"],
   cabin_air: ["cabin air filter", "pollen filter"],
-  spark_plugs: ["spark plugs"],
-  inspect_brakes: ["inspect brake pads", "inspect brake", "inspect brake hoses", "parking brake"],
+  spark_plugs: ["spark plugs", "spark plug(s)", "spark plug "],
+  inspect_brakes: ["inspect brake pads", "inspect brake", "inspect brake hoses", "parking brake", "brake pads replaced", "brake rotor"],
   multi_point: ["multi-point inspection", "multi point inspection"],
+  battery: ["battery replaced", "battery/charging"],
+  alignment: ["wheel alignment", "four wheel alignment"],
+  steering: ["rack and pinion", "tie rod", "steering"],
+  suspension: ["strut(s) replaced", "struts replaced", "suspension"],
 };
 
 function toKeyFromName(name: string): string | null {
