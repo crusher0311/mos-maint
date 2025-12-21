@@ -35,16 +35,20 @@ export type ProtractorVehicle = {
   ID: string;
   OwnerID?: string;
   LookUp?: string;
+  Lookup?: string;
   VIN?: string;
   Year?: number;
   Make?: string;
   Model?: string;
+  Submodel?: string;
   Color?: string;
   Engine?: string;
   Transmission?: string;
   Odometer?: number;
   OdometerDate?: string;
+  Usage?: number;
   LicensePlate?: string;
+  PlateRegistration?: string;
   Owner?: ProtractorContact;
 };
 
@@ -53,6 +57,7 @@ export type ProtractorWorkOrder = {
   WorkOrderNumber?: number;
   Type?: string;
   Status?: string;
+  WorkflowStage?: string;
   ServiceItemID?: string;
   ServiceItem?: ProtractorVehicle;
   ContactID?: string;
@@ -62,6 +67,10 @@ export type ProtractorWorkOrder = {
   ScheduledTime?: string;
   PromisedTime?: string;
   Odometer?: number;
+  InUsage?: number;
+  OutUsage?: number;
+  Duration?: number;
+  Completed?: boolean;
   ServicePackages?: ProtractorServicePackage[];
   Header?: {
     CreationTime?: string;
@@ -427,7 +436,7 @@ export async function upsertProtractorVehicleSnapshot(
         color: vehicle.Color ?? null,
         engine: vehicle.Engine ?? null,
         transmission: vehicle.Transmission ?? null,
-        odometer: vehicle.Odometer ?? null,
+        odometer: vehicle.Usage ?? vehicle.Odometer ?? null,
         odometerDate: vehicle.OdometerDate ?? null,
         licensePlate: vehicle.LicensePlate ?? null,
         ownerId: vehicle.OwnerID ?? null,
@@ -470,7 +479,9 @@ export async function upsertProtractorWorkOrderSnapshot(
         contactId: workOrder.ContactID ?? null,
         contactName,
         companyName,
-        odometer: workOrder.Odometer ?? null,
+        odometer: workOrder.InUsage ?? workOrder.Odometer ?? null,
+        workflowStage: workOrder.WorkflowStage ?? null,
+        completed: workOrder.Completed ?? false,
         scheduledTime: workOrder.ScheduledTime ?? null,
         promisedTime: workOrder.PromisedTime ?? null,
         servicePackages: workOrder.ServicePackages ?? [],

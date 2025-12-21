@@ -82,8 +82,8 @@ export async function POST(req: NextRequest) {
         const vehicle = wo.ServiceItem;
         const vin = vehicle.VIN?.toUpperCase();
         
-        // Use work order odometer (more current) or fall back to vehicle odometer
-        const currentOdometer = wo.Odometer ?? vehicle.Odometer;
+        // Use work order InUsage (more current) or fall back to vehicle Usage
+        const currentOdometer = wo.InUsage ?? vehicle.Usage ?? wo.Odometer ?? vehicle.Odometer;
         
         if (vin) {
           await upsertProtractorVehicleSnapshot(shopId, vin, vehicle);
@@ -118,8 +118,8 @@ export async function POST(req: NextRequest) {
             year: vehicle.Year,
             make: vehicle.Make,
             model: vehicle.Model,
-            odometer: vehicle.Odometer,
-            woOdometer: wo.Odometer,
+            odometer: vehicle.Usage ?? vehicle.Odometer,
+            woOdometer: wo.InUsage ?? wo.Odometer,
           });
 
           if (vehicle.ID) {
