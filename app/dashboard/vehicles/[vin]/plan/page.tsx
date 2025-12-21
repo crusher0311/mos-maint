@@ -256,12 +256,15 @@ function triage({
     let dueAtDate: Date | null = null;
 
     // Miles-based next due
+    // Track if this item has never been done (for overdue calculation)
+    let neverDone = false;
     if (intervalMiles && intervalMiles > 0) {
       if (last?.miles != null) {
         dueAtMiles = last.miles + intervalMiles;
       } else if (currentMiles != null) {
-        // align to next interval bucket if no history
-        dueAtMiles = Math.ceil(currentMiles / intervalMiles) * intervalMiles;
+        // No history: was due at the first interval
+        dueAtMiles = intervalMiles;
+        neverDone = true;
       }
     }
 
