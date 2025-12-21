@@ -52,6 +52,123 @@ function toSquish(vin: string) {
   return v.slice(0, 8) + v.slice(9, 11);
 }
 
+/* ---------------- Smart mileage interpolation for CARFAX gaps ---------------- */
+type CarfaxRecordWithParsed = {
+  date: Date | null;
+  miles: number | null;
+  description?: string;
+};
+
+function fillCarfaxMileageGaps(
+  records: Array<{ date?: string; odometer?: number; description?: string }>,
+  opts: { today: Date; currentMiles: number | null; defaultRate: number | null }
+): CarfaxRecordWithParsed[] {
+  // Parse and sort by date ascending
+  const parsed: CarfaxRecordWithParsed[] = records.map(r => ({
+    date: parseCarfaxDate(r.date ?? null),
+    miles: typeof r.odometer === "number" && r.odometer > 0 ? r.odometer : null,
+    description: r.description,
+  }));
+
+  // Sort by date (nulls at end)
+  parsed.sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date.getTime() - b.date.getTime();
+  });
+
+  // Build list of records with known mileage for interpolation reference
+  const knownPoints: Array<{ date: Date; miles: number; index: number }> = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const rec = parsed[i];
+    if (rec.date && rec.miles != null) {
+      knownPoints.push({ date: rec.date, miles: rec.miles, index: i });
+    }
+  }
+
+  // Add current mileage as a reference point if available
+  if (opts.currentMiles != null) {
+    knownPoints.push({ date: opts.today, miles: opts.currentMiles, index: -1 });
+    knownPoints.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
+
+  // Fill gaps using interpolation or extrapolation
+  for (let i = 0; i < parsed.length; i++) {
+    const rec = parsed[i];
+    if (rec.miles != null || !rec.date) continue; // Already has miles or no date
+
+    const recTime = rec.date.getTime();
+
+    // Find closest known points before and after
+    let before: { date: Date; miles: number } | null = null;
+    let after: { date: Date; miles: number } | null = null;
+
+    for (const kp of knownPoints) {
+      if (kp.date.getTime() <= recTime) {
+        before = kp;
+      } else if (!after) {
+        after = kp;
+        break;
+      }
+    }
+
+    if (before && after) {
+      // Interpolate between two known points
+      const totalDays = (after.date.getTime() - before.date.getTime()) / (1000 * 60 * 60 * 24);
+      const daysSinceBefore = (recTime - before.date.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (totalDays > 0) {
+        const ratio = daysSinceBefore / totalDays;
+        const estimated = Math.round(before.miles + ratio * (after.miles - before.miles));
+        // Clamp to ensure monotonic (between before and after)
+        rec.miles = Math.max(before.miles, Math.min(after.miles, estimated));
+      } else {
+        rec.miles = before.miles;
+      }
+    } else if (before) {
+      // Extrapolate forward from the last known point
+      // Find rate from before's surrounding points
+      const beforeIdx = knownPoints.indexOf(before);
+      if (beforeIdx > 0) {
+        const prevPoint = knownPoints[beforeIdx - 1];
+        const days = (before.date.getTime() - prevPoint.date.getTime()) / (1000 * 60 * 60 * 24);
+        if (days > 0) {
+          const rate = (before.miles - prevPoint.miles) / days;
+          const daysSince = (recTime - before.date.getTime()) / (1000 * 60 * 60 * 24);
+          rec.miles = Math.round(before.miles + rate * daysSince);
+        }
+      } else if (opts.defaultRate != null) {
+        // Use default rate
+        const daysSince = (recTime - before.date.getTime()) / (1000 * 60 * 60 * 24);
+        rec.miles = Math.round(before.miles + opts.defaultRate * daysSince);
+      }
+    } else if (after) {
+      // Extrapolate backward from the first known point
+      // Find rate from after's surrounding points
+      const afterIdx = knownPoints.indexOf(after);
+      if (afterIdx < knownPoints.length - 1) {
+        const nextPoint = knownPoints[afterIdx + 1];
+        const days = (nextPoint.date.getTime() - after.date.getTime()) / (1000 * 60 * 60 * 24);
+        if (days > 0) {
+          const rate = (nextPoint.miles - after.miles) / days;
+          const daysBefore = (after.date.getTime() - recTime) / (1000 * 60 * 60 * 24);
+          rec.miles = Math.round(after.miles - rate * daysBefore);
+        }
+      } else if (opts.defaultRate != null) {
+        // Use default rate going backward
+        const daysBefore = (after.date.getTime() - recTime) / (1000 * 60 * 60 * 24);
+        rec.miles = Math.round(after.miles - opts.defaultRate * daysBefore);
+      }
+    }
+
+    // Ensure non-negative
+    if (rec.miles != null && rec.miles < 0) rec.miles = null;
+  }
+
+  return parsed;
+}
+
 /* ---------------- Get latest miles from multiple sources ---------------- */
 async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | null> {
   const vin = String(vinRaw || "").toUpperCase();
@@ -212,26 +329,18 @@ function triage({
   soonDays?: number;
   milesPerDay?: number | null;
 }): Buckets {
-  // Helper to estimate mileage from date if we have miles/day rate
-  const estimateMilesFromDate = (date: Date): number | null => {
-    if (milesPerDay == null || currentMiles == null) return null;
-    const daysAgo = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (daysAgo < 0) return null;
-    // Estimate: current mileage - (days ago * miles per day)
-    const estimated = Math.round(currentMiles - (daysAgo * milesPerDay));
-    return estimated > 0 ? estimated : null;
-  };
+  // Enrich CARFAX records with interpolated mileage for gaps
+  const enrichedRecords = fillCarfaxMileageGaps(carfaxRecords || [], {
+    today,
+    currentMiles,
+    defaultRate: milesPerDay,
+  });
 
-  // last-done map from CARFAX
+  // last-done map from CARFAX (now with interpolated mileage)
   const lastMap = new Map<string, LastDone>();
-  for (const r of carfaxRecords || []) {
-    const date = parseCarfaxDate(r.date ?? null);
-    let miles = typeof r.odometer === "number" ? r.odometer : null;
-    
-    // If we have a date but no mileage, estimate from miles/day
-    if (miles == null && date != null) {
-      miles = estimateMilesFromDate(date);
-    }
+  for (const r of enrichedRecords) {
+    const date = r.date;
+    const miles = r.miles;
     
     const desc = String(r.description || "").trim();
     const keys = toKeyFromFreeText(desc);
