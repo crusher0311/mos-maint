@@ -796,28 +796,13 @@ export async function applyCannedJobToWorkOrder(
     return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
   }
 
-  const now = new Date().toISOString();
-  
-  // Try minimal service package - let Protractor assign IDs
-  // Based on API docs, we may need to only provide essential fields
+  // Try absolute minimal - just the Code to reference existing template
+  // Protractor should pull all template details from the Code
   const newServicePackage: any = {
-    Code: cannedJobCode,
-    Status: "Pending",
-    Chapter: "Service",
-    Rank: (existingWorkOrder.ServicePackages?.length || 0) + 1,
-    ServicePackageHeader: {
-      Title: cannedJobTitle || cannedJobCode,
-      Description: `Added via MOS Maintenance`
-    },
-    ServicePackageLines: [],
-    ServicePackageInspectionLines: [],
-    ServicePackageFooter: {
-      Title: "",
-      Description: ""
-    }
+    Code: cannedJobCode
   };
   
-  console.log(`[Protractor] New service package (minimal):`, JSON.stringify(newServicePackage));
+  console.log(`[Protractor] Adding service package by code only:`, cannedJobCode);
 
   const updatedServicePackages = [
     ...(existingWorkOrder.ServicePackages || []),
