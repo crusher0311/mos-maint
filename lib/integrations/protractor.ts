@@ -733,7 +733,9 @@ export async function applyCannedJobToWorkOrder(
     `/WorkOrder/${workOrderId}/ServicePackage/CannedJob/${encodeURIComponent(cannedJobCode)}`,
   ];
 
+  const errors: string[] = [];
   for (const endpoint of endpoints) {
+    console.log(`[Protractor] Trying endpoint: ${endpoint}`);
     const result = await protractorFetch<ProtractorServicePackage>(
       endpoint,
       config,
@@ -741,11 +743,15 @@ export async function applyCannedJobToWorkOrder(
     );
 
     if (result.ok) {
+      console.log(`[Protractor] Success with endpoint: ${endpoint}`);
       return { ok: true, servicePackage: result.data };
     }
+    errors.push(`${endpoint}: ${result.error}`);
+    console.log(`[Protractor] Failed: ${result.error}`);
   }
 
-  return { ok: false, error: "Failed to apply service package to work order. Please verify the code is correct." };
+  console.log(`[Protractor] All endpoints failed for code "${cannedJobCode}" on WO "${workOrderId}"`);
+  return { ok: false, error: `Failed to apply service package. Tried endpoints: ${errors.join("; ")}` };
 }
 
 export async function fetchWorkOrdersForVehicle(

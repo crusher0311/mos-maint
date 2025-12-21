@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { vin, cannedJobId, workOrderId } = body;
+  console.log(`[Apply Canned Job] Request: vin=${vin}, cannedJobId=${cannedJobId}, workOrderId=${workOrderId}`);
 
   if (!cannedJobId) {
     return NextResponse.json({ error: "cannedJobId is required" }, { status: 400 });
@@ -38,8 +39,10 @@ export async function POST(req: NextRequest) {
   let targetWorkOrderId = workOrderId;
 
   if (!targetWorkOrderId && vin) {
+    console.log(`[Apply Canned Job] Looking up vehicle by VIN: ${vin}`);
     const vehicleResult = await fetchVehicleByVin(shopId, vin);
     if (!vehicleResult.ok || !vehicleResult.vehicle) {
+      console.log(`[Apply Canned Job] Vehicle not found: ${vehicleResult.error}`);
       return NextResponse.json(
         { error: vehicleResult.error || "Vehicle not found in Protractor" },
         { status: 404 }
@@ -47,11 +50,14 @@ export async function POST(req: NextRequest) {
     }
 
     const serviceItemId = vehicleResult.vehicle.ID;
+    console.log(`[Apply Canned Job] Found vehicle, ServiceItemID: ${serviceItemId}`);
+    
     const workOrdersResult = await fetchWorkOrdersForVehicle(shopId, serviceItemId, {
       includeOpen: true,
     });
 
     if (!workOrdersResult.ok) {
+      console.log(`[Apply Canned Job] Failed to fetch work orders: ${workOrdersResult.error}`);
       return NextResponse.json(
         { error: workOrdersResult.error || "Failed to fetch work orders" },
         { status: 500 }
@@ -61,15 +67,17 @@ export async function POST(req: NextRequest) {
     const openWorkOrders = (workOrdersResult.workOrders || []).filter(
       (wo) => !wo.Completed
     );
+    console.log(`[Apply Canned Job] Found ${openWorkOrders.length} open work orders`);
 
     if (openWorkOrders.length === 0) {
       return NextResponse.json(
-        { error: "No open work order found for this vehicle" },
+        { error: "No open work order found for this vehicle. The vehicle must have an active RO in Protractor." },
         { status: 404 }
       );
     }
 
     targetWorkOrderId = openWorkOrders[0].ID;
+    console.log(`[Apply Canned Job] Using work order ID: ${targetWorkOrderId}`);
   }
 
   if (!targetWorkOrderId) {
