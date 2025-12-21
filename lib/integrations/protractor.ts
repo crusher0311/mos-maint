@@ -720,24 +720,32 @@ export async function fetchCannedJobById(
 export async function applyCannedJobToWorkOrder(
   shopId: number,
   workOrderId: string,
-  cannedJobId: string
+  cannedJobCode: string
 ): Promise<{ ok: boolean; servicePackage?: ProtractorServicePackage; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const result = await protractorFetch<ProtractorServicePackage>(
-    `/WorkOrder/${workOrderId}/ServicePackage/CannedJob/${cannedJobId}`,
-    config,
-    { method: "POST" }
-  );
+  const endpoints = [
+    `/WorkOrder/${workOrderId}/ServicePackage/${encodeURIComponent(cannedJobCode)}`,
+    `/WorkOrder/${workOrderId}/ServicePackage/Code/${encodeURIComponent(cannedJobCode)}`,
+    `/WorkOrder/${workOrderId}/ServicePackage/CannedJob/${encodeURIComponent(cannedJobCode)}`,
+  ];
 
-  if (!result.ok) {
-    return { ok: false, error: result.error };
+  for (const endpoint of endpoints) {
+    const result = await protractorFetch<ProtractorServicePackage>(
+      endpoint,
+      config,
+      { method: "POST" }
+    );
+
+    if (result.ok) {
+      return { ok: true, servicePackage: result.data };
+    }
   }
 
-  return { ok: true, servicePackage: result.data };
+  return { ok: false, error: "Failed to apply service package to work order. Please verify the code is correct." };
 }
 
 export async function fetchWorkOrdersForVehicle(
