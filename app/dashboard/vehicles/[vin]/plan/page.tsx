@@ -658,21 +658,22 @@ export default async function VehiclePlanPage({ params }: PageProps) {
       vin: { $regex: new RegExp(`^${vin}$`, 'i') }
     });
     
-    const serviceItemId = protractorVehicleCache?.data?.ID;
+    // protractor_vehicles stores the Protractor ID in 'protractorId' field
+    const serviceItemId = protractorVehicleCache?.protractorId;
     console.log(`[Plan Debug] Protractor ServiceItemID for VIN ${vin}: ${serviceItemId || 'not found'}`);
     
     if (serviceItemId) {
-      // Look up work orders by ServiceItemID
+      // Look up work orders by ServiceItemID - stored in flat 'serviceItemId' field
       const protractorWO = await db.collection("protractor_work_orders").findOne(
         { 
           shopId, 
-          "data.ServiceItemID": serviceItemId,
-          "data.Completed": { $ne: true }
+          serviceItemId: serviceItemId,
+          completed: { $ne: true }
         },
-        { sort: { "data.Header.LastModifiedTime": -1 } }
+        { sort: { fetchedAt: -1 } }
       );
-      if (protractorWO?.data?.WorkOrderNumber) {
-        latestRoNumber = String(protractorWO.data.WorkOrderNumber);
+      if (protractorWO?.workOrderNumber) {
+        latestRoNumber = String(protractorWO.workOrderNumber);
         console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}`);
       }
     }
