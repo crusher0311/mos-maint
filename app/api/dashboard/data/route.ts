@@ -256,19 +256,25 @@ export async function GET() {
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
-          shopId: Number(user.shopId),
-          status: { $nin: ["Closed", "Invoiced", "Completed"] }
+          $or: [
+            { shopId: Number(user.shopId) },
+            { shopId: String(user.shopId) }
+          ]
         }
       },
       {
         $lookup: {
           from: "protractor_vehicles",
-          let: { serviceItemId: "$serviceItemId" },
+          let: { serviceItemId: "$serviceItemId", vin: "$vin" },
           pipeline: [
             {
               $match: {
-                $expr: { $eq: ["$protractorId", "$$serviceItemId"] },
-                shopId: Number(user.shopId)
+                $expr: {
+                  $or: [
+                    { $eq: ["$protractorId", "$$serviceItemId"] },
+                    { $eq: [{ $toUpper: "$vin" }, { $toUpper: "$$vin" }] }
+                  ]
+                }
               }
             },
             { $limit: 1 }
@@ -294,8 +300,8 @@ export async function GET() {
           displayVin: { $toUpper: { $ifNull: ["$vehicleData.vin", "$vin"] } },
           displayMiles: { $ifNull: ["$odometer", "$vehicleData.odometer"] },
           displayRo: "$workOrderNumber",
-          dviDone: false,
-          source: "protractor",
+          dviDone: { $literal: false },
+          source: { $literal: "protractor" },
           af: {
             status: "$status",
             createdAt: "$fetchedAt",
