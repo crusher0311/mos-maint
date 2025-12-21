@@ -83,10 +83,14 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
-- **2024-12-21**: Protractor Canned Jobs Integration
+- **2024-12-21**: Protractor Canned Jobs Integration (Multi-Select)
   - **Canned Job Sync**: Fetch and cache canned jobs from Protractor API
   - **Mapping UI**: Settings > Canned Jobs page to map service keys (oil, brakes, etc.) to Protractor canned job IDs
-  - **One-Click Add to RO**: Blue "Add to RO" button appears on Plan page recommendations when a mapped canned job exists
+  - **Multiple Options Per Service**: Each service type can have multiple canned job options mapped (e.g., different oil change types)
+  - Mapping data stored as `Record<string, string[]>` in `shops.protractor.cannedJobMappings`
+  - **Add to RO Button**: Blue "Add to RO" button on Plan page recommendations
+    - Single canned job: One-click to add
+    - Multiple canned jobs: Dropdown for advisor to select which option applies
   - Clicking the button automatically finds the vehicle's open work order and applies the canned job
   - Application history logged in `canned_job_applications` collection
   - Canned jobs cached in `protractor_canned_jobs` with 6-hour TTL
