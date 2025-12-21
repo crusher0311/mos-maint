@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Loader2, Check, AlertCircle, ChevronDown, X } from "lucide-react";
+import { Plus, Loader2, Check, AlertCircle, ChevronDown, X, Copy, ClipboardCheck } from "lucide-react";
 
 type CannedJobOption = {
   id: string;
@@ -16,12 +16,13 @@ type Props = {
 };
 
 export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId }: Props) {
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO" | "copied">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [appliedJobTitle, setAppliedJobTitle] = useState<string | null>(null);
   const [manualRONumber, setManualRONumber] = useState("");
   const [pendingJob, setPendingJob] = useState<CannedJobOption | null>(null);
+  const [apiUnavailable, setApiUnavailable] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +79,10 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
         setStatus("needsRO");
         setPendingJob({ id: cannedJobId, title: cannedJobTitle });
         setErrorMsg(null);
+      } else if (data.error?.includes("Failed to apply service package") || res.status === 500) {
+        setApiUnavailable(true);
+        setStatus("idle");
+        setErrorMsg("API not available - use Copy instead");
       } else {
         setStatus("error");
         setErrorMsg(data.error || "Failed to add to RO");
@@ -93,6 +98,22 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
     handleApply(pendingJob.id, pendingJob.title, manualRONumber.trim());
   }
 
+  async function handleCopy(cannedJobId: string, cannedJobTitle: string) {
+    try {
+      await navigator.clipboard.writeText(cannedJobId);
+      setStatus("copied");
+      setAppliedJobTitle(cannedJobTitle);
+      setShowDropdown(false);
+      setTimeout(() => {
+        setStatus("idle");
+        setAppliedJobTitle(null);
+      }, 2000);
+    } catch {
+      setStatus("error");
+      setErrorMsg("Failed to copy");
+    }
+  }
+
   if (!cannedJobOptions || cannedJobOptions.length === 0) {
     return null;
   }
@@ -102,6 +123,15 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
         <Check className="w-3 h-3" />
         Added{appliedJobTitle ? `: ${appliedJobTitle}` : ""}
+      </span>
+    );
+  }
+
+  if (status === "copied") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+        <ClipboardCheck className="w-3 h-3" />
+        Copied{appliedJobTitle ? `: ${appliedJobTitle}` : ""}
       </span>
     );
   }
@@ -167,6 +197,56 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
         <AlertCircle className="w-3 h-3" />
         Retry
       </span>
+    );
+  }
+
+  if (apiUnavailable) {
+    if (cannedJobOptions.length === 1) {
+      const job = cannedJobOptions[0];
+      return (
+        <button
+          onClick={() => handleCopy(job.id, job.title)}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-600 text-white text-xs font-medium hover:bg-gray-700 transition-colors"
+          title={`Copy "${job.id}" to clipboard`}
+        >
+          <Copy className="w-3 h-3" />
+          Copy Code
+        </button>
+      );
+    }
+
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setShowDropdown(!showDropdown)}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-600 text-white text-xs font-medium hover:bg-gray-700 transition-colors"
+        >
+          <Copy className="w-3 h-3" />
+          Copy Code
+          <ChevronDown className="w-3 h-3" />
+        </button>
+
+        {showDropdown && (
+          <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            <div className="p-2 border-b border-gray-100">
+              <span className="text-xs text-gray-500 font-medium">Copy code to add in Protractor:</span>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {cannedJobOptions.map((job) => (
+                <button
+                  key={job.id}
+                  onClick={() => handleCopy(job.id, job.title)}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors flex items-center gap-2"
+                >
+                  <Copy className="w-3 h-3 text-gray-400" />
+                  <span>{job.title}</span>
+                  <span className="text-xs text-gray-400 ml-auto">{job.id}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
