@@ -11,9 +11,13 @@ type DashboardData = {
 
 export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
   const [data, setData] = useState(initialData);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setLastUpdated(new Date());
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -254,7 +258,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         </div>
 
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
-          <p>Last updated: {lastUpdated.toLocaleTimeString()}</p>
+          <p>Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : "—"}</p>
           <p className="flex items-center gap-1">
             <span className="w-2 h-2 bg-green-500 rounded-full"></span>
             Auto-refreshes every 30 seconds
