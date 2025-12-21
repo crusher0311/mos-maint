@@ -81,6 +81,13 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-12-21**: Vehicle Component Tracking & Declined Services
+  - **Vehicle Attribute Checkboxes**: Advisors can mark which components a vehicle has (e.g., cabin filter, timing belt) via checkboxes in the Attributes tab. Data stored in `vehicles.hasComponents` as normalized key-value pairs.
+  - **Declined Services Tracking**: Track services customers have declined with reason, mileage, and date. Displayed in History tab with red "DECLINED" badge.
+  - **"Previously Declined" Badge on Plan**: Recommendations that match previously declined services show an orange "Previously declined" badge with decline context.
+  - **Refined Recs UI**: DVI inspection items now have cleaner visual indicators with colored left borders (red for needs attention, yellow for caution), category headers show count badges, and status labels are more prominent.
+  - **API Endpoints**: `/api/vehicles/[vin]/components` (GET/PATCH) and `/api/vehicles/[vin]/declined` (GET/POST/DELETE) for managing component states and declined services.
+
 - **2024-12-20**: Protractor Integration
   - Created lib/integrations/protractor.ts with HMAC-SHA1 authentication (verified against official sample)
   - API client supports: Locations, Contacts, ServiceItems (vehicles), WorkOrders, Invoices, DeferredWork
