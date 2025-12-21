@@ -31,7 +31,7 @@ export async function GET() {
     }
 
     // Build rows from latest AutoFlow events per VIN (same logic as dashboard page)
-    const rows = await db.collection("events").aggregate([
+    const autoflowRows = await db.collection("events").aggregate([
       {
         $match: {
           $and: [
@@ -251,6 +251,73 @@ export async function GET() {
       // Limit to a reasonable count
       { $limit: 100 }
     ]).toArray();
+
+    // Also fetch Protractor work orders with active status
+    const protractorRows = await db.collection("protractor_work_orders").aggregate([
+      {
+        $match: {
+          shopId: Number(user.shopId),
+          status: { $nin: ["Closed", "Invoiced", "Completed"] }
+        }
+      },
+      {
+        $lookup: {
+          from: "protractor_vehicles",
+          let: { serviceItemId: "$serviceItemId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$protractorId", "$$serviceItemId"] },
+                shopId: Number(user.shopId)
+              }
+            },
+            { $limit: 1 }
+          ],
+          as: "vehicleData"
+        }
+      },
+      { $unwind: { path: "$vehicleData", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          updatedAt: { $ifNull: ["$fetchedAt", new Date()] },
+          displayName: { $ifNull: ["$contactName", "Unknown Customer"] },
+          displayVehicle: {
+            $concat: [
+              { $toString: { $ifNull: ["$vehicleData.year", ""] } },
+              { $cond: [{ $ifNull: ["$vehicleData.year", false] }, " ", ""] },
+              { $ifNull: ["$vehicleData.make", ""] },
+              { $cond: [{ $ifNull: ["$vehicleData.make", false] }, " ", ""] },
+              { $ifNull: ["$vehicleData.model", ""] }
+            ]
+          },
+          displayVin: { $toUpper: { $ifNull: ["$vehicleData.vin", "$vin"] } },
+          displayMiles: { $ifNull: ["$odometer", "$vehicleData.odometer"] },
+          displayRo: "$workOrderNumber",
+          dviDone: false,
+          source: "protractor",
+          af: {
+            status: "$status",
+            createdAt: "$fetchedAt",
+            miles: { $ifNull: ["$odometer", "$vehicleData.odometer"] }
+          }
+        }
+      },
+      { $match: { displayVin: { $type: "string", $ne: "" } } },
+      { $limit: 100 }
+    ]).toArray();
+
+    // Merge and deduplicate by VIN (AutoFlow takes priority)
+    const autoflowVins = new Set(autoflowRows.map((r: any) => r.displayVin?.toUpperCase()));
+    const uniqueProtractorRows = protractorRows.filter(
+      (r: any) => r.displayVin && !autoflowVins.has(r.displayVin.toUpperCase())
+    );
+
+    const rows = [...autoflowRows, ...uniqueProtractorRows].sort((a: any, b: any) => {
+      const nameA = a.displayName || "";
+      const nameB = b.displayName || "";
+      return nameA.localeCompare(nameB);
+    });
 
     return NextResponse.json({
       rows,
