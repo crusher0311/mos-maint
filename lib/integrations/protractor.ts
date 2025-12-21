@@ -796,13 +796,43 @@ export async function applyCannedJobToWorkOrder(
     return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
   }
 
-  // Try absolute minimal - just the Code to reference existing template
-  // Protractor should pull all template details from the Code
+  const now = new Date().toISOString();
+  const newPackageId = crypto.randomUUID();
+  
+  // Match the exact structure from Protractor's deferred work format
   const newServicePackage: any = {
-    Code: cannedJobCode
+    Header: {
+      ID: newPackageId,
+      CreationTime: now,
+      DeletionTime: "0001-01-01T00:00:00",
+      DeletionTimeSpecified: true,
+      LastModifiedTime: now
+    },
+    ID: newPackageId,
+    Chapter: "Service",
+    Rank: (existingWorkOrder.ServicePackages?.length || 0) + 1,
+    Code: cannedJobCode,
+    Status: "Pending",
+    ServicePackageHeader: {
+      Title: cannedJobTitle || cannedJobCode,
+      Description: "Added via MOS Maintenance"
+    },
+    ServicePackageLines: {
+      ItemCollection: []
+    },
+    ServicePackageInspectionLines: {
+      ItemCollection: []
+    },
+    ServicePackageFooter: {
+      Title: "",
+      Description: ""
+    },
+    URL: "",
+    Flag: "",
+    IsInvoicing: false
   };
   
-  console.log(`[Protractor] Adding service package by code only:`, cannedJobCode);
+  console.log(`[Protractor] Adding service package with full structure:`, JSON.stringify(newServicePackage));
 
   const updatedServicePackages = [
     ...(existingWorkOrder.ServicePackages || []),
