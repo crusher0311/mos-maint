@@ -288,7 +288,12 @@ export async function GET() {
         $project: {
           _id: 0,
           updatedAt: { $ifNull: ["$fetchedAt", new Date()] },
-          displayName: { $ifNull: ["$workOrder.contactName", "Unknown Customer"] },
+          displayName: {
+            $ifNull: [
+              "$workOrder.companyName",
+              { $ifNull: ["$workOrder.contactName", "Unknown Customer"] }
+            ]
+          },
           displayVehicle: {
             $concat: [
               { $toString: { $ifNull: ["$year", ""] } },
@@ -299,14 +304,24 @@ export async function GET() {
             ]
           },
           displayVin: "$vin",
-          displayMiles: { $ifNull: ["$workOrder.odometer", "$odometer"] },
+          displayMiles: {
+            $ifNull: [
+              "$workOrder.odometer",
+              { $ifNull: ["$odometer", null] }
+            ]
+          },
           displayRo: "$workOrder.workOrderNumber",
           dviDone: { $literal: false },
           source: { $literal: "protractor" },
           af: {
             status: { $ifNull: ["$workOrder.status", "Open"] },
             createdAt: "$fetchedAt",
-            miles: { $ifNull: ["$workOrder.odometer", "$odometer"] }
+            miles: {
+              $ifNull: [
+                "$workOrder.odometer",
+                { $ifNull: ["$odometer", null] }
+              ]
+            }
           }
         }
       },

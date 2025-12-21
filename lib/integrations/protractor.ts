@@ -454,6 +454,8 @@ export async function upsertProtractorWorkOrderSnapshot(
         .join(" ") || workOrder.Contact.FileAs || null
     : null;
   
+  const companyName = workOrder.Contact?.Company || null;
+  
   await db.collection("protractor_work_orders").updateOne(
     { shopId, workOrderId: workOrder.ID },
     {
@@ -467,6 +469,7 @@ export async function upsertProtractorWorkOrderSnapshot(
         serviceItemId: workOrder.ServiceItemID ?? null,
         contactId: workOrder.ContactID ?? null,
         contactName,
+        companyName,
         odometer: workOrder.Odometer ?? null,
         scheduledTime: workOrder.ScheduledTime ?? null,
         promisedTime: workOrder.PromisedTime ?? null,
