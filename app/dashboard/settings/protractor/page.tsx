@@ -9,16 +9,24 @@ import {
   Link2,
   Key,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ProtractorSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState<{
     configured: boolean;
     connectionId?: string;
     hasApiKey?: boolean;
+  } | null>(null);
+  const [syncStats, setSyncStats] = useState<{
+    vehicles: number;
+    workOrders: number;
+    deferredWorkItems: number;
+    lastSync: string | null;
   } | null>(null);
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -35,11 +43,57 @@ export default function ProtractorSettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
+        
+        if (data.configured) {
+          fetchSyncStats();
+        }
       }
     } catch (err) {
       console.error("Failed to fetch Protractor status:", err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchSyncStats() {
+    try {
+      const res = await fetch("/api/protractor/sync", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats) {
+          setSyncStats(data.stats);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch sync stats:", err);
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/protractor/sync", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.ok) {
+        setMessage({ 
+          type: "success", 
+          text: `Synced ${data.vehiclesSynced} vehicles from ${data.workOrdersFound} work orders` 
+        });
+        fetchSyncStats();
+      } else {
+        setMessage({ type: "error", text: data.error || "Sync failed" });
+      }
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message || "Sync failed" });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -179,25 +233,87 @@ export default function ProtractorSettingsPage() {
         </div>
 
         {status?.configured ? (
-          <div className="p-6">
-            <p className="text-gray-600 mb-4">
-              Your shop is connected to Protractor. Vehicle data, work orders, and
-              service history will sync automatically.
-            </p>
-            <button
-              onClick={handleDisconnect}
-              disabled={saving}
-              className="px-4 py-2 bg-red-50 text-red-700 rounded-lg border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
-            >
-              {saving ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Disconnecting...
-                </span>
+          <div className="p-6 space-y-6">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-medium text-gray-900 mb-3">Sync Status</h3>
+              {syncStats ? (
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600">{syncStats.vehicles}</div>
+                    <div className="text-sm text-gray-500">Vehicles</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600">{syncStats.workOrders}</div>
+                    <div className="text-sm text-gray-500">Work Orders</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600">{syncStats.deferredWorkItems}</div>
+                    <div className="text-sm text-gray-500">Deferred Items</div>
+                  </div>
+                </div>
               ) : (
-                "Disconnect Protractor"
+                <p className="text-gray-500 text-sm">No sync data yet</p>
               )}
-            </button>
+              {syncStats?.lastSync && (
+                <p className="text-xs text-gray-400 mt-3 text-center">
+                  Last synced: {new Date(syncStats.lastSync).toLocaleString()}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">
+                  Click "Sync Now" to import all currently open work orders and vehicles from Protractor.
+                </p>
+              </div>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Sync Now
+                  </>
+                )}
+              </button>
+            </div>
+
+            {message && (
+              <div
+                className={`p-4 rounded-lg ${
+                  message.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}
+              >
+                {message.text}
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-gray-200">
+              <button
+                onClick={handleDisconnect}
+                disabled={saving}
+                className="px-4 py-2 bg-red-50 text-red-700 rounded-lg border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+              >
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Disconnecting...
+                  </span>
+                ) : (
+                  "Disconnect Protractor"
+                )}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="p-6 space-y-6">
