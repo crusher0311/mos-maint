@@ -844,7 +844,48 @@ export async function applyCannedJobToWorkOrder(
     ServicePackages: updatedServicePackages
   };
 
-  console.log(`[Protractor] POSTing work order update with new service package`);
+  console.log(`[Protractor] Trying multiple approaches to add service package...`);
+  
+  // Approach 1: Try POST to /WorkOrder/{id}/ServicePackage (dedicated endpoint)
+  console.log(`[Protractor] Approach 1: POST /WorkOrder/${workOrderGuid}/ServicePackage`);
+  const spResult = await protractorFetch<any>(
+    `/WorkOrder/${workOrderGuid}/ServicePackage`,
+    config,
+    {
+      method: "POST",
+      body: JSON.stringify(newServicePackage)
+    }
+  );
+  
+  if (spResult.ok) {
+    console.log(`[Protractor] Approach 1 SUCCESS: Service package added via dedicated endpoint`);
+    return { ok: true, servicePackage: spResult.data || newServicePackage };
+  }
+  console.log(`[Protractor] Approach 1 failed: ${spResult.error}`);
+  
+  // Approach 2: Try PUT to /WorkOrder/{id} with full payload
+  console.log(`[Protractor] Approach 2: PUT /WorkOrder/${workOrderGuid} with updated ServicePackages`);
+  const putResult = await protractorFetch<any>(
+    `/WorkOrder/${workOrderGuid}`,
+    config,
+    {
+      method: "PUT",
+      body: JSON.stringify(updatePayload)
+    }
+  );
+  
+  if (putResult.ok) {
+    console.log(`[Protractor] Approach 2 SUCCESS: Work order updated via PUT`);
+    const packages = Array.isArray(putResult.data?.ServicePackages) ? putResult.data.ServicePackages : [];
+    if (packages.length > 0) {
+      return { ok: true, servicePackage: packages[packages.length - 1] };
+    }
+    return { ok: true, servicePackage: newServicePackage };
+  }
+  console.log(`[Protractor] Approach 2 failed: ${putResult.error}`);
+  
+  // Approach 3: Original POST to /WorkOrder/{id}
+  console.log(`[Protractor] Approach 3: POST /WorkOrder/${workOrderGuid} with updated ServicePackages`);
   console.log(`[Protractor] Total service packages in payload: ${updatedServicePackages.length}`);
 
   const result = await protractorFetch<any>(
@@ -857,11 +898,11 @@ export async function applyCannedJobToWorkOrder(
   );
 
   if (!result.ok) {
-    console.log(`[Protractor] Failed to update work order: ${result.error}`);
-    return { ok: false, error: result.error || "Failed to update work order" };
+    console.log(`[Protractor] Approach 3 failed: ${result.error}`);
+    return { ok: false, error: "All approaches failed to add service package. The Protractor API may not support adding packages via the API." };
   }
 
-  console.log(`[Protractor] Work order update response received`);
+  console.log(`[Protractor] Approach 3 work order update response received`);
   console.log(`[Protractor] Response data keys:`, Object.keys(result.data || {}));
   
   // Protractor may return just confirmation or the full work order
