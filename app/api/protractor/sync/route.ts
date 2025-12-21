@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     workOrdersFound: workOrders.length,
     vehiclesSynced: 0,
     deferredWorkSynced: 0,
-    vehicleDetails: [] as Array<{ vin: string; year?: number; make?: string; model?: string }>,
+    vehicleDetails: [] as Array<{ vin: string; year?: number; make?: string; model?: string; odometer?: number; woOdometer?: number }>,
     errors: [] as string[],
   };
 
@@ -96,6 +96,8 @@ export async function POST(req: NextRequest) {
             year: vehicle.Year,
             make: vehicle.Make,
             model: vehicle.Model,
+            odometer: vehicle.Odometer,
+            woOdometer: wo.Odometer,
           });
 
           if (vehicle.ID) {
