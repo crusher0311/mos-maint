@@ -58,6 +58,15 @@ export async function POST(req: NextRequest) {
 
     if (!workOrdersResult.ok) {
       console.log(`[Apply Canned Job] Failed to fetch work orders: ${workOrdersResult.error}`);
+      if (workOrdersResult.error === "WORK_ORDER_LOOKUP_NOT_AVAILABLE") {
+        return NextResponse.json(
+          { 
+            error: "Work order lookup not available. Please enter the RO number manually.",
+            requiresManualEntry: true
+          },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
         { error: workOrdersResult.error || "Failed to fetch work orders" },
         { status: 500 }
@@ -71,8 +80,11 @@ export async function POST(req: NextRequest) {
 
     if (openWorkOrders.length === 0) {
       return NextResponse.json(
-        { error: "No open work order found for this vehicle. The vehicle must have an active RO in Protractor." },
-        { status: 404 }
+        { 
+          error: "No open work order found for this vehicle. Please enter the RO number manually.",
+          requiresManualEntry: true
+        },
+        { status: 400 }
       );
     }
 

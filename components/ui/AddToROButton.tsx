@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Loader2, Check, AlertCircle, ChevronDown } from "lucide-react";
+import { Plus, Loader2, Check, AlertCircle, ChevronDown, X } from "lucide-react";
 
 type CannedJobOption = {
   id: string;
@@ -15,23 +15,36 @@ type Props = {
 };
 
 export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [appliedJobTitle, setAppliedJobTitle] = useState<string | null>(null);
+  const [manualRONumber, setManualRONumber] = useState("");
+  const [pendingJob, setPendingJob] = useState<CannedJobOption | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
+        if (status === "needsRO") {
+          setStatus("idle");
+          setPendingJob(null);
+        }
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [status]);
 
-  async function handleApply(cannedJobId: string, cannedJobTitle: string) {
+  useEffect(() => {
+    if (status === "needsRO" && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [status]);
+
+  async function handleApply(cannedJobId: string, cannedJobTitle: string, workOrderId?: string) {
     if (status === "loading" || status === "success") return;
 
     setStatus("loading");
@@ -39,11 +52,16 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
     setShowDropdown(false);
 
     try {
+      const body: Record<string, string> = { vin, cannedJobId };
+      if (workOrderId) {
+        body.workOrderId = workOrderId;
+      }
+
       const res = await fetch("/api/protractor/apply-canned-job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ vin, cannedJobId }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();
@@ -51,14 +69,25 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
       if (res.ok && data.success) {
         setStatus("success");
         setAppliedJobTitle(cannedJobTitle);
+        setManualRONumber("");
+        setPendingJob(null);
+      } else if (data.requiresManualEntry) {
+        setStatus("needsRO");
+        setPendingJob({ id: cannedJobId, title: cannedJobTitle });
+        setErrorMsg(null);
       } else {
         setStatus("error");
         setErrorMsg(data.error || "Failed to add to RO");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus("error");
-      setErrorMsg(err.message || "Network error");
+      setErrorMsg(err instanceof Error ? err.message : "Network error");
     }
+  }
+
+  function handleSubmitManualRO() {
+    if (!pendingJob || !manualRONumber.trim()) return;
+    handleApply(pendingJob.id, pendingJob.title, manualRONumber.trim());
   }
 
   if (!cannedJobOptions || cannedJobOptions.length === 0) {
@@ -71,6 +100,54 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
         <Check className="w-3 h-3" />
         Added{appliedJobTitle ? `: ${appliedJobTitle}` : ""}
       </span>
+    );
+  }
+
+  if (status === "needsRO") {
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <div className="absolute bottom-full left-0 mb-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-600 font-medium">Enter RO Number</span>
+            <button
+              onClick={() => {
+                setStatus("idle");
+                setPendingJob(null);
+                setManualRONumber("");
+              }}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={manualRONumber}
+              onChange={(e) => setManualRONumber(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSubmitManualRO();
+              }}
+              placeholder="e.g. 12345"
+              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleSubmitManualRO}
+              disabled={!manualRONumber.trim()}
+              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Add
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Adding: {pendingJob?.title}
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">
+          Enter RO #
+        </span>
+      </div>
     );
   }
 
@@ -128,7 +205,7 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions }: Props) {
       {showDropdown && (
         <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
           <div className="p-2 border-b border-gray-100">
-            <span className="text-xs text-gray-500 font-medium">Select canned job to apply:</span>
+            <span className="text-xs text-gray-500 font-medium">Select service package to apply:</span>
           </div>
           <div className="max-h-48 overflow-y-auto">
             {cannedJobOptions.map((job) => (
