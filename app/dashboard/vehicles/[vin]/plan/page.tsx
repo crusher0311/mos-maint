@@ -566,7 +566,16 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
   const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
   const shopIntervals: Record<string, ShopIntervalOverride> = shop?.maintenance?.intervals ?? {};
-  const cannedJobMappings: Record<string, string> = shop?.protractor?.cannedJobMappings ?? {};
+  const rawMappings = shop?.protractor?.cannedJobMappings ?? {};
+  const cannedJobMappings: Record<string, string[]> = {};
+  for (const key in rawMappings) {
+    const val = rawMappings[key];
+    if (Array.isArray(val)) {
+      cannedJobMappings[key] = val;
+    } else if (typeof val === "string" && val) {
+      cannedJobMappings[key] = [val];
+    }
+  }
   
   const cannedJobsCache = await getCannedJobsFromCache(shopId);
   const cannedJobsById: Record<string, { id: string; title: string }> = {};
@@ -574,6 +583,13 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     for (const job of cannedJobsCache.cannedJobs) {
       cannedJobsById[job.id] = { id: job.id, title: job.title };
     }
+  }
+  
+  function getCannedJobOptionsForService(serviceKey: string) {
+    const ids = cannedJobMappings[serviceKey] || [];
+    return ids
+      .map(id => cannedJobsById[id])
+      .filter(Boolean);
   }
 
   const vehicle = await db.collection("vehicles").findOne(
@@ -839,14 +855,16 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         )}
                       </div>
                     </div>
-                    {cannedJobMappings[t.key] && cannedJobsById[cannedJobMappings[t.key]] && (
-                      <AddToROButton
-                        vin={vin}
-                        serviceKey={t.key}
-                        cannedJobId={cannedJobMappings[t.key]}
-                        cannedJobTitle={cannedJobsById[cannedJobMappings[t.key]].title}
-                      />
-                    )}
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.key);
+                      return opts.length > 0 ? (
+                        <AddToROButton
+                          vin={vin}
+                          serviceKey={t.key}
+                          cannedJobOptions={opts}
+                        />
+                      ) : null;
+                    })()}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -949,14 +967,16 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
-                    {cannedJobMappings[t.key] && cannedJobsById[cannedJobMappings[t.key]] && (
-                      <AddToROButton
-                        vin={vin}
-                        serviceKey={t.key}
-                        cannedJobId={cannedJobMappings[t.key]}
-                        cannedJobTitle={cannedJobsById[cannedJobMappings[t.key]].title}
-                      />
-                    )}
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.key);
+                      return opts.length > 0 ? (
+                        <AddToROButton
+                          vin={vin}
+                          serviceKey={t.key}
+                          cannedJobOptions={opts}
+                        />
+                      ) : null;
+                    })()}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -1046,14 +1066,16 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
-                    {cannedJobMappings[t.key] && cannedJobsById[cannedJobMappings[t.key]] && (
-                      <AddToROButton
-                        vin={vin}
-                        serviceKey={t.key}
-                        cannedJobId={cannedJobMappings[t.key]}
-                        cannedJobTitle={cannedJobsById[cannedJobMappings[t.key]].title}
-                      />
-                    )}
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.key);
+                      return opts.length > 0 ? (
+                        <AddToROButton
+                          vin={vin}
+                          serviceKey={t.key}
+                          cannedJobOptions={opts}
+                        />
+                      ) : null;
+                    })()}
                   </div>
 
                   <div className="text-sm mt-2">
