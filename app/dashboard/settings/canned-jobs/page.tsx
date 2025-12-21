@@ -9,6 +9,8 @@ import {
   XCircle,
   AlertCircle,
   Save,
+  Plus,
+  X,
 } from "lucide-react";
 
 const SERVICE_KEYS = [
@@ -37,7 +39,7 @@ type CannedJob = {
 };
 
 type Mapping = {
-  [serviceKey: string]: string;
+  [serviceKey: string]: string[];
 };
 
 export default function CannedJobsSettingsPage() {
@@ -49,6 +51,7 @@ export default function CannedJobsSettingsPage() {
   const [originalMappings, setOriginalMappings] = useState<Mapping>({});
   const [protractorConfigured, setProtractorConfigured] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [expandedService, setExpandedService] = useState<string | null>(null);
 
   useEffect(() => {
     checkProtractorStatus();
@@ -84,6 +87,12 @@ export default function CannedJobsSettingsPage() {
         if (refresh) {
           setMessage({ type: "success", text: `Synced ${data.cannedJobs?.length || 0} canned jobs from Protractor` });
         }
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Failed to fetch canned jobs:", errorData);
+        if (refresh) {
+          setMessage({ type: "error", text: errorData.error || "Failed to sync canned jobs" });
+        }
       }
     } catch (err) {
       console.error("Failed to fetch canned jobs:", err);
@@ -100,12 +109,26 @@ export default function CannedJobsSettingsPage() {
       const res = await fetch("/api/settings/canned-job-mappings", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setMappings(data.mappings || {});
-        setOriginalMappings(data.mappings || {});
+        const normalized = normalizeMapping(data.mappings || {});
+        setMappings(normalized);
+        setOriginalMappings(normalized);
       }
     } catch (err) {
       console.error("Failed to fetch mappings:", err);
     }
+  }
+
+  function normalizeMapping(raw: Record<string, string | string[]>): Mapping {
+    const result: Mapping = {};
+    for (const key in raw) {
+      const val = raw[key];
+      if (Array.isArray(val)) {
+        result[key] = val;
+      } else if (typeof val === "string" && val) {
+        result[key] = [val];
+      }
+    }
+    return result;
   }
 
   async function handleSave() {
@@ -133,20 +156,36 @@ export default function CannedJobsSettingsPage() {
     }
   }
 
-  function handleMappingChange(serviceKey: string, cannedJobId: string) {
+  function addCannedJobToService(serviceKey: string, cannedJobId: string) {
+    if (!cannedJobId) return;
     setMappings((prev) => {
-      const updated = { ...prev };
-      if (cannedJobId) {
-        updated[serviceKey] = cannedJobId;
-      } else {
-        delete updated[serviceKey];
+      const existing = prev[serviceKey] || [];
+      if (existing.includes(cannedJobId)) return prev;
+      return {
+        ...prev,
+        [serviceKey]: [...existing, cannedJobId],
+      };
+    });
+  }
+
+  function removeCannedJobFromService(serviceKey: string, cannedJobId: string) {
+    setMappings((prev) => {
+      const existing = prev[serviceKey] || [];
+      const filtered = existing.filter((id) => id !== cannedJobId);
+      if (filtered.length === 0) {
+        const { [serviceKey]: _, ...rest } = prev;
+        return rest;
       }
-      return updated;
+      return {
+        ...prev,
+        [serviceKey]: filtered,
+      };
     });
   }
 
   const hasChanges = JSON.stringify(mappings) !== JSON.stringify(originalMappings);
-  const mappedCount = Object.keys(mappings).length;
+  const mappedCount = Object.keys(mappings).filter((k) => mappings[k]?.length > 0).length;
+  const totalMappedJobs = Object.values(mappings).reduce((sum, arr) => sum + (arr?.length || 0), 0);
 
   if (loading) {
     return (
@@ -193,8 +232,8 @@ export default function CannedJobsSettingsPage() {
           Canned Job Mappings
         </h1>
         <p className="mt-2 text-gray-600">
-          Map maintenance recommendations to Protractor canned jobs. When a recommendation appears
-          on the Plan page, advisors can add the mapped canned job to the RO with one click.
+          Map maintenance recommendations to Protractor canned jobs. You can assign multiple canned jobs
+          to each service - advisors will choose which one to apply when adding to the RO.
         </p>
       </div>
 
@@ -206,7 +245,7 @@ export default function CannedJobsSettingsPage() {
             </span>
             {mappedCount > 0 && (
               <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                {mappedCount} mapped
+                {mappedCount} services mapped ({totalMappedJobs} jobs)
               </span>
             )}
           </div>
@@ -231,36 +270,105 @@ export default function CannedJobsSettingsPage() {
 
         <div className="divide-y divide-gray-100">
           {SERVICE_KEYS.map(({ key, name }) => {
-            const selectedJobId = mappings[key];
-            const selectedJob = cannedJobs.find((j) => j.id === selectedJobId);
+            const selectedJobIds = mappings[key] || [];
+            const selectedJobs = selectedJobIds
+              .map((id) => cannedJobs.find((j) => j.id === id))
+              .filter(Boolean) as CannedJob[];
+            const isExpanded = expandedService === key;
+            const availableJobs = cannedJobs.filter(
+              (job) => !selectedJobIds.includes(job.id)
+            );
 
             return (
-              <div key={key} className="p-4 flex items-center gap-4">
-                <div className="w-48 flex-shrink-0">
-                  <span className="font-medium text-gray-900">{name}</span>
+              <div key={key} className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-gray-900 w-44">{name}</span>
+                    {selectedJobs.length > 0 && (
+                      <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                        {selectedJobs.length} option{selectedJobs.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {selectedJobs.length > 0 ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-gray-300" />
+                    )}
+                    <button
+                      onClick={() => setExpandedService(isExpanded ? null : key)}
+                      className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                    >
+                      {isExpanded ? "Hide" : "Edit"}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <select
-                    value={selectedJobId || ""}
-                    onChange={(e) => handleMappingChange(key, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="">-- No canned job --</option>
-                    {cannedJobs.map((job) => (
-                      <option key={job.id} value={job.id}>
+
+                {selectedJobs.length > 0 && !isExpanded && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {selectedJobs.map((job) => (
+                      <span
+                        key={job.id}
+                        className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                      >
                         {job.title}
                         {job.code ? ` (${job.code})` : ""}
-                      </option>
+                      </span>
                     ))}
-                  </select>
-                </div>
-                <div className="w-6">
-                  {selectedJob ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-gray-300" />
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {isExpanded && (
+                  <div className="mt-3 space-y-3">
+                    {selectedJobs.length > 0 && (
+                      <div className="space-y-2">
+                        <span className="text-xs text-gray-500 uppercase tracking-wide">
+                          Mapped Canned Jobs
+                        </span>
+                        {selectedJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded-lg"
+                          >
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                {job.title}
+                              </span>
+                              {job.code && (
+                                <span className="ml-2 text-xs text-gray-500">
+                                  ({job.code})
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => removeCannedJobFromService(key, job.id)}
+                              className="p-1 text-red-600 hover:bg-red-100 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        value=""
+                        onChange={(e) => addCannedJobToService(key, e.target.value)}
+                      >
+                        <option value="">+ Add a canned job...</option>
+                        {availableJobs.map((job) => (
+                          <option key={job.id} value={job.id}>
+                            {job.title}
+                            {job.code ? ` (${job.code})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -302,9 +410,10 @@ export default function CannedJobsSettingsPage() {
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-medium text-blue-900 mb-2">How it works</h3>
         <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-          <li>Select a canned job for each maintenance service type</li>
-          <li>When viewing a vehicle&apos;s Plan page, recommendations with mapped canned jobs will show an &quot;Add to RO&quot; button</li>
-          <li>Clicking &quot;Add to RO&quot; will add the canned job to the vehicle&apos;s open work order in Protractor</li>
+          <li>Click &quot;Edit&quot; to add multiple canned jobs to each service type</li>
+          <li>When multiple options exist, advisors will see a dropdown to choose which canned job applies</li>
+          <li>If only one canned job is mapped, it will be used automatically</li>
+          <li>Clicking &quot;Add to RO&quot; on the Plan page adds the selected canned job to the vehicle&apos;s open work order</li>
         </ul>
       </div>
     </div>
