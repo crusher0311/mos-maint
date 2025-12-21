@@ -796,19 +796,11 @@ export async function applyCannedJobToWorkOrder(
     return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
   }
 
-  const newPackageId = crypto.randomUUID();
   const now = new Date().toISOString();
   
-  const laborLineId = crypto.randomUUID();
+  // Try minimal service package - let Protractor assign IDs
+  // Based on API docs, we may need to only provide essential fields
   const newServicePackage: any = {
-    Header: {
-      ID: newPackageId,
-      CreationTime: now,
-      DeletionTime: "0001-01-01T00:00:00",
-      DeletionTimeSpecified: true,
-      LastModifiedTime: now
-    },
-    ID: newPackageId,
     Code: cannedJobCode,
     Status: "Pending",
     Chapter: "Service",
@@ -817,22 +809,7 @@ export async function applyCannedJobToWorkOrder(
       Title: cannedJobTitle || cannedJobCode,
       Description: `Added via MOS Maintenance`
     },
-    ServicePackageLines: [
-      {
-        Header: {
-          ID: laborLineId,
-          CreationTime: now,
-          DeletionTime: "0001-01-01T00:00:00",
-          DeletionTimeSpecified: true,
-          LastModifiedTime: now
-        },
-        ID: laborLineId,
-        LineType: "Labor",
-        Description: cannedJobTitle || cannedJobCode,
-        Quantity: 1,
-        Status: "Pending"
-      }
-    ],
+    ServicePackageLines: [],
     ServicePackageInspectionLines: [],
     ServicePackageFooter: {
       Title: "",
@@ -840,7 +817,7 @@ export async function applyCannedJobToWorkOrder(
     }
   };
   
-  console.log(`[Protractor] New service package:`, JSON.stringify(newServicePackage));
+  console.log(`[Protractor] New service package (minimal):`, JSON.stringify(newServicePackage));
 
   const updatedServicePackages = [
     ...(existingWorkOrder.ServicePackages || []),
@@ -880,7 +857,7 @@ export async function applyCannedJobToWorkOrder(
   console.log(`[Protractor] Response has ${returnedServicePackages.length} service packages`);
   
   if (returnedServicePackages.length > 0) {
-    const addedPackage = returnedServicePackages.find((sp: any) => sp.ID === newPackageId || sp.Code === cannedJobCode);
+    const addedPackage = returnedServicePackages.find((sp: any) => sp.Code === cannedJobCode);
     if (addedPackage) {
       console.log(`[Protractor] SUCCESS: Service package confirmed in response`);
       return { ok: true, servicePackage: addedPackage };
