@@ -84,7 +84,8 @@ The application uses a modern SaaS-style design with:
 
 ## Recent Changes
 - **2024-12-21**: Protractor Canned Jobs Integration (Multi-Select)
-  - **Canned Job Sync**: Fetch and cache canned jobs from Protractor API
+  - **Canned Job Sync**: Attempts to fetch canned jobs from Protractor API (tries multiple endpoints)
+  - **Manual Entry Fallback**: If API sync fails, users can manually add canned jobs by entering their ID and title from Protractor's UI
   - **Mapping UI**: Settings > Canned Jobs page to map service keys (oil, brakes, etc.) to Protractor canned job IDs
   - **Multiple Options Per Service**: Each service type can have multiple canned job options mapped (e.g., different oil change types)
   - Mapping data stored as `Record<string, string[]>` in `shops.protractor.cannedJobMappings`

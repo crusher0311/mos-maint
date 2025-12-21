@@ -11,6 +11,7 @@ import {
   Save,
   Plus,
   X,
+  Edit3,
 } from "lucide-react";
 
 const SERVICE_KEYS = [
@@ -52,6 +53,9 @@ export default function CannedJobsSettingsPage() {
   const [protractorConfigured, setProtractorConfigured] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [expandedService, setExpandedService] = useState<string | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualId, setManualId] = useState("");
+  const [manualTitle, setManualTitle] = useState("");
 
   useEffect(() => {
     checkProtractorStatus();
@@ -183,6 +187,22 @@ export default function CannedJobsSettingsPage() {
     });
   }
 
+  function handleAddManualCannedJob() {
+    if (!manualId.trim()) return;
+    const newJob: CannedJob = {
+      id: manualId.trim(),
+      title: manualTitle.trim() || `Job ${manualId.trim()}`,
+      description: "Manually added",
+    };
+    setCannedJobs((prev) => {
+      if (prev.some((j) => j.id === newJob.id)) return prev;
+      return [...prev, newJob];
+    });
+    setManualId("");
+    setManualTitle("");
+    setMessage({ type: "success", text: `Added canned job "${newJob.title}"` });
+  }
+
   const hasChanges = JSON.stringify(mappings) !== JSON.stringify(originalMappings);
   const mappedCount = Object.keys(mappings).filter((k) => mappings[k]?.length > 0).length;
   const totalMappedJobs = Object.values(mappings).reduce((sum, arr) => sum + (arr?.length || 0), 0);
@@ -238,34 +258,78 @@ export default function CannedJobsSettingsPage() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">
-              {cannedJobs.length} canned jobs available
-            </span>
-            {mappedCount > 0 && (
-              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                {mappedCount} services mapped ({totalMappedJobs} jobs)
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">
+                {cannedJobs.length} canned jobs available
               </span>
-            )}
+              {mappedCount > 0 && (
+                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                  {mappedCount} services mapped ({totalMappedJobs} jobs)
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowManualEntry(!showManualEntry)}
+                className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors flex items-center gap-2"
+              >
+                <Edit3 className="w-4 h-4" />
+                Add Manually
+              </button>
+              <button
+                onClick={() => fetchCannedJobs(true)}
+                disabled={syncing}
+                className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Sync Jobs
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => fetchCannedJobs(true)}
-            disabled={syncing}
-            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {syncing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                Sync Jobs
-              </>
-            )}
-          </button>
+
+          {showManualEntry && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h4 className="text-sm font-medium text-gray-900 mb-3">Add Canned Job Manually</h4>
+              <p className="text-xs text-gray-600 mb-3">
+                If the sync doesn&apos;t work, you can manually add canned jobs by entering their ID from Protractor.
+              </p>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={manualId}
+                  onChange={(e) => setManualId(e.target.value)}
+                  placeholder="Canned Job ID (required)"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="text"
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  placeholder="Title (optional)"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleAddManualCannedJob}
+                  disabled={!manualId.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="divide-y divide-gray-100">
