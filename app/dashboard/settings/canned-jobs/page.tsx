@@ -48,8 +48,10 @@ export default function CannedJobsSettingsPage() {
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cannedJobs, setCannedJobs] = useState<CannedJob[]>([]);
+  const [manualJobs, setManualJobs] = useState<CannedJob[]>([]);
   const [mappings, setMappings] = useState<Mapping>({});
   const [originalMappings, setOriginalMappings] = useState<Mapping>({});
+  const [originalManualJobs, setOriginalManualJobs] = useState<CannedJob[]>([]);
   const [protractorConfigured, setProtractorConfigured] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [expandedService, setExpandedService] = useState<string | null>(null);
@@ -116,6 +118,19 @@ export default function CannedJobsSettingsPage() {
         const normalized = normalizeMapping(data.mappings || {});
         setMappings(normalized);
         setOriginalMappings(normalized);
+        
+        const savedManualJobs = (data.manualJobs || []).map((j: any) => ({
+          id: j.id,
+          title: j.title || `Job ${j.id}`,
+          description: j.description || "Manually added",
+        }));
+        setManualJobs(savedManualJobs);
+        setOriginalManualJobs(savedManualJobs);
+        setCannedJobs((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const newJobs = savedManualJobs.filter((j: CannedJob) => !existingIds.has(j.id));
+          return [...prev, ...newJobs];
+        });
       }
     } catch (err) {
       console.error("Failed to fetch mappings:", err);
@@ -143,12 +158,13 @@ export default function CannedJobsSettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ mappings }),
+        body: JSON.stringify({ mappings, manualJobs }),
       });
 
       if (res.ok) {
         setOriginalMappings({ ...mappings });
-        setMessage({ type: "success", text: "Canned job mappings saved successfully!" });
+        setOriginalManualJobs([...manualJobs]);
+        setMessage({ type: "success", text: "Service package mappings saved successfully!" });
       } else {
         const data = await res.json();
         setMessage({ type: "error", text: data.error || "Failed to save mappings" });
@@ -198,12 +214,18 @@ export default function CannedJobsSettingsPage() {
       if (prev.some((j) => j.id === newJob.id)) return prev;
       return [...prev, newJob];
     });
+    setManualJobs((prev) => {
+      if (prev.some((j) => j.id === newJob.id)) return prev;
+      return [...prev, newJob];
+    });
     setManualId("");
     setManualTitle("");
-    setMessage({ type: "success", text: `Added canned job "${newJob.title}"` });
+    setMessage({ type: "success", text: `Added "${newJob.title}" - click Save Mappings to keep it` });
   }
 
-  const hasChanges = JSON.stringify(mappings) !== JSON.stringify(originalMappings);
+  const hasChanges = 
+    JSON.stringify(mappings) !== JSON.stringify(originalMappings) ||
+    JSON.stringify(manualJobs) !== JSON.stringify(originalManualJobs);
   const mappedCount = Object.keys(mappings).filter((k) => mappings[k]?.length > 0).length;
   const totalMappedJobs = Object.values(mappings).reduce((sum, arr) => sum + (arr?.length || 0), 0);
 
