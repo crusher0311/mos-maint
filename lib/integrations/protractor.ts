@@ -673,16 +673,27 @@ export async function fetchCannedJobs(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+  const endpoints = [
+    "/ServicePackage/",
+    "/ServicePackage/Search/",
     "/ServicePackage/CannedJob",
-    config
-  );
+  ];
 
-  if (!result.ok) {
-    return { ok: false, error: result.error };
+  for (const endpoint of endpoints) {
+    const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+      endpoint,
+      config
+    );
+
+    if (result.ok && result.data?.ItemCollection?.length) {
+      return { ok: true, cannedJobs: result.data.ItemCollection };
+    }
   }
 
-  return { ok: true, cannedJobs: result.data?.ItemCollection || [] };
+  return { 
+    ok: false, 
+    error: "Could not fetch canned jobs from Protractor. The Canned Jobs API endpoint may not be available for your account. Please contact Protractor support to verify API access." 
+  };
 }
 
 export async function fetchCannedJobById(
