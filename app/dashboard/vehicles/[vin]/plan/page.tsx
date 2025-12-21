@@ -585,6 +585,13 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     }
   }
   
+  const manualJobs = shop?.protractor?.manualCannedJobs || [];
+  for (const job of manualJobs) {
+    if (job.id && !cannedJobsById[job.id]) {
+      cannedJobsById[job.id] = { id: job.id, title: job.title || `Job ${job.id}` };
+    }
+  }
+  
   function getCannedJobOptionsForService(serviceKey: string) {
     const ids = cannedJobMappings[serviceKey] || [];
     return ids
