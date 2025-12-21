@@ -316,9 +316,17 @@ function triage({
 
   // Add Protractor deferred work (shop recommendations)
   for (const dw of protractorDeferredWork || []) {
+    // Title can be at root level or nested in ServicePackageHeader
+    const title = dw.Title 
+      || dw.ServicePackageHeader?.Title 
+      || dw.Code 
+      || dw.Description 
+      || dw.ServicePackageHeader?.Description
+      || "Deferred Service";
+    
     triaged.push({
       key: `protractor_${dw.ID}`,
-      title: dw.Title || dw.Description || "Deferred Service",
+      title,
       category: "Shop Recommendation",
       intervalMiles: null,
       intervalMonths: null,
