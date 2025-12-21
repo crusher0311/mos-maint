@@ -18,6 +18,19 @@ export async function getSession(): Promise<SessionInfo | null> {
   // ✅ Next.js 15: await cookies()
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
+  
+  // Dev auto-login: skip auth in development mode
+  if (!token && process.env.NODE_ENV === "development" && process.env.DEV_AUTO_LOGIN === "true") {
+    const devShopId = Number(process.env.DEV_SHOP_ID || "1");
+    const devEmail = process.env.DEV_USER_EMAIL || "dev@example.com";
+    return {
+      token: "dev-auto-login",
+      shopId: devShopId,
+      email: devEmail,
+      role: "owner",
+    };
+  }
+  
   if (!token) return null;
 
   const db = await getDb();
