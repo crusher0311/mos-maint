@@ -652,17 +652,29 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   
   // Also check Protractor for active work orders if no AutoFlow RO found
   if (!latestRoNumber) {
-    const protractorWO = await db.collection("protractor_work_orders").findOne(
-      { 
-        shopId, 
-        "data.ServiceItem.VIN": { $regex: new RegExp(`^${vin}$`, 'i') },
-        "data.Completed": { $ne: true }
-      },
-      { sort: { "data.Header.LastModifiedTime": -1 } }
-    );
-    if (protractorWO?.data?.WorkOrderNumber) {
-      latestRoNumber = String(protractorWO.data.WorkOrderNumber);
-      console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}`);
+    // First get the vehicle's Protractor ServiceItemID
+    const protractorVehicleCache = await db.collection("protractor_vehicles").findOne({
+      shopId,
+      vin: { $regex: new RegExp(`^${vin}$`, 'i') }
+    });
+    
+    const serviceItemId = protractorVehicleCache?.data?.ID;
+    console.log(`[Plan Debug] Protractor ServiceItemID for VIN ${vin}: ${serviceItemId || 'not found'}`);
+    
+    if (serviceItemId) {
+      // Look up work orders by ServiceItemID
+      const protractorWO = await db.collection("protractor_work_orders").findOne(
+        { 
+          shopId, 
+          "data.ServiceItemID": serviceItemId,
+          "data.Completed": { $ne: true }
+        },
+        { sort: { "data.Header.LastModifiedTime": -1 } }
+      );
+      if (protractorWO?.data?.WorkOrderNumber) {
+        latestRoNumber = String(protractorWO.data.WorkOrderNumber);
+        console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}`);
+      }
     }
   }
   
