@@ -869,6 +869,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                           vin={vin}
                           serviceKey={t.key}
                           cannedJobOptions={opts}
+                          workOrderId={latestRoNumber ?? undefined}
                         />
                       ) : null;
                     })()}
@@ -981,6 +982,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                           vin={vin}
                           serviceKey={t.key}
                           cannedJobOptions={opts}
+                          workOrderId={latestRoNumber ?? undefined}
                         />
                       ) : null;
                     })()}
@@ -1080,6 +1082,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                           vin={vin}
                           serviceKey={t.key}
                           cannedJobOptions={opts}
+                          workOrderId={latestRoNumber ?? undefined}
                         />
                       ) : null;
                     })()}
