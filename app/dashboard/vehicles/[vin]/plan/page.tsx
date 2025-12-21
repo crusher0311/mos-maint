@@ -315,6 +315,7 @@ function triage({
   }
 
   // Add Protractor deferred work (shop recommendations)
+  // These are services that were recommended but not performed - they're already overdue
   for (const dw of protractorDeferredWork || []) {
     // Title can be at root level or nested in ServicePackageHeader
     const title = dw.Title 
@@ -335,7 +336,7 @@ function triage({
       dueAtDate: null,
       milesToGo: null,
       daysToGo: null,
-      bump: "yellow",
+      bump: "red", // Deferred = already recommended = already overdue
       source: "protractor",
       reason: dw.Reason || undefined,
     });
