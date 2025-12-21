@@ -823,24 +823,41 @@ export async function applyCannedJobToWorkOrder(
     ServicePackages: updatedServicePackages
   };
 
-  console.log(`[Protractor] POSTing updated work order with new service package`);
+  console.log(`[Protractor] Attempting to add service package to work order`);
 
-  const result = await protractorFetch<ProtractorWorkOrder>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(updatePayload)
+  const endpointsToTry = [
+    { method: "POST", endpoint: `/WorkOrder/${workOrderGuid}/ServicePackage`, body: newServicePackage },
+    { method: "POST", endpoint: `/WorkOrder/${workOrderGuid}/ServicePackage/Code/${encodeURIComponent(cannedJobCode)}`, body: null },
+    { method: "PUT", endpoint: `/WorkOrder/${workOrderGuid}`, body: updatePayload },
+    { method: "POST", endpoint: `/WorkOrder/${workOrderGuid}`, body: updatePayload },
+  ];
+
+  for (const attempt of endpointsToTry) {
+    console.log(`[Protractor] Trying ${attempt.method} ${attempt.endpoint}`);
+    
+    const result = await protractorFetch<any>(
+      attempt.endpoint,
+      config,
+      {
+        method: attempt.method,
+        body: attempt.body ? JSON.stringify(attempt.body) : undefined
+      }
+    );
+
+    if (result.ok) {
+      console.log(`[Protractor] Success with ${attempt.method} ${attempt.endpoint}`);
+      console.log(`[Protractor] Response:`, JSON.stringify(result.data).slice(0, 500));
+      return { ok: true, servicePackage: newServicePackage };
     }
-  );
-
-  if (!result.ok) {
-    console.log(`[Protractor] Failed to update work order: ${result.error}`);
-    return { ok: false, error: result.error || "Failed to update work order" };
+    
+    console.log(`[Protractor] Failed: ${result.error}`);
   }
 
-  console.log(`[Protractor] Successfully added service package to work order`);
-  return { ok: true, servicePackage: newServicePackage };
+  console.log(`[Protractor] All endpoints failed for adding service package`);
+  return { 
+    ok: false, 
+    error: `Could not add service package to work order. The Protractor API may not support this operation, or additional permissions may be required.` 
+  };
 }
 
 export async function fetchWorkOrdersForVehicle(
