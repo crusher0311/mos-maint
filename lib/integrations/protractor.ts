@@ -764,22 +764,37 @@ export async function fetchWorkOrdersForVehicle(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  // Try API first
   const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
     `/ServiceItem/${serviceItemId}/WorkOrder`,
     config
   );
 
-  if (!result.ok) {
-    return { ok: false, error: result.error };
+  if (result.ok) {
+    let workOrders = result.data?.ItemCollection || [];
+    if (options?.includeOpen) {
+      workOrders = workOrders.filter(wo => !wo.Completed);
+    }
+    return { ok: true, workOrders };
   }
 
-  let workOrders = result.data?.ItemCollection || [];
-  
-  if (options?.includeOpen) {
-    workOrders = workOrders.filter(wo => !wo.Completed);
+  // API not available, try cached work orders from MongoDB
+  console.log(`[Protractor] API endpoint not available, checking cached work orders`);
+  const db = await getDb();
+  const cached = await db.collection("protractor_work_orders").find({
+    shopId,
+    "data.ServiceItemID": serviceItemId,
+  }).toArray();
+
+  if (cached.length > 0) {
+    let workOrders = cached.map(c => c.data as ProtractorWorkOrder);
+    if (options?.includeOpen) {
+      workOrders = workOrders.filter(wo => !wo.Completed);
+    }
+    return { ok: true, workOrders };
   }
 
-  return { ok: true, workOrders };
+  return { ok: false, error: "WORK_ORDER_LOOKUP_NOT_AVAILABLE" };
 }
 
 export async function upsertCannedJobsCache(
