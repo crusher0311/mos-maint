@@ -448,6 +448,12 @@ export async function upsertProtractorWorkOrderSnapshot(
   const now = new Date();
   const vin = workOrder.ServiceItem?.VIN?.toUpperCase() ?? null;
   
+  const contactName = workOrder.Contact
+    ? [workOrder.Contact.Name?.FirstName, workOrder.Contact.Name?.LastName]
+        .filter(Boolean)
+        .join(" ") || workOrder.Contact.FileAs || null
+    : null;
+  
   await db.collection("protractor_work_orders").updateOne(
     { shopId, workOrderId: workOrder.ID },
     {
@@ -460,6 +466,7 @@ export async function upsertProtractorWorkOrderSnapshot(
         vin,
         serviceItemId: workOrder.ServiceItemID ?? null,
         contactId: workOrder.ContactID ?? null,
+        contactName,
         odometer: workOrder.Odometer ?? null,
         scheduledTime: workOrder.ScheduledTime ?? null,
         promisedTime: workOrder.PromisedTime ?? null,
