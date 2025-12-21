@@ -1,0 +1,470 @@
+post /WorkOrder/{id}
+Response Class (Status 200)
+OK
+
+ModelExample Value
+<?xml version="1.0"?>
+<WorkOrder>
+  <Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+    <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+    <DeletionTimeSpecified>true</DeletionTimeSpecified>
+    <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+    <LastModifiedBy>string</LastModifiedBy>
+  </Header>
+  <ID>00000000-0000-0000-0000-000000000000</ID>
+  <Type>string</Type>
+  <ScheduledTime>1970-01-01T00:00:00.001Z</ScheduledTime>
+  <PromisedTime>1970-01-01T00:00:00.001Z</PromisedTime>
+  <InvoiceTime>1970-01-01T00:00:00.001Z</InvoiceTime>
+  <WorkOrderNumber>1</WorkOrderNumber>
+  <InvoiceNumber>1</InvoiceNumber>
+  <PurchaseOrderNumber>string</PurchaseOrderNumber>
+  <Contact>
+    <Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+      <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+      <DeletionTimeSpecified>true</DeletionTimeSpecified>
+      <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+      <LastModifiedBy>string</LastModifiedBy>
+    </Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <FileAs>string</FileAs>
+    <Name>
+      <Title>string</Title>
+      <Prefix>string</Prefix>
+      <FirstName>string</FirstName>
+      <MiddleName>string</MiddleName>
+      <LastName>string</LastName>
+      <Suffix>string</Suffix>
+    </Name>
+    <Address>
+      <Title>string</Title>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <Street>string</Street>
+      <City>string</City>
+      <Province>string</Province>
+      <PostalCode>string</PostalCode>
+      <Country>string</Country>
+    </Address>
+    <Company>string</Company>
+    <Phone1Title>string</Phone1Title>
+    <Phone1>string</Phone1>
+    <Phone2Title>string</Phone2Title>
+    <Phone2>string</Phone2>
+    <EmailTitle>string</EmailTitle>
+    <Email>string</Email>
+    <AdditionalNames>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalNames>
+    <AdditionalPhones>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalPhones>
+    <AdditionalURIs>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalURIs>
+    <PreferredContactMethod>string</PreferredContactMethod>
+    <MarketingSource>string</MarketingSource>
+    <Note>string</Note>
+    <NoMessaging>true</NoMessaging>
+    <NoEmail>true</NoEmail>
+    <NoPostCard>true</NoPostCard>
+    <Discount>
+      <LaborRateCode>string</LaborRateCode>
+      <LaborDiscountPercent>1.1</LaborDiscountPercent>
+      <LaborDiscountAlways>true</LaborDiscountAlways>
+      <MaterialRateCode>string</MaterialRateCode>
+      <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+      <MaterialDiscountAlways>true</MaterialDiscountAlways>
+    </Discount>
+  </Contact>
+  <ServiceItem>
+    <Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+      <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+      <DeletionTimeSpecified>true</DeletionTimeSpecified>
+      <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+      <LastModifiedBy>string</LastModifiedBy>
+    </Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Type>string</Type>
+    <Lookup>string</Lookup>
+    <Description>string</Description>
+    <Usage>1</Usage>
+    <ProductionDate>1970-01-01T00:00:00.001Z</ProductionDate>
+    <Note>string</Note>
+    <NoEmail>true</NoEmail>
+    <NoPostCard>true</NoPostCard>
+    <OwnerID>00000000-0000-0000-0000-000000000000</OwnerID>
+    <Owner>
+      <Header>
+        <ID>00000000-0000-0000-0000-000000000000</ID>
+        <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+        <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+        <DeletionTimeSpecified>true</DeletionTimeSpecified>
+        <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+        <LastModifiedBy>string</LastModifiedBy>
+      </Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <FileAs>string</FileAs>
+      <Name>
+        <Title>string</Title>
+        <Prefix>string</Prefix>
+        <FirstName>string</FirstName>
+        <MiddleName>string</MiddleName>
+        <LastName>string</LastName>
+        <Suffix>string</Suffix>
+      </Name>
+      <Address>
+        <Title>string</Title>
+        <ID>00000000-0000-0000-0000-000000000000</ID>
+        <Street>string</Street>
+        <City>string</City>
+        <Province>string</Province>
+        <PostalCode>string</PostalCode>
+        <Country>string</Country>
+      </Address>
+      <Company>string</Company>
+      <Phone1Title>string</Phone1Title>
+      <Phone1>string</Phone1>
+      <Phone2Title>string</Phone2Title>
+      <Phone2>string</Phone2>
+      <EmailTitle>string</EmailTitle>
+      <Email>string</Email>
+      <AdditionalNames>
+        <!-- invalid XML -->
+        <Dummy>string</Dummy>
+      </AdditionalNames>
+      <AdditionalPhones>
+        <!-- invalid XML -->
+        <Dummy>string</Dummy>
+      </AdditionalPhones>
+      <AdditionalURIs>
+        <!-- invalid XML -->
+        <Dummy>string</Dummy>
+      </AdditionalURIs>
+      <PreferredContactMethod>string</PreferredContactMethod>
+      <MarketingSource>string</MarketingSource>
+      <Note>string</Note>
+      <NoMessaging>true</NoMessaging>
+      <NoEmail>true</NoEmail>
+      <NoPostCard>true</NoPostCard>
+      <Discount>
+        <LaborRateCode>string</LaborRateCode>
+        <LaborDiscountPercent>1.1</LaborDiscountPercent>
+        <LaborDiscountAlways>true</LaborDiscountAlways>
+        <MaterialRateCode>string</MaterialRateCode>
+        <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+        <MaterialDiscountAlways>true</MaterialDiscountAlways>
+      </Discount>
+    </Owner>
+    <Reminders>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </Reminders>
+  </ServiceItem>
+  <ServiceAdvisor>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Type>string</Type>
+    <Name>string</Name>
+  </ServiceAdvisor>
+  <Technician>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Type>string</Type>
+    <Name>string</Name>
+  </Technician>
+  <Duration>1.1</Duration>
+  <InUsage>1</InUsage>
+  <OutUsage>1</OutUsage>
+  <WorkflowStage>string</WorkflowStage>
+  <SearchString>string</SearchString>
+  <Note>string</Note>
+  <ServicePackages>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </ServicePackages>
+  <DeferredServicePackages>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </DeferredServicePackages>
+  <Summary>
+    <PartsTotal>1.1</PartsTotal>
+    <LaborTotal>1.1</LaborTotal>
+    <SubletTotal>1.1</SubletTotal>
+    <NetTotal>1.1</NetTotal>
+    <OtherCharges>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </OtherCharges>
+    <OtherChargeTotal>1.1</OtherChargeTotal>
+    <TaxTotal>1.1</TaxTotal>
+    <GrandTotal>1.1</GrandTotal>
+    <TotalOutstanding>1.1</TotalOutstanding>
+  </Summary>
+  <OtherChargeCode>string</OtherChargeCode>
+  <Flag>string</Flag>
+  <WorkOrderFlags>string</WorkOrderFlags>
+  <Tags>string</Tags>
+  <Authorizations>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </Authorizations>
+  <Signature>
+    <Image>string</Image>
+  </Signature>
+  <Completed>true</Completed>
+</WorkOrder>
+
+
+Response Content Type 
+application/xml
+Parameters
+Parameter	Value	Description	Parameter Type	Data Type
+id	
+(required)
+path	string
+workOrder	
+(required)
+
+Parameter content type: 
+application/xml
+body	
+ModelExample Value
+<?xml version="1.0"?>
+<WorkOrder>
+  <Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+    <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+    <DeletionTimeSpecified>true</DeletionTimeSpecified>
+    <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+    <LastModifiedBy>string</LastModifiedBy>
+  </Header>
+  <ID>00000000-0000-0000-0000-000000000000</ID>
+  <Type>string</Type>
+  <ScheduledTime>1970-01-01T00:00:00.001Z</ScheduledTime>
+  <PromisedTime>1970-01-01T00:00:00.001Z</PromisedTime>
+  <InvoiceTime>1970-01-01T00:00:00.001Z</InvoiceTime>
+  <WorkOrderNumber>1</WorkOrderNumber>
+  <InvoiceNumber>1</InvoiceNumber>
+  <PurchaseOrderNumber>string</PurchaseOrderNumber>
+  <Contact>
+    <Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+      <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+      <DeletionTimeSpecified>true</DeletionTimeSpecified>
+      <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+      <LastModifiedBy>string</LastModifiedBy>
+    </Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <FileAs>string</FileAs>
+    <Name>
+      <Title>string</Title>
+      <Prefix>string</Prefix>
+      <FirstName>string</FirstName>
+      <MiddleName>string</MiddleName>
+      <LastName>string</LastName>
+      <Suffix>string</Suffix>
+    </Name>
+    <Address>
+      <Title>string</Title>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <Street>string</Street>
+      <City>string</City>
+      <Province>string</Province>
+      <PostalCode>string</PostalCode>
+      <Country>string</Country>
+    </Address>
+    <Company>string</Company>
+    <Phone1Title>string</Phone1Title>
+    <Phone1>string</Phone1>
+    <Phone2Title>string</Phone2Title>
+    <Phone2>string</Phone2>
+    <EmailTitle>string</EmailTitle>
+    <Email>string</Email>
+    <AdditionalNames>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalNames>
+    <AdditionalPhones>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalPhones>
+    <AdditionalURIs>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalURIs>
+    <PreferredContactMethod>string</PreferredContactMethod>
+    <MarketingSource>string</MarketingSource>
+    <Note>string</Note>
+    <NoMessaging>true</NoMessaging>
+    <NoEmail>true</NoEmail>
+    <NoPostCard>true</NoPostCard>
+    <Discount>
+      <LaborRateCode>string</LaborRateCode>
+      <LaborDiscountPercent>1.1</LaborDiscountPercent>
+      <LaborDiscountAlways>true</LaborDiscountAlways>
+      <MaterialRateCode>string</MaterialRateCode>
+      <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+      <MaterialDiscountAlways>true</MaterialDiscountAlways>
+    </Discount>
+  </Contact>
+  <ServiceItem>
+    <Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+      <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+      <DeletionTimeSpecified>true</DeletionTimeSpecified>
+      <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+      <LastModifiedBy>string</LastModifiedBy>
+    </Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Type>string</Type>
+    <Lookup>string</Lookup>
+    <Description>string</Description>
+    <Usage>1</Usage>
+    <ProductionDate>1970-01-01T00:00:00.001Z</ProductionDate>
+    <Note>string</Note>
+    <NoEmail>true</NoEmail>
+    <NoPostCard>true</NoPostCard>
+    <OwnerID>00000000-0000-0000-0000-000000000000</OwnerID>
+    <Owner>
+      <Header>
+        <ID>00000000-0000-0000-0000-000000000000</ID>
+        <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+        <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+        <DeletionTimeSpecified>true</DeletionTimeSpecified>
+        <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+        <LastModifiedBy>string</LastModifiedBy>
+      </Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <FileAs>string</FileAs>
+      <Name>
+        <Title>string</Title>
+        <Prefix>string</Prefix>
+        <FirstName>string</FirstName>
+        <MiddleName>string</MiddleName>
+        <LastName>string</LastName>
+        <Suffix>string</Suffix>
+      </Name>
+      <Address>
+        <Title>string</Title>
+        <ID>00000000-0000-0000-0000-000000000000</ID>
+        <Street>string</Street>
+        <City>string</City>
+        <Province>string</Province>
+        <PostalCode>string</PostalCode>
+        <Country>string</Country>
+      </Address>
+      <Company>string</Company>
+      <Phone1Title>string</Phone1Title>
+      <Phone1>string</Phone1>
+      <Phone2Title>string</Phone2Title>
+      <Phone2>string</Phone2>
+      <EmailTitle>string</EmailTitle>
+      <Email>string</Email>
+      <AdditionalNames>
+        <!-- invalid XML -->
+        <Dummy>string</Dummy>
+      </AdditionalNames>
+      <AdditionalPhones>
+        <!-- invalid XML -->
+        <Dummy>string</Dummy>
+      </AdditionalPhones>
+      <AdditionalURIs>
+        <!-- invalid XML -->
+        <Dummy>string</Dummy>
+      </AdditionalURIs>
+      <PreferredContactMethod>string</PreferredContactMethod>
+      <MarketingSource>string</MarketingSource>
+      <Note>string</Note>
+      <NoMessaging>true</NoMessaging>
+      <NoEmail>true</NoEmail>
+      <NoPostCard>true</NoPostCard>
+      <Discount>
+        <LaborRateCode>string</LaborRateCode>
+        <LaborDiscountPercent>1.1</LaborDiscountPercent>
+        <LaborDiscountAlways>true</LaborDiscountAlways>
+        <MaterialRateCode>string</MaterialRateCode>
+        <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+        <MaterialDiscountAlways>true</MaterialDiscountAlways>
+      </Discount>
+    </Owner>
+    <Reminders>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </Reminders>
+  </ServiceItem>
+  <ServiceAdvisor>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Type>string</Type>
+    <Name>string</Name>
+  </ServiceAdvisor>
+  <Technician>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Type>string</Type>
+    <Name>string</Name>
+  </Technician>
+  <Duration>1.1</Duration>
+  <InUsage>1</InUsage>
+  <OutUsage>1</OutUsage>
+  <WorkflowStage>string</WorkflowStage>
+  <SearchString>string</SearchString>
+  <Note>string</Note>
+  <ServicePackages>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </ServicePackages>
+  <DeferredServicePackages>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </DeferredServicePackages>
+  <Summary>
+    <PartsTotal>1.1</PartsTotal>
+    <LaborTotal>1.1</LaborTotal>
+    <SubletTotal>1.1</SubletTotal>
+    <NetTotal>1.1</NetTotal>
+    <OtherCharges>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </OtherCharges>
+    <OtherChargeTotal>1.1</OtherChargeTotal>
+    <TaxTotal>1.1</TaxTotal>
+    <GrandTotal>1.1</GrandTotal>
+    <TotalOutstanding>1.1</TotalOutstanding>
+  </Summary>
+  <OtherChargeCode>string</OtherChargeCode>
+  <Flag>string</Flag>
+  <WorkOrderFlags>string</WorkOrderFlags>
+  <Tags>string</Tags>
+  <Authorizations>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </Authorizations>
+  <Signature>
+    <Image>string</Image>
+  </Signature>
+  <Completed>true</Completed>
+</WorkOrder>
+connectionid	
+a9f3c1e27b6d4f8ca02e3b9d5f7a1c4e
+Connection ID for session context. Example: a9f3c1e27b6d4f8ca02e3b9d5f7a1c4e
+
+query	string
+apiKey	
+4b8f7d2a19c34e6fb0a7d5c8e23f9b1a
+API Key used to authorize the request. Example: 4b8f7d2a19c34e6fb0a7d5c8e23f9b1a
+
+query	string
+authentication	
+n3/Fp9SbhzVQeWux/MdI7FlQJg==
+Encrypted authentication token. Example: m5/Vc1RzhUETQvEtx/JdIglQpTg=
+
+query	string
