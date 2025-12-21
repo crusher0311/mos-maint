@@ -300,23 +300,24 @@ export default function CannedJobsSettingsPage() {
 
           {showManualEntry && (
             <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h4 className="text-sm font-medium text-gray-900 mb-3">Add Canned Job Manually</h4>
+              <h4 className="text-sm font-medium text-gray-900 mb-3">Add Service Package Manually</h4>
               <p className="text-xs text-gray-600 mb-3">
-                If the sync doesn&apos;t work, you can manually add canned jobs by entering their ID from Protractor.
+                Enter the Service Package <strong>Code</strong> from Protractor (Setup &gt; Work Order Setup &gt; Services).
+                The Code is a text identifier used to search and add packages to work orders.
               </p>
               <div className="flex gap-3">
                 <input
                   type="text"
                   value={manualId}
                   onChange={(e) => setManualId(e.target.value)}
-                  placeholder="Canned Job ID (required)"
+                  placeholder="Service Package Code (required)"
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <input
                   type="text"
                   value={manualTitle}
                   onChange={(e) => setManualTitle(e.target.value)}
-                  placeholder="Title (optional)"
+                  placeholder="Title (optional, for display)"
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
