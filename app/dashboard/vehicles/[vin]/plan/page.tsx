@@ -298,6 +298,12 @@ function triage({
 
     const milesToGo = currentMiles != null && dueAtMiles != null ? dueAtMiles - currentMiles : null;
 
+    // If no time-based interval but we have miles and miles/day, estimate date
+    if (dueAtDate == null && milesToGo != null && milesPerDay != null && milesPerDay > 0) {
+      const daysUntilDue = Math.round(milesToGo / milesPerDay);
+      dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+    }
+
     const daysToGo =
       dueAtDate != null ? Math.ceil((dueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
@@ -892,7 +898,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
                     {t.dueAtDate != null && (
                       <>
-                        or ~<strong>{t.dueAtDate.toLocaleDateString()}</strong>
+                        By ~<strong>{t.dueAtDate.toLocaleDateString()}</strong>
                       </>
                     )}
                   </div>
