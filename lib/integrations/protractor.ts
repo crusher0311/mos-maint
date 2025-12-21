@@ -717,41 +717,130 @@ export async function fetchCannedJobById(
   return { ok: true, cannedJob: result.data };
 }
 
+export async function resolveWorkOrderGuid(
+  shopId: number,
+  roNumberOrGuid: string
+): Promise<{ ok: boolean; workOrderGuid?: string; workOrder?: ProtractorWorkOrder; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roNumberOrGuid);
+  
+  if (isGuid) {
+    const result = await fetchWorkOrderById(shopId, roNumberOrGuid);
+    if (result.ok && result.workOrder) {
+      return { ok: true, workOrderGuid: result.workOrder.ID, workOrder: result.workOrder };
+    }
+    return { ok: false, error: result.error || "Work order not found" };
+  }
+
+  const roNumber = parseInt(roNumberOrGuid, 10);
+  if (isNaN(roNumber)) {
+    return { ok: false, error: "Invalid RO number" };
+  }
+
+  console.log(`[Protractor] Looking up GUID for RO number: ${roNumber}`);
+
+  const activeResult = await fetchActiveWorkOrders(shopId, { readInProgress: true });
+  if (activeResult.ok && activeResult.workOrders) {
+    const match = activeResult.workOrders.find(wo => wo.WorkOrderNumber === roNumber);
+    if (match) {
+      console.log(`[Protractor] Found GUID ${match.ID} for RO ${roNumber}`);
+      return { ok: true, workOrderGuid: match.ID, workOrder: match };
+    }
+  }
+
+  const db = await getDb();
+  const cached = await db.collection("protractor_work_orders").findOne({
+    shopId,
+    "data.WorkOrderNumber": roNumber
+  });
+  
+  if (cached?.data?.ID) {
+    console.log(`[Protractor] Found cached GUID ${cached.data.ID} for RO ${roNumber}`);
+    const fullWO = await fetchWorkOrderById(shopId, cached.data.ID);
+    if (fullWO.ok && fullWO.workOrder) {
+      return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
+    }
+  }
+
+  return { ok: false, error: `Could not find work order with RO# ${roNumber}. Make sure it's an active work order.` };
+}
+
 export async function applyCannedJobToWorkOrder(
   shopId: number,
-  workOrderId: string,
-  cannedJobCode: string
+  workOrderIdOrNumber: string,
+  cannedJobCode: string,
+  cannedJobTitle?: string
 ): Promise<{ ok: boolean; servicePackage?: ProtractorServicePackage; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const endpoints = [
-    `/WorkOrder/${workOrderId}/ServicePackage/${encodeURIComponent(cannedJobCode)}`,
-    `/WorkOrder/${workOrderId}/ServicePackage/Code/${encodeURIComponent(cannedJobCode)}`,
-    `/WorkOrder/${workOrderId}/ServicePackage/CannedJob/${encodeURIComponent(cannedJobCode)}`,
-  ];
+  console.log(`[Protractor] Adding service package "${cannedJobCode}" to work order ${workOrderIdOrNumber}`);
 
-  const errors: string[] = [];
-  for (const endpoint of endpoints) {
-    console.log(`[Protractor] Trying endpoint: ${endpoint}`);
-    const result = await protractorFetch<ProtractorServicePackage>(
-      endpoint,
-      config,
-      { method: "POST" }
-    );
-
-    if (result.ok) {
-      console.log(`[Protractor] Success with endpoint: ${endpoint}`);
-      return { ok: true, servicePackage: result.data };
-    }
-    errors.push(`${endpoint}: ${result.error}`);
-    console.log(`[Protractor] Failed: ${result.error}`);
+  const resolveResult = await resolveWorkOrderGuid(shopId, workOrderIdOrNumber);
+  if (!resolveResult.ok || !resolveResult.workOrderGuid || !resolveResult.workOrder) {
+    return { ok: false, error: resolveResult.error || "Could not resolve work order" };
   }
 
-  console.log(`[Protractor] All endpoints failed for code "${cannedJobCode}" on WO "${workOrderId}"`);
-  return { ok: false, error: `Failed to apply service package. Tried endpoints: ${errors.join("; ")}` };
+  const workOrderGuid = resolveResult.workOrderGuid;
+  const existingWorkOrder = resolveResult.workOrder;
+
+  console.log(`[Protractor] Work order GUID: ${workOrderGuid}, Type: ${existingWorkOrder.Type}`);
+
+  if (existingWorkOrder.Type !== "WorkOrder" && existingWorkOrder.Type !== "Estimate" && existingWorkOrder.Type !== "Appointment") {
+    return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
+  }
+
+  const newPackageId = crypto.randomUUID();
+  const newServicePackage: ProtractorServicePackage = {
+    ID: newPackageId,
+    Title: cannedJobTitle || cannedJobCode,
+    Description: `Added via MOS Maintenance - ${cannedJobCode}`,
+    Status: "Pending",
+    ServicePackageLines: [
+      {
+        ID: crypto.randomUUID(),
+        LineType: "Labor",
+        Description: cannedJobTitle || cannedJobCode,
+        Quantity: 1,
+        Status: "Pending",
+      }
+    ]
+  };
+
+  const updatedServicePackages = [
+    ...(existingWorkOrder.ServicePackages || []),
+    newServicePackage
+  ];
+
+  const updatePayload = {
+    ...existingWorkOrder,
+    ServicePackages: updatedServicePackages
+  };
+
+  console.log(`[Protractor] POSTing updated work order with new service package`);
+
+  const result = await protractorFetch<ProtractorWorkOrder>(
+    `/WorkOrder/${workOrderGuid}`,
+    config,
+    {
+      method: "POST",
+      body: JSON.stringify(updatePayload)
+    }
+  );
+
+  if (!result.ok) {
+    console.log(`[Protractor] Failed to update work order: ${result.error}`);
+    return { ok: false, error: result.error || "Failed to update work order" };
+  }
+
+  console.log(`[Protractor] Successfully added service package to work order`);
+  return { ok: true, servicePackage: newServicePackage };
 }
 
 export async function fetchWorkOrdersForVehicle(

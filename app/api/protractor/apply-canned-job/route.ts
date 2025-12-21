@@ -22,14 +22,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
   }
 
-  let body: { vin?: string; cannedJobId?: string; workOrderId?: string };
+  let body: { vin?: string; cannedJobId?: string; cannedJobTitle?: string; workOrderId?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { vin, cannedJobId, workOrderId } = body;
+  const { vin, cannedJobId, cannedJobTitle, workOrderId } = body;
   console.log(`[Apply Canned Job] Request: vin=${vin}, cannedJobId=${cannedJobId}, workOrderId=${workOrderId}`);
 
   if (!cannedJobId) {
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await applyCannedJobToWorkOrder(shopId, targetWorkOrderId, cannedJobId);
+  const result = await applyCannedJobToWorkOrder(shopId, targetWorkOrderId, cannedJobId, cannedJobTitle);
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 500 });

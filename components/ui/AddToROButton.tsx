@@ -56,7 +56,7 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
     const effectiveWorkOrderId = manualWorkOrderId || propWorkOrderId;
 
     try {
-      const body: Record<string, string> = { vin, cannedJobId };
+      const body: Record<string, string> = { vin, cannedJobId, cannedJobTitle };
       if (effectiveWorkOrderId) {
         body.workOrderId = effectiveWorkOrderId;
       }
