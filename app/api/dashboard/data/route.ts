@@ -252,60 +252,61 @@ export async function GET() {
       { $limit: 100 }
     ]).toArray();
 
-    // Also fetch Protractor work orders with active status
-    const protractorRows = await db.collection("protractor_work_orders").aggregate([
+    // Also fetch Protractor vehicles directly (synced via Protractor integration)
+    const protractorRows = await db.collection("protractor_vehicles").aggregate([
       {
         $match: {
-          $or: [
-            { shopId: Number(user.shopId) },
-            { shopId: String(user.shopId) }
-          ]
+          shopId: Number(user.shopId)
         }
       },
       {
         $lookup: {
-          from: "protractor_vehicles",
-          let: { serviceItemId: "$serviceItemId", vin: "$vin" },
+          from: "protractor_work_orders",
+          let: { vin: "$vin", protractorId: "$protractorId" },
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $or: [
-                    { $eq: ["$protractorId", "$$serviceItemId"] },
-                    { $eq: [{ $toUpper: "$vin" }, { $toUpper: "$$vin" }] }
+                  $and: [
+                    { $eq: ["$shopId", Number(user.shopId)] },
+                    { $or: [
+                      { $eq: ["$serviceItemId", "$$protractorId"] },
+                      { $eq: [{ $toUpper: "$vin" }, "$$vin"] }
+                    ]}
                   ]
                 }
               }
             },
+            { $sort: { fetchedAt: -1 } },
             { $limit: 1 }
           ],
-          as: "vehicleData"
+          as: "workOrder"
         }
       },
-      { $unwind: { path: "$vehicleData", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$workOrder", preserveNullAndEmptyArrays: true } },
       {
         $project: {
           _id: 0,
           updatedAt: { $ifNull: ["$fetchedAt", new Date()] },
-          displayName: { $ifNull: ["$contactName", "Unknown Customer"] },
+          displayName: { $ifNull: ["$workOrder.contactName", "Unknown Customer"] },
           displayVehicle: {
             $concat: [
-              { $toString: { $ifNull: ["$vehicleData.year", ""] } },
-              { $cond: [{ $ifNull: ["$vehicleData.year", false] }, " ", ""] },
-              { $ifNull: ["$vehicleData.make", ""] },
-              { $cond: [{ $ifNull: ["$vehicleData.make", false] }, " ", ""] },
-              { $ifNull: ["$vehicleData.model", ""] }
+              { $toString: { $ifNull: ["$year", ""] } },
+              { $cond: [{ $ifNull: ["$year", false] }, " ", ""] },
+              { $ifNull: ["$make", ""] },
+              { $cond: [{ $ifNull: ["$make", false] }, " ", ""] },
+              { $ifNull: ["$model", ""] }
             ]
           },
-          displayVin: { $toUpper: { $ifNull: ["$vehicleData.vin", "$vin"] } },
-          displayMiles: { $ifNull: ["$odometer", "$vehicleData.odometer"] },
-          displayRo: "$workOrderNumber",
+          displayVin: "$vin",
+          displayMiles: { $ifNull: ["$workOrder.odometer", "$odometer"] },
+          displayRo: "$workOrder.workOrderNumber",
           dviDone: { $literal: false },
           source: { $literal: "protractor" },
           af: {
-            status: "$status",
+            status: { $ifNull: ["$workOrder.status", "Open"] },
             createdAt: "$fetchedAt",
-            miles: { $ifNull: ["$odometer", "$vehicleData.odometer"] }
+            miles: { $ifNull: ["$workOrder.odometer", "$odometer"] }
           }
         }
       },
