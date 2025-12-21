@@ -299,6 +299,13 @@ type TriagedItem = {
   source?: "oem" | "dvi" | "protractor";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
+  usingShopInterval?: boolean;
+};
+
+type ShopIntervalOverride = {
+  useShop: boolean;
+  miles: number | null;
+  months: number | null;
 };
 
 type Buckets = { overdue: TriagedItem[]; dueSoon: TriagedItem[]; upcoming: TriagedItem[] };
@@ -317,6 +324,7 @@ function triage({
   soonMiles = DEFAULT_SOON_MILES,
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
+  shopIntervals = {},
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -328,6 +336,7 @@ function triage({
   soonMiles?: number;
   soonDays?: number;
   milesPerDay?: number | null;
+  shopIntervals?: Record<string, ShopIntervalOverride>;
 }): Buckets {
   // Enrich CARFAX records with interpolated mileage for gaps
   const enrichedRecords = fillCarfaxMileageGaps(carfaxRecords || [], {
@@ -377,8 +386,16 @@ function triage({
   for (const o of oemItems) {
     const key = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
     const last = lastMap.get(key) ?? null;
-    const intervalMiles = o.miles ?? null;
-    const intervalMonths = o.months ?? null;
+    
+    // Check for shop interval override
+    const shopOverride = shopIntervals[key];
+    const usingShopInterval = shopOverride?.useShop === true;
+    const intervalMiles = usingShopInterval && shopOverride.miles != null 
+      ? shopOverride.miles 
+      : (o.miles ?? null);
+    const intervalMonths = usingShopInterval && shopOverride.months != null 
+      ? shopOverride.months 
+      : (o.months ?? null);
 
     // Track that we've used this DVI key
     if (dviMap.has(key)) usedDviKeys.add(key);
@@ -432,6 +449,7 @@ function triage({
       bump: dviInfo?.status ?? null,
       source: "oem",
       declined: declinedInfo,
+      usingShopInterval,
     });
   }
 
@@ -545,6 +563,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   );
   const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
   const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
+  const shopIntervals: Record<string, ShopIntervalOverride> = shop?.maintenance?.intervals ?? {};
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
@@ -726,6 +745,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     soonMiles,
     soonDays,
     milesPerDay: mpdBlended,
+    shopIntervals,
   });
 
   console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
@@ -800,6 +820,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         )}
                         {t.bump === "red" && t.source !== "protractor" && <span className="rounded-full bg-red-600 text-white px-2 py-0.5">DVI 🔴</span>}
                         {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
+                        {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                         {t.declined && (
                           <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
                             Previously declined
@@ -843,7 +864,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <summary className="cursor-pointer text-xs underline">Why this is recommended</summary>
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
-                        <span className="font-medium">OEM Interval:</span>{" "}
+                        <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
                         {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
@@ -903,6 +924,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DVI 🟡</span>
                     )}
                     {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
+                    {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                     {t.declined && (
                       <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
                         Previously declined
@@ -946,7 +968,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <summary className="cursor-pointer text-xs underline">Why this is recommended</summary>
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
-                        <span className="font-medium">OEM Interval:</span>{" "}
+                        <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
                         {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
@@ -991,6 +1013,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
                     )}
+                    {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                     {t.declined && (
                       <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
                         Previously declined
@@ -1024,7 +1047,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <summary className="cursor-pointer text-xs underline">Show details</summary>
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
-                        <span className="font-medium">OEM Interval:</span>{" "}
+                        <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
                         {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
