@@ -66,6 +66,8 @@ The app is configured for Replit autoscale deployment:
 - `protractor_invoices` - Cached Protractor invoices
 - `protractor_deferred_work` - Cached Protractor deferred work (maintenance recommendations)
 - `protractor_events` - Raw webhook events from Protractor
+- `protractor_canned_jobs` - Cached Protractor canned jobs for quick access
+- `canned_job_applications` - Log of canned jobs applied to work orders
 
 ## UI Design System
 The application uses a modern SaaS-style design with:
@@ -81,6 +83,16 @@ The application uses a modern SaaS-style design with:
 - `app/dashboard/DashboardClient.tsx` - Dashboard with stats cards, search, and data table
 
 ## Recent Changes
+- **2024-12-21**: Protractor Canned Jobs Integration
+  - **Canned Job Sync**: Fetch and cache canned jobs from Protractor API
+  - **Mapping UI**: Settings > Canned Jobs page to map service keys (oil, brakes, etc.) to Protractor canned job IDs
+  - **One-Click Add to RO**: Blue "Add to RO" button appears on Plan page recommendations when a mapped canned job exists
+  - Clicking the button automatically finds the vehicle's open work order and applies the canned job
+  - Application history logged in `canned_job_applications` collection
+  - Canned jobs cached in `protractor_canned_jobs` with 6-hour TTL
+  - API endpoints: `/api/protractor/canned-jobs` (list), `/api/protractor/apply-canned-job` (apply to RO)
+  - Client component `AddToROButton` handles async state (loading, success, error with retry)
+
 - **2024-12-21**: Shop Maintenance Intervals & CARFAX Mileage Interpolation
   - **Shop Intervals Override**: New Settings > Shop Intervals page allows shops to define custom maintenance schedules that override OEM recommendations
   - Shops can set custom miles/months intervals for common services (oil, tire rotation, brakes, etc.)
