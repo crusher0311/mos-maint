@@ -1100,18 +1100,36 @@ export async function fetchWorkOrdersForVehicle(
   }
 
   // API not available, try cached work orders from MongoDB
-  console.log(`[Protractor] API endpoint not available, checking cached work orders`);
+  console.log(`[Protractor] API endpoint not available, checking cached work orders for serviceItemId: ${serviceItemId}`);
   const db = await getDb();
-  const cached = await db.collection("protractor_work_orders").find({
-    shopId,
-    "data.ServiceItemID": serviceItemId,
-  }).toArray();
+  
+  // Work orders are cached with flat structure from upsertProtractorWorkOrderSnapshot
+  const query: any = { shopId, serviceItemId };
+  if (options?.includeOpen) {
+    query.completed = { $ne: true };
+  }
+  
+  const cached = await db.collection("protractor_work_orders")
+    .find(query)
+    .sort({ fetchedAt: -1 })
+    .toArray();
+
+  console.log(`[Protractor] Found ${cached.length} cached work orders`);
 
   if (cached.length > 0) {
-    let workOrders = cached.map(c => c.data as ProtractorWorkOrder);
-    if (options?.includeOpen) {
-      workOrders = workOrders.filter(wo => !wo.Completed);
-    }
+    // Convert cached snapshots back to work order format
+    const workOrders = cached.map(c => ({
+      ID: c.workOrderId,
+      WorkOrderNumber: c.workOrderNumber,
+      Type: c.type,
+      Status: c.status,
+      ServiceItemID: c.serviceItemId,
+      ContactID: c.contactId,
+      Completed: c.completed,
+      ScheduledTime: c.scheduledTime,
+      PromisedTime: c.promisedTime,
+      ServicePackages: c.servicePackages,
+    } as ProtractorWorkOrder));
     return { ok: true, workOrders };
   }
 
