@@ -7,6 +7,11 @@ export interface AutoVitalsConfig {
   jwtToken?: string;
 }
 
+export interface AutoVitalsCredentials {
+  welcomeCode: string;
+  personalCode: string;
+}
+
 export interface AutoVitalsVehicle {
   vehicleId: number;
   vin?: string;
@@ -509,6 +514,78 @@ export async function testAutoVitalsConnection(
     ok: true, 
     shopName: result.data?.ShopName || result.data?.shopName 
   };
+}
+
+export async function loginWithCodes(
+  credentials: AutoVitalsCredentials
+): Promise<{ ok: true; config: AutoVitalsConfig; shopName?: string } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Logging in with welcome code`);
+  
+  const { welcomeCode, personalCode } = credentials;
+  
+  if (!welcomeCode || !personalCode) {
+    return { ok: false, error: "Welcome code and personal code are required" };
+  }
+  
+  try {
+    const loginUrl = `${AUTOVITALS_BASE_URL}/TvpxService.asmx/LoginStart`;
+    
+    const response = await fetch(loginUrl, {
+      method: "POST",
+      headers: {
+        "accept": "application/json, text/javascript, */*; q=0.01",
+        "content-type": "application/json; charset=UTF-8",
+        "x-requested-with": "XMLHttpRequest",
+      },
+      body: JSON.stringify({
+        welcomeCode: welcomeCode.trim(),
+        personalCode: personalCode.trim(),
+      }),
+    });
+    
+    if (!response.ok) {
+      return { ok: false, error: `Login failed: HTTP ${response.status}` };
+    }
+    
+    const setCookieHeader = response.headers.get("set-cookie");
+    const data = await response.json();
+    
+    const parsedData = data.d ? (typeof data.d === "string" ? JSON.parse(data.d) : data.d) : data;
+    
+    if (parsedData.Error || parsedData.error) {
+      return { ok: false, error: parsedData.Error || parsedData.error || "Login failed" };
+    }
+    
+    const shopId = parsedData.ShopId || parsedData.shopId || parsedData.sid;
+    const userId = parsedData.UserId || parsedData.userId || parsedData.uid;
+    const shopName = parsedData.ShopName || parsedData.shopName;
+    
+    if (!shopId) {
+      return { ok: false, error: "Login succeeded but no shop ID returned. Please verify your codes." };
+    }
+    
+    let sessionCookie = setCookieHeader || "";
+    
+    if (!sessionCookie && parsedData.SessionId) {
+      sessionCookie = `ASP.NET_SessionId=${parsedData.SessionId}`;
+    }
+    
+    if (!sessionCookie) {
+      return { ok: false, error: "Login succeeded but no session was established. Please try again." };
+    }
+    
+    const config: AutoVitalsConfig = {
+      shopId,
+      userId,
+      sessionCookie,
+    };
+    
+    return { ok: true, config, shopName };
+    
+  } catch (error) {
+    console.error("[AutoVitals] Login error:", error);
+    return { ok: false, error: error instanceof Error ? error.message : "Login failed" };
+  }
 }
 
 export async function resolveAutoVitalsConfig(
