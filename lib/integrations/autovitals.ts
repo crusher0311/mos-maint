@@ -483,9 +483,10 @@ export async function getCachedAutoVitalsInspection(
   return collection.findOne({ appointmentId, shopId }) as Promise<AutoVitalsInspectionResult | null>;
 }
 
-export async function getShopAutoVitalsConfig(shopId: string): Promise<AutoVitalsConfig | null> {
+export async function getShopAutoVitalsConfig(shopId: string | number): Promise<AutoVitalsConfig | null> {
   const db = await getDb();
-  const shop = await db.collection("shops").findOne({ _id: shopId });
+  const numericShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
+  const shop = await db.collection("shops").findOne({ shopId: numericShopId });
   
   if (!shop?.autovitals?.shopId || !shop?.autovitals?.sessionCookie) {
     return null;
