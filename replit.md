@@ -22,6 +22,7 @@ The application features a modern SaaS-style design.
 -   **Content Areas**: Light backgrounds (gray-50/white) with card-based layouts.
 -   **Accent Color**: Blue (#3B82F6 / blue-600) for primary actions and highlights.
 -   **Components**: Key components include a `Sidebar`, `AppLayout`, `LoginForm`, and `DashboardClient`.
+-   **Unified Integrations Page**: Settings > Integrations provides a single tabbed interface for CARFAX, AutoFlow, Protractor, and AutoVitals configuration. Canned Job Mappings are accessible from the Protractor tab.
 -   **Vehicle Detail Page**: Tabbed interface for Attributes, Recommendations (Recs), and History.
 -   **Data Source Badges**: Visual indicators (OEM, DVI, CARFAX, Shop, Protractor) on recommendations.
 -   **Loading Indicators**: `loading.tsx` for Plan and Vehicle Detail pages to show progress during API calls.
