@@ -856,35 +856,38 @@ export async function fetchServicePackageTemplateDetail(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  // Per Protractor docs: POST /ServicePackageTemplate/Read with ServicePackageTemplateReadRequest body
-  console.log(`[Protractor] Fetching template detail for ${templateId} via POST /ServicePackageTemplate/Read...`);
-  
-  const postResult = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
-    `/ServicePackageTemplate/Read`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify({ 
-        ServicePackageTemplateReadRequest: { ID: templateId }
-      })
-    }
-  );
-  
-  console.log(`[Protractor] Template detail POST response: ok=${postResult.ok}, status=${postResult.status || 'N/A'}`);
-  
-  if (postResult.ok && postResult.data) {
-    // Response could be the template directly or wrapped in ServicePackageTemplate property
-    const template = (postResult.data as any).ServicePackageTemplate || postResult.data;
-    const linesCount = template.ServicePackageLines?.ItemCollection?.length || 0;
-    console.log(`[Protractor] Got template detail with ${linesCount} lines`);
+  // Try GET endpoints to fetch template detail with lines
+  const getEndpoints = [
+    `/ServicePackageTemplate/Read/${templateId}`,
+    `/ServicePackageTemplate/${templateId}`,
+    `/ServicePackageTemplate/Read?id=${templateId}`,
+    `/ServicePackageTemplate?id=${templateId}`,
+  ];
+
+  for (const endpoint of getEndpoints) {
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
+    const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
+      endpoint,
+      config
+    );
+
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, status=${result.status || 'N/A'}`);
     
-    if (template.ID) {
-      return { ok: true, template };
+    if (result.ok && result.data) {
+      const template = (result.data as any).ServicePackageTemplate || result.data;
+      const linesCount = template.ServicePackageLines?.ItemCollection?.length || 0;
+      console.log(`[Protractor] Got template detail with ${linesCount} lines`);
+      
+      if (template.ID) {
+        return { ok: true, template };
+      }
+    }
+    
+    // Log raw response for debugging
+    if (result.error) {
+      console.log(`[Protractor] GET ${endpoint} error:`, result.error);
     }
   }
-  
-  // Log raw response for debugging
-  console.log(`[Protractor] Template detail raw response:`, JSON.stringify(postResult.data || postResult.error).substring(0, 500));
 
   return { ok: false, error: `Template detail not found for ID ${templateId}` };
 }
