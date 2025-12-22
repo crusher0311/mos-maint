@@ -1190,60 +1190,77 @@ export async function applyCannedJobToWorkOrder(
   if (!template.ServicePackageLines?.ItemCollection?.length) {
     console.log(`[Protractor] Template has no lines in summary, trying to add via WorkOrder POST with template ID: ${template.ID}...`);
     
-    // Build service package with template ID reference
-    const newServicePackage = {
-      ID: "00000000-0000-0000-0000-000000000000",
-      Code: template.Code || cannedJobCode,
-      ServicePackageHeader: {
-        Title: template.ServicePackageHeader?.Title || cannedJobTitle || cannedJobCode,
-        Description: template.ServicePackageHeader?.Description || "",
+    // Try multiple payload formats - Protractor API is finicky about structure
+    const payloadVariants = [
+      // Format 1: Minimal with just template ID reference
+      { 
+        ServicePackages: { 
+          ItemCollection: [{ ServicePackageTemplateID: template.ID }] 
+        } 
       },
-      ServicePackageLines: { ItemCollection: [] },
-      ServicePackageTemplateID: template.ID,  // Reference the template
-      Status: "Pending",
-    };
+      // Format 2: With Code
+      { 
+        ServicePackages: { 
+          ItemCollection: [{ 
+            Code: template.Code || cannedJobCode,
+            ServicePackageTemplateID: template.ID 
+          }] 
+        } 
+      },
+      // Format 3: Full service package structure
+      { 
+        ServicePackages: { 
+          ItemCollection: [{ 
+            ID: "00000000-0000-0000-0000-000000000000",
+            Code: template.Code || cannedJobCode,
+            ServicePackageHeader: {
+              Title: template.ServicePackageHeader?.Title || cannedJobCode,
+              Description: template.ServicePackageHeader?.Description || "",
+            },
+            ServicePackageTemplateID: template.ID,
+            Status: "Pending"
+          }] 
+        } 
+      },
+    ];
     
-    // Get existing work order and add service package
-    const existingPackagesRaw = existingWorkOrder.ServicePackages;
-    const existingPackages = Array.isArray(existingPackagesRaw) 
-      ? existingPackagesRaw 
-      : (existingPackagesRaw?.ItemCollection || []);
+    let lastError = "";
     
-    const updatedWorkOrder = {
-      ServicePackages: {
-        ItemCollection: [...existingPackages, newServicePackage]
-      }
-    };
-    
-    console.log(`[Protractor] POSTing work order update with ServicePackageTemplateID...`);
-    console.log(`[Protractor] Request payload:`, JSON.stringify(updatedWorkOrder).substring(0, 500));
-    
-    const updateResult = await protractorFetch<any>(
-      `/WorkOrder/${workOrderGuid}`,
-      config,
-      {
-        method: "POST",
-        body: JSON.stringify(updatedWorkOrder)
-      }
-    );
-    
-    console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
-    if (updateResult.data) {
-      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
-    }
-    
-    if (updateResult.ok) {
-      // Check if the response actually contains our service package
-      const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
-                               updateResult.data?.ServicePackages || [];
-      const added = Array.isArray(responsePackages) && responsePackages.some(
-        (p: any) => p.Code === (template.Code || cannedJobCode) || 
-                    p.ServicePackageHeader?.Title === (template.ServicePackageHeader?.Title || cannedJobTitle) ||
-                    p.ServicePackageTemplateID === template.ID
+    for (let i = 0; i < payloadVariants.length; i++) {
+      const payload = payloadVariants[i];
+      console.log(`[Protractor] Trying payload format ${i + 1}/${payloadVariants.length}...`);
+      console.log(`[Protractor] Request payload:`, JSON.stringify(payload).substring(0, 500));
+      
+      const updateResult = await protractorFetch<any>(
+        `/WorkOrder/${workOrderGuid}`,
+        config,
+        {
+          method: "POST",
+          body: JSON.stringify(payload)
+        }
       );
       
-      if (added) {
-        console.log(`[Protractor] SUCCESS: Verified service package in response`);
+      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
+      if (updateResult.data) {
+        console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
+      }
+      
+      if (updateResult.ok) {
+        // Check if the response actually contains our service package
+        const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
+                                 updateResult.data?.ServicePackages || [];
+        const added = Array.isArray(responsePackages) && responsePackages.some(
+          (p: any) => p.Code === (template.Code || cannedJobCode) || 
+                      p.ServicePackageHeader?.Title === (template.ServicePackageHeader?.Title || cannedJobTitle) ||
+                      p.ServicePackageTemplateID === template.ID
+        );
+        
+        if (added) {
+          console.log(`[Protractor] SUCCESS: Verified service package in response (format ${i + 1})`);
+        } else {
+          console.log(`[Protractor] API returned OK (format ${i + 1}) - service package likely added`);
+        }
+        
         return {
           ok: true,
           servicePackage: {
@@ -1255,26 +1272,18 @@ export async function applyCannedJobToWorkOrder(
           }
         };
       } else {
-        console.log(`[Protractor] WARNING: API returned OK but service package not verified in response`);
-        // Still return success since API said OK
-        return {
-          ok: true,
-          servicePackage: {
-            ID: template.ID,
-            Title: template.ServicePackageHeader?.Title || cannedJobCode,
-            Description: template.ServicePackageHeader?.Description || "",
-            Chapter: template.Chapter || "Service",
-            Status: "Pending"
-          }
-        };
+        lastError = updateResult.error || "Unknown error";
+        console.log(`[Protractor] Format ${i + 1} failed: ${lastError}`);
+        // Continue to try next format
       }
-    } else {
-      console.log(`[Protractor] WorkOrder update failed: ${updateResult.error}`);
-      return {
-        ok: false,
-        error: `Failed to add service package via WorkOrder update: ${updateResult.error}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
-      };
     }
+    
+    // All formats failed
+    console.log(`[Protractor] All payload formats failed. Last error: ${lastError}`);
+    return {
+      ok: false,
+      error: `Failed to add service package via WorkOrder update: ${lastError}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
+    };
   }
 
   return { 
