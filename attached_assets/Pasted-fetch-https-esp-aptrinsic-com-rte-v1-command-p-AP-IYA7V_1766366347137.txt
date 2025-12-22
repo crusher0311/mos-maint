@@ -1,0 +1,1352 @@
+fetch("https://esp.aptrinsic.com/rte/v1/command?p=AP-IYA7VJMPTTJW-2&sv=0.56.7&v=AP-IYA7VJMPTTJW-2-1766333027022-75874263&ai=5a5f5cde-f23f-42f0-9420-829d785e6ef8&vt=2&s=AP-IYA7VJMPTTJW-2-1766366023810-67467782&et=click&rf=https%3A%2F%2Fmail.google.com%2F&sc=https%3A%2F%2F&ho=tvpx.autovitals.com&pa=%2F&q&ha&sch=1957&scw=2447&pt=TVPx%3A%20Tech%20View&cb=1766366036730-1739", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "text/plain;charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "cross-site"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"elementTree\":[{\"tagName\":\"BODY\",\"attributes\":{\"data-bind\":\"css: { 'tablet': isTablet, 'help-mode': helpBackdropVisible }\"},\"child_n\":3,\"child_tag_n\":1},{\"tagName\":\"DIV\",\"attributes\":{\"data-bind\":\"component: { name: 'master-layout', params: $root }\",\"data-help-group-code\":\"root\"},\"child_n\":2,\"child_tag_n\":2},{\"tagName\":\"DIV\",\"attributes\":{\"id\":\"tvp\",\"data-bind\":\"css: {'workflow-view': currentView() === wfView, 'no-tech-hours': !showTechHours(), 'cc-v2': serverSettings.conversationCenterVersion() == 2, 'simplified-tiles': simplifiedRoTileEnabled}\",\"class\":\"cc-v2 simplified-tiles\"},\"child_n\":1,\"child_tag_n\":1},{\"tagName\":\"DIV\",\"attributes\":{\"data-bind\":\"component: { name: 'tech-view', params: $data }\",\"id\":\"techView\"},\"child_n\":4,\"child_tag_n\":4},{\"tagName\":\"DIV\",\"attributes\":{\"class\":\"content tbl open-on-tablet-hv\",\"data-help-group-code\":\"tile_grid\",\"data-bind\":\"css: {'no-special-markers': !showSpecialMarkers(), 'open-on-tablet-hv': roOpenOnTabletHighVisibility()}\"},\"child_n\":2,\"child_tag_n\":2},{\"tagName\":\"DIV\",\"attributes\":{\"class\":\"vehicles-row\",\"data-bind\":\"css: {collapsed: collapsedMode}\"},\"child_n\":1,\"child_tag_n\":1},{\"tagName\":\"DIV\",\"attributes\":{\"class\":\"vehicles-col\",\"data-bind\":\"attr: {'data-tech-id': id}\",\"data-tech-id\":\"2000060698\"},\"child_n\":3,\"child_tag_n\":3},{\"tagName\":\"DIV\",\"attributes\":{\"class\":\"tile-wrapper\"},\"child_n\":1,\"child_tag_n\":1},{\"tagName\":\"DIV\",\"attributes\":{\"class\":\"tile not-empty-tile ui-draggable ui-draggable-handle ui-droppable\",\"data-bind\":\"css: {collapsed: collapsed() && !(appointment.openOnTablet() && techInfo.openOnTabletAppointmentId() == appointment.id), 'grey-out': $parents[1].serviceAdvisor() && appointment.serviceAdvisorId() != $parents[1].serviceAdvisor(), 'red-pt': promisedTimeClas\"},\"child_n\":1,\"child_tag_n\":1},{\"tagName\":\"DIV\",\"attributes\":{\"class\":\"tile-row2\"},\"child_n\":2,\"child_tag_n\":2}]}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "omit"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=InspectionResults_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"InspectionResults_Get\",\"request\":{\"appointmentId\":1226211332}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=HelpTips_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"HelpTips_Get\",\"request\":{\"groupCodes\":\"work_order_popup,work_order_popup_header,work_order_popup_menu,work_order_popup_tab_1,work_order_popup_tab_2,work_order_popup_tab_3,work_order_popup_tab_4,work_order_popup_tab_1\"}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=VehicleRepairOrderJobs_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"VehicleRepairOrderJobs_Get\",\"request\":{\"appointmentId\":1226211332}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=GetDeletedJobs", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"GetDeletedJobs\",\"request\":{\"appointmentId\":1226211332}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetInspectionResultsUrls", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"inspectionResultId\":null,\"appointmentId\":1226211332,\"guided\":false}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://shop.autovitals.com/Services/tvpx.asmx/ShortenLink", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "fullUrl=https%3A%2F%2Ftvpx.autovitals.com%2FInspectionResults%3Fjobs%3Dtrue%26forcustomer%3Dfalse%26datax%3Dfalse%26sid%3D11876%26appointmentId%3D1226211332%26mode%3Dmanage%26digest%3Dm2St28%2B%2FLZp4s2V0skKFyg&datax=false&shopId=11876",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "omit"
+}); ;
+fetch("https://shop.autovitals.com/Services/tvpx.asmx/ShortenLink", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "fullUrl=https%3A%2F%2Ftvpx.autovitals.com%2FInspectionResults%3Fjobs%3Dtrue%26forcustomer%3Dtrue%26datax%3Dfalse%26sid%3D11876%26appointmentId%3D1226211332%26mode%3Dmanage%26digest%3Dm2St28%2B%2FLZp4s2V0skKFyg&datax=false&shopId=11876",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "omit"
+}); ;
+fetch("https://shop.autovitals.com/Services/tvpx.asmx/ShortenLink", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "fullUrl=https%3A%2F%2Ftvpx.autovitals.com%2FInspectionResults%3Fjobs%3Dtrue%26datax%3Dfalse%26sid%3D11876%26appointmentId%3D1226211332%26mode%3Dview%26digest%3DbWQckE2V0mD58bNKgWoFSw&datax=false&shopId=11876",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "omit"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointment_Get_AdditionalInfo", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointment_Get_AdditionalInfo\",\"request\":{\"appointmentId\":1226211332}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Vehicle_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Vehicle_Get\",\"request\":{\"vehicleId\":2025944667}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://esp.aptrinsic.com/rte/v1/inapp?p=AP-IYA7VJMPTTJW-2&sv=0.56.7&v=AP-IYA7VJMPTTJW-2-1766333027022-75874263&ai=5a5f5cde-f23f-42f0-9420-829d785e6ef8&vt=2&s=AP-IYA7VJMPTTJW-2-1766366023810-67467782&sc=https%3A%2F%2F&ho=tvpx.autovitals.com&pa=%2F&q&ha&u=tvpx.autovitals.com%2F&gcx=%7B%7D&cb=1766366037481-2127", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "cross-site"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "GET",
+  "mode": "cors",
+  "credentials": "omit"
+}); ;
+fetch("https://www.google-analytics.com/g/collect?v=2&tid=G-WVGDHBMV65&gtm=45je5ca1v9178329099za200zd9178329099&_p=1766332868716&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1906032959.1764783495&ul=en-us&sr=2146x1716&uaa=x86&uab=64&uafvl=Google%2520Chrome%3B143.0.7499.42%7CChromium%3B143.0.7499.42%7CNot%2520A(Brand%3B24.0.0.0&uamb=0&uam=&uap=Windows&uapv=19.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104527907~104528501~104684208~104684211~105391253~115497442~115583767~115616986~115938465~115938469~116184927~116184929~116251938~116251940~116744866&sid=1766366026&sct=3&seg=0&dl=https%3A%2F%2Ftvpx.autovitals.com%2F&dr=https%3A%2F%2Fmail.google.com%2F&dt=TVPx%3A%20Tech%20View&_s=8&tfd=33173343", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "text/plain;charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "no-cors",
+    "sec-fetch-site": "cross-site",
+    "sec-fetch-storage-access": "active"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "en=Click&_ee=1&ep.event_category=Vehicle%20Tile%20-%20Basic%20Controls&ep.event_label=Work%20Order&_et=5538\r\nen=Opening&_ee=1&ep.event_category=Vehicle%20Tile%20-%20Basic%20Controls&ep.event_label=Work%20Order&_et=3",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8945969607,\"lastUpdate\":\"2025-12-21T18:03:19.227\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=SpecialMessage_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"SpecialMessage_Get\",\"request\":{\"userId\":1153730}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946661741,\"lastUpdate\":\"2025-12-22T01:14:09.637\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetServerSettingsUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946662125,\"lastUpdate\":\"2025-12-22T01:14:40.767\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=SpecialMessage_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"SpecialMessage_Get\",\"request\":{\"userId\":1153730}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetServerSettingsUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946662584,\"lastUpdate\":\"2025-12-22T01:15:11.743\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946664967,\"lastUpdate\":\"2025-12-22T01:15:42.727\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=SpecialMessage_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"SpecialMessage_Get\",\"request\":{\"userId\":1153730}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetServerSettingsUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946668486,\"lastUpdate\":\"2025-12-22T01:16:13.75\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://esp.aptrinsic.com/rte/api/v1/feature/client?p=AP-IYA7VJMPTTJW-2&sv=0.56.7&v=AP-IYA7VJMPTTJW-2-1766333027022-75874263&ai=5a5f5cde-f23f-42f0-9420-829d785e6ef8&vt=2&s=AP-IYA7VJMPTTJW-2-1766366023810-67467782&wsv=0.56.7&cb=1766366206872-3564", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "cross-site"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "GET",
+  "mode": "cors",
+  "credentials": "omit"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946671396,\"lastUpdate\":\"2025-12-22T01:16:44.73\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=SpecialMessage_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"SpecialMessage_Get\",\"request\":{\"userId\":1153730}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946672351,\"lastUpdate\":\"2025-12-22T01:17:14.853\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetServerSettingsUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946672825,\"lastUpdate\":\"2025-12-22T01:17:44.963\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=SpecialMessage_Get", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"SpecialMessage_Get\",\"request\":{\"userId\":1153730}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/chat/updates", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NjYzOTA2MjgsIlVzZXJJZCI6MTE1MzczMCwiU2hvcElkIjoxMTg3NiwiRGJOYW1lIjoiYXZkYnByb2QifQ.EdYMa_huxcjhJ0mFaFJA6vvYmqo6MtENSl9hwy3dKDo",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"channelTypeId\":null,\"channelId\":null,\"previousTimestamp\":8923778862}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=TechInfo_Get2", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"TechInfo_Get2\",\"request\":{}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=Appointments_GetUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"Appointments_GetUpdates\",\"request\":{\"timestamp\":8946673236,\"lastUpdate\":\"2025-12-22T01:18:15.423\",\"techView\":true,\"userId\":1153730,\"isAvSupport\":false}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetServerSettingsUpdates", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=utf-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": null,
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+}); ;
+fetch("https://tvpx.autovitals.com/TvpxService.asmx/GetData?sp=MessageCounters_Get3", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/json; charset=UTF-8",
+    "priority": "u=1, i",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "https://tvpx.autovitals.com/",
+  "body": "{\"spName\":\"MessageCounters_Get3\",\"request\":{\"userId\":1153730,\"maxSentConsumerEmailId\":61356226,\"maxTextMessageId\":85626931}}",
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+});
