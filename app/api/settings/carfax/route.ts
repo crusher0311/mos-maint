@@ -53,3 +53,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
 }
+
+export async function DELETE() {
+  try {
+    const session = await requireSession();
+    const shopId = Number(session.shopId);
+
+    const db = await getDb();
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $unset: {
+          carfax: "",
+          carfaxLocationId: "",
+        },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
+  }
+}

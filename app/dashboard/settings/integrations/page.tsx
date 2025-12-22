@@ -19,6 +19,7 @@ import {
   Hash,
   ChevronDown,
   ChevronUp,
+  Trash2,
 } from "lucide-react";
 
 type IntegrationTab = "carfax" | "autoflow" | "protractor" | "autovitals";
@@ -138,7 +139,78 @@ export default function IntegrationsPage() {
         {activeTab === "protractor" && <ProtractorSection onUpdate={fetchAllStatuses} />}
         {activeTab === "autovitals" && <AutovitalsSection onUpdate={fetchAllStatuses} />}
       </div>
+
+      <DevToolsSection />
     </main>
+  );
+}
+
+function DevToolsSection() {
+  const [clearing, setClearing] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleClearVehicles() {
+    if (!confirm("Are you sure you want to clear ALL vehicles, plans, and customers? This cannot be undone.")) {
+      return;
+    }
+    
+    setClearing(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/dev/clear-vehicles", {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ 
+          type: "success", 
+          text: `Cleared ${data.deleted.vehicles} vehicles, ${data.deleted.plans} plans, and ${data.deleted.customers} customers` 
+        });
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to clear data" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to clear data" });
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  return (
+    <div className="mt-8 bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">Developer Tools</h2>
+        <p className="text-gray-600 mb-4">
+          Tools for testing and development. Use with caution.
+        </p>
+
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h3 className="font-medium text-red-800 mb-2">Clear Vehicle Data</h3>
+          <p className="text-sm text-red-700 mb-4">
+            Delete all vehicles, plans, and customers for this shop. This is useful for testing different integration imports. This action cannot be undone.
+          </p>
+          <button
+            onClick={handleClearVehicles}
+            disabled={clearing}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {clearing ? "Clearing..." : "Clear All Vehicles"}
+          </button>
+          
+          {message && (
+            <div className={`mt-4 flex items-center gap-2 p-3 rounded-lg ${
+              message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-100 text-red-800"
+            }`}>
+              {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+              <span>{message.text}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -146,6 +218,7 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
   const [locationId, setLocationId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [envConfigured, setEnvConfigured] = useState(false);
 
@@ -190,6 +263,31 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
       setMessage({ type: "error", text: "Failed to save settings" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Are you sure you want to disconnect CARFAX?")) return;
+    
+    setDisconnecting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings/carfax", {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setMessage({ type: "success", text: "CARFAX disconnected successfully" });
+        setLocationId("");
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: "Failed to disconnect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to disconnect" });
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -249,14 +347,26 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
         </div>
       )}
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-      >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-        Save Location ID
-      </button>
+      <div className="flex gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Save Location ID
+        </button>
+        {locationId && (
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="px-6 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Disconnect
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -268,6 +378,7 @@ function AutoflowSection({ onUpdate }: { onUpdate: () => void }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -312,6 +423,33 @@ function AutoflowSection({ onUpdate }: { onUpdate: () => void }) {
       setMessage({ type: "error", text: "Failed to save settings" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Are you sure you want to disconnect AutoFlow?")) return;
+    
+    setDisconnecting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings/autoflow", {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setMessage({ type: "success", text: "AutoFlow disconnected successfully" });
+        setDomain("");
+        setApiKey("");
+        setApiPassword("");
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: "Failed to disconnect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to disconnect" });
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -421,7 +559,7 @@ function AutoflowSection({ onUpdate }: { onUpdate: () => void }) {
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
         <button
           onClick={handleSave}
           disabled={saving}
@@ -438,6 +576,16 @@ function AutoflowSection({ onUpdate }: { onUpdate: () => void }) {
           {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Test Connection
         </button>
+        {isConfigured && (
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="px-6 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Disconnect
+          </button>
+        )}
       </div>
     </div>
   );
@@ -464,8 +612,7 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [updatePackage, setUpdatePackage] = useState(false);
-  const [updateLine, setUpdateLine] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -477,8 +624,6 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
-        setUpdatePackage(data.updateWorkOrderPackage || false);
-        setUpdateLine(data.updateWorkOrderLine || false);
         if (data.configured) {
           fetchSyncStats();
         }
@@ -544,8 +689,8 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
         body: JSON.stringify({ 
           connectionId, 
           apiKey,
-          updateWorkOrderPackage: updatePackage,
-          updateWorkOrderLine: updateLine,
+          updateWorkOrderPackage: true,
+          updateWorkOrderLine: true,
         }),
       });
 
@@ -561,6 +706,38 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
       setMessage({ type: "error", text: "Failed to save settings" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Are you sure you want to disconnect Protractor? This will remove your credentials.")) {
+      return;
+    }
+    
+    setDisconnecting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings/protractor", {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setMessage({ type: "success", text: "Protractor disconnected successfully" });
+        setStatus(null);
+        setSyncStats(null);
+        setConnectionId("");
+        setApiKey("");
+        fetchStatus();
+        onUpdate();
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to disconnect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to disconnect" });
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -587,26 +764,6 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
       setMessage({ type: "error", text: "Sync failed" });
     } finally {
       setSyncing(false);
-    }
-  }
-
-  async function handleToggleOption(option: "package" | "line", value: boolean) {
-    try {
-      const res = await fetch("/api/settings/protractor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          updateWorkOrderPackage: option === "package" ? value : updatePackage,
-          updateWorkOrderLine: option === "line" ? value : updateLine,
-        }),
-      });
-
-      if (res.ok) {
-        if (option === "package") setUpdatePackage(value);
-        if (option === "line") setUpdateLine(value);
-      }
-    } catch (err) {
-      console.error("Failed to update option:", err);
     }
   }
 
@@ -693,49 +850,6 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
 
       {status?.configured && (
         <div className="space-y-6">
-          <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
-            <h3 className="font-medium text-gray-900">Work Order Settings</h3>
-            <p className="text-sm text-gray-600">
-              Enable these options to allow adding service packages to work orders.
-            </p>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Update Work Order Package</p>
-                  <p className="text-xs text-gray-500">Required for Add to RO feature</p>
-                </div>
-                <button
-                  onClick={() => handleToggleOption("package", !updatePackage)}
-                  className="focus:outline-none"
-                >
-                  {updatePackage ? (
-                    <ToggleRight className="w-10 h-6 text-blue-600" />
-                  ) : (
-                    <ToggleLeft className="w-10 h-6 text-gray-400" />
-                  )}
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Update Work Order Line</p>
-                  <p className="text-xs text-gray-500">Required for line items in service packages</p>
-                </div>
-                <button
-                  onClick={() => handleToggleOption("line", !updateLine)}
-                  className="focus:outline-none"
-                >
-                  {updateLine ? (
-                    <ToggleRight className="w-10 h-6 text-blue-600" />
-                  ) : (
-                    <ToggleLeft className="w-10 h-6 text-gray-400" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <h3 className="font-medium text-gray-900 mb-3">Sync Data</h3>
             {syncStats && (
@@ -781,6 +895,21 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
               <Settings className="w-4 h-4" />
               Manage Canned Job Mappings
             </a>
+          </div>
+
+          <div className="bg-white border border-red-200 rounded-lg p-4">
+            <h3 className="font-medium text-gray-900 mb-2">Disconnect Integration</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Remove Protractor connection. This will not delete any synced data.
+            </p>
+            <button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+            >
+              {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Disconnect Protractor
+            </button>
           </div>
         </div>
       )}
