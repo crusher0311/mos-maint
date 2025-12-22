@@ -66,18 +66,94 @@ export async function POST(req: NextRequest) {
   console.log(`[Protractor Sync] Fetching service packages...`);
   try {
     const cannedJobsResult = await fetchCannedJobs(shopId);
-    console.log(`[Protractor Sync] Canned jobs result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}, error=${cannedJobsResult.error || 'none'}`);
-    if (cannedJobsResult.ok && cannedJobsResult.cannedJobs) {
+    console.log(`[Protractor Sync] Canned jobs API result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}`);
+    
+    if (cannedJobsResult.ok && cannedJobsResult.cannedJobs?.length) {
       await upsertCannedJobsCache(shopId, cannedJobsResult.cannedJobs);
       results.cannedJobsSynced = cannedJobsResult.cannedJobs.length;
-      console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} canned jobs`);
-    } else if (cannedJobsResult.error) {
-      console.log(`[Protractor Sync] Canned jobs error: ${cannedJobsResult.error}`);
-      results.errors.push(`Canned jobs: ${cannedJobsResult.error}`);
+      console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} canned jobs from API`);
+    } else {
+      // API not available - discover from existing synced data
+      console.log(`[Protractor Sync] API not available, discovering from cached data...`);
+      const discovered = await discoverCannedJobsFromCache(shopId);
+      if (discovered.length > 0) {
+        await mergeCannedJobsToCache(shopId, discovered);
+        results.cannedJobsSynced = discovered.length;
+        console.log(`[Protractor Sync] Discovered ${discovered.length} service packages from cached data`);
+      }
     }
   } catch (err: any) {
     console.log(`[Protractor Sync] Canned jobs exception: ${err.message}`);
     results.errors.push(`Canned jobs: ${err.message}`);
+  }
+
+  // Helper: discover canned jobs from cached deferred work and work orders
+  async function discoverCannedJobsFromCache(shopId: number) {
+    const discovered = new Map<string, { id: string; title: string; description: string; chapter: string; code: string }>();
+    
+    // Get from deferred work
+    const deferredWork = await db.collection("protractor_deferred_work").find({ shopId }).toArray();
+    for (const dw of deferredWork) {
+      const items = dw.items || dw.deferredWork || [];
+      for (const item of items) {
+        const code = item.Code || item.code || item.ServicePackageCode;
+        const title = item.Title || item.title || item.Description || item.description;
+        if (code && !discovered.has(code.toLowerCase())) {
+          discovered.set(code.toLowerCase(), {
+            id: code,
+            title: title || code,
+            description: item.Description || item.description || "",
+            chapter: item.Chapter || item.chapter || "Service",
+            code: code,
+          });
+        }
+      }
+    }
+    
+    // Get from work orders service packages
+    const workOrders = await db.collection("protractor_work_orders").find({ shopId }).toArray();
+    for (const wo of workOrders) {
+      const packages = wo.servicePackages || wo.ServicePackages || [];
+      const pkgArray = Array.isArray(packages) ? packages : (packages.ItemCollection || []);
+      for (const pkg of pkgArray) {
+        const code = pkg.Code || pkg.code;
+        const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.title;
+        if (code && !discovered.has(code.toLowerCase())) {
+          discovered.set(code.toLowerCase(), {
+            id: code,
+            title: title || code,
+            description: pkg.ServicePackageHeader?.Description || pkg.Description || "",
+            chapter: pkg.Chapter || pkg.chapter || "Service",
+            code: code,
+          });
+        }
+      }
+    }
+    
+    return Array.from(discovered.values());
+  }
+  
+  async function mergeCannedJobsToCache(shopId: number, discovered: any[]) {
+    const existing = await db.collection("protractor_canned_jobs").findOne({ shopId });
+    const existingItems = existing?.items || [];
+    const existingCodes = new Set(existingItems.map((i: any) => (i.code || i.id)?.toLowerCase()));
+    
+    const newItems = discovered.filter(d => !existingCodes.has(d.code?.toLowerCase()));
+    const merged = [...existingItems, ...newItems];
+    
+    await db.collection("protractor_canned_jobs").updateOne(
+      { shopId },
+      {
+        $set: {
+          shopId,
+          items: merged,
+          fetchedAt: new Date(),
+          source: "discovered",
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
   }
 
   // Fetch individual work orders to get complete data (including Odometer)
