@@ -31,8 +31,16 @@ export default function ProtractorSettingsPage() {
     vehicles: number;
     workOrders: number;
     deferredWorkItems: number;
+    cannedJobs: number;
     lastSync: string | null;
   } | null>(null);
+  const [cannedJobs, setCannedJobs] = useState<Array<{
+    id: string;
+    title: string;
+    description: string;
+    chapter: string;
+    code: string;
+  }>>([]);
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -67,6 +75,9 @@ export default function ProtractorSettingsPage() {
         const data = await res.json();
         if (data.stats) {
           setSyncStats(data.stats);
+        }
+        if (data.cannedJobs) {
+          setCannedJobs(data.cannedJobs);
         }
       }
     } catch (err) {
@@ -259,7 +270,7 @@ export default function ProtractorSettingsPage() {
             <div className="bg-gray-50 rounded-lg p-4">
               <h3 className="font-medium text-gray-900 mb-3">Sync Status</h3>
               {syncStats ? (
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="grid grid-cols-4 gap-4 text-center">
                   <div>
                     <div className="text-2xl font-bold text-blue-600">{syncStats.vehicles}</div>
                     <div className="text-sm text-gray-500">Vehicles</div>
@@ -271,6 +282,10 @@ export default function ProtractorSettingsPage() {
                   <div>
                     <div className="text-2xl font-bold text-blue-600">{syncStats.deferredWorkItems}</div>
                     <div className="text-sm text-gray-500">Deferred Items</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600">{syncStats.cannedJobs || 0}</div>
+                    <div className="text-sm text-gray-500">Service Packages</div>
                   </div>
                 </div>
               ) : (
@@ -368,6 +383,35 @@ export default function ProtractorSettingsPage() {
                 </div>
               )}
             </div>
+
+            {cannedJobs.length > 0 && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-medium text-gray-900 mb-3">Available Service Packages</h3>
+                <p className="text-sm text-gray-500 mb-3">
+                  These service packages can be added to work orders from the vehicle plan page.
+                </p>
+                <div className="max-h-64 overflow-y-auto border border-gray-200 rounded bg-white">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-700">Code</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-700">Title</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-700">Chapter</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {cannedJobs.map((job) => (
+                        <tr key={job.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-xs text-gray-600">{job.code}</td>
+                          <td className="px-3 py-2 text-gray-900">{job.title}</td>
+                          <td className="px-3 py-2 text-gray-500">{job.chapter}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {message && (
               <div
