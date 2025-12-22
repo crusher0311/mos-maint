@@ -1238,7 +1238,7 @@ export async function getCannedJobsFromCache(
 export async function fetchCannedJobsWithCache(
   shopId: number,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
-): Promise<{ ok: boolean; cannedJobs?: any[]; error?: string; source?: "cache" | "api" }> {
+): Promise<{ ok: boolean; cannedJobs?: any[]; error?: string; source?: "cache" | "api" | "discovered" }> {
   const db = await getDb();
   const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
 
@@ -1247,11 +1247,24 @@ export async function fetchCannedJobsWithCache(
     ? now - new Date(cached.fetchedAt).getTime() <= maxAgeMs
     : false;
 
+  // Normalize cached items to consistent format
+  const normalizeCachedItems = (items: any[]) => items.map(job => ({
+    id: job.id || job.ID || job.code || "",
+    title: job.title || job.Title || "",
+    description: job.description || job.Description || "",
+    chapter: job.chapter || job.Chapter || "",
+    code: job.code || job.Code || "",
+    laborHours: job.laborHours ?? job.LaborHours ?? null,
+    laborRate: job.laborRate ?? job.LaborRate ?? null,
+    fixedPrice: job.fixedPrice ?? job.FixedPrice ?? null,
+    lineCount: job.lineCount ?? job.ServicePackageLines?.length ?? 0,
+  }));
+
   if (fresh && cached) {
     return {
       ok: true,
-      cannedJobs: cached.items || [],
-      source: "cache",
+      cannedJobs: normalizeCachedItems(cached.items || []),
+      source: cached.source === "discovered" ? "discovered" : "cache",
     };
   }
 
@@ -1261,7 +1274,7 @@ export async function fetchCannedJobsWithCache(
     return {
       ok: true,
       cannedJobs: result.cannedJobs.map(job => ({
-        id: job.ID,
+        id: job.ID || job.Code || "",
         title: job.Title ?? "",
         description: job.Description ?? "",
         chapter: job.Chapter ?? "",
@@ -1272,6 +1285,15 @@ export async function fetchCannedJobsWithCache(
         lineCount: job.ServicePackageLines?.length ?? 0,
       })),
       source: "api",
+    };
+  }
+
+  // API failed - fall back to cache if available (even if stale)
+  if (cached?.items?.length) {
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(cached.items),
+      source: cached.source === "discovered" ? "discovered" : "cache",
     };
   }
 
