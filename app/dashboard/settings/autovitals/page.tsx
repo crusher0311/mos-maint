@@ -303,6 +303,19 @@ export default function AutoVitalsSettingsPage() {
               
               {showAdvanced && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                    <p className="font-medium text-amber-800 mb-2">How to get your session cookie:</p>
+                    <ol className="list-decimal list-inside space-y-2 text-amber-700">
+                      <li>Open a new browser tab and go to <a href="https://shop.autovitals.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">shop.autovitals.com</a></li>
+                      <li>Log in with your Welcome Code and Personal Code</li>
+                      <li>Once logged in, press <strong>F12</strong> (or right-click and select "Inspect")</li>
+                      <li>Click the <strong>Application</strong> tab (Chrome) or <strong>Storage</strong> tab (Firefox)</li>
+                      <li>In the left sidebar, expand <strong>Cookies</strong> and click on "shop.autovitals.com"</li>
+                      <li>Find the cookie named <strong>JSESSIONID</strong> or similar session cookie</li>
+                      <li>Double-click the <strong>Value</strong> column to select it, then copy (Ctrl+C)</li>
+                      <li>Paste it in the Session Cookie field below</li>
+                    </ol>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Shop ID (optional)
@@ -314,21 +327,19 @@ export default function AutoVitalsSettingsPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="e.g., 11876"
                     />
+                    <p className="text-xs text-gray-500 mt-1">You can find this in the AutoVitals URL after logging in</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Session Cookie (if auto-login doesn't work)
+                      Session Cookie
                     </label>
                     <textarea
                       value={settings.sessionCookie}
                       onChange={(e) => setSettings({ ...settings, sessionCookie: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 font-mono text-xs"
                       rows={2}
-                      placeholder="Paste from browser dev tools if needed..."
+                      placeholder="Paste your JSESSIONID value here..."
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Only needed if automatic connection fails. Copy from Network tab in browser developer tools.
-                    </p>
                   </div>
                 </div>
               )}
