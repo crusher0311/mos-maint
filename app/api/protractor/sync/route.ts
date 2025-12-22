@@ -63,16 +63,20 @@ export async function POST(req: NextRequest) {
   };
 
   // Sync canned jobs / service package templates
+  console.log(`[Protractor Sync] Fetching service packages...`);
   try {
     const cannedJobsResult = await fetchCannedJobs(shopId);
+    console.log(`[Protractor Sync] Canned jobs result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}, error=${cannedJobsResult.error || 'none'}`);
     if (cannedJobsResult.ok && cannedJobsResult.cannedJobs) {
       await upsertCannedJobsCache(shopId, cannedJobsResult.cannedJobs);
       results.cannedJobsSynced = cannedJobsResult.cannedJobs.length;
       console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} canned jobs`);
     } else if (cannedJobsResult.error) {
+      console.log(`[Protractor Sync] Canned jobs error: ${cannedJobsResult.error}`);
       results.errors.push(`Canned jobs: ${cannedJobsResult.error}`);
     }
   } catch (err: any) {
+    console.log(`[Protractor Sync] Canned jobs exception: ${err.message}`);
     results.errors.push(`Canned jobs: ${err.message}`);
   }
 
