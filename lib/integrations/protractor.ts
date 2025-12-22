@@ -717,6 +717,106 @@ export async function fetchCannedJobById(
   return { ok: true, cannedJob: result.data };
 }
 
+export type ProtractorServicePackageTemplate = {
+  ID: string;
+  Header?: {
+    ID?: string;
+    CreationTime?: string;
+    LastModifiedTime?: string;
+  };
+  Chapter?: string;
+  Code?: string;
+  Rank?: number;
+  ServicePackageHeader?: {
+    Title?: string;
+    Description?: string;
+  };
+  ServicePackageLines?: {
+    ItemCollection?: Array<{
+      ID: string;
+      Header?: { ID?: string };
+      Rank?: number;
+      Type?: string;
+      Description?: string;
+      Quantity?: number;
+      Price?: number;
+      Total?: number;
+      Discount?: number;
+      ExtendedTotal?: number;
+      RateCode?: string;
+      PartNumber?: string;
+      Manufacturer?: string;
+    }>;
+  };
+  ServicePackageInspectionLines?: {
+    ItemCollection?: Array<any>;
+  };
+  ServicePackageFooter?: {
+    Title?: string;
+    Description?: string;
+  };
+  ServicePackageTemplateID?: string;
+  ServiceCategoryID?: string;
+};
+
+export async function fetchServicePackageTemplates(
+  shopId: number
+): Promise<{ ok: boolean; templates?: ProtractorServicePackageTemplate[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const endpoints = [
+    "/ServicePackage/Template",
+    "/ServicePackage/",
+  ];
+
+  for (const endpoint of endpoints) {
+    const result = await protractorFetch<{ ItemCollection?: ProtractorServicePackageTemplate[] }>(
+      endpoint,
+      config
+    );
+
+    if (result.ok && result.data?.ItemCollection?.length) {
+      return { ok: true, templates: result.data.ItemCollection };
+    }
+  }
+
+  return { 
+    ok: false, 
+    error: "Could not fetch service package templates from Protractor" 
+  };
+}
+
+export async function fetchServicePackageTemplateDetail(
+  shopId: number,
+  templateId: string
+): Promise<{ ok: boolean; template?: ProtractorServicePackageTemplate; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const endpoints = [
+    `/ServicePackage/Template/${templateId}`,
+    `/ServicePackage/${templateId}`,
+  ];
+
+  for (const endpoint of endpoints) {
+    const result = await protractorFetch<ProtractorServicePackageTemplate>(
+      endpoint,
+      config
+    );
+
+    if (result.ok && result.data) {
+      return { ok: true, template: result.data };
+    }
+  }
+
+  return { ok: false, error: "Template not found" };
+}
+
 export async function resolveWorkOrderGuid(
   shopId: number,
   roNumberOrGuid: string
@@ -773,11 +873,27 @@ export async function applyCannedJobToWorkOrder(
   shopId: number,
   workOrderIdOrNumber: string,
   cannedJobCode: string,
-  cannedJobTitle?: string
+  cannedJobTitle?: string,
+  templateId?: string,
+  employeeId?: string
 ): Promise<{ ok: boolean; servicePackage?: ProtractorServicePackage; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId });
+  
+  const updatePackageEnabled = shop?.protractor?.updateWorkOrderPackage === true;
+  const updateLineEnabled = shop?.protractor?.updateWorkOrderLine === true;
+  
+  if (!updatePackageEnabled || !updateLineEnabled) {
+    console.log(`[Protractor] Warning: Required parameters not enabled. UpdateWorkOrderPackage: ${updatePackageEnabled}, UpdateWorkOrderLine: ${updateLineEnabled}`);
+    return { 
+      ok: false, 
+      error: "Required Protractor parameters not enabled. Please enable 'UpdateWorkOrderPackage' and 'UpdateWorkOrderLine' in your Protractor Integration settings (Actions → Add → set value to 'Yes') and toggle them on in MOS Settings." 
+    };
   }
 
   console.log(`[Protractor] Adding service package "${cannedJobCode}" to work order ${workOrderIdOrNumber}`);
@@ -796,135 +912,148 @@ export async function applyCannedJobToWorkOrder(
     return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
   }
 
-  const now = new Date().toISOString();
-  const newPackageId = crypto.randomUUID();
+  let template: ProtractorServicePackageTemplate | undefined;
   
-  // Match the exact structure from Protractor's deferred work format
-  const newServicePackage: any = {
-    Header: {
-      ID: newPackageId,
-      CreationTime: now,
-      DeletionTime: "0001-01-01T00:00:00",
-      DeletionTimeSpecified: true,
-      LastModifiedTime: now
-    },
-    ID: newPackageId,
-    Chapter: "Service",
-    Rank: (existingWorkOrder.ServicePackages?.length || 0) + 1,
-    Code: cannedJobCode,
-    Status: "Pending",
-    ServicePackageHeader: {
-      Title: cannedJobTitle || cannedJobCode,
-      Description: "Added via MOS Maintenance"
-    },
-    ServicePackageLines: {
-      ItemCollection: []
-    },
-    ServicePackageInspectionLines: {
-      ItemCollection: []
-    },
-    ServicePackageFooter: {
-      Title: "",
-      Description: ""
-    },
-    URL: "",
-    Flag: "",
-    IsInvoicing: false
+  if (templateId) {
+    const templateResult = await fetchServicePackageTemplateDetail(shopId, templateId);
+    if (templateResult.ok && templateResult.template) {
+      template = templateResult.template;
+      console.log(`[Protractor] Found template detail with ID: ${template.ID}`);
+    }
+  }
+
+  if (!template) {
+    const templatesResult = await fetchServicePackageTemplates(shopId);
+    if (templatesResult.ok && templatesResult.templates) {
+      const matchedSummary = templatesResult.templates.find(
+        (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
+      );
+      if (matchedSummary) {
+        console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
+        const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
+        if (detailResult.ok && detailResult.template) {
+          template = detailResult.template;
+          console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
+        } else {
+          console.log(`[Protractor] Could not fetch template detail: ${detailResult.error}`);
+          return {
+            ok: false,
+            error: `Found service package template "${matchedSummary.ServicePackageHeader?.Title || matchedSummary.Code}", but could not fetch its line details. The template detail endpoint may not be enabled for your Protractor account.`
+          };
+        }
+      } else {
+        console.log(`[Protractor] No template found matching code "${cannedJobCode}" or title "${cannedJobTitle}"`);
+        return {
+          ok: false,
+          error: `Service package template not found. Please ensure a template with code "${cannedJobCode}" exists in your Protractor setup.`
+        };
+      }
+    }
+  }
+
+  const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
+  
+  const mapLineType = (lineType?: string): string => {
+    if (!lineType) return "LaborLine";
+    
+    const normalized = lineType.toLowerCase();
+    
+    if (normalized === "laborline" || normalized === "labor") return "LaborLine";
+    if (normalized === "partline" || normalized === "part" || normalized === "material") return "PartLine";
+    if (normalized === "subletline" || normalized === "sublet") return "SubletLine";
+    if (normalized === "otherline" || normalized === "other") return "OtherLine";
+    
+    if (lineType.endsWith("Line")) return lineType;
+    
+    return "LaborLine";
   };
   
-  console.log(`[Protractor] Adding service package with full structure:`, JSON.stringify(newServicePackage));
-
-  const updatedServicePackages = [
-    ...(existingWorkOrder.ServicePackages || []),
-    newServicePackage
-  ];
-
-  const updatePayload = {
-    ...existingWorkOrder,
-    ServicePackages: updatedServicePackages
-  };
-
-  console.log(`[Protractor] Trying multiple approaches to add service package...`);
-  
-  // Approach 1: Try POST to /WorkOrder/{id}/ServicePackage (dedicated endpoint)
-  console.log(`[Protractor] Approach 1: POST /WorkOrder/${workOrderGuid}/ServicePackage`);
-  const spResult = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}/ServicePackage`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(newServicePackage)
+  if (template && template.ServicePackageLines?.ItemCollection?.length) {
+    console.log(`[Protractor] Using TimeClock API to insert service package lines...`);
+    
+    const lines = template.ServicePackageLines.ItemCollection;
+    console.log(`[Protractor] Found ${lines.length} lines in template`);
+    
+    const errors: string[] = [];
+    let successCount = 0;
+    
+    for (const line of lines) {
+      const lineType = mapLineType(line.Type);
+      const timeClockPayload = {
+        Type: lineType,
+        EmployeeID: employeeId || ZERO_GUID,
+        ClockedIn: false,
+        WorkOrderID: workOrderGuid,
+        ServicePackageLineID: line.ID,
+      };
+      
+      console.log(`[Protractor] Posting to TimeClock for line ${line.ID} (${lineType})...`);
+      
+      const timeClockResult = await protractorFetch<any>(
+        `/TimeClock/List/WorkOrder/${workOrderGuid}`,
+        config,
+        {
+          method: "POST",
+          body: JSON.stringify(timeClockPayload)
+        }
+      );
+      
+      if (timeClockResult.ok) {
+        successCount++;
+        console.log(`[Protractor] TimeClock line ${line.ID} added successfully`);
+      } else {
+        const errorMsg = `Line ${line.ID} (${lineType}): ${timeClockResult.error || "Unknown error"}`;
+        errors.push(errorMsg);
+        console.log(`[Protractor] TimeClock line failed: ${errorMsg}`);
+      }
     }
-  );
-  
-  if (spResult.ok) {
-    console.log(`[Protractor] Approach 1 SUCCESS: Service package added via dedicated endpoint`);
-    return { ok: true, servicePackage: spResult.data || newServicePackage };
-  }
-  console.log(`[Protractor] Approach 1 failed: ${spResult.error}`);
-  
-  // Approach 2: Try PUT to /WorkOrder/{id} with full payload
-  console.log(`[Protractor] Approach 2: PUT /WorkOrder/${workOrderGuid} with updated ServicePackages`);
-  const putResult = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "PUT",
-      body: JSON.stringify(updatePayload)
+    
+    if (successCount === lines.length) {
+      console.log(`[Protractor] SUCCESS: Added all ${lines.length} lines via TimeClock`);
+      return { 
+        ok: true, 
+        servicePackage: {
+          ID: template.ID,
+          Title: template.ServicePackageHeader?.Title,
+          Description: template.ServicePackageHeader?.Description,
+          Chapter: template.Chapter,
+          Status: "Pending"
+        }
+      };
     }
-  );
-  
-  if (putResult.ok) {
-    console.log(`[Protractor] Approach 2 SUCCESS: Work order updated via PUT`);
-    const packages = Array.isArray(putResult.data?.ServicePackages) ? putResult.data.ServicePackages : [];
-    if (packages.length > 0) {
-      return { ok: true, servicePackage: packages[packages.length - 1] };
-    }
-    return { ok: true, servicePackage: newServicePackage };
-  }
-  console.log(`[Protractor] Approach 2 failed: ${putResult.error}`);
-  
-  // Approach 3: Original POST to /WorkOrder/{id}
-  console.log(`[Protractor] Approach 3: POST /WorkOrder/${workOrderGuid} with updated ServicePackages`);
-  console.log(`[Protractor] Total service packages in payload: ${updatedServicePackages.length}`);
-
-  const result = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(updatePayload)
-    }
-  );
-
-  if (!result.ok) {
-    console.log(`[Protractor] Approach 3 failed: ${result.error}`);
-    return { ok: false, error: "All approaches failed to add service package. The Protractor API may not support adding packages via the API." };
-  }
-
-  console.log(`[Protractor] Approach 3 work order update response received`);
-  console.log(`[Protractor] Response data keys:`, Object.keys(result.data || {}));
-  
-  // Protractor may return just confirmation or the full work order
-  // Either way, a successful POST means the package was added
-  const returnedServicePackages = Array.isArray(result.data?.ServicePackages) 
-    ? result.data.ServicePackages 
-    : [];
-  console.log(`[Protractor] Response has ${returnedServicePackages.length} service packages`);
-  
-  if (returnedServicePackages.length > 0) {
-    const addedPackage = returnedServicePackages.find((sp: any) => sp.Code === cannedJobCode);
-    if (addedPackage) {
-      console.log(`[Protractor] SUCCESS: Service package confirmed in response`);
-      return { ok: true, servicePackage: addedPackage };
+    
+    if (errors.length > 0 && successCount === 0) {
+      console.log(`[Protractor] TimeClock approach failed for all lines: ${errors.join("; ")}`);
+      return { 
+        ok: false, 
+        error: `TimeClock API failed: ${errors[0]}. Make sure 'UpdateWorkOrderPackage' and 'UpdateWorkOrderLine' are set to 'Yes' in your Protractor Integration settings.` 
+      };
+    } else if (errors.length > 0) {
+      console.log(`[Protractor] Partial success: ${successCount}/${lines.length} lines added. Some lines failed: ${errors.join("; ")}`);
+      return { 
+        ok: false, 
+        error: `Partial failure: ${successCount}/${lines.length} lines added. Failed: ${errors.join("; ")}` 
+      };
     }
   }
-  
-  // POST succeeded - the service package was likely added even if not in response
-  console.log(`[Protractor] SUCCESS: Work order updated (service package not in response but POST succeeded)`);
+
+  if (!template) {
+    return { 
+      ok: false, 
+      error: `No service package template found for "${cannedJobCode}". TimeClock API requires a valid template with line details.` 
+    };
+  }
+
+  if (!template.ServicePackageLines?.ItemCollection?.length) {
+    return { 
+      ok: false, 
+      error: `Template "${template.ServicePackageHeader?.Title || template.Code}" has no line items. Cannot add empty service package via TimeClock API.` 
+    };
+  }
+
   return { 
-    ok: true, 
-    servicePackage: newServicePackage
+    ok: false, 
+    error: "Failed to add service package to work order" 
   };
 }
 

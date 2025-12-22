@@ -10,6 +10,9 @@ import {
   Key,
   AlertCircle,
   RefreshCw,
+  ToggleLeft,
+  ToggleRight,
+  Info,
 } from "lucide-react";
 
 export default function ProtractorSettingsPage() {
@@ -21,6 +24,8 @@ export default function ProtractorSettingsPage() {
     configured: boolean;
     connectionId?: string;
     hasApiKey?: boolean;
+    updateWorkOrderPackage?: boolean;
+    updateWorkOrderLine?: boolean;
   } | null>(null);
   const [syncStats, setSyncStats] = useState<{
     vehicles: number;
@@ -191,6 +196,23 @@ export default function ProtractorSettingsPage() {
     }
   }
 
+  async function handleToggleSetting(setting: "updateWorkOrderPackage" | "updateWorkOrderLine", value: boolean) {
+    try {
+      const res = await fetch("/api/settings/protractor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ [setting]: value }),
+      });
+
+      if (res.ok) {
+        setStatus((prev) => prev ? { ...prev, [setting]: value } : null);
+      }
+    } catch (err) {
+      console.error("Failed to update setting:", err);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -284,6 +306,67 @@ export default function ProtractorSettingsPage() {
                   </>
                 )}
               </button>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-start gap-3 mb-4">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-amber-900">Required for Service Package Insertion</h3>
+                  <p className="text-sm text-amber-800 mt-1">
+                    These parameters must also be set in your Protractor Integration settings. 
+                    Go to Protractor → Actions → Add, and add these parameters with value "Yes" (case-sensitive).
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-white rounded border border-amber-100">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">UpdateWorkOrderPackage</p>
+                    <p className="text-xs text-gray-500">Enables adding service packages to work orders</p>
+                  </div>
+                  <button
+                    onClick={() => handleToggleSetting("updateWorkOrderPackage", !status?.updateWorkOrderPackage)}
+                    className="flex items-center gap-2"
+                  >
+                    {status?.updateWorkOrderPackage ? (
+                      <ToggleRight className="w-8 h-8 text-green-600" />
+                    ) : (
+                      <ToggleLeft className="w-8 h-8 text-gray-400" />
+                    )}
+                    <span className={`text-sm font-medium ${status?.updateWorkOrderPackage ? "text-green-600" : "text-gray-500"}`}>
+                      {status?.updateWorkOrderPackage ? "Enabled" : "Disabled"}
+                    </span>
+                  </button>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-white rounded border border-amber-100">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">UpdateWorkOrderLine</p>
+                    <p className="text-xs text-gray-500">Enables adding line items to service packages</p>
+                  </div>
+                  <button
+                    onClick={() => handleToggleSetting("updateWorkOrderLine", !status?.updateWorkOrderLine)}
+                    className="flex items-center gap-2"
+                  >
+                    {status?.updateWorkOrderLine ? (
+                      <ToggleRight className="w-8 h-8 text-green-600" />
+                    ) : (
+                      <ToggleLeft className="w-8 h-8 text-gray-400" />
+                    )}
+                    <span className={`text-sm font-medium ${status?.updateWorkOrderLine ? "text-green-600" : "text-gray-500"}`}>
+                      {status?.updateWorkOrderLine ? "Enabled" : "Disabled"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {(!status?.updateWorkOrderPackage || !status?.updateWorkOrderLine) && (
+                <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  <strong>Warning:</strong> Both parameters must be enabled to add service packages via API.
+                </div>
+              )}
             </div>
 
             {message && (
