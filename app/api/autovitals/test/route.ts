@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import { testAutoVitalsConnection, AutoVitalsConfig } from "@/lib/integrations/autovitals";
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session || !session.shopId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { shopId, userId, sessionCookie, jwtToken } = body;
 
