@@ -76,6 +76,9 @@ export default function AutoVitalsSettingsPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.needsManualAuth) {
+          setShowAdvanced(true);
+        }
         throw new Error(data.error || "Failed to connect");
       }
 
