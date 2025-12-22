@@ -977,46 +977,79 @@ export async function applyCannedJobToWorkOrder(
     console.log(`[Protractor] Looking up service package templates...`);
     const templatesResult = await fetchServicePackageTemplates(shopId);
     
-    if (!templatesResult.ok) {
-      console.log(`[Protractor] Failed to fetch templates: ${templatesResult.error}`);
-      return {
-        ok: false,
-        error: `Could not fetch service package templates: ${templatesResult.error}`
-      };
+    if (templatesResult.ok && templatesResult.templates?.length) {
+      console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
+      const matchedSummary = templatesResult.templates.find(
+        (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
+      );
+      
+      if (matchedSummary) {
+        console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
+        const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
+        if (detailResult.ok && detailResult.template) {
+          template = detailResult.template;
+          console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
+        }
+      }
     }
     
-    if (!templatesResult.templates || templatesResult.templates.length === 0) {
-      console.log(`[Protractor] No templates available in Protractor`);
-      return {
-        ok: false,
-        error: `No service package templates found in your Protractor account. Please create templates in Protractor before adding them to work orders.`
+    // Template API not available - use direct WorkOrder POST to add service package by code
+    if (!template) {
+      console.log(`[Protractor] Template API not available, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
+      
+      // Per Protractor docs: POST /WorkOrder/{workOrderID} with service package in request body
+      const newServicePackage = {
+        ID: "00000000-0000-0000-0000-000000000000",
+        Code: cannedJobCode,
+        ServicePackageHeader: {
+          Title: cannedJobTitle || cannedJobCode,
+          Description: "",
+        },
+        ServicePackageLines: { ItemCollection: [] },
+        Status: "Pending",
       };
-    }
-    
-    console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
-    const matchedSummary = templatesResult.templates.find(
-      (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
-    );
-    
-    if (matchedSummary) {
-      console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
-      const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
-      if (detailResult.ok && detailResult.template) {
-        template = detailResult.template;
-        console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
+      
+      // Get existing work order and add service package
+      const existingPackagesRaw = existingWorkOrder.ServicePackages;
+      const existingPackages = Array.isArray(existingPackagesRaw) 
+        ? existingPackagesRaw 
+        : (existingPackagesRaw?.ItemCollection || []);
+      const updatedWorkOrder = {
+        ...existingWorkOrder,
+        ServicePackages: {
+          ItemCollection: [...existingPackages, newServicePackage]
+        }
+      };
+      
+      console.log(`[Protractor] POSTing work order update with new service package...`);
+      const updateResult = await protractorFetch<any>(
+        `/WorkOrder/${workOrderGuid}`,
+        config,
+        {
+          method: "POST",
+          body: JSON.stringify(updatedWorkOrder)
+        }
+      );
+      
+      if (updateResult.ok) {
+        console.log(`[Protractor] SUCCESS: Added service package "${cannedJobCode}" via WorkOrder update`);
+        return {
+          ok: true,
+          servicePackage: {
+            ID: updateResult.data?.ID || newServicePackage.ID,
+            Title: cannedJobTitle || cannedJobCode,
+            Description: "",
+            Chapter: "Service",
+            Status: "Pending"
+          }
+        };
       } else {
-        console.log(`[Protractor] Could not fetch template detail: ${detailResult.error}`);
+        console.log(`[Protractor] WorkOrder update failed: ${updateResult.error}`);
         return {
           ok: false,
-          error: `Found service package template "${matchedSummary.ServicePackageHeader?.Title || matchedSummary.Code}", but could not fetch its line details. The template detail endpoint may not be enabled for your Protractor account.`
+          error: `Failed to add service package via WorkOrder update: ${updateResult.error}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
         };
       }
-    } else {
-      console.log(`[Protractor] No template found matching code "${cannedJobCode}" or title "${cannedJobTitle}"`);
-      return {
-        ok: false,
-        error: `Service package template "${cannedJobCode}" not found. Please ensure a template with this code exists in your Protractor setup.`
-      };
     }
   }
 
