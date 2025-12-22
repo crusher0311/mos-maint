@@ -989,34 +989,55 @@ export async function applyCannedJobToWorkOrder(
 
   let template: ProtractorServicePackageTemplate | undefined;
   
-  if (templateId) {
-    const templateResult = await fetchServicePackageTemplateDetail(shopId, templateId);
-    if (templateResult.ok && templateResult.template) {
-      template = templateResult.template;
-      console.log(`[Protractor] Found template detail with ID: ${template.ID}`);
+  // First check MongoDB cache for synced templates (which should have lines)
+  // Reuse db from earlier in function
+  const cannedJobsCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
+  const cachedTemplates = cannedJobsCache?.items || [];
+  
+  if (cachedTemplates.length > 0) {
+    console.log(`[Protractor] Checking ${cachedTemplates.length} cached templates for "${cannedJobCode}"...`);
+    const cachedMatch = cachedTemplates.find(
+      (t: any) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle || t.ID === templateId
+    );
+    
+    if (cachedMatch) {
+      template = cachedMatch;
+      const linesCount = template?.ServicePackageLines?.ItemCollection?.length || 0;
+      console.log(`[Protractor] Found cached template: ${template?.Code}, ${linesCount} lines`);
     }
   }
+  
+  // If not in cache or cache has no lines, try API
+  if (!template || !template.ServicePackageLines?.ItemCollection?.length) {
+    if (templateId) {
+      const templateResult = await fetchServicePackageTemplateDetail(shopId, templateId);
+      if (templateResult.ok && templateResult.template) {
+        template = templateResult.template;
+        console.log(`[Protractor] Found template detail from API with ID: ${template.ID}`);
+      }
+    }
 
-  if (!template) {
-    console.log(`[Protractor] Looking up service package templates...`);
-    const templatesResult = await fetchServicePackageTemplates(shopId);
-    
-    if (templatesResult.ok && templatesResult.templates?.length) {
-      console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
-      const matchedSummary = templatesResult.templates.find(
-        (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
-      );
+    if (!template || !template.ServicePackageLines?.ItemCollection?.length) {
+      console.log(`[Protractor] Looking up service package templates from API...`);
+      const templatesResult = await fetchServicePackageTemplates(shopId);
       
-      if (matchedSummary) {
-        console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
-        const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
-        if (detailResult.ok && detailResult.template) {
-          template = detailResult.template;
-          console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
-        } else {
-          // Use the summary directly - it has the ID we need
-          template = matchedSummary;
-          console.log(`[Protractor] Using template summary directly (ID: ${matchedSummary.ID})`);
+      if (templatesResult.ok && templatesResult.templates?.length) {
+        console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
+        const matchedSummary = templatesResult.templates.find(
+          (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
+        );
+        
+        if (matchedSummary) {
+          console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
+          const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
+          if (detailResult.ok && detailResult.template) {
+            template = detailResult.template;
+            console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
+          } else {
+            // Use the summary directly - it has the ID we need
+            template = matchedSummary;
+            console.log(`[Protractor] Using template summary directly (ID: ${matchedSummary.ID})`);
+          }
         }
       }
     }
@@ -1183,29 +1204,24 @@ export async function applyCannedJobToWorkOrder(
     
     if (errors.length > 0 && successCount === 0) {
       console.log(`[Protractor] TimeClock approach failed for all lines: ${errors.join("; ")}`);
-      return { 
-        ok: false, 
-        error: `TimeClock API failed: ${errors[0]}. Make sure 'UpdateWorkOrderPackage' and 'UpdateWorkOrderLine' are set to 'Yes' in your Protractor Integration settings.` 
-      };
+      console.log(`[Protractor] Falling back to WorkOrder POST with lines included...`);
+      // Fall through to WorkOrder POST approach below
     } else if (errors.length > 0) {
       console.log(`[Protractor] Partial success: ${successCount}/${lines.length} lines added. Some lines failed: ${errors.join("; ")}`);
-      return { 
-        ok: false, 
-        error: `Partial failure: ${successCount}/${lines.length} lines added. Failed: ${errors.join("; ")}` 
-      };
+      // Fall through to try WorkOrder POST approach
     }
   }
 
   if (!template) {
     return { 
       ok: false, 
-      error: `No service package template found for "${cannedJobCode}". TimeClock API requires a valid template with line details.` 
+      error: `No service package template found for "${cannedJobCode}". Please sync canned jobs in Settings.` 
     };
   }
 
-  // Template has no lines - try adding via WorkOrder POST with ServicePackageTemplateID
-  if (!template.ServicePackageLines?.ItemCollection?.length) {
-    console.log(`[Protractor] Template has no lines in summary, trying to add via WorkOrder POST with template ID: ${template.ID}...`);
+  // Try adding via WorkOrder POST with full template details including lines
+  const templateLines = template.ServicePackageLines?.ItemCollection || [];
+  console.log(`[Protractor] Adding via WorkOrder POST with template ID: ${template.ID} and ${templateLines.length} lines...`);
     
     // Per Protractor docs: workOrderID should be GUID
     // Include WorkOrderID in the service package payload
@@ -1250,7 +1266,7 @@ export async function applyCannedJobToWorkOrder(
       : (existingPackagesRaw?.ItemCollection || []);
     
     // Build full work order object with new service package added
-    // Use ServicePackageTemplateID without lines - let Protractor expand the template
+    // Include actual lines from template
     const fullWorkOrderPayload = {
       ...existingWorkOrder,
       ID: workOrderGuid,
@@ -1267,7 +1283,26 @@ export async function applyCannedJobToWorkOrder(
               Description: template.ServicePackageHeader?.Description || "",
             },
             ServicePackageTemplateID: template.ID,
-            // Don't include ServicePackageLines - let Protractor use template's lines
+            ServicePackageLines: {
+              ItemCollection: templateLines.map((line: any, idx: number) => ({
+                ID: "00000000-0000-0000-0000-000000000000",
+                Rank: idx + 1,
+                Type: line.Type || "Labor",
+                Description: line.Description || "",
+                Quantity: line.Quantity || "1",
+                Unit: line.Unit || "Hour",
+                Price: line.Price || 0,
+                PriceUnit: line.PriceUnit || "Hour",
+                MinimumCharge: line.MinimumCharge || 0,
+                Total: line.Total || 0,
+                Discount: line.Discount || 0,
+                ExtendedTotal: line.ExtendedTotal || 0,
+                TotalCost: line.TotalCost || 0,
+                PartNumber: line.PartNumber || "",
+                Manufacturer: line.Manufacturer || "",
+                Completed: false,
+              }))
+            }
           }
         ]
       }

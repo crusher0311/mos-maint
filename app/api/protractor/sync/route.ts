@@ -10,6 +10,7 @@ import {
   fetchDeferredWork,
   upsertProtractorDeferredWorkSnapshot,
   fetchCannedJobs,
+  fetchServicePackageTemplateDetail,
   upsertCannedJobsCache,
 } from "@/lib/integrations/protractor";
 import pLimit from "p-limit";
@@ -69,9 +70,36 @@ export async function POST(req: NextRequest) {
     console.log(`[Protractor Sync] Canned jobs API result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}`);
     
     if (cannedJobsResult.ok && cannedJobsResult.cannedJobs?.length) {
-      await upsertCannedJobsCache(shopId, cannedJobsResult.cannedJobs);
-      results.cannedJobsSynced = cannedJobsResult.cannedJobs.length;
-      console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} canned jobs from API`);
+      // Fetch full details for each template (with lines) using rate limiting
+      const templateLimit = pLimit(5); // 5 concurrent requests
+      console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
+      
+      const templatesWithDetails = await Promise.all(
+        cannedJobsResult.cannedJobs.map((template: any) =>
+          templateLimit(async () => {
+            try {
+              const detailResult = await fetchServicePackageTemplateDetail(shopId, template.ID);
+              if (detailResult.ok && detailResult.template) {
+                const linesCount = detailResult.template.ServicePackageLines?.ItemCollection?.length || 0;
+                if (linesCount > 0) {
+                  console.log(`[Protractor Sync] Template ${template.Code}: ${linesCount} lines`);
+                }
+                return detailResult.template;
+              }
+            } catch (err: any) {
+              console.log(`[Protractor Sync] Failed to fetch detail for ${template.Code}: ${err.message}`);
+            }
+            // Fall back to summary if detail fetch fails
+            return template;
+          })
+        )
+      );
+      
+      await upsertCannedJobsCache(shopId, templatesWithDetails);
+      results.cannedJobsSynced = templatesWithDetails.length;
+      
+      const withLines = templatesWithDetails.filter((t: any) => t.ServicePackageLines?.ItemCollection?.length > 0);
+      console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} templates (${withLines.length} with line details)`);
     } else {
       // API not available - discover from existing synced data
       console.log(`[Protractor Sync] API not available, discovering from cached data...`);
