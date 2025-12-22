@@ -9,6 +9,8 @@ import {
   upsertProtractorWorkOrderSnapshot,
   fetchDeferredWork,
   upsertProtractorDeferredWorkSnapshot,
+  fetchCannedJobs,
+  upsertCannedJobsCache,
 } from "@/lib/integrations/protractor";
 import pLimit from "p-limit";
 
@@ -55,9 +57,24 @@ export async function POST(req: NextRequest) {
     workOrdersFound: workOrdersFromList.length,
     vehiclesSynced: 0,
     deferredWorkSynced: 0,
+    cannedJobsSynced: 0,
     vehicleDetails: [] as Array<{ vin: string; year?: number; make?: string; model?: string; odometer?: number; woOdometer?: number }>,
     errors: [] as string[],
   };
+
+  // Sync canned jobs / service package templates
+  try {
+    const cannedJobsResult = await fetchCannedJobs(shopId);
+    if (cannedJobsResult.ok && cannedJobsResult.cannedJobs) {
+      await upsertCannedJobsCache(shopId, cannedJobsResult.cannedJobs);
+      results.cannedJobsSynced = cannedJobsResult.cannedJobs.length;
+      console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} canned jobs`);
+    } else if (cannedJobsResult.error) {
+      results.errors.push(`Canned jobs: ${cannedJobsResult.error}`);
+    }
+  } catch (err: any) {
+    results.errors.push(`Canned jobs: ${err.message}`);
+  }
 
   // Fetch individual work orders to get complete data (including Odometer)
   // Rate limit to 3 concurrent requests to avoid overwhelming the API
@@ -178,6 +195,9 @@ export async function GET(req: NextRequest) {
   const vehicleCount = await db.collection("protractor_vehicles").countDocuments({ shopId });
   const workOrderCount = await db.collection("protractor_work_orders").countDocuments({ shopId });
   const deferredWorkCount = await db.collection("protractor_deferred_work").countDocuments({ shopId });
+  
+  const cannedJobsCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
+  const cannedJobsCount = cannedJobsCache?.items?.length || 0;
 
   const lastSync = await db.collection("protractor_vehicles")
     .find({ shopId })
@@ -192,7 +212,9 @@ export async function GET(req: NextRequest) {
       vehicles: vehicleCount,
       workOrders: workOrderCount,
       deferredWorkItems: deferredWorkCount,
+      cannedJobs: cannedJobsCount,
       lastSync: lastSync[0]?.fetchedAt || null,
     },
+    cannedJobs: cannedJobsCache?.items || [],
   });
 }
