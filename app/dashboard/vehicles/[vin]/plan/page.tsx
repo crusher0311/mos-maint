@@ -657,32 +657,74 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   const ros = eventRos;
   
   let latestRoNumber = ros[0]?.roNumber ?? null;
+  let latestWorkOrderId: string | null = null;
   
-  // Also check Protractor for active work orders if no AutoFlow RO found
+  // Also check Protractor for active work orders
+  // First get the vehicle's Protractor ServiceItemID
+  const protractorVehicleCache = await db.collection("protractor_vehicles").findOne({
+    shopId,
+    vin: { $regex: new RegExp(`^${vin}$`, 'i') }
+  });
+  
+  // protractor_vehicles stores the Protractor ID in 'protractorId' field
+  const serviceItemId = protractorVehicleCache?.protractorId;
+  console.log(`[Plan Debug] Protractor ServiceItemID for VIN ${vin}: ${serviceItemId || 'not found'}`);
+  
+  if (serviceItemId) {
+    // Look up work orders by ServiceItemID - check all possible field variations
+    const protractorWO = await db.collection("protractor_work_orders").findOne(
+      { 
+        shopId, 
+        $and: [
+          { $or: [
+            { serviceItemId: serviceItemId },
+            { "data.ServiceItemID": serviceItemId },
+            { ServiceItemID: serviceItemId }
+          ]},
+          { $or: [
+            { completed: { $ne: true } },
+            { "data.Completed": { $ne: true } },
+            { Completed: { $ne: true } }
+          ]}
+        ]
+      },
+      { sort: { fetchedAt: -1, createdAt: -1 } }
+    );
+    
+    console.log(`[Plan Debug] Protractor WO query result:`, protractorWO ? 
+      `found WO#${protractorWO.workOrderNumber || protractorWO.WorkOrderNumber || protractorWO.data?.WorkOrderNumber}` : 
+      'not found');
+    
+    const woNumber = protractorWO?.workOrderNumber || protractorWO?.WorkOrderNumber || protractorWO?.data?.WorkOrderNumber;
+    const woId = protractorWO?.workOrderId || protractorWO?.ID || protractorWO?.data?.ID;
+    
+    if (woNumber) {
+      latestRoNumber = String(woNumber);
+      latestWorkOrderId = woId ? String(woId) : null;
+      console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}, ID: ${latestWorkOrderId}`);
+    }
+  }
+  
+  // If still no RO, check if there are any work orders for this VIN directly
   if (!latestRoNumber) {
-    // First get the vehicle's Protractor ServiceItemID
-    const protractorVehicleCache = await db.collection("protractor_vehicles").findOne({
-      shopId,
-      vin: { $regex: new RegExp(`^${vin}$`, 'i') }
-    });
+    const protractorWOByVin = await db.collection("protractor_work_orders").findOne(
+      { 
+        shopId,
+        $or: [
+          { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+          { "data.VIN": { $regex: new RegExp(`^${vin}$`, 'i') } }
+        ]
+      },
+      { sort: { fetchedAt: -1, createdAt: -1 } }
+    );
     
-    // protractor_vehicles stores the Protractor ID in 'protractorId' field
-    const serviceItemId = protractorVehicleCache?.protractorId;
-    console.log(`[Plan Debug] Protractor ServiceItemID for VIN ${vin}: ${serviceItemId || 'not found'}`);
-    
-    if (serviceItemId) {
-      // Look up work orders by ServiceItemID - stored in flat 'serviceItemId' field
-      const protractorWO = await db.collection("protractor_work_orders").findOne(
-        { 
-          shopId, 
-          serviceItemId: serviceItemId,
-          completed: { $ne: true }
-        },
-        { sort: { fetchedAt: -1 } }
-      );
-      if (protractorWO?.workOrderNumber) {
-        latestRoNumber = String(protractorWO.workOrderNumber);
-        console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}`);
+    if (protractorWOByVin) {
+      const woNumber = protractorWOByVin.workOrderNumber || protractorWOByVin.WorkOrderNumber || protractorWOByVin.data?.WorkOrderNumber;
+      const woId = protractorWOByVin.workOrderId || protractorWOByVin.ID || protractorWOByVin.data?.ID;
+      if (woNumber) {
+        latestRoNumber = String(woNumber);
+        latestWorkOrderId = woId ? String(woId) : null;
+        console.log(`[Plan Debug] Found Protractor RO by VIN: ${latestRoNumber}`);
       }
     }
   }
