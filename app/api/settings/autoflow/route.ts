@@ -4,30 +4,56 @@ import { requireSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+export async function GET() {
+  try {
+    const session = await requireSession();
+    const shopId = Number(session.shopId);
+
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { autoflowDomain: 1, autoflowApiKey: 1, autoflowApiPassword: 1 } }
+    );
+
+    return NextResponse.json({
+      autoflowDomain: shop?.autoflowDomain || "",
+      autoflowApiKey: shop?.autoflowApiKey || "",
+      autoflowApiPassword: shop?.autoflowApiPassword || "",
+      configured: Boolean(shop?.autoflowDomain && shop?.autoflowApiKey),
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { shopId, autoflowDomain, autoflowApiKey, autoflowApiPassword } = body || {};
+    const { domain, apiKey, apiPassword, shopId: bodyShopId, autoflowDomain, autoflowApiKey, autoflowApiPassword } = body || {};
     const session = await requireSession();
+    const shopId = Number(session.shopId);
 
-    if (Number(session.shopId) !== Number(shopId)) {
+    if (bodyShopId && Number(bodyShopId) !== shopId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // normalize domain (strip protocol, path, trailing slash)
-    const domain = String(autoflowDomain || "")
+    const domainValue = domain || autoflowDomain || "";
+    const keyValue = apiKey || autoflowApiKey || "";
+    const passwordValue = apiPassword || autoflowApiPassword || "";
+
+    const normalizedDomain = String(domainValue)
       .replace(/^https?:\/\//i, "")
       .replace(/\/.*$/, "")
       .replace(/[./]+$/, "");
 
     const db = await getDb();
     await db.collection("shops").updateOne(
-      { shopId: Number(shopId) },
+      { shopId },
       {
         $set: {
-          autoflowDomain: domain,
-          autoflowApiKey: String(autoflowApiKey || ""),
-          autoflowApiPassword: String(autoflowApiPassword || ""),
+          autoflowDomain: normalizedDomain,
+          autoflowApiKey: String(keyValue),
+          autoflowApiPassword: String(passwordValue),
         },
       },
       { upsert: true }
