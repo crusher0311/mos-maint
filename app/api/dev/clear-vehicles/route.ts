@@ -6,6 +6,10 @@ export const runtime = "nodejs";
 
 export async function DELETE() {
   try {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "This endpoint is only available in development" }, { status: 403 });
+    }
+
     const session = await requireSession();
     const shopId = Number(session.shopId);
 
