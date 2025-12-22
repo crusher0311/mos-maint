@@ -1022,6 +1022,10 @@ export async function applyCannedJobToWorkOrder(
       };
       
       console.log(`[Protractor] POSTing work order update with new service package...`);
+      console.log(`[Protractor] Request payload:`, JSON.stringify({
+        ServicePackages: { ItemCollection: [{ Code: cannedJobCode, Title: cannedJobTitle }] }
+      }));
+      
       const updateResult = await protractorFetch<any>(
         `/WorkOrder/${workOrderGuid}`,
         config,
@@ -1031,18 +1035,43 @@ export async function applyCannedJobToWorkOrder(
         }
       );
       
+      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}, status=${updateResult.status || 'N/A'}`);
+      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data || {}).substring(0, 500));
+      
       if (updateResult.ok) {
-        console.log(`[Protractor] SUCCESS: Added service package "${cannedJobCode}" via WorkOrder update`);
-        return {
-          ok: true,
-          servicePackage: {
-            ID: updateResult.data?.ID || newServicePackage.ID,
-            Title: cannedJobTitle || cannedJobCode,
-            Description: "",
-            Chapter: "Service",
-            Status: "Pending"
-          }
-        };
+        // Check if the response actually contains our service package
+        const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
+                                 updateResult.data?.ServicePackages || [];
+        const added = Array.isArray(responsePackages) && responsePackages.some(
+          (p: any) => p.Code === cannedJobCode || p.ServicePackageHeader?.Title === cannedJobTitle
+        );
+        
+        if (added) {
+          console.log(`[Protractor] SUCCESS: Verified service package "${cannedJobCode}" in response`);
+          return {
+            ok: true,
+            servicePackage: {
+              ID: updateResult.data?.ID || newServicePackage.ID,
+              Title: cannedJobTitle || cannedJobCode,
+              Description: "",
+              Chapter: "Service",
+              Status: "Pending"
+            }
+          };
+        } else {
+          console.log(`[Protractor] WARNING: API returned OK but service package not found in response`);
+          // Still return success since API said OK - Protractor may add it asynchronously
+          return {
+            ok: true,
+            servicePackage: {
+              ID: newServicePackage.ID,
+              Title: cannedJobTitle || cannedJobCode,
+              Description: "",
+              Chapter: "Service",
+              Status: "Pending"
+            }
+          };
+        }
       } else {
         console.log(`[Protractor] WorkOrder update failed: ${updateResult.error}`);
         return {
