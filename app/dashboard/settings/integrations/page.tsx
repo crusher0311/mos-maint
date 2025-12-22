@@ -148,6 +148,11 @@ export default function IntegrationsPage() {
 function DevToolsSection() {
   const [clearing, setClearing] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isDevMode, setIsDevMode] = useState(false);
+
+  useEffect(() => {
+    setIsDevMode(process.env.NODE_ENV !== "production");
+  }, []);
 
   async function handleClearVehicles() {
     if (!confirm("Are you sure you want to clear ALL vehicles, plans, and customers? This cannot be undone.")) {
@@ -176,6 +181,10 @@ function DevToolsSection() {
     } finally {
       setClearing(false);
     }
+  }
+
+  if (!isDevMode) {
+    return null;
   }
 
   return (
