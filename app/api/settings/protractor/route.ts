@@ -95,9 +95,15 @@ export async function POST(req: NextRequest) {
           "protractor.configured": true,
           "protractor.configuredAt": new Date(),
           "protractor.locations": testResult.locations,
+          "protractor.updateWorkOrderPackage": true,
+          "protractor.updateWorkOrderLine": true,
           updatedAt: new Date(),
         },
-      }
+        $setOnInsert: {
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
     );
 
     return NextResponse.json({
