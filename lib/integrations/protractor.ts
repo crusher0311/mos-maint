@@ -923,31 +923,49 @@ export async function applyCannedJobToWorkOrder(
   }
 
   if (!template) {
+    console.log(`[Protractor] Looking up service package templates...`);
     const templatesResult = await fetchServicePackageTemplates(shopId);
-    if (templatesResult.ok && templatesResult.templates) {
-      const matchedSummary = templatesResult.templates.find(
-        (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
-      );
-      if (matchedSummary) {
-        console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
-        const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
-        if (detailResult.ok && detailResult.template) {
-          template = detailResult.template;
-          console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
-        } else {
-          console.log(`[Protractor] Could not fetch template detail: ${detailResult.error}`);
-          return {
-            ok: false,
-            error: `Found service package template "${matchedSummary.ServicePackageHeader?.Title || matchedSummary.Code}", but could not fetch its line details. The template detail endpoint may not be enabled for your Protractor account.`
-          };
-        }
+    
+    if (!templatesResult.ok) {
+      console.log(`[Protractor] Failed to fetch templates: ${templatesResult.error}`);
+      return {
+        ok: false,
+        error: `Could not fetch service package templates: ${templatesResult.error}`
+      };
+    }
+    
+    if (!templatesResult.templates || templatesResult.templates.length === 0) {
+      console.log(`[Protractor] No templates available in Protractor`);
+      return {
+        ok: false,
+        error: `No service package templates found in your Protractor account. Please create templates in Protractor before adding them to work orders.`
+      };
+    }
+    
+    console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
+    const matchedSummary = templatesResult.templates.find(
+      (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
+    );
+    
+    if (matchedSummary) {
+      console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
+      const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
+      if (detailResult.ok && detailResult.template) {
+        template = detailResult.template;
+        console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
       } else {
-        console.log(`[Protractor] No template found matching code "${cannedJobCode}" or title "${cannedJobTitle}"`);
+        console.log(`[Protractor] Could not fetch template detail: ${detailResult.error}`);
         return {
           ok: false,
-          error: `Service package template not found. Please ensure a template with code "${cannedJobCode}" exists in your Protractor setup.`
+          error: `Found service package template "${matchedSummary.ServicePackageHeader?.Title || matchedSummary.Code}", but could not fetch its line details. The template detail endpoint may not be enabled for your Protractor account.`
         };
       }
+    } else {
+      console.log(`[Protractor] No template found matching code "${cannedJobCode}" or title "${cannedJobTitle}"`);
+      return {
+        ok: false,
+        error: `Service package template "${cannedJobCode}" not found. Please ensure a template with this code exists in your Protractor setup.`
+      };
     }
   }
 
