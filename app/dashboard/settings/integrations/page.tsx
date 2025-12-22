@@ -768,6 +768,20 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
               {syncing ? "Syncing..." : "Sync Now"}
             </button>
           </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="font-medium text-gray-900 mb-2">Canned Job Mappings</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Map maintenance recommendations to Protractor canned jobs for one-click "Add to RO" functionality.
+            </p>
+            <a
+              href="/dashboard/settings/canned-jobs"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
+            >
+              <Settings className="w-4 h-4" />
+              Manage Canned Job Mappings
+            </a>
+          </div>
         </div>
       )}
 
