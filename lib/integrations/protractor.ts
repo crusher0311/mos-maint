@@ -674,25 +674,36 @@ export async function fetchCannedJobs(
   }
 
   const endpoints = [
+    "/ServicePackage/Template",
     "/ServicePackage/",
     "/ServicePackage/Search/",
     "/ServicePackage/CannedJob",
   ];
 
+  const errors: string[] = [];
+  
   for (const endpoint of endpoints) {
+    console.log(`[Protractor] Trying canned jobs endpoint: ${endpoint}`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
       endpoint,
       config
     );
 
+    console.log(`[Protractor] Endpoint ${endpoint} result: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}, error=${result.error || 'none'}`);
+    
     if (result.ok && result.data?.ItemCollection?.length) {
+      console.log(`[Protractor] Found ${result.data.ItemCollection.length} service packages via ${endpoint}`);
       return { ok: true, cannedJobs: result.data.ItemCollection };
+    }
+    
+    if (result.error) {
+      errors.push(`${endpoint}: ${result.error}`);
     }
   }
 
   return { 
     ok: false, 
-    error: "Could not fetch canned jobs from Protractor. The Canned Jobs API endpoint may not be available for your account. Please contact Protractor support to verify API access." 
+    error: `Could not fetch service packages. Tried endpoints: ${errors.join('; ')}` 
   };
 }
 
