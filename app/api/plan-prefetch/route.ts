@@ -8,6 +8,10 @@ import {
   fetchVehicleWithCache as fetchProtractorVehicle,
   fetchDeferredWorkWithCache as fetchProtractorDeferredWork,
 } from "@/lib/integrations/protractor";
+import {
+  resolveAutoVitalsConfig,
+  fetchAutoVitalsInspectionByVin,
+} from "@/lib/integrations/autovitals";
 import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -150,6 +154,26 @@ export async function POST(req: NextRequest) {
           }
         } catch (err: any) {
           results.protractor = `error: ${err.message}`;
+        }
+      })()
+    );
+
+    prefetchPromises.push(
+      (async () => {
+        try {
+          const autoVitalsCfg = await resolveAutoVitalsConfig(shopId);
+          if (autoVitalsCfg.configured) {
+            const avInspection = await fetchAutoVitalsInspectionByVin(shopId, vin, 6 * 60 * 60 * 1000);
+            if (avInspection.ok) {
+              results.autovitals = "cached";
+            } else {
+              results.autovitals = avInspection.error || "no_data";
+            }
+          } else {
+            results.autovitals = "not_configured";
+          }
+        } catch (err: any) {
+          results.autovitals = `error: ${err.message}`;
         }
       })()
     );

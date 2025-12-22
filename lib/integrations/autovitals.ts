@@ -510,3 +510,94 @@ export async function testAutoVitalsConnection(
     shopName: result.data?.ShopName || result.data?.shopName 
   };
 }
+
+export async function resolveAutoVitalsConfig(
+  shopId: number
+): Promise<{ configured: boolean; config?: AutoVitalsConfig }> {
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId });
+  
+  if (!shop?.autovitals?.shopId || !shop?.autovitals?.sessionCookie) {
+    return { configured: false };
+  }
+
+  return {
+    configured: true,
+    config: {
+      shopId: shop.autovitals.shopId,
+      userId: shop.autovitals.userId,
+      sessionCookie: shop.autovitals.sessionCookie,
+      jwtToken: shop.autovitals.jwtToken,
+    },
+  };
+}
+
+export async function fetchAutoVitalsInspectionByVin(
+  shopId: number,
+  vin: string,
+  ttlMs: number = 6 * 60 * 60 * 1000
+): Promise<{ ok: true; inspection: AutoVitalsInspectionResult; items: AutoVitalsInspectionItem[] } | { ok: false; error: string }> {
+  const db = await getDb();
+  const shopIdStr = String(shopId);
+  const vinUpper = vin.toUpperCase();
+  
+  // First check cache for recent inspection by VIN
+  const cachedVehicle = await db.collection("autovitals_vehicles").findOne({
+    shopId: shopIdStr,
+    vin: { $regex: new RegExp(`^${vinUpper}$`, 'i') }
+  });
+  
+  if (!cachedVehicle?.vehicleId) {
+    return { ok: false, error: "Vehicle not found in AutoVitals cache. Run sync first." };
+  }
+  
+  // Find the most recent appointment for this vehicle
+  const cachedAppointment = await db.collection("autovitals_appointments").findOne(
+    { shopId: shopIdStr, vehicleId: cachedVehicle.vehicleId },
+    { sort: { updatedAt: -1 } }
+  );
+  
+  if (!cachedAppointment?.appointmentId) {
+    return { ok: false, error: "No appointment found for this vehicle in AutoVitals." };
+  }
+  
+  // Check cache for inspection
+  const cachedInspection = await db.collection("autovitals_inspections").findOne({
+    shopId: shopIdStr,
+    appointmentId: cachedAppointment.appointmentId
+  });
+  
+  const cacheAge = cachedInspection?.updatedAt 
+    ? Date.now() - new Date(cachedInspection.updatedAt).getTime() 
+    : Infinity;
+  
+  if (cachedInspection && cacheAge < ttlMs && cachedInspection.items?.length > 0) {
+    console.log(`[AutoVitals] Using cached inspection for VIN ${vin}, age: ${Math.round(cacheAge / 1000 / 60)}m`);
+    return {
+      ok: true,
+      inspection: cachedInspection as AutoVitalsInspectionResult,
+      items: cachedInspection.items || []
+    };
+  }
+  
+  // Fetch fresh from API
+  const configResult = await resolveAutoVitalsConfig(shopId);
+  if (!configResult.configured || !configResult.config) {
+    return { ok: false, error: "AutoVitals not configured for this shop." };
+  }
+  
+  const inspectionResult = await getInspectionResults(cachedAppointment.appointmentId, configResult.config);
+  
+  if (!inspectionResult.ok) {
+    return { ok: false, error: inspectionResult.error };
+  }
+  
+  // Cache the result
+  await cacheAutoVitalsInspection(inspectionResult.data, shopIdStr);
+  
+  return {
+    ok: true,
+    inspection: inspectionResult.data,
+    items: inspectionResult.data.items || []
+  };
+}

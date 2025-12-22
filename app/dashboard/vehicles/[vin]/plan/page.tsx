@@ -17,6 +17,10 @@ import {
   getCannedJobsFromCache,
   type ProtractorDeferredWork,
 } from "@/lib/integrations/protractor";
+import {
+  resolveAutoVitalsConfig,
+  fetchAutoVitalsInspectionByVin,
+} from "@/lib/integrations/autovitals";
 import { AddToROButton } from "@/components/ui/AddToROButton";
 
 export const runtime = "nodejs";
@@ -299,6 +303,7 @@ type TriagedItem = {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor";
+  dviSource?: "autoflow" | "autovitals";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
@@ -332,7 +337,7 @@ function triage({
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
   currentMiles: number | null;
   today?: Date;
-  dviFindings: Array<{ name?: string; status?: string | number }>;
+  dviFindings: Array<{ name?: string; status?: string | number; source?: string }>;
   protractorDeferredWork?: ProtractorDeferredWork[];
   declinedServices?: DeclinedServiceEntry[];
   soonMiles?: number;
@@ -364,14 +369,15 @@ function triage({
     }
   }
 
-  // DVI bumps - track which items we've seen
-  const dviMap = new Map<string, { status: "red" | "yellow"; name: string }>();
+  // DVI bumps - track which items we've seen (from AutoFlow or AutoVitals)
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" }>();
   for (const it of dviFindings || []) {
     const key = it?.name ? toKeyFromName(String(it.name)) : null;
     if (!key) continue;
     const s = String(it.status ?? "");
-    if (s === "0") dviMap.set(key, { status: "red", name: String(it.name) });
-    else if (s === "1" && dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: String(it.name) });
+    const dviSource = (it.source === "autovitals" ? "autovitals" : "autoflow") as "autoflow" | "autovitals";
+    if (s === "0") dviMap.set(key, { status: "red", name: String(it.name), dviSource });
+    else if (s === "1" && dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: String(it.name), dviSource });
   }
 
   // Declined services map - key is the serviceKey
@@ -450,6 +456,7 @@ function triage({
       daysToGo,
       bump: dviInfo?.status ?? null,
       source: "oem",
+      dviSource: dviInfo?.dviSource,
       declined: declinedInfo,
       usingShopInterval,
     });
@@ -471,6 +478,7 @@ function triage({
       daysToGo: null,
       bump: dviInfo.status,
       source: "dvi",
+      dviSource: dviInfo.dviSource,
     });
   }
 
@@ -758,12 +766,36 @@ export default async function VehiclePlanPage({ params }: PageProps) {
         }))
       : [];
 
-  const dviFindings: Array<{ name?: string; status?: string | number }> =
+  // AutoFlow DVI findings
+  const autoflowDviFindings: Array<{ name?: string; status?: string | number; source?: string }> =
     (dvi as any).ok && Array.isArray((dvi as any).categories)
       ? (dvi as any).categories.flatMap((c: any) =>
-          Array.isArray(c.items) ? c.items.map((it: any) => ({ name: it.name, status: it.status })) : []
+          Array.isArray(c.items) ? c.items.map((it: any) => ({ name: it.name, status: it.status, source: "autoflow" })) : []
         )
       : [];
+
+  // AutoVitals DVI findings
+  const autoVitalsCfg = await resolveAutoVitalsConfig(shopId);
+  let autoVitalsDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+  if (autoVitalsCfg.configured) {
+    const avInspection = await fetchAutoVitalsInspectionByVin(shopId, vin, 6 * 60 * 60 * 1000);
+    if (avInspection.ok && avInspection.items) {
+      autoVitalsDviFindings = avInspection.items
+        .filter(item => item.status === "red" || item.status === "yellow")
+        .map(item => ({
+          name: item.name,
+          status: item.status === "red" ? "0" : "1",
+          source: "autovitals"
+        }));
+      console.log(`[Plan Debug] AutoVitals DVI items: ${autoVitalsDviFindings.length}`);
+    }
+  }
+
+  // Merge DVI findings from both sources (AutoFlow and AutoVitals)
+  const dviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [
+    ...autoflowDviFindings,
+    ...autoVitalsDviFindings
+  ];
 
   const oemItems: OEMItem[] = (oemData.items as any[]).map((x) => ({
     maintenance_id: x.maintenance_id,
@@ -882,7 +914,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
                         )}
-                        {t.bump === "red" && t.source !== "protractor" && <span className="rounded-full bg-red-600 text-white px-2 py-0.5">DVI 🔴</span>}
+                        {t.bump === "red" && t.source !== "protractor" && (
+                          <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : "bg-red-600"}`}>
+                            {t.dviSource === "autovitals" ? "AutoVitals 🔴" : "DVI 🔴"}
+                          </span>
+                        )}
                         {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
                         {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                         {t.declined && (
@@ -996,7 +1032,9 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       </span>
                     )}
                     {t.bump === "yellow" && t.source !== "protractor" && (
-                      <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DVI 🟡</span>
+                      <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : "bg-amber-600"}`}>
+                        {t.dviSource === "autovitals" ? "AutoVitals 🟡" : "DVI 🟡"}
+                      </span>
                     )}
                     {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
                     {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
