@@ -673,37 +673,77 @@ export async function fetchCannedJobs(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const endpoints = [
-    "/ServicePackage/Template",
-    "/ServicePackage/",
-    "/ServicePackage/Search/",
-    "/ServicePackage/CannedJob",
+  // Protractor uses POST requests with specific request bodies for service package templates
+  const postEndpoints = [
+    {
+      endpoint: "/ServicePackageTemplate/Read",
+      body: { ServicePackageTemplateReadRequest: {} }
+    },
+    {
+      endpoint: "/ServicePackageTemplateList/Read",
+      body: { ServicePackageTemplateListReadRequest: {} }
+    },
   ];
 
   const errors: string[] = [];
   
-  for (const endpoint of endpoints) {
-    console.log(`[Protractor] Trying canned jobs endpoint: ${endpoint}`);
+  // Try POST endpoints first (documented Protractor 2.0 API)
+  for (const { endpoint, body } of postEndpoints) {
+    console.log(`[Protractor] Trying POST ${endpoint}...`);
+    const result = await protractorFetch<{ 
+      ItemCollection?: ProtractorCannedJob[];
+      ServicePackageTemplates?: ProtractorCannedJob[];
+      ServicePackageTemplateReadResponse?: { ItemCollection?: ProtractorCannedJob[] };
+    }>(
+      endpoint,
+      config,
+      { method: "POST", body: JSON.stringify(body) }
+    );
+
+    const items = result.data?.ItemCollection || 
+                  result.data?.ServicePackageTemplates || 
+                  result.data?.ServicePackageTemplateReadResponse?.ItemCollection;
+
+    console.log(`[Protractor] POST ${endpoint} result: ok=${result.ok}, items=${items?.length || 0}, error=${result.error || 'none'}`);
+    
+    if (result.ok && items?.length) {
+      console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
+      return { ok: true, cannedJobs: items };
+    }
+    
+    if (result.error) {
+      errors.push(`POST ${endpoint}: ${result.error}`);
+    }
+  }
+
+  // Fallback to GET endpoints
+  const getEndpoints = [
+    "/ServicePackage/Template",
+    "/ServicePackage/",
+  ];
+  
+  for (const endpoint of getEndpoints) {
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
       endpoint,
       config
     );
 
-    console.log(`[Protractor] Endpoint ${endpoint} result: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}, error=${result.error || 'none'}`);
+    console.log(`[Protractor] GET ${endpoint} result: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}, error=${result.error || 'none'}`);
     
     if (result.ok && result.data?.ItemCollection?.length) {
-      console.log(`[Protractor] Found ${result.data.ItemCollection.length} service packages via ${endpoint}`);
+      console.log(`[Protractor] Found ${result.data.ItemCollection.length} service packages via GET ${endpoint}`);
       return { ok: true, cannedJobs: result.data.ItemCollection };
     }
     
     if (result.error) {
-      errors.push(`${endpoint}: ${result.error}`);
+      errors.push(`GET ${endpoint}: ${result.error}`);
     }
   }
 
   return { 
     ok: false, 
-    error: `Could not fetch service packages. Tried endpoints: ${errors.join('; ')}` 
+    error: `Could not fetch service packages. API responses: ${errors.slice(0, 2).join('; ')}` 
   };
 }
 
