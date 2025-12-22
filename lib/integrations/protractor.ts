@@ -1233,6 +1233,7 @@ export async function applyCannedJobToWorkOrder(
       : (existingPackagesRaw?.ItemCollection || []);
     
     // Build full work order object with new service package added
+    // Use ServicePackageTemplateID without lines - let Protractor expand the template
     const fullWorkOrderPayload = {
       ...existingWorkOrder,
       ID: workOrderGuid,
@@ -1241,7 +1242,7 @@ export async function applyCannedJobToWorkOrder(
           ...existingPackages,
           {
             ID: "00000000-0000-0000-0000-000000000000",
-            Chapter: "Service",
+            Chapter: template.Chapter || "Service",
             Code: template.Code || cannedJobCode,
             Rank: existingPackages.length + 1,
             ServicePackageHeader: {
@@ -1249,21 +1250,7 @@ export async function applyCannedJobToWorkOrder(
               Description: template.ServicePackageHeader?.Description || "",
             },
             ServicePackageTemplateID: template.ID,
-            ServicePackageLines: {
-              ItemCollection: [{
-                ID: "00000000-0000-0000-0000-000000000000",
-                Rank: 1,
-                Type: "Labor",
-                Description: template.ServicePackageHeader?.Title || cannedJobCode,
-                Quantity: "1",
-                MinimumCharge: 0,
-                Total: "0.00",
-                Discount: 0,
-                ExtendedTotal: "0.00",
-                TotalCost: "0.00",
-                Completed: false,
-              }]
-            }
+            // Don't include ServicePackageLines - let Protractor use template's lines
           }
         ]
       }
