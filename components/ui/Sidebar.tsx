@@ -81,11 +81,7 @@ export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarPr
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Extension Abilities", href: "/dashboard/settings/extensions" },
         { name: "Customer Workflows", href: "/dashboard/settings/workflows" },
-        { name: "CARFAX", href: "/dashboard/settings/carfax" },
-        { name: "AutoFlow", href: "/dashboard/settings/autoflow" },
-        { name: "Protractor", href: "/dashboard/settings/protractor" },
-        { name: "AutoVitals", href: "/dashboard/settings/autovitals" },
-        { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" }
+        { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
   ];
