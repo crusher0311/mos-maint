@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({ 
-        error: `Auto-login failed: ${loginResult.error}. Please use the advanced options to enter your session cookie manually.` 
+        error: "AutoVitals requires manual login. Please click 'Advanced options' below, then log into AutoVitals in a separate browser tab and copy your session cookie.",
+        needsManualAuth: true
       }, { status: 400 });
     }
 
