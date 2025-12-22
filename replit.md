@@ -31,7 +31,8 @@ The application features a modern SaaS-style design.
 -   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses (DataOne, Protractor, AutoVitals, CARFAX) with defined TTLs to improve performance.
 -   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations like Protractor.
 -   **CARFAX Mileage Interpolation**: Smart algorithm for estimating mileage in CARFAX service records.
--   **Protractor Canned Jobs**: Syncs, allows manual entry, and provides mapping UI for canned jobs, enabling advisors to easily add them to repair orders. Service packages are inserted via TimeClock API using proper line type mapping (LaborLine, PartLine, SubletLine, OtherLine). Requires `UpdateWorkOrderPackage` and `UpdateWorkOrderLine` parameters set to "Yes" in Protractor Integration settings.
+-   **Protractor Canned Jobs**: Syncs, allows manual entry, and provides mapping UI for canned jobs, enabling advisors to easily add them to repair orders. Service packages are inserted via TimeClock API using proper line type mapping (LaborLine, PartLine, SubletLine, OtherLine). The `UpdateWorkOrderPackage` and `UpdateWorkOrderLine` settings are automatically enabled when connecting Protractor.
+-   **Protractor Sync**: The "Sync Now" button imports vehicles from recent work orders and syncs all service package templates (canned jobs) with full parts/labor line details.
 -   **Shop Maintenance Intervals**: Allows shops to define custom maintenance schedules that override OEM recommendations.
 -   **Environment Configuration**: Configured for Replit with specific port settings and allowed origins.
 
