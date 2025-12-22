@@ -27,8 +27,11 @@ export default function AutoVitalsSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showUpdateSession, setShowUpdateSession] = useState(false);
+  const [newSessionCookie, setNewSessionCookie] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -108,16 +111,27 @@ export default function AutoVitalsSettingsPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 401 || data.error?.includes("401") || data.error?.includes("Unauthorized")) {
+          setSessionExpired(true);
+          setShowUpdateSession(true);
+          setError("Session expired. Please enter a fresh session cookie from AutoVitals below.");
+          return;
+        }
         throw new Error(data.error || "Sync failed");
       }
 
       await fetchSettings();
       setTestResult({ 
         success: true, 
-        message: `Synced ${data.appointments || 0} appointments and ${data.inspections || 0} inspections` 
+        message: `Synced ${data.stats?.appointments || 0} appointments and ${data.stats?.inspectionsSynced || 0} inspections` 
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sync failed");
+      const errorMsg = err instanceof Error ? err.message : "Sync failed";
+      if (errorMsg.includes("401") || errorMsg.includes("Unauthorized")) {
+        setError("Session expired. Please disconnect and reconnect with a fresh session cookie from AutoVitals.");
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setSyncing(false);
     }
@@ -241,6 +255,73 @@ export default function AutoVitalsSettingsPage() {
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-700">
               <XCircle className="w-5 h-5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {showUpdateSession && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-4">
+              <div className="text-sm">
+                <p className="font-medium text-amber-800 mb-2">Update your session cookie:</p>
+                <ol className="list-decimal list-inside space-y-1 text-amber-700 text-xs">
+                  <li>Open <a href="https://shop.autovitals.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">shop.autovitals.com</a> and log in</li>
+                  <li>Press F12, go to Application → Cookies</li>
+                  <li>Copy the <strong>.TVPXAUTH</strong> cookie value</li>
+                  <li>Paste it below</li>
+                </ol>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Session Cookie</label>
+                <textarea
+                  value={newSessionCookie}
+                  onChange={(e) => setNewSessionCookie(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 font-mono text-xs"
+                  rows={2}
+                  placeholder="Paste your .TVPXAUTH value here..."
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!newSessionCookie.trim()) return;
+                    setSaving(true);
+                    setError(null);
+                    try {
+                      const res = await fetch("/api/autovitals/settings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          sessionCookie: newSessionCookie,
+                          shopId: settings.shopId,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || "Failed to update");
+                      setSessionExpired(false);
+                      setShowUpdateSession(false);
+                      setNewSessionCookie("");
+                      setTestResult({ success: true, message: "Session updated successfully!" });
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Failed to update session");
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving || !newSessionCookie.trim()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Update Session
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUpdateSession(false);
+                    setNewSessionCookie("");
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
