@@ -311,7 +311,7 @@ export default function AutoVitalsSettingsPage() {
                       <li>Once logged in, press <strong>F12</strong> (or right-click and select "Inspect")</li>
                       <li>Click the <strong>Application</strong> tab (Chrome) or <strong>Storage</strong> tab (Firefox)</li>
                       <li>In the left sidebar, expand <strong>Cookies</strong> and click on "shop.autovitals.com"</li>
-                      <li>Find the cookie named <strong>JSESSIONID</strong> or similar session cookie</li>
+                      <li>Find the cookie named <strong>.TVPXAUTH</strong> (this is the authentication cookie)</li>
                       <li>Double-click the <strong>Value</strong> column to select it, then copy (Ctrl+C)</li>
                       <li>Paste it in the Session Cookie field below</li>
                     </ol>
@@ -327,7 +327,7 @@ export default function AutoVitalsSettingsPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="e.g., 11876"
                     />
-                    <p className="text-xs text-gray-500 mt-1">You can find this in the AutoVitals URL after logging in</p>
+                    <p className="text-xs text-gray-500 mt-1">Look for the <strong>ssid</strong> cookie value (e.g., 11876)</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
