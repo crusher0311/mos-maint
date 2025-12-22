@@ -1190,35 +1190,54 @@ export async function applyCannedJobToWorkOrder(
   if (!template.ServicePackageLines?.ItemCollection?.length) {
     console.log(`[Protractor] Template has no lines in summary, trying to add via WorkOrder POST with template ID: ${template.ID}...`);
     
-    // Try multiple payload formats - Protractor API is finicky about structure
+    // Per Protractor docs: Service package must include lines
+    // Using the documented structure from Add_Service_Package.rtf
+    const servicePackagePayload = {
+      ServicePackages: {
+        ItemCollection: [{
+          ID: "00000000-0000-0000-0000-000000000000",
+          Chapter: "Service",
+          Code: template.Code || cannedJobCode,
+          Rank: 1,
+          ServicePackageHeader: {
+            Title: template.ServicePackageHeader?.Title || cannedJobCode,
+            Description: template.ServicePackageHeader?.Description || "",
+          },
+          ServicePackageTemplateID: template.ID,
+          ServicePackageLines: {
+            ItemCollection: [{
+              ID: "00000000-0000-0000-0000-000000000000",
+              Rank: 1,
+              Type: "Labor",
+              Description: template.ServicePackageHeader?.Title || cannedJobCode,
+              Quantity: "1",
+              MinimumCharge: 0,
+              Total: "0.00",
+              Discount: 0,
+              ExtendedTotal: "0.00",
+              TotalCost: "0.00",
+              Completed: false,
+            }]
+          }
+        }]
+      }
+    };
+    
     const payloadVariants = [
-      // Format 1: Minimal with just template ID reference
+      // Format 1: Full structure with lines (from Protractor docs)
+      servicePackagePayload,
+      // Format 2: Just template ID reference
       { 
         ServicePackages: { 
           ItemCollection: [{ ServicePackageTemplateID: template.ID }] 
         } 
       },
-      // Format 2: With Code
+      // Format 3: With Code and template ID
       { 
         ServicePackages: { 
           ItemCollection: [{ 
             Code: template.Code || cannedJobCode,
             ServicePackageTemplateID: template.ID 
-          }] 
-        } 
-      },
-      // Format 3: Full service package structure
-      { 
-        ServicePackages: { 
-          ItemCollection: [{ 
-            ID: "00000000-0000-0000-0000-000000000000",
-            Code: template.Code || cannedJobCode,
-            ServicePackageHeader: {
-              Title: template.ServicePackageHeader?.Title || cannedJobCode,
-              Description: template.ServicePackageHeader?.Description || "",
-            },
-            ServicePackageTemplateID: template.ID,
-            Status: "Pending"
           }] 
         } 
       },
