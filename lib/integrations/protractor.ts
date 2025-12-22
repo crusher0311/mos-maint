@@ -818,18 +818,25 @@ export async function fetchServicePackageTemplates(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const endpoints = [
+  // Try GET endpoints first (based on Protractor documentation)
+  const getEndpoints = [
+    "/ServicePackageTemplate/Read",
+    "/ServicePackageTemplate",
     "/ServicePackage/Template",
     "/ServicePackage/",
   ];
 
-  for (const endpoint of endpoints) {
+  for (const endpoint of getEndpoints) {
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorServicePackageTemplate[] }>(
       endpoint,
       config
     );
 
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}`);
+    
     if (result.ok && result.data?.ItemCollection?.length) {
+      console.log(`[Protractor] Found ${result.data.ItemCollection.length} templates via GET ${endpoint}`);
       return { ok: true, templates: result.data.ItemCollection };
     }
   }
