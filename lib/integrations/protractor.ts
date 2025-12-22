@@ -1222,174 +1222,163 @@ export async function applyCannedJobToWorkOrder(
   // Try adding via WorkOrder POST with full template details including lines
   const templateLines = template.ServicePackageLines?.ItemCollection || [];
   console.log(`[Protractor] Adding via WorkOrder POST with template ID: ${template.ID} and ${templateLines.length} lines...`);
-    
-    // Per Protractor docs: workOrderID should be GUID
-    // Include WorkOrderID in the service package payload
-    const servicePackagePayload = {
-      WorkOrderID: workOrderGuid,  // Include the GUID in body
-      ServicePackages: {
-        ItemCollection: [{
+  
+  // Per Protractor docs: workOrderID should be GUID
+  // Include WorkOrderID in the service package payload
+  const servicePackagePayload = {
+    WorkOrderID: workOrderGuid,
+    ServicePackages: {
+      ItemCollection: [{
+        ID: "00000000-0000-0000-0000-000000000000",
+        Chapter: "Service",
+        Code: template.Code || cannedJobCode,
+        Rank: 1,
+        WorkOrderID: workOrderGuid,
+        ServicePackageHeader: {
+          Title: template.ServicePackageHeader?.Title || cannedJobCode,
+          Description: template.ServicePackageHeader?.Description || "",
+        },
+        ServicePackageTemplateID: template.ID,
+        ServicePackageLines: {
+          ItemCollection: [{
+            ID: "00000000-0000-0000-0000-000000000000",
+            Rank: 1,
+            Type: "Labor",
+            Description: template.ServicePackageHeader?.Title || cannedJobCode,
+            Quantity: "1",
+            MinimumCharge: 0,
+            Total: "0.00",
+            Discount: 0,
+            ExtendedTotal: "0.00",
+            TotalCost: "0.00",
+            Completed: false,
+            WorkOrderID: workOrderGuid,
+          }]
+        }
+      }]
+    }
+  };
+  
+  // Per docs: "WorkOrder object serialized in string format" - include full work order structure
+  const existingPackagesRaw = existingWorkOrder.ServicePackages;
+  const existingPackages = Array.isArray(existingPackagesRaw) 
+    ? existingPackagesRaw 
+    : (existingPackagesRaw?.ItemCollection || []);
+  
+  // Build full work order object with new service package added
+  // Include actual lines from template
+  const fullWorkOrderPayload = {
+    ...existingWorkOrder,
+    ID: workOrderGuid,
+    ServicePackages: {
+      ItemCollection: [
+        ...existingPackages,
+        {
           ID: "00000000-0000-0000-0000-000000000000",
-          Chapter: "Service",
+          Chapter: template.Chapter || "Service",
           Code: template.Code || cannedJobCode,
-          Rank: 1,
-          WorkOrderID: workOrderGuid,  // Also in the package
+          Rank: existingPackages.length + 1,
           ServicePackageHeader: {
             Title: template.ServicePackageHeader?.Title || cannedJobCode,
             Description: template.ServicePackageHeader?.Description || "",
           },
           ServicePackageTemplateID: template.ID,
           ServicePackageLines: {
-            ItemCollection: [{
+            ItemCollection: templateLines.map((line: any, idx: number) => ({
               ID: "00000000-0000-0000-0000-000000000000",
-              Rank: 1,
-              Type: "Labor",
-              Description: template.ServicePackageHeader?.Title || cannedJobCode,
-              Quantity: "1",
-              MinimumCharge: 0,
-              Total: "0.00",
-              Discount: 0,
-              ExtendedTotal: "0.00",
-              TotalCost: "0.00",
+              Rank: idx + 1,
+              Type: line.Type || "Labor",
+              Description: line.Description || "",
+              Quantity: line.Quantity || "1",
+              Unit: line.Unit || "Hour",
+              Price: line.Price || 0,
+              PriceUnit: line.PriceUnit || "Hour",
+              MinimumCharge: line.MinimumCharge || 0,
+              Total: line.Total || 0,
+              Discount: line.Discount || 0,
+              ExtendedTotal: line.ExtendedTotal || 0,
+              TotalCost: line.TotalCost || 0,
+              PartNumber: line.PartNumber || "",
+              Manufacturer: line.Manufacturer || "",
               Completed: false,
-              WorkOrderID: workOrderGuid,
-            }]
+            }))
           }
-        }]
-      }
-    };
-    
-    // Per docs: "WorkOrder object serialized in string format" - include full work order structure
-    const existingPackagesRaw = existingWorkOrder.ServicePackages;
-    const existingPackages = Array.isArray(existingPackagesRaw) 
-      ? existingPackagesRaw 
-      : (existingPackagesRaw?.ItemCollection || []);
-    
-    // Build full work order object with new service package added
-    // Include actual lines from template
-    const fullWorkOrderPayload = {
-      ...existingWorkOrder,
+        }
+      ]
+    }
+  };
+  
+  const payloadVariants = [
+    fullWorkOrderPayload,
+    servicePackagePayload,
+    { 
       ID: workOrderGuid,
-      ServicePackages: {
-        ItemCollection: [
-          ...existingPackages,
-          {
-            ID: "00000000-0000-0000-0000-000000000000",
-            Chapter: template.Chapter || "Service",
-            Code: template.Code || cannedJobCode,
-            Rank: existingPackages.length + 1,
-            ServicePackageHeader: {
-              Title: template.ServicePackageHeader?.Title || cannedJobCode,
-              Description: template.ServicePackageHeader?.Description || "",
-            },
-            ServicePackageTemplateID: template.ID,
-            ServicePackageLines: {
-              ItemCollection: templateLines.map((line: any, idx: number) => ({
-                ID: "00000000-0000-0000-0000-000000000000",
-                Rank: idx + 1,
-                Type: line.Type || "Labor",
-                Description: line.Description || "",
-                Quantity: line.Quantity || "1",
-                Unit: line.Unit || "Hour",
-                Price: line.Price || 0,
-                PriceUnit: line.PriceUnit || "Hour",
-                MinimumCharge: line.MinimumCharge || 0,
-                Total: line.Total || 0,
-                Discount: line.Discount || 0,
-                ExtendedTotal: line.ExtendedTotal || 0,
-                TotalCost: line.TotalCost || 0,
-                PartNumber: line.PartNumber || "",
-                Manufacturer: line.Manufacturer || "",
-                Completed: false,
-              }))
-            }
-          }
-        ]
-      }
-    };
+      ServicePackages: { 
+        ItemCollection: [{ 
+          ServicePackageTemplateID: template.ID,
+          Code: template.Code || cannedJobCode
+        }] 
+      } 
+    },
+  ];
+  
+  let lastError = "";
+  
+  for (let i = 0; i < payloadVariants.length; i++) {
+    const payload = payloadVariants[i];
+    console.log(`[Protractor] Trying payload format ${i + 1}/${payloadVariants.length}...`);
+    console.log(`[Protractor] Request payload:`, JSON.stringify(payload).substring(0, 500));
     
-    const payloadVariants = [
-      // Format 1: Full work order object (as per docs)
-      fullWorkOrderPayload,
-      // Format 2: Just ServicePackages with new package
-      servicePackagePayload,
-      // Format 3: Minimal with template ID
-      { 
-        ID: workOrderGuid,
-        ServicePackages: { 
-          ItemCollection: [{ 
-            ServicePackageTemplateID: template.ID,
-            Code: template.Code || cannedJobCode
-          }] 
-        } 
-      },
-    ];
-    
-    let lastError = "";
-    
-    for (let i = 0; i < payloadVariants.length; i++) {
-      const payload = payloadVariants[i];
-      console.log(`[Protractor] Trying payload format ${i + 1}/${payloadVariants.length}...`);
-      console.log(`[Protractor] Request payload:`, JSON.stringify(payload).substring(0, 500));
-      
-      const updateResult = await protractorFetch<any>(
-        `/WorkOrder/${workOrderGuid}`,
-        config,
-        {
-          method: "POST",
-          body: JSON.stringify(payload)
-        }
-      );
-      
-      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
-      if (updateResult.data) {
-        console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
+    const updateResult = await protractorFetch<any>(
+      `/WorkOrder/${workOrderGuid}`,
+      config,
+      {
+        method: "POST",
+        body: JSON.stringify(payload)
       }
-      
-      if (updateResult.ok) {
-        // Check if the response actually contains our service package
-        const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
-                                 updateResult.data?.ServicePackages || [];
-        const added = Array.isArray(responsePackages) && responsePackages.some(
-          (p: any) => p.Code === (template.Code || cannedJobCode) || 
-                      p.ServicePackageHeader?.Title === (template.ServicePackageHeader?.Title || cannedJobTitle) ||
-                      p.ServicePackageTemplateID === template.ID
-        );
-        
-        if (added) {
-          console.log(`[Protractor] SUCCESS: Verified service package in response (format ${i + 1})`);
-        } else {
-          console.log(`[Protractor] API returned OK (format ${i + 1}) - service package likely added`);
-        }
-        
-        return {
-          ok: true,
-          servicePackage: {
-            ID: template.ID,
-            Title: template.ServicePackageHeader?.Title || cannedJobCode,
-            Description: template.ServicePackageHeader?.Description || "",
-            Chapter: template.Chapter || "Service",
-            Status: "Pending"
-          }
-        };
-      } else {
-        lastError = updateResult.error || "Unknown error";
-        console.log(`[Protractor] Format ${i + 1} failed: ${lastError}`);
-        // Continue to try next format
-      }
+    );
+    
+    console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
+    if (updateResult.data) {
+      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
     }
     
-    // All formats failed
-    console.log(`[Protractor] All payload formats failed. Last error: ${lastError}`);
-    return {
-      ok: false,
-      error: `Failed to add service package via WorkOrder update: ${lastError}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
-    };
+    if (updateResult.ok) {
+      const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
+                               updateResult.data?.ServicePackages || [];
+      const added = Array.isArray(responsePackages) && responsePackages.some(
+        (p: any) => p.Code === (template.Code || cannedJobCode) || 
+                    p.ServicePackageHeader?.Title === (template.ServicePackageHeader?.Title || cannedJobTitle) ||
+                    p.ServicePackageTemplateID === template.ID
+      );
+      
+      if (added) {
+        console.log(`[Protractor] SUCCESS: Verified service package in response (format ${i + 1})`);
+      } else {
+        console.log(`[Protractor] API returned OK (format ${i + 1}) - service package likely added`);
+      }
+      
+      return {
+        ok: true,
+        servicePackage: {
+          ID: template.ID,
+          Title: template.ServicePackageHeader?.Title || cannedJobCode,
+          Description: template.ServicePackageHeader?.Description || "",
+          Chapter: template.Chapter || "Service",
+          Status: "Pending"
+        }
+      };
+    } else {
+      lastError = updateResult.error || "Unknown error";
+      console.log(`[Protractor] Format ${i + 1} failed: ${lastError}`);
+    }
   }
-
-  return { 
-    ok: false, 
-    error: "Failed to add service package to work order" 
+    
+  // All formats failed
+  console.log(`[Protractor] All payload formats failed. Last error: ${lastError}`);
+  return {
+    ok: false,
+    error: `Failed to add service package via WorkOrder update: ${lastError}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
   };
 }
 
