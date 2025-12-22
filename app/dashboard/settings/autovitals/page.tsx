@@ -65,6 +65,8 @@ export default function AutoVitalsSettingsPage() {
         throw new Error(data.error || "Failed to save settings");
       }
 
+      // Refetch settings to update isConfigured flag
+      await fetchSettings();
       setTestResult({ success: true, message: "Settings saved successfully!" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
