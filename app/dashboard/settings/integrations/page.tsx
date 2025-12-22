@@ -695,12 +695,7 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
       const res = await fetch("/api/settings/protractor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          connectionId, 
-          apiKey,
-          updateWorkOrderPackage: true,
-          updateWorkOrderLine: true,
-        }),
+        body: JSON.stringify({ connectionId, apiKey }),
       });
 
       const data = await res.json();

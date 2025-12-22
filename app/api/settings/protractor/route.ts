@@ -44,29 +44,7 @@ export async function POST(req: NextRequest) {
 
     const shopId = Number(session.shopId);
     const body = await req.json();
-    const { connectionId, apiKey, updateWorkOrderPackage, updateWorkOrderLine } = body;
-
-    const db = await getDb();
-
-    if (updateWorkOrderPackage !== undefined || updateWorkOrderLine !== undefined) {
-      const updateFields: any = { updatedAt: new Date() };
-      if (updateWorkOrderPackage !== undefined) {
-        updateFields["protractor.updateWorkOrderPackage"] = updateWorkOrderPackage;
-      }
-      if (updateWorkOrderLine !== undefined) {
-        updateFields["protractor.updateWorkOrderLine"] = updateWorkOrderLine;
-      }
-      
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: updateFields }
-      );
-
-      return NextResponse.json({
-        ok: true,
-        message: "Protractor settings updated",
-      });
-    }
+    const { connectionId, apiKey } = body;
 
     if (!connectionId || !apiKey) {
       return NextResponse.json(
@@ -75,6 +53,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const db = await getDb();
     const cleanConnectionId = connectionId.trim().toLowerCase();
     const cleanApiKey = apiKey.trim().toLowerCase();
 
