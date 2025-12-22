@@ -1190,15 +1190,17 @@ export async function applyCannedJobToWorkOrder(
   if (!template.ServicePackageLines?.ItemCollection?.length) {
     console.log(`[Protractor] Template has no lines in summary, trying to add via WorkOrder POST with template ID: ${template.ID}...`);
     
-    // Per Protractor docs: Service package must include lines
-    // Using the documented structure from Add_Service_Package.rtf
+    // Per Protractor docs: workOrderID should be GUID
+    // Include WorkOrderID in the service package payload
     const servicePackagePayload = {
+      WorkOrderID: workOrderGuid,  // Include the GUID in body
       ServicePackages: {
         ItemCollection: [{
           ID: "00000000-0000-0000-0000-000000000000",
           Chapter: "Service",
           Code: template.Code || cannedJobCode,
           Rank: 1,
+          WorkOrderID: workOrderGuid,  // Also in the package
           ServicePackageHeader: {
             Title: template.ServicePackageHeader?.Title || cannedJobCode,
             Description: template.ServicePackageHeader?.Description || "",
@@ -1217,27 +1219,68 @@ export async function applyCannedJobToWorkOrder(
               ExtendedTotal: "0.00",
               TotalCost: "0.00",
               Completed: false,
+              WorkOrderID: workOrderGuid,
             }]
           }
         }]
       }
     };
     
+    // Per docs: "WorkOrder object serialized in string format" - include full work order structure
+    const existingPackagesRaw = existingWorkOrder.ServicePackages;
+    const existingPackages = Array.isArray(existingPackagesRaw) 
+      ? existingPackagesRaw 
+      : (existingPackagesRaw?.ItemCollection || []);
+    
+    // Build full work order object with new service package added
+    const fullWorkOrderPayload = {
+      ...existingWorkOrder,
+      ID: workOrderGuid,
+      ServicePackages: {
+        ItemCollection: [
+          ...existingPackages,
+          {
+            ID: "00000000-0000-0000-0000-000000000000",
+            Chapter: "Service",
+            Code: template.Code || cannedJobCode,
+            Rank: existingPackages.length + 1,
+            ServicePackageHeader: {
+              Title: template.ServicePackageHeader?.Title || cannedJobCode,
+              Description: template.ServicePackageHeader?.Description || "",
+            },
+            ServicePackageTemplateID: template.ID,
+            ServicePackageLines: {
+              ItemCollection: [{
+                ID: "00000000-0000-0000-0000-000000000000",
+                Rank: 1,
+                Type: "Labor",
+                Description: template.ServicePackageHeader?.Title || cannedJobCode,
+                Quantity: "1",
+                MinimumCharge: 0,
+                Total: "0.00",
+                Discount: 0,
+                ExtendedTotal: "0.00",
+                TotalCost: "0.00",
+                Completed: false,
+              }]
+            }
+          }
+        ]
+      }
+    };
+    
     const payloadVariants = [
-      // Format 1: Full structure with lines (from Protractor docs)
+      // Format 1: Full work order object (as per docs)
+      fullWorkOrderPayload,
+      // Format 2: Just ServicePackages with new package
       servicePackagePayload,
-      // Format 2: Just template ID reference
+      // Format 3: Minimal with template ID
       { 
-        ServicePackages: { 
-          ItemCollection: [{ ServicePackageTemplateID: template.ID }] 
-        } 
-      },
-      // Format 3: With Code and template ID
-      { 
+        ID: workOrderGuid,
         ServicePackages: { 
           ItemCollection: [{ 
-            Code: template.Code || cannedJobCode,
-            ServicePackageTemplateID: template.ID 
+            ServicePackageTemplateID: template.ID,
+            Code: template.Code || cannedJobCode
           }] 
         } 
       },
