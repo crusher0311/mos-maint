@@ -84,6 +84,7 @@ export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarPr
         { name: "CARFAX", href: "/dashboard/settings/carfax" },
         { name: "AutoFlow", href: "/dashboard/settings/autoflow" },
         { name: "Protractor", href: "/dashboard/settings/protractor" },
+        { name: "AutoVitals", href: "/dashboard/settings/autovitals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" }
       ]
     }
