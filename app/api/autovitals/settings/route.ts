@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { loginWithCodes, testAutoVitalsConnection } from "@/lib/integrations/autovitals";
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,10 +9,10 @@ export async function GET(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const user = { shopId: String(session.shopId) };
+    const shopId = Number(session.shopId);
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ _id: user.shopId });
+    const shop = await db.collection("shops").findOne({ shopId });
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -21,10 +22,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       shopId: autovitals.shopId || null,
-      userId: autovitals.userId || null,
-      sessionCookie: autovitals.sessionCookie ? "••••••••" : "",
-      jwtToken: autovitals.jwtToken ? "••••••••" : "",
+      shopName: autovitals.shopName || "",
       isConfigured: !!(autovitals.shopId && autovitals.sessionCookie),
+      lastSync: autovitals.lastSync || null,
     });
   } catch (error) {
     console.error("[AutoVitals Settings GET] Error:", error);
@@ -38,50 +38,102 @@ export async function POST(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const user = { shopId: String(session.shopId) };
+    const userShopId = Number(session.shopId);
 
     const body = await request.json();
-    const { shopId, userId, sessionCookie, jwtToken } = body;
+    const { welcomeCode, personalCode, sessionCookie, shopId: avShopId } = body;
 
-    if (!shopId) {
-      return NextResponse.json({ error: "Shop ID is required" }, { status: 400 });
-    }
+    const db = await getDb();
 
-    if (!sessionCookie || sessionCookie === "••••••••") {
-      const db = await getDb();
-      const shop = await db.collection("shops").findOne({ _id: user.shopId });
-      if (!shop?.autovitals?.sessionCookie) {
-        return NextResponse.json({ error: "Session Cookie is required" }, { status: 400 });
+    if (sessionCookie && avShopId) {
+      const testResult = await testAutoVitalsConnection({
+        shopId: avShopId,
+        sessionCookie,
+      });
+
+      if (!testResult.ok) {
+        return NextResponse.json({ 
+          error: `Connection test failed: ${testResult.error}. Please check your session cookie.` 
+        }, { status: 400 });
       }
+
+      await db.collection("shops").updateOne(
+        { shopId: userShopId },
+        { 
+          $set: {
+            "autovitals.shopId": avShopId,
+            "autovitals.sessionCookie": sessionCookie,
+            "autovitals.shopName": testResult.shopName || "",
+            "autovitals.updatedAt": new Date(),
+          }
+        }
+      );
+
+      return NextResponse.json({ 
+        success: true,
+        shopName: testResult.shopName,
+      });
     }
+
+    if (welcomeCode && personalCode) {
+      const loginResult = await loginWithCodes({ welcomeCode, personalCode });
+
+      if (loginResult.ok) {
+        await db.collection("shops").updateOne(
+          { shopId: userShopId },
+          { 
+            $set: {
+              "autovitals.shopId": loginResult.config.shopId,
+              "autovitals.userId": loginResult.config.userId,
+              "autovitals.sessionCookie": loginResult.config.sessionCookie,
+              "autovitals.shopName": loginResult.shopName || "",
+              "autovitals.updatedAt": new Date(),
+            }
+          }
+        );
+
+        return NextResponse.json({ 
+          success: true,
+          shopName: loginResult.shopName,
+        });
+      }
+
+      return NextResponse.json({ 
+        error: `Auto-login failed: ${loginResult.error}. Please use the advanced options to enter your session cookie manually.` 
+      }, { status: 400 });
+    }
+
+    return NextResponse.json({ 
+      error: "Please provide either login codes or a session cookie with shop ID" 
+    }, { status: 400 });
+  } catch (error) {
+    console.error("[AutoVitals Settings POST] Error:", error);
+    return NextResponse.json({ error: "Failed to save settings" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session || !session.shopId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userShopId = Number(session.shopId);
 
     const db = await getDb();
     
-    const updateData: Record<string, any> = {
-      "autovitals.shopId": shopId,
-      "autovitals.updatedAt": new Date(),
-    };
-
-    if (userId) {
-      updateData["autovitals.userId"] = userId;
-    }
-
-    if (sessionCookie && sessionCookie !== "••••••••") {
-      updateData["autovitals.sessionCookie"] = sessionCookie;
-    }
-
-    if (jwtToken && jwtToken !== "••••••••") {
-      updateData["autovitals.jwtToken"] = jwtToken;
-    }
-
     await db.collection("shops").updateOne(
-      { _id: user.shopId },
-      { $set: updateData }
+      { shopId: userShopId },
+      { 
+        $unset: {
+          autovitals: "",
+        }
+      }
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[AutoVitals Settings POST] Error:", error);
-    return NextResponse.json({ error: "Failed to save settings" }, { status: 500 });
+    console.error("[AutoVitals Settings DELETE] Error:", error);
+    return NextResponse.json({ error: "Failed to disconnect" }, { status: 500 });
   }
 }

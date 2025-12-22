@@ -1,4 +1,3 @@
-// app/setup/SetupWizard.tsx
 "use client";
 
 import { useState } from "react";
@@ -11,10 +10,20 @@ interface Step1Data {
   confirmPassword: string;
 }
 
-interface Step2Data {
-  autoflowDomain?: string;
-  autoflowApiKey?: string;
-  autoflowApiPassword?: string;
+interface IntegrationData {
+  autoflow?: {
+    domain?: string;
+    apiKey?: string;
+    apiPassword?: string;
+  };
+  autovitals?: {
+    welcomeCode?: string;
+    personalCode?: string;
+  };
+  protractor?: {
+    apiKey?: string;
+    shopId?: string;
+  };
 }
 
 export default function SetupWizard() {
@@ -25,7 +34,8 @@ export default function SetupWizard() {
     adminPassword: "",
     confirmPassword: "",
   });
-  const [step2Data, setStep2Data] = useState<Step2Data>({});
+  const [integrations, setIntegrations] = useState<IntegrationData>({});
+  const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   
@@ -59,7 +69,13 @@ export default function SetupWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...step1Data,
-          ...step2Data,
+          autoflowDomain: integrations.autoflow?.domain,
+          autoflowApiKey: integrations.autoflow?.apiKey,
+          autoflowApiPassword: integrations.autoflow?.apiPassword,
+          autovitalsWelcomeCode: integrations.autovitals?.welcomeCode,
+          autovitalsPersonalCode: integrations.autovitals?.personalCode,
+          protractorApiKey: integrations.protractor?.apiKey,
+          protractorShopId: integrations.protractor?.shopId,
         }),
       });
 
@@ -69,13 +85,16 @@ export default function SetupWizard() {
         throw new Error(data.error || "Setup failed");
       }
 
-      // Redirect to dashboard
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed");
     } finally {
       setBusy(false);
     }
+  };
+
+  const toggleIntegration = (name: string) => {
+    setExpandedIntegration(expandedIntegration === name ? null : name);
   };
 
   if (currentStep === 1) {
@@ -180,57 +199,178 @@ export default function SetupWizard() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-lg w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Configure Integrations
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Step 2 of 2: Connect your shop management system (optional)
+            Step 2 of 2: Connect your shop systems (all optional, can be done later)
           </p>
         </div>
         
-        <form className="mt-8 space-y-6" onSubmit={handleFinalSubmit}>
+        <form className="mt-8 space-y-4" onSubmit={handleFinalSubmit}>
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
           
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-              <h3 className="text-sm font-medium text-blue-900 mb-2">AutoFlow Integration</h3>
-              <p className="text-xs text-blue-700 mb-3">
-                Connect your AutoFlow system to automatically sync vehicle data and maintenance records.
-              </p>
-              
-              <div className="space-y-3">
+          {/* AutoFlow Integration */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleIntegration("autoflow")}
+              className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <span className="text-blue-600 font-bold text-sm">AF</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900">AutoFlow</p>
+                  <p className="text-xs text-gray-500">Shop management & vehicle data</p>
+                </div>
+              </div>
+              <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedIntegration === "autoflow" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {expandedIntegration === "autoflow" && (
+              <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
                 <input
                   type="text"
                   placeholder="AutoFlow Subdomain (e.g., yourshop)"
-                  value={step2Data.autoflowDomain || ""}
-                  onChange={(e) => setStep2Data({ ...step2Data, autoflowDomain: e.target.value })}
+                  value={integrations.autoflow?.domain || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    autoflow: { ...integrations.autoflow, domain: e.target.value }
+                  })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 />
                 <input
                   type="text"
                   placeholder="API Key"
-                  value={step2Data.autoflowApiKey || ""}
-                  onChange={(e) => setStep2Data({ ...step2Data, autoflowApiKey: e.target.value })}
+                  value={integrations.autoflow?.apiKey || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    autoflow: { ...integrations.autoflow, apiKey: e.target.value }
+                  })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 />
                 <input
                   type="password"
                   placeholder="API Password"
-                  value={step2Data.autoflowApiPassword || ""}
-                  onChange={(e) => setStep2Data({ ...step2Data, autoflowApiPassword: e.target.value })}
+                  value={integrations.autoflow?.apiPassword || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    autoflow: { ...integrations.autoflow, apiPassword: e.target.value }
+                  })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 />
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="flex space-x-4">
+          {/* AutoVitals Integration */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleIntegration("autovitals")}
+              className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <span className="text-green-600 font-bold text-sm">AV</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900">AutoVitals</p>
+                  <p className="text-xs text-gray-500">Digital vehicle inspections (DVI)</p>
+                </div>
+              </div>
+              <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedIntegration === "autovitals" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {expandedIntegration === "autovitals" && (
+              <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                <p className="text-xs text-gray-600 mb-2">
+                  Enter the same codes you use to log into AutoVitals
+                </p>
+                <input
+                  type="text"
+                  placeholder="Welcome Code (your shop's code)"
+                  value={integrations.autovitals?.welcomeCode || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    autovitals: { ...integrations.autovitals, welcomeCode: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Personal Code (your employee code)"
+                  value={integrations.autovitals?.personalCode || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    autovitals: { ...integrations.autovitals, personalCode: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Protractor Integration */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleIntegration("protractor")}
+              className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <span className="text-purple-600 font-bold text-sm">PR</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900">Protractor</p>
+                  <p className="text-xs text-gray-500">Shop management & repair orders</p>
+                </div>
+              </div>
+              <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedIntegration === "protractor" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {expandedIntegration === "protractor" && (
+              <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                <input
+                  type="text"
+                  placeholder="Shop ID"
+                  value={integrations.protractor?.shopId || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    protractor: { ...integrations.protractor, shopId: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+                <input
+                  type="password"
+                  placeholder="API Key"
+                  value={integrations.protractor?.apiKey || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    protractor: { ...integrations.protractor, apiKey: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex space-x-4 pt-4">
             <button
               type="button"
               onClick={() => setCurrentStep(1)}
@@ -248,7 +388,7 @@ export default function SetupWizard() {
           </div>
           
           <p className="text-center text-xs text-gray-500">
-            You can configure integrations later in the settings panel
+            You can configure or update integrations later in Settings
           </p>
         </form>
       </div>
