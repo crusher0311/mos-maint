@@ -16,10 +16,18 @@ export async function GET(req: NextRequest) {
     const shopId = Number(session.shopId);
     const config = await resolveProtractorConfig(shopId);
 
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { protractor: 1 } }
+    );
+
     return NextResponse.json({
       configured: config.configured,
       connectionId: config.connectionId ? `${config.connectionId.slice(0, 8)}...` : null,
       hasApiKey: Boolean(config.apiKey),
+      updateWorkOrderPackage: shop?.protractor?.updateWorkOrderPackage ?? false,
+      updateWorkOrderLine: shop?.protractor?.updateWorkOrderLine ?? false,
     });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
@@ -36,7 +44,29 @@ export async function POST(req: NextRequest) {
 
     const shopId = Number(session.shopId);
     const body = await req.json();
-    const { connectionId, apiKey } = body;
+    const { connectionId, apiKey, updateWorkOrderPackage, updateWorkOrderLine } = body;
+
+    const db = await getDb();
+
+    if (updateWorkOrderPackage !== undefined || updateWorkOrderLine !== undefined) {
+      const updateFields: any = { updatedAt: new Date() };
+      if (updateWorkOrderPackage !== undefined) {
+        updateFields["protractor.updateWorkOrderPackage"] = updateWorkOrderPackage;
+      }
+      if (updateWorkOrderLine !== undefined) {
+        updateFields["protractor.updateWorkOrderLine"] = updateWorkOrderLine;
+      }
+      
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $set: updateFields }
+      );
+
+      return NextResponse.json({
+        ok: true,
+        message: "Protractor settings updated",
+      });
+    }
 
     if (!connectionId || !apiKey) {
       return NextResponse.json(
@@ -56,7 +86,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = await getDb();
     await db.collection("shops").updateOne(
       { shopId },
       {
