@@ -856,23 +856,50 @@ export async function fetchServicePackageTemplateDetail(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  // Try various endpoint formats to get template detail with lines
   const endpoints = [
+    `/ServicePackageTemplate/${templateId}`,
+    `/ServicePackageTemplate/Read/${templateId}`,
     `/ServicePackage/Template/${templateId}`,
     `/ServicePackage/${templateId}`,
   ];
 
   for (const endpoint of endpoints) {
+    console.log(`[Protractor] Trying to fetch template detail from: ${endpoint}`);
     const result = await protractorFetch<ProtractorServicePackageTemplate>(
       endpoint,
       config
     );
 
+    console.log(`[Protractor] Template detail ${endpoint}: ok=${result.ok}, hasLines=${result.data?.ServicePackageLines?.ItemCollection?.length || 0}`);
+    
     if (result.ok && result.data) {
+      // Check if the template has lines populated
+      if (result.data.ServicePackageLines?.ItemCollection?.length) {
+        console.log(`[Protractor] Found template with ${result.data.ServicePackageLines.ItemCollection.length} lines`);
+      }
       return { ok: true, template: result.data };
     }
   }
+  
+  // Try POST with Read request body (some Protractor APIs require POST for read operations)
+  console.log(`[Protractor] Trying POST to read template ${templateId}...`);
+  const postResult = await protractorFetch<{ ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
+    `/ServicePackageTemplate/Read`,
+    config,
+    {
+      method: "POST",
+      body: JSON.stringify({ 
+        ServicePackageTemplateReadRequest: { ID: templateId }
+      })
+    }
+  );
+  
+  if (postResult.ok && postResult.data?.ServicePackageTemplate) {
+    return { ok: true, template: postResult.data.ServicePackageTemplate };
+  }
 
-  return { ok: false, error: "Template not found" };
+  return { ok: false, error: "Template detail not found" };
 }
 
 export async function resolveWorkOrderGuid(
