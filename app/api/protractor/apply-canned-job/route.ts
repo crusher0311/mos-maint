@@ -6,6 +6,7 @@ import {
   fetchVehicleByVin,
   fetchWorkOrdersForVehicle,
 } from "@/lib/integrations/protractor";
+import { logRecommendationEvent } from "@/lib/enterprise";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,6 +115,22 @@ export async function POST(req: NextRequest) {
     appliedAt: new Date(),
     appliedBy: session.email || null,
   });
+
+  try {
+    await logRecommendationEvent({
+      shopId,
+      vin: vin?.toUpperCase() || "",
+      workOrderId: String(targetWorkOrderId),
+      provider: "protractor",
+      eventType: "recommendation_added",
+      recommendationType: "shop",
+      serviceCode: cannedJobId,
+      serviceName: cannedJobTitle || cannedJobId,
+      addedBy: session.email || undefined,
+    });
+  } catch (err) {
+    console.error("[Apply Canned Job] Failed to log recommendation event:", err);
+  }
 
   return NextResponse.json({
     success: true,

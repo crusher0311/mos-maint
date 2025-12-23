@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Building2, Plus, Check, X, RefreshCw, ArrowLeft, Search } from "lucide-react";
 import Link from "next/link";
