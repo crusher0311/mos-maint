@@ -140,8 +140,12 @@ export async function getUsageAnalytics(startDate?: Date, endDate?: Date) {
     }
   ]).toArray();
   
+  const shopIds = byShop.map(s => s._id);
   const shops = await db.collection("shops")
-    .find({ shopId: { $in: byShop.map(s => Number(s._id) || s._id) } })
+    .find({ $or: [
+      { shopId: { $in: shopIds.map(id => Number(id)).filter(n => !isNaN(n)) } },
+      { shopId: { $in: shopIds } }
+    ]})
     .toArray();
   const shopMap = new Map(shops.map(s => [String(s.shopId), s.name]));
   
