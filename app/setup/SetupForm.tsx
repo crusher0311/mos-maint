@@ -32,8 +32,8 @@ export default function SetupForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Setup failed");
-      setMsg("âœ… Account created and signed in.");
-      // window.location.href = data.redirect || "/dashboard";
+      setMsg("Account created! Redirecting...");
+      window.location.href = data.redirect || "/dashboard";
     } catch (err: any) {
       setMsg("âŒ " + (err?.message || String(err)));
     } finally {

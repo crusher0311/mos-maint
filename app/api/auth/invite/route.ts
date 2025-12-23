@@ -8,11 +8,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const sess = await getSession(req);
+  const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { user } = sess;
-  if (user.role !== "owner") {
+  if (sess.role !== "owner" && sess.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -20,6 +19,7 @@ export async function POST(req: NextRequest) {
   const emailInput = String(body?.email || "").trim().toLowerCase();
   const inviteRole = (String(body?.role || "staff").trim().toLowerCase()) as
     | "owner"
+    | "admin"
     | "manager"
     | "staff"
     | "viewer";
@@ -37,10 +37,9 @@ export async function POST(req: NextRequest) {
 
   await setup.insertOne({
     token,
-    shopId: user.shopId,
+    shopId: sess.shopId,
     emailLower: emailInput,
     role: inviteRole,
-    createdBy: user._id,
     createdAt: now,
     expiresAt,
   });
@@ -48,17 +47,11 @@ export async function POST(req: NextRequest) {
   const base =
     process.env.NEXT_PUBLIC_BASE_URL ||
     `https://${req.headers.get("host") || "localhost:3000"}`;
-  const setupUrl = `${base}/setup?shopId=${user.shopId}&token=${token}`;
+  const setupUrl = `${base}/setup?shopId=${sess.shopId}&token=${token}`;
 
-  // Optional email (no-op if you donâ€™t have SMTP configured)
   try {
-    const msg = makeInviteEmail({
-      to: emailInput,
-      shopId: user.shopId,
-      setupUrl,
-      invitedBy: user.email,
-    });
-    await sendEmail(msg);
+    const msg = makeInviteEmail(setupUrl, sess.shopId, inviteRole);
+    await sendEmail({ to: emailInput, ...msg });
   } catch {
     // Swallow email errors to avoid blocking invites in dev
   }

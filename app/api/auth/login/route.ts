@@ -12,6 +12,24 @@ function looksLikeBcrypt(s: unknown) {
   return typeof s === "string" && /^\$2[aby]\$/.test(s);
 }
 
+function looksLikeScrypt(s: unknown) {
+  return typeof s === "string" && s.startsWith("scrypt:");
+}
+
+async function verifyScrypt(password: string, hash: string): Promise<boolean> {
+  const parts = hash.split(":");
+  if (parts.length < 4) return false;
+  const salt = parts[2];
+  const storedDerived = parts[3];
+  const crypto = await import("crypto");
+  return new Promise((resolve) => {
+    crypto.scrypt(password, salt, 64, (err, buf) => {
+      if (err) return resolve(false);
+      resolve(buf.toString("hex") === storedDerived);
+    });
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const { email, password, shopId } = await req.json();
@@ -58,11 +76,22 @@ export async function POST(req: Request) {
 
     if (looksLikeBcrypt(dbHash)) {
       passOk = await bcrypt.compare(String(password), String(dbHash));
+    } else if (looksLikeScrypt(dbHash)) {
+      // Handle scrypt hashes (from older complete-setup route)
+      passOk = await verifyScrypt(String(password), String(dbHash));
+      // Upgrade to bcrypt on successful login
+      if (passOk) {
+        const newHash = await bcrypt.hash(String(password), 12);
+        await db.collection("users").updateOne(
+          { _id: user._id },
+          { $set: { passwordHash: newHash } }
+        );
+      }
     } else if (legacyPlain) {
       // Compare plaintext legacy; if ok, upgrade to bcrypt
       passOk = String(password) === String(legacyPlain);
       if (passOk) {
-        const newHash = await bcrypt.hash(String(password), 10);
+        const newHash = await bcrypt.hash(String(password), 12);
         await db.collection("users").updateOne(
           { _id: user._id },
           { $set: { passwordHash: newHash }, $unset: { password: "" } }
