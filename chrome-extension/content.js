@@ -173,12 +173,12 @@
       
       if (!state.connected || !state.serverUrl || !state.apiKey) {
         console.log('[MOS AutoVitals] Not connected, skipping sync');
-        return;
+        return false;
       }
       
       if (!data.vehicle.vin && data.inspection.results.length === 0) {
         console.log('[MOS AutoVitals] No VIN or inspection data found, skipping sync');
-        return;
+        return false;
       }
       
       console.log('[MOS AutoVitals] Syncing DVI data:', data);
@@ -206,18 +206,24 @@
           type: 'SYNC_SUCCESS',
           data: result
         });
+        return true;
       } else {
         const error = await response.json();
         console.error('[MOS AutoVitals] Sync failed:', error);
+        return false;
       }
     } catch (error) {
       console.error('[MOS AutoVitals] Sync error:', error);
+      return false;
     }
   }
 
-  function checkAndSync() {
+  let retryCount = 0;
+  const MAX_RETRIES = 5;
+  const RETRY_DELAYS = [2000, 4000, 6000, 8000, 10000];
+
+  async function checkAndSync() {
     if (isProcessing) return;
-    if (window.location.href === lastProcessedUrl) return;
     
     const isInspectionPage = 
       window.location.href.includes('inspection') ||
@@ -227,16 +233,31 @@
     
     if (!isInspectionPage) return;
     
+    if (window.location.href === lastProcessedUrl && retryCount >= MAX_RETRIES) {
+      return;
+    }
+    
     isProcessing = true;
-    lastProcessedUrl = window.location.href;
     
-    console.log('[MOS AutoVitals] Detected inspection page, extracting data...');
+    console.log(`[MOS AutoVitals] Detected inspection page, extracting data... (attempt ${retryCount + 1})`);
     
-    setTimeout(() => {
-      const data = extractDVIData();
-      syncDVIData(data);
-      isProcessing = false;
-    }, 2000);
+    const delay = RETRY_DELAYS[retryCount] || 2000;
+    
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    const data = extractDVIData();
+    const success = await syncDVIData(data);
+    
+    if (success) {
+      lastProcessedUrl = window.location.href;
+      retryCount = 0;
+      console.log('[MOS AutoVitals] Successfully synced, marking URL as processed');
+    } else if (retryCount < MAX_RETRIES) {
+      retryCount++;
+      console.log(`[MOS AutoVitals] Sync failed/incomplete, will retry (${retryCount}/${MAX_RETRIES})`);
+    }
+    
+    isProcessing = false;
   }
 
   const observer = new MutationObserver((mutations) => {
@@ -261,6 +282,7 @@
     if (url !== lastUrl) {
       lastUrl = url;
       lastProcessedUrl = '';
+      retryCount = 0;
       checkAndSync();
     }
   }).observe(document, { subtree: true, childList: true });
