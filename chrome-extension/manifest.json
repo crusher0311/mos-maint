@@ -1,11 +1,13 @@
 {
   "manifest_version": 3,
   "name": "MOS AutoVitals Sync",
-  "version": "1.0.0",
-  "description": "Sync Digital Vehicle Inspection (DVI) data from AutoVitals to MOS Maintenance",
+  "version": "1.1.0",
+  "description": "Sync vehicle data from AutoVitals and view OEM, CARFAX, and maintenance plans",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "sidePanel",
+    "tabs"
   ],
   "host_permissions": [
     "https://*.autovitals.com/*",
@@ -23,6 +25,9 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "content_scripts": [
     {

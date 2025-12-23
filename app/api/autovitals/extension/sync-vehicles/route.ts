@@ -52,29 +52,29 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const vehicleDoc: any = {
+      const setFields: any = {
         shopId,
-        source: source || "autovitals",
         updatedAt: now,
       };
-
-      if (vin) vehicleDoc.vin = vin;
-      if (vehicle.year) vehicleDoc.year = parseInt(vehicle.year, 10);
-      if (vehicle.make) vehicleDoc.make = vehicle.make;
-      if (vehicle.model) vehicleDoc.model = vehicle.model;
-      if (vehicle.mileage) vehicleDoc.lastMileage = parseInt(String(vehicle.mileage).replace(/\D/g, ''), 10);
-      if (vehicle.licensePlate) vehicleDoc.license = vehicle.licensePlate;
       
-      if (vehicle.customerName || vehicle.customerPhone || vehicle.customerEmail) {
-        vehicleDoc.customer = {
-          name: vehicle.customerName || null,
-          phone: vehicle.customerPhone || null,
-          email: vehicle.customerEmail || null,
-        };
+      if (vin) setFields.vin = vin;
+      if (vehicle.year) setFields.year = parseInt(vehicle.year, 10);
+      if (vehicle.make) setFields.make = vehicle.make;
+      if (vehicle.model) setFields.model = vehicle.model;
+      if (vehicle.mileage) {
+        const mileage = parseInt(String(vehicle.mileage).replace(/\D/g, ''), 10);
+        if (!isNaN(mileage) && mileage > 0) {
+          setFields.lastMileage = mileage;
+        }
       }
+      if (vehicle.licensePlate) setFields.license = vehicle.licensePlate;
+      
+      if (vehicle.customerName) setFields["customer.name"] = vehicle.customerName;
+      if (vehicle.customerPhone) setFields["customer.phone"] = vehicle.customerPhone;
+      if (vehicle.customerEmail) setFields["customer.email"] = vehicle.customerEmail;
 
       if (vehicle.lastServiceDate) {
-        vehicleDoc.lastServiceDate = vehicle.lastServiceDate;
+        setFields.lastServiceDate = vehicle.lastServiceDate;
       }
 
       const filter = vin 
@@ -84,9 +84,10 @@ export async function POST(req: NextRequest) {
       const result = await db.collection("vehicles").updateOne(
         filter,
         {
-          $set: vehicleDoc,
+          $set: setFields,
           $setOnInsert: {
             createdAt: now,
+            source: source || "autovitals",
           }
         },
         { upsert: true }

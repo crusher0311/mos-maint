@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOS Vehicle Data</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .header-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    
+    .header-vin {
+      font-size: 11px;
+      opacity: 0.9;
+      font-family: monospace;
+    }
+    
+    .vehicle-info {
+      background: rgba(255,255,255,0.15);
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    
+    .tabs {
+      display: flex;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      position: sticky;
+      top: 60px;
+      z-index: 99;
+    }
+    
+    .tab {
+      flex: 1;
+      padding: 10px 8px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: #64748b;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    
+    .tab:hover {
+      background: #f1f5f9;
+    }
+    
+    .tab.active {
+      color: #3b82f6;
+      border-bottom-color: #3b82f6;
+    }
+    
+    .content {
+      padding: 12px;
+    }
+    
+    .panel {
+      display: none;
+    }
+    
+    .panel.active {
+      display: block;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .recommendation {
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    
+    .recommendation.immediate {
+      background: #fee2e2;
+      border-left: 3px solid #ef4444;
+    }
+    
+    .recommendation.due-soon {
+      background: #fef3c7;
+      border-left: 3px solid #f59e0b;
+    }
+    
+    .recommendation.upcoming {
+      background: #f0fdf4;
+      border-left: 3px solid #22c55e;
+    }
+    
+    .recommendation-title {
+      font-weight: 500;
+      color: #1e293b;
+      margin-bottom: 2px;
+    }
+    
+    .recommendation-detail {
+      font-size: 11px;
+      color: #64748b;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      margin-left: 4px;
+    }
+    
+    .badge.oem { background: #dbeafe; color: #1d4ed8; }
+    .badge.carfax { background: #fef3c7; color: #92400e; }
+    .badge.shop { background: #dcfce7; color: #166534; }
+    .badge.dvi { background: #f3e8ff; color: #7c3aed; }
+    
+    .loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: #64748b;
+    }
+    
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 30px 20px;
+      color: #64748b;
+    }
+    
+    .empty-state-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    
+    .empty-state-title {
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .empty-state-text {
+      font-size: 12px;
+    }
+    
+    .error-state {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin: 12px;
+    }
+    
+    .not-connected {
+      padding: 40px 20px;
+      text-align: center;
+    }
+    
+    .not-connected-title {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    
+    .not-connected-text {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 16px;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+    
+    .history-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 12px;
+    }
+    
+    .history-item:last-child {
+      border-bottom: none;
+    }
+    
+    .history-date {
+      font-weight: 500;
+      color: #374151;
+    }
+    
+    .history-mileage {
+      color: #64748b;
+      font-size: 11px;
+    }
+    
+    .history-services {
+      margin-top: 4px;
+      color: #475569;
+    }
+    
+    .refresh-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.8);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .refresh-btn:hover {
+      background: rgba(255,255,255,0.2);
+      color: white;
+    }
+    
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="not-connected" class="not-connected">
+    <div class="not-connected-title">Not Connected</div>
+    <div class="not-connected-text">
+      Click the extension icon in the toolbar to connect to your MOS account.
+    </div>
+  </div>
+  
+  <div id="main-content" style="display: none;">
+    <div class="header">
+      <div class="header-row">
+        <div>
+          <div class="header-title">MOS Vehicle Data</div>
+          <div class="header-vin" id="current-vin">No vehicle detected</div>
+        </div>
+        <button class="refresh-btn" id="refresh-btn" title="Refresh data">↻</button>
+      </div>
+      <div class="vehicle-info" id="vehicle-info" style="display: none;">
+        <span id="vehicle-ymm"></span>
+      </div>
+    </div>
+    
+    <div class="tabs">
+      <button class="tab active" data-tab="plan">Plan</button>
+      <button class="tab" data-tab="oem">OEM</button>
+      <button class="tab" data-tab="carfax">CARFAX</button>
+      <button class="tab" data-tab="dvi">DVI</button>
+    </div>
+    
+    <div class="content">
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <div>Loading vehicle data...</div>
+      </div>
+      
+      <div id="no-vehicle" class="empty-state" style="display: none;">
+        <div class="empty-state-icon">🚗</div>
+        <div class="empty-state-title">No Vehicle Detected</div>
+        <div class="empty-state-text">Open a vehicle in AutoVitals to see recommendations</div>
+      </div>
+      
+      <div id="error" class="error-state" style="display: none;"></div>
+      
+      <div id="panel-plan" class="panel active"></div>
+      <div id="panel-oem" class="panel"></div>
+      <div id="panel-carfax" class="panel"></div>
+      <div id="panel-dvi" class="panel"></div>
+    </div>
+  </div>
+  
+  <script src="sidepanel.js"></script>
+</body>
+</html>

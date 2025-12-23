@@ -107,39 +107,63 @@
 
   function extractVehiclesFromDashboard() {
     const vehicles = [];
+    const seenVINs = new Set();
     
     const tableSelectors = [
       'table tbody tr',
+      '[role="row"]',
+      '[role="gridcell"]',
       '.vehicle-row',
       '.customer-row',
       '.data-row',
       '[class*="vehicle-list"] > div',
       '[class*="customer-list"] > div',
       '.list-item',
-      '[role="row"]',
+      '[class*="ag-row"]',
+      '[class*="row-"]',
+      '[data-row]',
+      '[data-index]',
     ];
 
     for (const selector of tableSelectors) {
-      const rows = document.querySelectorAll(selector);
-      if (rows.length > 0) {
-        console.log(`[MOS AutoVitals] Found ${rows.length} rows with selector: ${selector}`);
-        
-        rows.forEach((row, index) => {
-          if (row.querySelector('th') || row.classList.contains('header')) {
-            return;
-          }
+      try {
+        const rows = document.querySelectorAll(selector);
+        if (rows.length > 0) {
+          console.log(`[MOS AutoVitals] Checking ${rows.length} elements with selector: ${selector}`);
           
-          const vehicle = extractVehicleFromRow(row);
-          
-          if (vehicle.vin || (vehicle.customerName && (vehicle.make || vehicle.model))) {
-            vehicles.push(vehicle);
-          }
-        });
-        
-        if (vehicles.length > 0) {
-          break;
+          rows.forEach((row, index) => {
+            if (row.querySelector('th') || row.classList.contains('header') || 
+                row.getAttribute('role') === 'columnheader') {
+              return;
+            }
+            
+            const vehicle = extractVehicleFromRow(row);
+            
+            if (vehicle.vin && !seenVINs.has(vehicle.vin)) {
+              seenVINs.add(vehicle.vin);
+              vehicles.push(vehicle);
+            } else if (!vehicle.vin && vehicle.customerName && (vehicle.make || vehicle.model)) {
+              vehicles.push(vehicle);
+            }
+          });
         }
+      } catch (err) {
+        console.log(`[MOS AutoVitals] Error with selector ${selector}:`, err);
       }
+    }
+
+    if (vehicles.length === 0) {
+      console.log('[MOS AutoVitals] Trying text-based VIN extraction...');
+      const pageText = document.body.innerText || '';
+      const vinPattern = /\b[A-HJ-NPR-Z0-9]{17}\b/gi;
+      const allVINs = pageText.match(vinPattern) || [];
+      const uniqueVINs = [...new Set(allVINs.map(v => v.toUpperCase()))];
+      
+      uniqueVINs.forEach(vin => {
+        if (!seenVINs.has(vin)) {
+          vehicles.push({ vin });
+        }
+      });
     }
 
     console.log(`[MOS AutoVitals] Extracted ${vehicles.length} vehicles from dashboard`);
@@ -296,20 +320,42 @@
 
   function getPageType() {
     const url = window.location.href.toLowerCase();
-    const pageText = document.body.innerText?.toLowerCase() || '';
     
-    if (url.includes('inspection') || url.includes('dvi') || 
-        document.querySelector('.inspection-container, .dvi-container, .vehicle-inspection, [class*="inspection-detail"]')) {
+    if (url.includes('inspection') || url.includes('dvi')) {
       return 'inspection';
     }
     
-    if (url.includes('dashboard') || url.includes('vehicle') || url.includes('customer') ||
-        url.includes('list') || url.includes('search') ||
-        document.querySelector('table, [class*="vehicle-list"], [class*="customer-list"], [class*="data-grid"]')) {
+    const inspectionIndicators = document.querySelectorAll(
+      '.inspection-container, .dvi-container, .vehicle-inspection, ' +
+      '[class*="inspection-detail"], [class*="dvi-detail"], ' +
+      '[data-inspection], [data-dvi]'
+    );
+    if (inspectionIndicators.length > 0) {
+      return 'inspection';
+    }
+
+    const dashboardIndicators = document.querySelectorAll(
+      'table, [role="grid"], [role="table"], ' +
+      '[class*="grid"], [class*="list"], [class*="table"], ' +
+      '[data-grid], [data-list], .ag-root, .ag-body, ' +
+      '[class*="row"]:not(tr), [class*="item"]'
+    );
+    
+    if (dashboardIndicators.length > 0) {
       return 'dashboard';
     }
     
-    return 'unknown';
+    const hasMultipleVINs = (document.body.innerText?.match(/\b[A-HJ-NPR-Z0-9]{17}\b/gi) || []).length > 1;
+    if (hasMultipleVINs) {
+      return 'dashboard';
+    }
+    
+    const hasSingleVIN = (document.body.innerText?.match(/\b[A-HJ-NPR-Z0-9]{17}\b/gi) || []).length === 1;
+    if (hasSingleVIN) {
+      return 'inspection';
+    }
+    
+    return 'dashboard';
   }
 
   async function syncData(data, endpoint) {
@@ -458,6 +504,21 @@
         vehicleCount,
         url: window.location.href,
       });
+      return true;
+    }
+    
+    if (message.type === 'GET_CURRENT_VIN') {
+      const pageText = document.body.innerText || '';
+      const vinPattern = /\b[A-HJ-NPR-Z0-9]{17}\b/gi;
+      const matches = pageText.match(vinPattern);
+      
+      if (matches && matches.length > 0) {
+        const vin = matches[0].toUpperCase();
+        console.log('[MOS AutoVitals] Current VIN:', vin);
+        sendResponse({ vin });
+      } else {
+        sendResponse({ vin: null });
+      }
       return true;
     }
   });
