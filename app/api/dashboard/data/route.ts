@@ -323,13 +323,65 @@ export async function GET() {
       { $limit: 100 }
     ]).toArray();
 
-    // Merge and deduplicate by VIN (AutoFlow takes priority)
+    // Fetch Tekmetric vehicles (stored in vehicles collection with tekmetric field)
+    const tekmetricRows = await db.collection("vehicles").aggregate([
+      {
+        $match: {
+          "tekmetric.shopId": { $exists: true },
+          vin: { $ne: null, $type: "string" }
+        }
+      },
+      { $sort: { updatedAt: -1 } },
+      {
+        $project: {
+          _id: 0,
+          updatedAt: { $ifNull: ["$updatedAt", new Date()] },
+          displayName: {
+            $cond: [
+              { $and: [{ $ifNull: ["$customer.firstName", false] }, { $ifNull: ["$customer.lastName", false] }] },
+              { $concat: ["$customer.firstName", " ", "$customer.lastName"] },
+              { $ifNull: ["$customer.firstName", { $ifNull: ["$customer.lastName", "Unknown Customer"] }] }
+            ]
+          },
+          displayVehicle: {
+            $concat: [
+              { $toString: { $ifNull: ["$year", ""] } },
+              { $cond: [{ $ifNull: ["$year", false] }, " ", ""] },
+              { $ifNull: ["$make", ""] },
+              { $cond: [{ $ifNull: ["$make", false] }, " ", ""] },
+              { $ifNull: ["$model", ""] }
+            ]
+          },
+          displayVin: { $toUpper: "$vin" },
+          displayMiles: "$mileage",
+          displayRo: null,
+          dviDone: { $literal: false },
+          source: { $literal: "tekmetric" },
+          af: {
+            status: { $literal: "Synced" },
+            createdAt: "$tekmetric.lastSynced",
+            miles: "$mileage"
+          }
+        }
+      },
+      { $limit: 100 }
+    ]).toArray();
+
+    // Merge and deduplicate by VIN (AutoFlow takes priority, then Protractor, then Tekmetric)
     const autoflowVins = new Set(autoflowRows.map((r: any) => r.displayVin?.toUpperCase()));
     const uniqueProtractorRows = protractorRows.filter(
       (r: any) => r.displayVin && !autoflowVins.has(r.displayVin.toUpperCase())
     );
+    
+    const existingVins = new Set([
+      ...autoflowRows.map((r: any) => r.displayVin?.toUpperCase()),
+      ...uniqueProtractorRows.map((r: any) => r.displayVin?.toUpperCase())
+    ]);
+    const uniqueTekmetricRows = tekmetricRows.filter(
+      (r: any) => r.displayVin && !existingVins.has(r.displayVin.toUpperCase())
+    );
 
-    const rows = [...autoflowRows, ...uniqueProtractorRows].sort((a: any, b: any) => {
+    const rows = [...autoflowRows, ...uniqueProtractorRows, ...uniqueTekmetricRows].sort((a: any, b: any) => {
       const nameA = a.displayName || "";
       const nameB = b.displayName || "";
       return nameA.localeCompare(nameB);
