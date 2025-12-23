@@ -1,0 +1,30 @@
+inspection:1  GET https://shop.tekmetric.com/admin/shop/14956/repair-orders/280272106/inspection 404 (Not Found)
+index.js:340 init shopWareCreateQuote
+index.js:344 start shopWareCreateQuote
+index.js:347 Found carvisNoteId in URL: null
+index.js:350 No carvisNoteId found in URL
+index.js:252 shopWareAskCarvis init
+index.js:256 shopWareAskCarvis checkUrl
+index.js:260 shopWareAskCarvis - Not a Shopware work order URL, exiting
+index.js:143 init hiddenDiv
+index.js:110 URL actually changed from:  to: https://shop.tekmetric.com/admin/shop/14956/repair-orders/280272106/inspection
+inspection:1 <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes">
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:6 [Pendo] advanceGuideOnClick init
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:30 [Pendo] buttons found: Q {context: undefined, length: 0}
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:31 [Pendo] buttons length: 0
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:38 [Pendo] elements used for listeners: []
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:46 [Pendo] teardown running
+main-B_djiGAD.js:262 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
+contents.04ff201a.js:17 JWT stored in extension storage
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:6 [Pendo] advanceGuideOnClick init
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:30 [Pendo] buttons found: Q {context: undefined, length: 0}
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:31 [Pendo] buttons length: 0
+4Yjyb9HQOQbQcUBPskIm9XnMfNE.guide.js?sha256=5-gC8qvTauZEUKSXP84SK7uqzMwGsCZDsIXSLRzSVWQ:38 [Pendo] elements used for listeners: []
+contents.04ff201a.js:17 Fetching RO data for RO #4140 at shop 14956 for email bcrusha@carexpertsok.com
+contents.04ff201a.js:17 Using cached RO data for RO #4140 (age: 0 minutes)
+contents.04ff201a.js:17 Cache check result: HIT
+contents.04ff201a.js:17 Using cached RO data for RO #4140 - avoiding API call
+contents.04ff201a.js:17 Updated cache with 0 labor groups for shop 14956
+contents.04ff201a.js:17 Using cached RO data for RO #4140 (age: 0 minutes)
+contents.04ff201a.js:17 Successfully cached RO data for RO #4140 at shop 14956 for email bcrusha@carexpertsok.com
+contents.04ff201a.js:17 RO data cache updated for RO #4140
