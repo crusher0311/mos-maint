@@ -219,7 +219,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
             { 
               $set: {
                 ...vehicle,
-                shopId: shop._id,
+                shopId: String(shopId),
                 tekmetric: {
                   vehicleId: tekVehicle.id,
                   customerId: tekVehicle.customerId,
