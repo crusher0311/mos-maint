@@ -121,6 +121,8 @@ export async function DELETE(req: NextRequest) {
       }
     );
 
+    await db.collection("protractor_canned_jobs").deleteOne({ shopId });
+
     return NextResponse.json({ ok: true, message: "Protractor disconnected" });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
