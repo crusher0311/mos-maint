@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEnterpriseAnalytics, getEnterpriseById, getShopsForEnterprise } from "@/lib/enterprise";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!["owner", "admin"].includes(session.role || "")) {
+    return NextResponse.json({ error: "Forbidden - admin access required" }, { status: 403 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const enterpriseId = searchParams.get("enterpriseId");

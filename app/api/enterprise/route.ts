@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { createEnterprise, getEnterpriseById, addShopToEnterprise } from "@/lib/enterprise";
+import { getSession } from "@/lib/auth";
+import { createEnterprise, getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function requireAdminAuth() {
+  const session = await getSession();
+  if (!session) {
+    return { error: "Unauthorized", status: 401 };
+  }
+  if (!["owner", "admin"].includes(session.role || "")) {
+    return { error: "Forbidden - admin access required", status: 403 };
+  }
+  return { session };
+}
+
 export async function GET(req: NextRequest) {
+  const auth = await requireAdminAuth();
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const enterpriseId = searchParams.get("id");
@@ -28,6 +45,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminAuth();
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await req.json();
     const { name, shopIds } = body;
@@ -53,6 +75,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await requireAdminAuth();
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await req.json();
     const { enterpriseId, shopId, action } = body;
@@ -61,13 +88,25 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Enterprise ID is required" }, { status: 400 });
     }
     
+    const db = await getDb();
+    
     if (action === "add_shop" && shopId) {
       await addShopToEnterprise(enterpriseId, shopId);
       
-      const db = await getDb();
       await db.collection("shops").updateOne(
         { shopId },
         { $set: { enterpriseId: new ObjectId(enterpriseId), updatedAt: new Date() } }
+      );
+      
+      return NextResponse.json({ ok: true });
+    }
+    
+    if (action === "remove_shop" && shopId) {
+      await removeShopFromEnterprise(enterpriseId, shopId);
+      
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $unset: { enterpriseId: "" }, $set: { updatedAt: new Date() } }
       );
       
       return NextResponse.json({ ok: true });
