@@ -329,6 +329,7 @@ export async function GET() {
       {
         $match: {
           "tekmetric.shopId": { $exists: true },
+          "tekmetric.repairOrderNumber": { $exists: true },
           vin: { $ne: null, $type: "string" }
         }
       },
@@ -355,11 +356,11 @@ export async function GET() {
           },
           displayVin: { $toUpper: "$vin" },
           displayMiles: "$mileage",
-          displayRo: null,
+          displayRo: "$tekmetric.repairOrderNumber",
           dviDone: { $literal: false },
           source: { $literal: "tekmetric" },
           af: {
-            status: { $literal: "Synced" },
+            status: { $ifNull: ["$tekmetric.roStatus", "Open"] },
             createdAt: "$tekmetric.lastSynced",
             miles: "$mileage"
           }
