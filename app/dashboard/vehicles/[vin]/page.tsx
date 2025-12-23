@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
-import { getRepairOrders, getVehicle as getTekmetricVehicle, getCustomer as getTekmetricCustomer } from "@/lib/tekmetric";
+import { searchVehiclesByVin, getRepairOrders } from "@/lib/tekmetric";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -189,47 +189,47 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // If still not found, try to fetch from Tekmetric API
+  // If still not found, try to fetch from Tekmetric API using direct VIN search
   if (!vehicle) {
     const shop = await db.collection("shops").findOne({});
     if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_API_TOKEN) {
       try {
-        // Search for repair orders with this VIN
-        const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
-          repairOrderStatusId: [1, 2, 3, 5],
-          size: 100,
-        });
+        // Direct VIN search - single API call
+        const vehicleResponse = await searchVehiclesByVin(shop.tekmetric.shopId, vin);
         
-        // Find the RO with matching VIN
-        for (const ro of roResponse.content) {
-          try {
-            const tekVehicle = await getTekmetricVehicle(ro.vehicleId);
-            if (tekVehicle.vin?.toUpperCase() === vin) {
-              let customerName = '';
-              try {
-                const customer = await getTekmetricCustomer(ro.customerId);
-                customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ');
-              } catch (e) {}
-              
-              vehicle = {
-                _id: null,
-                vin: vin,
-                year: tekVehicle.year || null,
-                make: tekVehicle.make || null,
-                model: tekVehicle.model || null,
-                license: tekVehicle.licensePlate || null,
-                lastMileage: ro.milesIn || ro.milesOut || tekVehicle.mileageIn || tekVehicle.mileageOut || null,
-                odometer: tekVehicle.mileageIn || tekVehicle.mileageOut || null,
-                updatedAt: ro.updatedDate ? new Date(ro.updatedDate) : new Date(),
-                customerId: null,
-                tekmetricRo: ro.repairOrderNumber,
-                tekmetricStatus: ro.repairOrderLabel?.name || ro.repairOrderStatus?.name || 'Open',
-              };
-              break;
-            }
-          } catch (e) {
-            // Vehicle fetch failed, continue to next RO
-          }
+        if (vehicleResponse.content.length > 0) {
+          const tekVehicle = vehicleResponse.content[0];
+          
+          vehicle = {
+            _id: null,
+            vin: vin,
+            year: tekVehicle.year || null,
+            make: tekVehicle.make || null,
+            model: tekVehicle.model || null,
+            license: tekVehicle.licensePlate || null,
+            lastMileage: tekVehicle.mileageIn || tekVehicle.mileageOut || null,
+            odometer: tekVehicle.mileageIn || tekVehicle.mileageOut || null,
+            updatedAt: tekVehicle.updatedDate ? new Date(tekVehicle.updatedDate) : new Date(),
+            customerId: null,
+          };
+          
+          // Store in database for future lookups
+          await db.collection("vehicles").updateOne(
+            { vin },
+            { 
+              $set: {
+                ...vehicle,
+                shopId: shop._id,
+                tekmetric: {
+                  vehicleId: tekVehicle.id,
+                  customerId: tekVehicle.customerId,
+                  lastSynced: new Date()
+                }
+              },
+              $setOnInsert: { createdAt: new Date() }
+            },
+            { upsert: true }
+          );
         }
       } catch (error) {
         console.error('[Vehicle Detail] Error fetching from Tekmetric:', error);

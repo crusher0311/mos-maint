@@ -203,6 +203,14 @@ export async function getVehicle(vehicleId: number): Promise<TekmetricVehicle> {
   return tekmetricRequest(`/vehicles/${vehicleId}`);
 }
 
+export async function searchVehiclesByVin(shopId: number, vin: string): Promise<PaginatedResponse<TekmetricVehicle>> {
+  const queryParams = new URLSearchParams({ 
+    shop: shopId.toString(),
+    search: vin
+  });
+  return tekmetricRequest(`/vehicles?${queryParams}`);
+}
+
 export interface TekmetricRepairOrderFull {
   id: number;
   repairOrderNumber: number;

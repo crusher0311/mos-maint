@@ -331,58 +331,115 @@ export async function GET(request: NextRequest) {
     const shop = await db.collection("shops").findOne({});
     const tekmetricConnected = !!shop?.tekmetric?.shopId;
     
-    // Fetch Tekmetric vehicles directly from API if connected
+    // Fetch Tekmetric vehicles - use cache if available, refresh if stale
     let tekmetricRows: any[] = [];
     if (tekmetricConnected && process.env.TEKMETRIC_API_TOKEN) {
-      try {
-        // Fetch active repair orders: Estimate(1), Work-in-Progress(2), Complete(3)
-        const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
-          repairOrderStatusId: [1, 2, 3],
-          size: 100,
-          sortDirection: 'DESC'
-        });
-        
-        console.log(`[Tekmetric] Fetched ${roResponse.content.length} repair orders, total: ${roResponse.totalElements}`);
-        
-        // Fetch vehicle and customer details for each RO (show each RO as its own row)
-        for (const ro of roResponse.content) {
-          try {
-            const vehicle = await getVehicle(ro.vehicleId);
-            if (!vehicle.vin) {
-              console.log(`[Tekmetric] Skipping RO #${ro.repairOrderNumber} - vehicle ${ro.vehicleId} has no VIN`);
-              continue;
-            }
-            
-            let customerName = 'Unknown Customer';
+      const CACHE_TTL = 2 * 60 * 1000; // 2 minute cache
+      const cacheKey = `tekmetric_dashboard_${shop.tekmetric.shopId}`;
+      
+      // Check cache first
+      const cached = await db.collection("tekmetric_cache").findOne({ 
+        key: cacheKey,
+        expiresAt: { $gt: new Date() }
+      });
+      
+      if (cached?.rows) {
+        console.log(`[Tekmetric] Using cached data (${cached.rows.length} rows)`);
+        tekmetricRows = cached.rows;
+      } else {
+        // Fetch fresh data from API
+        try {
+          const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
+            repairOrderStatusId: [1, 2, 3],
+            size: 100,
+            sortDirection: 'DESC'
+          });
+          
+          console.log(`[Tekmetric] Fetched ${roResponse.content.length} repair orders from API`);
+          
+          // Fetch vehicle and customer details for each RO
+          for (const ro of roResponse.content) {
             try {
-              const customer = await getCustomer(ro.customerId);
-              customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'Unknown Customer';
-            } catch (e) {}
-            
-            const displayVehicle = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
-            const statusLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || ro.repairOrderStatus?.name || 'Open';
-            
-            tekmetricRows.push({
-              updatedAt: ro.updatedDate ? new Date(ro.updatedDate) : new Date(),
-              displayName: customerName,
-              displayVehicle,
-              displayVin: vehicle.vin.toUpperCase(),
-              displayMiles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null,
-              displayRo: ro.repairOrderNumber,
-              dviDone: false,
-              source: 'tekmetric',
-              af: {
-                status: statusLabel,
-                createdAt: ro.createdDate ? new Date(ro.createdDate) : new Date(),
-                miles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null
+              const vehicle = await getVehicle(ro.vehicleId);
+              if (!vehicle.vin) {
+                console.log(`[Tekmetric] Skipping RO #${ro.repairOrderNumber} - no VIN`);
+                continue;
               }
-            });
-          } catch (e) {
-            console.error(`Error fetching vehicle ${ro.vehicleId}:`, e);
+              
+              let customerName = 'Unknown Customer';
+              try {
+                const customer = await getCustomer(ro.customerId);
+                customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'Unknown Customer';
+              } catch (e) {}
+              
+              const displayVehicle = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
+              const statusLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || ro.repairOrderStatus?.name || 'Open';
+              
+              tekmetricRows.push({
+                updatedAt: ro.updatedDate ? new Date(ro.updatedDate) : new Date(),
+                displayName: customerName,
+                displayVehicle,
+                displayVin: vehicle.vin.toUpperCase(),
+                displayMiles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null,
+                displayRo: ro.repairOrderNumber,
+                dviDone: false,
+                source: 'tekmetric',
+                af: {
+                  status: statusLabel,
+                  createdAt: ro.createdDate ? new Date(ro.createdDate) : new Date(),
+                  miles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null
+                }
+              });
+              
+              // Store vehicle in DB for detail page lookups
+              await db.collection("vehicles").updateOne(
+                { vin: vehicle.vin.toUpperCase() },
+                { 
+                  $set: {
+                    vin: vehicle.vin.toUpperCase(),
+                    year: vehicle.year,
+                    make: vehicle.make,
+                    model: vehicle.model,
+                    mileage: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
+                    licensePlate: vehicle.licensePlate,
+                    shopId: shop._id,
+                    tekmetric: {
+                      vehicleId: vehicle.id,
+                      customerId: vehicle.customerId,
+                      repairOrderNumber: ro.repairOrderNumber,
+                      roStatus: ro.repairOrderStatus?.name,
+                      lastSynced: new Date()
+                    },
+                    customer: customerName !== 'Unknown Customer' ? { 
+                      name: customerName 
+                    } : undefined,
+                    updatedAt: new Date()
+                  },
+                  $setOnInsert: { createdAt: new Date() }
+                },
+                { upsert: true }
+              );
+            } catch (e) {
+              console.error(`Error fetching vehicle ${ro.vehicleId}:`, e);
+            }
           }
+          
+          // Store in cache
+          await db.collection("tekmetric_cache").updateOne(
+            { key: cacheKey },
+            { 
+              $set: { 
+                key: cacheKey,
+                rows: tekmetricRows, 
+                expiresAt: new Date(Date.now() + CACHE_TTL),
+                updatedAt: new Date()
+              }
+            },
+            { upsert: true }
+          );
+        } catch (error) {
+          console.error('Error fetching Tekmetric repair orders:', error);
         }
-      } catch (error) {
-        console.error('Error fetching Tekmetric repair orders:', error);
       }
     }
 
