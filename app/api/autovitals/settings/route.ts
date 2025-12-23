@@ -19,12 +19,16 @@ export async function GET(request: NextRequest) {
     }
 
     const autovitals = shop.autovitals || {};
+    const hasApiKey = !!shop.autovitalsApiKey;
+    const extensionConnected = autovitals.extensionConnected || false;
 
     return NextResponse.json({
       shopId: autovitals.shopId || null,
       shopName: autovitals.shopName || "",
-      isConfigured: !!(autovitals.shopId && autovitals.sessionCookie),
-      lastSync: autovitals.lastSync || null,
+      isConfigured: hasApiKey && extensionConnected,
+      hasApiKey,
+      extensionConnected,
+      lastSync: autovitals.lastSyncAt || autovitals.lastSync || null,
     });
   } catch (error) {
     console.error("[AutoVitals Settings GET] Error:", error);

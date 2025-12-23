@@ -934,6 +934,10 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
   const [loading, setLoading] = useState(true);
   const [isConfigured, setIsConfigured] = useState(false);
   const [shopName, setShopName] = useState("");
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -946,12 +950,66 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
         const data = await res.json();
         setIsConfigured(data.isConfigured || false);
         setShopName(data.shopName || "");
+        if (data.hasApiKey) {
+          setApiKey("configured");
+        }
       }
     } catch (err) {
       console.error("Failed to fetch AutoVitals settings:", err);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleGenerateKey() {
+    setGenerating(true);
+    setMessage(null);
+    
+    try {
+      const res = await fetch("/api/autovitals/extension/generate-key", {
+        method: "POST",
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        setApiKey(data.apiKey);
+        setShowApiKey(true);
+        setMessage({ type: "success", text: "API key generated! Copy it now - it won't be shown again." });
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to generate API key" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to generate API key" });
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleRevokeKey() {
+    if (!confirm("Are you sure you want to revoke this API key? The Chrome extension will stop working.")) {
+      return;
+    }
+    
+    try {
+      const res = await fetch("/api/autovitals/extension/generate-key", {
+        method: "DELETE",
+      });
+      
+      if (res.ok) {
+        setApiKey(null);
+        setIsConfigured(false);
+        setMessage({ type: "success", text: "API key revoked" });
+        onUpdate();
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to revoke API key" });
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text);
+    setMessage({ type: "success", text: "Copied to clipboard!" });
   }
 
   if (loading) {
@@ -984,53 +1042,99 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
         </div>
       </div>
 
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h3 className="font-medium text-gray-900 mb-3">Step 1: Generate API Key</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Generate an API key that the Chrome extension will use to connect to your MOS account.
+        </p>
+        
+        {apiKey && showApiKey ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={apiKey}
+                readOnly
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm"
+              />
+              <button
+                onClick={() => copyToClipboard(apiKey)}
+                className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm"
+              >
+                Copy
+              </button>
+            </div>
+            <p className="text-xs text-amber-600">
+              Save this key now! It won't be shown again after you leave this page.
+            </p>
+          </div>
+        ) : apiKey ? (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-green-600">API key is configured</span>
+            <button
+              onClick={handleRevokeKey}
+              className="text-sm text-red-600 hover:text-red-700"
+            >
+              Revoke Key
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleGenerateKey}
+            disabled={generating}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 text-sm"
+          >
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+            Generate API Key
+          </button>
+        )}
+      </div>
+
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex gap-3">
           <Chrome className="w-6 h-6 text-blue-600 flex-shrink-0" />
           <div>
-            <h3 className="font-medium text-blue-900 mb-2">Chrome Extension Required</h3>
+            <h3 className="font-medium text-blue-900 mb-2">Step 2: Install Chrome Extension</h3>
             <p className="text-sm text-blue-800 mb-3">
-              AutoVitals integration requires our Chrome extension to securely sync your inspection data. 
-              The extension connects to your AutoVitals account and automatically imports DVI results.
+              Load the extension in Chrome to start syncing inspection data from AutoVitals.
             </p>
-            <a
-              href="#"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Install Chrome Extension
-            </a>
+            <div className="space-y-2">
+              <p className="text-xs text-blue-700">
+                Development install: Go to chrome://extensions, enable Developer mode, click "Load unpacked" and select the chrome-extension folder from the project.
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h3 className="font-medium text-gray-900 mb-3">How it works</h3>
+        <h3 className="font-medium text-gray-900 mb-3">Step 3: Connect the Extension</h3>
         <ol className="space-y-2 text-sm text-gray-600">
           <li className="flex items-start gap-2">
             <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">1</span>
-            Install the MOS Chrome extension from the Chrome Web Store
+            Click the MOS AutoVitals extension icon in Chrome
           </li>
           <li className="flex items-start gap-2">
             <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">2</span>
-            Log into AutoVitals in your browser
+            Enter your MOS server URL (this site's URL)
           </li>
           <li className="flex items-start gap-2">
             <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">3</span>
-            Click the extension icon and authorize the connection
+            Paste the API key you generated above
           </li>
           <li className="flex items-start gap-2">
             <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">4</span>
-            DVI data will automatically sync to MOS
+            Navigate to AutoVitals - DVI data will sync automatically
           </li>
         </ol>
       </div>
 
-      {isConfigured && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-sm text-gray-600">
-            Your AutoVitals connection is active. DVI data is being synced automatically via the Chrome extension.
-          </p>
+      {message && (
+        <div className={`flex items-center gap-2 p-3 rounded-lg ${
+          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+        }`}>
+          {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          <span>{message.text}</span>
         </div>
       )}
     </div>
