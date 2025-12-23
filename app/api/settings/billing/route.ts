@@ -21,7 +21,7 @@ export async function GET() {
     plan: billing.plan || "Free Trial",
     status: billing.status || "trial",
     vehicleCount,
-    vehicleLimit: billing.vehicleLimit || 50,
+    vehicleLimit: billing.vehicleLimit || 25,
     nextBillingDate: billing.nextBillingDate,
   });
 }
