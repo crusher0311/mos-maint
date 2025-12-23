@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  Download,
 } from "lucide-react";
 
 type IntegrationTab = "carfax" | "autoflow" | "protractor" | "autovitals";
@@ -1096,12 +1097,23 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
           <div>
             <h3 className="font-medium text-blue-900 mb-2">Step 2: Install Chrome Extension</h3>
             <p className="text-sm text-blue-800 mb-3">
-              Load the extension in Chrome to start syncing inspection data from AutoVitals.
+              Download and install the extension in Chrome to sync inspection data from AutoVitals.
             </p>
-            <div className="space-y-2">
-              <p className="text-xs text-blue-700">
-                Development install: Go to chrome://extensions, enable Developer mode, click "Load unpacked" and select the chrome-extension folder from the project.
-              </p>
+            <a
+              href="/api/autovitals/extension/download"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium mb-3"
+            >
+              <Download className="w-4 h-4" />
+              Download Extension
+            </a>
+            <div className="bg-blue-100 rounded-lg p-3 mt-3">
+              <p className="text-xs text-blue-800 font-medium mb-2">Installation steps:</p>
+              <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                <li>Extract the downloaded ZIP file to a permanent location</li>
+                <li>Open Chrome and go to chrome://extensions</li>
+                <li>Enable "Developer mode" (toggle in top right)</li>
+                <li>Click "Load unpacked" and select the extracted folder</li>
+              </ol>
             </div>
           </div>
         </div>

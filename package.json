@@ -14,6 +14,8 @@
     "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\""
   },
   "dependencies": {
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
     "csv-parse": "^6.1.0",
     "dotenv": "^17.2.1",
@@ -34,9 +36,9 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4.1.12",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^24.3.0",
     "@types/react": "19.1.11",
-    "@types/bcryptjs": "^2.4.6",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.5.0",
