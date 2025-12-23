@@ -23,5 +23,6 @@ export async function GET() {
     role: sess.role,
     shopId: sess.shopId,
     shopName: shop?.name || `Shop ${sess.shopId}`,
+    isPlatformAdmin: sess.isPlatformAdmin || false,
   });
 }

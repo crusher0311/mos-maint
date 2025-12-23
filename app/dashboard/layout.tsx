@@ -9,6 +9,7 @@ interface UserInfo {
   role: string;
   shopName: string;
   authenticated: boolean;
+  isPlatformAdmin?: boolean;
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -41,7 +42,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         shopName={userInfo?.shopName || "Loading..."} 
         userEmail={userInfo?.email}
         userRole={userInfo?.role}
-        userInitials={userInitials} 
+        userInitials={userInitials}
+        isPlatformAdmin={userInfo?.isPlatformAdmin}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {children}
