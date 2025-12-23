@@ -73,6 +73,32 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     return () => clearInterval(interval);
   }, [currentPage, searchQuery, showArchived]);
 
+  useEffect(() => {
+    if (!data.user?.shopId) return;
+    
+    const checkClosedOrders = async () => {
+      try {
+        const response = await fetch('/api/vehicles/check-closed-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopId: data.user.shopId })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.closed > 0) {
+            loadData(currentPage, searchQuery, showArchived);
+          }
+        }
+      } catch (err) {
+        console.error('Error checking closed orders:', err);
+      }
+    };
+
+    const pollInterval = setInterval(checkClosedOrders, 5000);
+    return () => clearInterval(pollInterval);
+  }, [data.user?.shopId, currentPage, searchQuery, showArchived]);
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
