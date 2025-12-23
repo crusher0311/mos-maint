@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
-import { searchVehiclesByVin, getRepairOrders } from "@/lib/tekmetric";
+import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -113,9 +113,9 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
   ]).next();
   const mAF = toPos(af?.miles);
 
-  // Vehicle-level odometer/lastMileage
-  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1 } });
-  const mVeh = toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
+  // Vehicle-level odometer/lastMileage/mileage (Tekmetric stores as mileage)
+  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1, mileage: 1 } });
+  const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
 
   return mRO ?? mAF ?? mVeh ?? null;
 }
@@ -333,12 +333,51 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   } else if (!cfg.configured) {
     dvi = { ok: false, error: "AutoFlow not connected." };
   } else {
-    // Force fresh fetch to debug
     dvi = await fetchDviWithCache(shopId, String(latestRoNumber), 1000);
-    // Debug: Log the full raw response
     if (dvi.raw) {
       console.log(`[DVI Debug] Full raw response keys:`, JSON.stringify(Object.keys(dvi.raw)));
       console.log(`[DVI Debug] dvis array:`, JSON.stringify(dvi.raw?.content?.dvis?.map((d: any) => ({ name: d.dvi_name, catCount: d.dvi_category?.length }))));
+    }
+  }
+
+  // Try Tekmetric inspections if no AutoFlow DVI and vehicle has Tekmetric data
+  let tekmetricDvi: any = null;
+  if (vehicle.tekmetric?.repairOrderId || vehicle.tekmetric?.vehicleId) {
+    const shop = await db.collection("shops").findOne({});
+    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_API_TOKEN) {
+      try {
+        // Get latest RO for this vehicle from Tekmetric
+        const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
+          vehicleId: vehicle.tekmetric.vehicleId,
+          size: 1,
+          sortDirection: 'DESC'
+        });
+        
+        if (roResponse.content.length > 0) {
+          const latestTekRo = roResponse.content[0];
+          console.log(`[Tekmetric] Fetching inspections for RO ${latestTekRo.id}`);
+          const inspections = await getRepairOrderInspections(latestTekRo.id);
+          
+          if (inspections.length > 0) {
+            console.log(`[Tekmetric] Found ${inspections.length} inspections`);
+            tekmetricDvi = {
+              ok: true,
+              source: 'tekmetric',
+              inspections: inspections,
+              items: inspections.flatMap((insp: any) => 
+                (insp.items || []).map((item: any) => ({
+                  name: item.name || item.categoryName || 'Unknown',
+                  status: item.status,
+                  notes: item.notes,
+                  source: 'tekmetric'
+                }))
+              )
+            };
+          }
+        }
+      } catch (error) {
+        console.log(`[Tekmetric] Inspection fetch error:`, error);
+      }
     }
   }
 
@@ -447,6 +486,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       }))}
       resolvedMiles={resolvedMiles}
       dvi={dvi}
+      tekmetricDvi={tekmetricDvi}
       carfax={carfax}
       localOe={localOe}
       mpd={mpd}

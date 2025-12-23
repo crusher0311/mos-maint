@@ -211,6 +211,37 @@ export async function searchVehiclesByVin(shopId: number, vin: string): Promise<
   return tekmetricRequest(`/vehicles?${queryParams}`);
 }
 
+export interface TekmetricInspectionItem {
+  id: number;
+  name?: string;
+  status?: string;
+  notes?: string;
+  categoryId?: number;
+  categoryName?: string;
+}
+
+export interface TekmetricInspection {
+  id: number;
+  repairOrderId: number;
+  templateId?: number;
+  templateName?: string;
+  status?: string;
+  completedDate?: string;
+  createdDate?: string;
+  updatedDate?: string;
+  items?: TekmetricInspectionItem[];
+}
+
+export async function getRepairOrderInspections(repairOrderId: number): Promise<TekmetricInspection[]> {
+  try {
+    const response = await tekmetricRequest(`/repair-orders/${repairOrderId}/inspections`);
+    return response.content || response || [];
+  } catch (error: any) {
+    console.log(`[Tekmetric] Inspections API returned: ${error.message}`);
+    return [];
+  }
+}
+
 export interface TekmetricRepairOrderFull {
   id: number;
   repairOrderNumber: number;

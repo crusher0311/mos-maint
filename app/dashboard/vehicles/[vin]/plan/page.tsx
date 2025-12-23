@@ -223,9 +223,9 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
   ]).toArray();
   const mAF = af.map((x: any) => toPos(x?.mileage)).find((x: any) => x != null) ?? null;
 
-  // Vehicle-level odometer/lastMileage
-  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1 } });
-  const mVeh = toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
+  // Vehicle-level odometer/lastMileage/mileage (Tekmetric stores as mileage)
+  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1, mileage: 1 } });
+  const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
 
   // Return the highest valid mileage
   const candidates = [mRO, mAF, mVeh].filter((x): x is number => x != null);
