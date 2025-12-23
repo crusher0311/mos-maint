@@ -487,6 +487,7 @@ export async function upsertProtractorWorkOrderSnapshot(
   let totalOther = 0;
   const packageSummaries: Array<{
     id: string;
+    templateId: string;
     code: string;
     title: string;
     laborTotal: number;
@@ -496,7 +497,11 @@ export async function upsertProtractorWorkOrderSnapshot(
   }> = [];
   
   for (const pkg of packages) {
-    const lines = pkg.ServicePackageLines?.ItemCollection || pkg.ServicePackageLines || [];
+    const linesRaw = pkg.ServicePackageLines;
+    const lines = Array.isArray(linesRaw) 
+      ? linesRaw 
+      : (linesRaw?.ItemCollection || []);
+    
     let pkgLabor = 0;
     let pkgParts = 0;
     let pkgOther = 0;
@@ -518,10 +523,15 @@ export async function upsertProtractorWorkOrderSnapshot(
       }
     }
     
+    const templateId = pkg.ServicePackageTemplateID || pkg.TemplateID || "";
+    const code = pkg.ServicePackageHeader?.Code || pkg.Code || templateId || "";
+    const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.Description || "";
+    
     packageSummaries.push({
       id: pkg.ID || "",
-      code: pkg.ServicePackageHeader?.Code || pkg.Code || pkg.ServicePackageTemplateID || "",
-      title: pkg.ServicePackageHeader?.Title || pkg.Title || "",
+      templateId,
+      code,
+      title,
       laborTotal: pkgLabor,
       partsTotal: pkgParts,
       otherTotal: pkgOther,

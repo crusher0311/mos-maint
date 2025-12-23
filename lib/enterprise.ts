@@ -260,6 +260,7 @@ export async function attributeRevenueFromWorkOrder(
   vin: string,
   packageSummaries: Array<{
     id: string;
+    templateId?: string;
     code: string;
     title: string;
     laborTotal: number;
@@ -287,9 +288,12 @@ export async function attributeRevenueFromWorkOrder(
   let totalRevenue = 0;
   
   for (const event of addedEvents) {
+    const eventCode = (event.serviceCode || "").toLowerCase();
     const matchedPkg = packageSummaries.find(pkg => 
-      pkg.code.toLowerCase() === (event.serviceCode || "").toLowerCase() ||
-      pkg.id === event.serviceCode
+      pkg.code.toLowerCase() === eventCode ||
+      pkg.id === event.serviceCode ||
+      (pkg.templateId && pkg.templateId.toLowerCase() === eventCode) ||
+      pkg.title.toLowerCase() === (event.serviceName || "").toLowerCase()
     );
     
     if (matchedPkg) {
