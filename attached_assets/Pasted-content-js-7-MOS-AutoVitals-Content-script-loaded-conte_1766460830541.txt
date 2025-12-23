@@ -1,0 +1,24 @@
+content.js:7 [MOS AutoVitals] Content script loaded
+content.js:728 Uncaught TypeError: Failed to execute 'observe' on 'MutationObserver': parameter 1 is not of type 'Node'.
+    at content.js:728:12
+    at content.js:747:3
+chrome-extension://pfpbhghkbclbhdchhdapohocoamapcmh/inject.js:1  Failed to load resource: net::ERR_FILE_NOT_FOUND
+contentscript.js:25 [contentscript] No benefits on init, will wait for fetch
+content.js:267 [MOS AutoVitals] Checking 2665 cards with selector: [class*="tile"]
+content.js:267 [MOS AutoVitals] Checking 539 cards with selector: .tile
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .vehicle-row
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .customer-row
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+about:blank:1 Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+about:blank:1 Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+(index):1 Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+about:blank:1 Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
