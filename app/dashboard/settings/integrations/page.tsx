@@ -934,6 +934,7 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
 function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
   const [loading, setLoading] = useState(true);
   const [isConfigured, setIsConfigured] = useState(false);
+  const [isApiConnected, setIsApiConnected] = useState(false);
   const [shopName, setShopName] = useState("");
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -941,6 +942,10 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
   const [bulkSyncing, setBulkSyncing] = useState(false);
   const [bulkSyncStats, setBulkSyncStats] = useState<any>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [welcomeCode, setWelcomeCode] = useState("");
+  const [personalCode, setPersonalCode] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -951,16 +956,80 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
       const res = await fetch("/api/autovitals/settings");
       if (res.ok) {
         const data = await res.json();
-        setIsConfigured(data.isConfigured || false);
+        setIsApiConnected(data.isConfigured || false);
         setShopName(data.shopName || "");
         if (data.hasApiKey) {
           setApiKey("configured");
+          setIsConfigured(true);
         }
       }
     } catch (err) {
       console.error("Failed to fetch AutoVitals settings:", err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleConnect() {
+    if (!welcomeCode || !personalCode) {
+      setMessage({ type: "error", text: "Please enter both Welcome Code and Personal Code" });
+      return;
+    }
+    
+    setConnecting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/autovitals/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ welcomeCode, personalCode }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to connect");
+      }
+
+      setIsApiConnected(true);
+      setShopName(data.shopName || "");
+      setWelcomeCode("");
+      setPersonalCode("");
+      setMessage({ 
+        type: "success", 
+        text: data.shopName ? `Connected to ${data.shopName}!` : "Connected successfully!" 
+      });
+      onUpdate();
+    } catch (err) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to connect" });
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Are you sure you want to disconnect AutoVitals?")) return;
+
+    setDisconnecting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/autovitals/settings", { method: "DELETE" });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to disconnect");
+      }
+
+      setIsApiConnected(false);
+      setShopName("");
+      setMessage({ type: "success", text: "Disconnected from AutoVitals" });
+      onUpdate();
+    } catch (err) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to disconnect" });
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -1060,7 +1129,75 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
         </p>
       </div>
 
-      {isConfigured && (
+      <div className={`rounded-lg p-4 ${isApiConnected ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {isApiConnected ? (
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-gray-400" />
+            )}
+            <span className={isApiConnected ? 'text-green-800' : 'text-gray-600'}>
+              {isApiConnected ? `Connected${shopName ? ` to ${shopName}` : ''}` : 'Not connected to AutoVitals API'}
+            </span>
+          </div>
+          {isApiConnected && (
+            <button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="text-sm text-red-600 hover:text-red-700"
+            >
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!isApiConnected && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="font-medium text-gray-900 mb-3">Connect to AutoVitals</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Enter your AutoVitals login codes to enable vehicle import and sync features.
+          </p>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Welcome Code</label>
+              <input
+                type="text"
+                value={welcomeCode}
+                onChange={(e) => setWelcomeCode(e.target.value)}
+                placeholder="Your shop's welcome code"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">This is your shop's code, shared by all employees</p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Personal Code</label>
+              <input
+                type="password"
+                value={personalCode}
+                onChange={(e) => setPersonalCode(e.target.value)}
+                placeholder="Your personal login code"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">This is your individual employee code</p>
+            </div>
+
+            <button
+              onClick={handleConnect}
+              disabled={connecting || !welcomeCode || !personalCode}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+              {connecting ? "Connecting..." : "Connect to AutoVitals"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isApiConnected && (
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <h3 className="font-medium text-gray-900 mb-2">Import Vehicles from AutoVitals</h3>
           <p className="text-sm text-gray-600 mb-4">
@@ -1090,19 +1227,6 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
           )}
         </div>
       )}
-
-      <div className={`rounded-lg p-4 ${isConfigured ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
-        <div className="flex items-center gap-3">
-          {isConfigured ? (
-            <CheckCircle className="w-5 h-5 text-green-600" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-gray-400" />
-          )}
-          <span className={isConfigured ? 'text-green-800' : 'text-gray-600'}>
-            {isConfigured ? `Connected${shopName ? ` to ${shopName}` : ''}` : 'Not configured'}
-          </span>
-        </div>
-      </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <h3 className="font-medium text-gray-900 mb-3">Step 1: Generate API Key</h3>
