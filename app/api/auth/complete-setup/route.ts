@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email does not match invite" }, { status: 403 });
     }
 
-    // role: from invite OR default to "staff"
-    const role = invite.role || "staff";
+    // role: from invite OR default to "user"
+    const role = invite.role || "user";
 
     // ensure uniqueness per shop
     const exists = await users.findOne({ shopId, emailLower: email });

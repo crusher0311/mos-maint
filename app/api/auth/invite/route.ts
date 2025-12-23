@@ -17,11 +17,11 @@ export async function POST(req: NextRequest) {
 
   const body = await safeJson(req);
   const emailInput = String(body?.email || "").trim().toLowerCase();
-  const inviteRole = (String(body?.role || "staff").trim().toLowerCase()) as
+  const inviteRole = (String(body?.role || "user").trim().toLowerCase()) as
     | "owner"
     | "admin"
     | "manager"
-    | "staff"
+    | "user"
     | "viewer";
 
   if (!emailInput) {
