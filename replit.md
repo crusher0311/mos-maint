@@ -82,6 +82,13 @@ The `chrome-extension/` folder contains a Chrome extension that integrates with 
 -   **VehicleDetailClient**: Proper TypeScript interfaces for DviResult, CarfaxResult, RepairOrderSummary, OemItem, TekmetricDvi
 -   **Tekmetric DVI**: Now receives and displays Tekmetric inspection data when available
 
+### Authentication & Authorization (Dec 2024)
+-   **Role Hierarchy**: Standardized roles - `owner` (shop superuser), `admin` (platform staff), `manager`, `staff`, `viewer`
+-   **Setup Flow**: New shops go through `/setup` wizard; invited users complete via token-based `/setup?token=...`
+-   **Password Hashing**: All routes now use bcrypt (cost factor 12); login handles legacy scrypt/plaintext with auto-upgrade
+-   **Session Consistency**: All auth routes use `session_token` cookie with consistent options
+-   **Invite Permissions**: Both `owner` and `admin` roles can invite users
+
 ## Known Limitations
 -   **Tekmetric ROs without VIN**: Repair orders without VINs (e.g., #4084, #4100) cannot be displayed
 -   **Tekmetric Inspections API**: Endpoint may return 404 if not enabled for the API token
