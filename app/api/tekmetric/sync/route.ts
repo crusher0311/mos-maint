@@ -68,8 +68,11 @@ export async function POST(request: NextRequest) {
     }
 
     for (const { vehicle, ro, customer } of vehicleMap.values()) {
-      const vehicleData = {
-        vin: vehicle.vin!.toUpperCase(),
+      const vin = vehicle.vin!.toUpperCase();
+      const existing = await db.collection("vehicles").findOne({ vin });
+      
+      const vehicleData: Record<string, any> = {
+        vin,
         year: vehicle.year,
         make: vehicle.make,
         model: vehicle.model,
@@ -100,18 +103,17 @@ export async function POST(request: NextRequest) {
         },
         updatedAt: new Date(),
       };
-
-      const existing = await db.collection("vehicles").findOne({ vin: vehicleData.vin });
       
       if (existing) {
         await db.collection("vehicles").updateOne(
-          { vin: vehicleData.vin },
+          { vin },
           { $set: vehicleData }
         );
         stats.vehiclesUpdated++;
       } else {
         await db.collection("vehicles").insertOne({
           ...vehicleData,
+          shopId: shop._id,
           createdAt: new Date(),
         });
         stats.vehiclesImported++;

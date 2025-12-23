@@ -1,10 +1,15 @@
 // app/api/dashboard/data/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Parse pagination params
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const pageSize = Math.min(100, Math.max(10, parseInt(searchParams.get('pageSize') || '50', 10)));
+    const search = searchParams.get('search')?.toLowerCase() || '';
     // Session check
     const store = await cookies();
     const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
@@ -249,8 +254,6 @@ export async function GET() {
           displayName: 1  // Alphabetical by customer name
         } 
       },
-      // Limit to a reasonable count
-      { $limit: 500 }
     ]).toArray();
 
     // Fetch Protractor work orders directly (they have the odometer)
@@ -320,8 +323,7 @@ export async function GET() {
             miles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }
           }
         }
-      },
-      { $limit: 500 }
+      }
     ]).toArray();
 
     // Fetch Tekmetric vehicles (stored in vehicles collection with tekmetric field)
@@ -365,8 +367,7 @@ export async function GET() {
             miles: "$mileage"
           }
         }
-      },
-      { $limit: 500 }
+      }
     ]).toArray();
 
     // Merge and deduplicate by VIN (AutoFlow takes priority, then Protractor, then Tekmetric)
@@ -383,14 +384,47 @@ export async function GET() {
       (r: any) => r.displayVin && !existingVins.has(r.displayVin.toUpperCase())
     );
 
-    const rows = [...autoflowRows, ...uniqueProtractorRows, ...uniqueTekmetricRows].sort((a: any, b: any) => {
+    // Combine all rows
+    let allRows = [...autoflowRows, ...uniqueProtractorRows, ...uniqueTekmetricRows];
+
+    // Apply search filter if provided
+    if (search) {
+      allRows = allRows.filter((row: any) => {
+        const searchFields = [
+          row.displayName,
+          row.displayVehicle,
+          row.displayVin,
+          row.displayRo?.toString(),
+          row.af?.status
+        ].filter(Boolean).map(s => s.toLowerCase());
+        return searchFields.some(field => field.includes(search));
+      });
+    }
+
+    // Sort alphabetically by customer name
+    allRows.sort((a: any, b: any) => {
       const nameA = a.displayName || "";
       const nameB = b.displayName || "";
       return nameA.localeCompare(nameB);
     });
 
+    // Calculate pagination
+    const totalCount = allRows.length;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedRows = allRows.slice(startIndex, endIndex);
+
     return NextResponse.json({
-      rows,
+      rows: paginatedRows,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      },
       user: {
         email: user.email,
         role: user.role,
