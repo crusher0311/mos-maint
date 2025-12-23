@@ -402,7 +402,7 @@ export async function GET(request: NextRequest) {
                     model: vehicle.model,
                     mileage: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
                     licensePlate: vehicle.licensePlate,
-                    shopId: shop._id,
+                    shopId: String(user.shopId),
                     tekmetric: {
                       vehicleId: vehicle.id,
                       customerId: vehicle.customerId,
