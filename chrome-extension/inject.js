@@ -176,16 +176,37 @@
     
     // Special handling for AutoVitals Table structure
     if (data && typeof data === 'object' && data.Table && Array.isArray(data.Table)) {
-      console.log('[MOS] Processing AutoVitals Table structure with', data.Table.length, 'records');
-      
-      // Process each appointment record
-      for (const record of data.Table) {
-        const vehicle = extractFromAppointment(record);
-        if (vehicle.vin) {
-          addVehicle(vehicle);
-        } else if (vehicle.vehicleId) {
-          // Even without VIN, we can store the vehicle with its AV ID
-          console.log('[MOS] Vehicle without VIN - VID:', vehicle.vehicleId, 'YMM:', record.YMM);
+      const isAppointments = url.includes('Appointments_Get');
+      if (isAppointments) {
+        console.log('[MOS] Processing Appointments_Get with', data.Table.length, 'records');
+        
+        // Process each appointment record - accept vehicles with VID even without VIN
+        for (const record of data.Table) {
+          const vehicle = extractFromAppointment(record);
+          
+          // Accept vehicle if it has VID, even without VIN
+          if (vehicle.vehicleId && vehicle.year && vehicle.make) {
+            const vehicleData = {
+              ...vehicle,
+              autovitalsVehicleId: vehicle.vehicleId,
+              appointmentId: record.AID,
+              customerId: record.CID,
+            };
+            
+            if (vehicle.vin) {
+              addVehicle(vehicleData);
+            } else {
+              // Add to vehicles list using VID as temporary identifier
+              if (!seenVINs.has('vid_' + vehicle.vehicleId)) {
+                seenVINs.add('vid_' + vehicle.vehicleId);
+                vehicles.push(vehicleData);
+              }
+            }
+          }
+        }
+        
+        if (vehicles.length > 0) {
+          console.log('[MOS] Extracted', vehicles.length, 'vehicles from Appointments_Get');
         }
       }
     }

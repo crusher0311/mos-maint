@@ -1,0 +1,223 @@
+content.js:7 [MOS AutoVitals] Content script loaded
+content.js:629 [MOS AutoVitals] Processing dashboard page (attempt 1)
+content.js:752 [MOS AutoVitals] Content script initialized
+inject.js:322 [MOS AutoVitals] Network interceptor v1.4.0 installed
+content.js:16 [MOS AutoVitals] Network interceptor injected
+contentscript.js:25 [contentscript] No benefits on init, will wait for fetch
+inject.js:305 [MOS] Captured XHR: https://esp.aptrinsic.com/rte/api/v1/feature/client?p=AP-IYA7VJMPTTJW-2&sv=0.56.7&v=AP-IYA7VJMPTTJW-2-1766333027022-75874263&vt=2&ai=5a5f5cde-f23f-42f0-9420-829d785e6ef8&s=AP-IYA7VJMPTTJW-2-1766460404131-82599811&wsv=0.56.7 type: application/json;charset=utf-8
+inject.js:311 [MOS] No vehicles found in XHR response, keys: ['0']
+inject.js:305 [MOS] Captured XHR: TvpxService.asmx/GetAuthByCookie type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: (2) ['ReturnCode', 'Data']
+inject.js:311 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=SpecialMessage_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: ['Table']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[0]
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 0 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=MessageCounters_Get3 type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: (3) ['Table', 'Table1', 'Table2']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[1]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (5) ['Incoming', 'Unseen', 'Tasks', 'TotalTasks', 'PmIsOnline']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"Incoming":0,"Unseen":0,"Tasks":0,"TotalTasks":88,"PmIsOnline":false}
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 1 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] Full appointment record keys: (5) ['Incoming', 'Unseen', 'Tasks', 'TotalTasks', 'PmIsOnline']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Checking for VIN in record: {"Incoming":0,"Unseen":0,"Tasks":0,"TotalTasks":88,"PmIsOnline":false}
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=ShopInfo_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: ['Table']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[1]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (86) ['SmsShopId', 'ShopId', 'ShopName', 'TimeZone', 'DistanceUnitSystem', 'OemRecsMinusOdometer', 'GuidedMode', 'CanUpdatePoS', 'CanUpdateSFAddOn', 'CanUpdateVinOdo', 'ShowTechInitials', 'ShowCompanyName', 'LoyaltyProgram', 'LoyaltyPointValue', 'MinLoyaltyPointsToRedeem', 'ShowOnboardingScreen', 'CanEditSpecialMarkers', 'CanSelectWorkflowStep', 'CanShowWorkflowView', 'CanShowConversationCenter', 'CanExpandCollapseTiles', 'CanFreezeWorkOrder', 'HasSpecialMarkers', 'ShowTechHours', 'ShowCRMTextVisitTab', 'CanHandlePickup', 'ShowTaskManager', 'CanShowBCP', 'CanScheduleAppointment', 'CanUseRetentionCampaigns', 'CanUseTeETimes', 'CanSeeReviews', 'DemoShop', 'HasPM', 'DataReady', 'Message', 'PackageName', 'ScheduleExactTime', 'IsDemo', 'CrmOptionReminderDate', 'HasHunterIntegration', 'Integrated', 'PaymentsConfigured', 'TerminalsConfigured', 'PaymentSystem', 'SmsType', 'ShopType', 'PilotShop', 'TestShop', 'LegacyShop', 'Phone', 'City', 'State', 'SendJobsToCustomer', 'ShowOEMRecommendations', 'ShowTSBsRecalls', 'ShowPromisedTime', 'UseSettingsApp', 'TaskManagerEnabled', 'ConversationCenterV2Enabled', 'PromptSABeforeReadyForPickupAboutIncompleteJobs', 'SimplifiedRoTileEnabled', 'ShowVehicleMarker', 'ShowCustomerMarker', 'ShowCountdownTimer', 'CountdownTimerDefaultValue', 'ShowSpecialMarkers', 'ShowJobProgress', 'ShowKeyTag', 'PromisedTimeVisibility', 'RoOpenOnTabletHighVisibility', 'DataX', 'Platform', 'IsShopWareShop', 'TekmetricRoUrl', 'AutomaticallyMarkMessagesAsRead', 'CompletedInspectionTopicsEnabled', 'PartnerApi', 'GainsightHelpEnabled', 'CanUseGoogleCalendar', 'WelcomeCode', 'AppointmentWriteBackUrl', 'AppointmentTimeInterval', 'ShowGoogleCalendarConfirmationLinks', 'TopicCustomerNotesAiRefinement', 'AllowTvpJobCreation']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"SmsShopId":305158,"ShopId":11876,"ShopName":"Harrell's Tire & Auto Service - Gillespie","TimeZone":"America/New_York","DistanceUnitSystem":2,"OemRecsMinusOdometer":5000,"GuidedMode":false,"CanUpdatePoS":true,"CanUpdateSFAddOn":false,"CanUpdateVinOdo":true,"ShowTechInitials":false,"ShowCompanyName":true,"LoyaltyProgram":false,"LoyaltyPointValue":0.08,"MinLoyaltyPointsToRedeem":500,"ShowOnboardingScreen":false,"CanEditSpecialMarkers":true,"CanSelectWorkflowStep":true,"CanShowWorkflowView":true,"CanShowConversationCenter":true,"CanExpandCollapseTiles":true,"CanFreezeWorkOrder":false,"HasSpecialMarkers":true,"ShowTechHours":true,"ShowCRMTextVisitTab":true,"CanHandlePickup":true,"ShowTaskManager":true,"CanShowBCP":true,"CanScheduleAppointment":true,"CanUseRetentionCampaigns":true,"CanUseTeETimes":true,"CanSeeReviews":true,"DemoShop":false,"HasPM":false,"DataReady":true,"Message":null,"PackageName":"SmartFlow X","ScheduleExactTime":true,"IsDemo":false,"CrmOptionReminderDate":null,"HasHunte
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 1 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=ServiceAdvisors_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: ['Table']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[14]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (3) ['Id', 'Name', 'Initials']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"Id":1700093933,"Name":"Aaron Spann","Initials":null}
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 14 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=UserSettings_Get2 type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: (2) ['Table', 'Table1']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[1]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (4) ['Id', 'Name', 'ViewId', 'UserSettings']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"Id":43512,"Name":"Default","ViewId":1,"UserSettings":"{\"columnCount\":11,\"sortOrder\":3,\"columnConfig\":\"-1/1,2000060696/1,2000060698/1,2000060700/1,2000091584/1,2000103112/1,2000140875/1,2000143997/1,2000147612/1,2000148092/1,2000150219/1,-2/1\",\"collapsed\":false,\"notifications\":false,\"guidedMode\":false,\"notificationSoundFile\":\"chimes.wav\",\"notificationSoundVolume\":50}"}
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 1 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=WorkflowSteps_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: ['Table']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[12]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (17) ['Id', 'ShopId', 'SmsStatusCode', 'RoStatus', 'StatusName', 'ShowInTechView', 'ShowOnTablet', 'Index', 'Active', 'ExistingJobsAuthorized', 'AddedJobsAuthorized', 'PickupStep', 'EstimateStep', 'ApprovalStep', 'WorkStep', 'SuperIndex', 'StepNumber']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"Id":-99,"ShopId":11876,"SmsStatusCode":null,"RoStatus":null,"StatusName":"Today's Appointments","ShowInTechView":0,"ShowOnTablet":0,"Index":-5,"Active":1,"ExistingJobsAuthorized":0,"AddedJobsAuthorized":0,"PickupStep":0,"EstimateStep":0,"ApprovalStep":0,"WorkStep":0,"SuperIndex":0,"StepNumber":0}
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 12 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=TechInfo_Get2 type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: (2) ['Table', 'Table1']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[12]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (17) ['Id', 'Name', 'ARON', 'BH', 'WH', 'TBBH', 'TNABH', 'TNFBH', 'DG', 'UD', 'OOTA', 'AIDS', 'CA', 'AD', 'IDL', 'BHC', 'WHC']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"Id":"-1","Name":"NO TECH","ARON":null,"BH":0,"WH":0,"TBBH":0,"TNABH":0,"TNFBH":0,"DG":0,"UD":0,"OOTA":null,"AIDS":"1231387202,1231767551,1231784502,1231932823,1225626472,1232295872,1231776326,1232358040,1232674408,1233081205,1232913310,1233196320,1233320503,1233400446,1233420951,1233467100","CA":"","AD":null,"IDL":1,"BHC":null,"WHC":null}
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 12 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=HelpTips_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: ['Table']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[100]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: (7) ['Id', 'GroupCode', 'TipCode', 'Title', 'Tip', 'Url', 'Tooltip']
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"Id":50,"GroupCode":"chat_bubble","TipCode":"Ask_Tech_Support","Title":"Ask Tech Support for Help","Tip":"Click here to report a problem to AutoVitals Tech Support.<br/><br/>Once a help ticket is created, tech support will get on it as fast as possible. If they have a question about the ticket they will open a chat back to the submitter of the help ticket, which will appear as Tech Support Chat below (heartbeat icon).","Url":"http://support.autovitals.com","Tooltip":"Click to reach out to AutoVitals Tech Support"}
+e0cf27d6ab22a0204aa3.js:2 [MOS] Processing AutoVitals Table structure with 100 records
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+content.js:267 [MOS AutoVitals] Checking 1 cards with selector: [class*="tile"]
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+content.js:646 [MOS AutoVitals] No vehicles found on dashboard
+content.js:676 [MOS AutoVitals] Will retry (1/5)
+jquery-3.4.1.min.js?v=947622386:2 [Violation] 'load' handler took 765ms
+content.js:629 [MOS AutoVitals] Processing dashboard page (attempt 2)
+ [MOS] Captured XHR: TvpxService.asmx/GetData?sp=Appointments_Get type: application/json; charset=utf-8
+ [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+ [MOS] Parsed JSON from string d
+ [MOS] Unwrapped to object with keys: (7) ['Table', 'Table1', 'Table2', 'Table3', 'Table4', 'Table5', 'Table6']
+ [MOS] First value type: object array[113]
+ [MOS] First Table item keys: (41) ['AID', 'KT', 'ROID', 'TID', 'SAID', 'SAN', 'SAI', 'VID', 'VS', 'YMM', 'CID', 'CN', 'CS', 'PT', 'CT', 'CC', 'CO', 'ART', 'RWIR', 'RWOIR', 'MP', 'OOT', 'TBH', 'FBH', 'WS', 'CCS', 'DEL', 'FIT', 'IDL', 'WOF', 'DRO', 'LP', 'AD', 'PYD', 'PS', 'SMSROID', 'IP', 'UM', 'UC', 'IRID', 'IRURL']
+ [MOS] First Table item sample: {"AID":1174767031,"KT":"714","ROID":"17714","TID":"2000140875","SAID":"-1","SAN":" ","SAI":null,"VID":2025563443,"VS":10259,"YMM":"2000 Isuzu NQR","CID":2017120400,"CN":"JOEY NEWCOMB","CS":8030,"PT":"2023-10-16T21:00:00","CT":null,"CC":null,"CO":null,"ART":null,"RWIR":0,"RWOIR":0,"MP":1,"OOT":0,"TBH":0,"FBH":0,"WS":678,"CCS":3,"DEL":0,"FIT":0,"IDL":true,"WOF":false,"DRO":true,"LP":false,"AD":"2023-10-16T17:36:19","PYD":false,"PS":null,"SMSROID":"644a7987-3496-4b19-8d67-f085fe4d57ce","IP":1,"UM":0,"UC":3,"IRID":1719480463,"IRURL":"https://tvpx.autovitals.com/InspectionResults?jobs=true&forcustomer=false&datax=false&sid=11876&inspectionResultId=1719480463&mode=manage&digest=l25lzHOnkq3d2Am29menzw"}
+ [MOS] Processing AutoVitals Table structure with 113 records
+ [MOS] Vehicle without VIN - VID: 2025563443 YMM: 2000 Isuzu NQR
+ [MOS] Vehicle without VIN - VID: 2028106621 YMM: 2017 Jeep Grand Cherokee
+ [MOS] Vehicle without VIN - VID: 2029802632 YMM: 2004 Mercedes-Benz CLK-Class
+ [MOS] Vehicle without VIN - VID: 2032185390 YMM: 2015 GMC Terrain
+ [MOS] Vehicle without VIN - VID: 2032412748 YMM: hd tanks
+ [MOS] Vehicle without VIN - VID: 2033302938 YMM: 2018 Nissan Sentra
+ [MOS] Vehicle without VIN - VID: 2031652615 YMM: 2017 Jeep Wrangler
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2033918850 YMM: 2007 Dodge Grand Caravan
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034038674 YMM: 1950 chevy
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034114073 YMM: radiator 82403
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034462718 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034530043 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034562158 YMM: 2016 Kenworth T370
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034723648 YMM: 2011 Ford Econoline
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034758916 YMM: 2018 Chevrolet Cruze
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034863768 YMM: 2017 International DuraStar 4300
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034970721 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034976411 YMM: 2014 RAM 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2025944667 YMM: 2016 Blue Bird All American/All Canadian
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035134740 YMM: 2009 Volkswagen CC
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035176163 YMM: 2019 Hyundai Elantra
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035178114 YMM: 82463
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035425561 YMM: 2023 Ford Transit
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035483437 YMM: 2014 Mazda Mazda6
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035518178 YMM: 2026 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035534675 YMM: 2026 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035582391 YMM: 2026 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035584334 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2015057403 YMM: 2017 Chevrolet Express
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035590781 YMM: 2026 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035591447 YMM: 2026 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035601061 YMM: 2018 Toyota C-HR
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035669478 YMM: 82502
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035673234 YMM: 2026 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035674594 YMM: 2012 Ford F-150
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035744091 YMM: 2009 Freightliner B2 Bus Chassis
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035777744 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035800848 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035818671 YMM: 2018 GMC Sierra 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035823460 YMM: 2014 Chrysler 200
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035516872 YMM: 2004 Chevrolet Suburban
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035892462 YMM: 1998 Ford Mustang
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035908545 YMM: 2016 Volkswagen Passat
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2029404198 YMM: 2011 Ford Econoline
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035929492 YMM: 2025 Hyundai Sonata Hybrid
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035942401 YMM: 82524
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035950702 YMM: 2015 Ford F-150
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035641795 YMM: 2002 Dodge Ram 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035966799 YMM: 2020 Chevrolet Equinox
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035204339 YMM: 2017 BMW 3-Series
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2033580511 YMM: 2017 Infiniti Q50
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035760644 YMM: 2011 Ford F-350 SD
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036006911 YMM: 2020 RAM 1500 Classic
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035894005 YMM: 2000 Ford Explorer
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034261888 YMM: 2021 Volkswagen Jetta
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2026658317 YMM: 2011 Hyundai Veracruz
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036014442 YMM: 82509
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036031676 YMM: 2003 Workhorse P30
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036047164 YMM: 2020 Ford Escape
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036043272 YMM: 2014 Polaris Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2026636895 YMM: 2011 Cadillac CTS
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2031821181 YMM: 2014 Freightliner XC-M
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036043348 YMM: 2006 Polaris Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036043276 YMM: 2013 Polaris Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034234521 YMM: 2013 Chevrolet Caprice
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036077972 YMM: 2012 Polaris Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036082134 YMM: 82531
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2027484314 YMM: 2005 Chevrolet C7C042
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2033454011 YMM: 2017 Mercedes-Benz S-Class
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036149031 YMM: 2021 Chevrolet Trax
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2026956681 YMM: 2016 Blue Bird All American/All Canadian
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2024539547 YMM: 2011 Chevrolet Silverado 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036170513 YMM: 1994 Chevrolet Caprice Classic
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036176752 YMM: 2026 Ford F-250 SD
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2015055844 YMM: 2019 Mercedes-Benz GLS-Class
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2018189574 YMM: 2017 Chevrolet Express
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2032978980 YMM: 2014 Chevrolet Tahoe
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034214186 YMM: 2020 Hyundai Palisade
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036185060 YMM: Unknown
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2029674639 YMM: 1994 Ford B700F
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036187464 YMM: 2014 GMC Sierra 1500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036190580 YMM: 2004 Jaguar X-Type
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2032978980 YMM: 2014 Chevrolet Tahoe
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035822837 YMM: 2021 GMC Sierra 3500HD
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036211122 YMM: 2016 Nissan Sentra
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036223802 YMM: 82536
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2032673257 YMM: 2013 Kia Optima
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036077545 YMM: 2015 Ford Escape
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2034656713 YMM: 2015 Honda Civic
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035950670 YMM: 2016 Nissan Z
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036257450 YMM: 2016 Ford Edge
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2015056304 YMM: 2019 Freightliner 114SD
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036320455 YMM: 2020 Mercedes-Benz Metris
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2015056326 YMM: 2017 Kenworth K300
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2027461116 YMM: 2016 Blue Bird All American/All Canadian
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2026486990 YMM: 2009 Mercedes-Benz SL-Class
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036388682 YMM: 2016 Hyundai Santa Fe
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036390825 YMM: 2018 Toyota Corolla
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2025961526 YMM: 2016 Blue Bird All American/All Canadian
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035585362 YMM: 2016 Dodge Journey SE
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2031500707 YMM: 2020 Dodge Durango
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2015057898 YMM: 2004 GMC Sierra 2500HD
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2032807601 YMM: 2000 Ford Econoline
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2028157123 YMM: 2007 Ford F-250 SD
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036258649 YMM: 2019 Ford Transit
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036414187 YMM: 2019 Nissan Rogue Sport
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2035970795 YMM: 2018 RAM 2500
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2022578245 YMM: 2017 Lincoln Navigator
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2026854874 YMM: 2016 Blue Bird All American/All Canadian
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036419132 YMM: 2011 Honda Accord
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2029565718 YMM: 2015 Porsche Panamera Hybrid
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036419774 YMM: 2011 Mercedes-Benz Sprinter
+e0cf27d6ab22a0204aa3.js:2 [MOS] Vehicle without VIN - VID: 2036421840 YMM: 2019 Mercedes-Benz Sprinter
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+[Violation] Forced reflow while executing JavaScript took 59ms
+content.js:267 [MOS AutoVitals] Checking 2665 cards with selector: [class*="tile"]
+content.js:267 [MOS AutoVitals] Checking 539 cards with selector: .tile
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .vehicle-row
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .customer-row
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+content.js:646 [MOS AutoVitals] No vehicles found on dashboard
+content.js:676 [MOS AutoVitals] Will retry (2/5)
