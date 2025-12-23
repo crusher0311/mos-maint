@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { logUsage, estimateTokens, estimateCost } from "@/lib/usage";
 
 function safeJsonParse<T = unknown>(text: string): T | null {
   try {
@@ -95,6 +96,9 @@ export async function POST(req: NextRequest) {
   const dviData = payload?.dviData ?? null;
   const carfaxData = payload?.carfaxData ?? null;
   const oemData = payload?.oemData ?? [];
+  const shopId = payload?.shopId ?? null;
+  const vin = payload?.vin ?? null;
+  const userEmail = payload?.userEmail ?? null;
 
   // Build source summaries (use whatever is available)
   const dviText = summarizeDvi(dviData);
@@ -193,6 +197,26 @@ Instructions:
       (typeof data === "string" ? data : JSON.stringify(data));
 
     const parsed = safeJsonParse<any>(raw);
+
+    const inputTokens = data?.usage?.prompt_tokens ?? estimateTokens(systemPrompt + userPrompt);
+    const outputTokens = data?.usage?.completion_tokens ?? estimateTokens(raw);
+    
+    if (shopId) {
+      try {
+        await logUsage({
+          shopId: String(shopId),
+          userEmail: userEmail || undefined,
+          action: "analyze",
+          model,
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          vin: vin || undefined,
+        });
+      } catch (logErr) {
+        console.error("Failed to log usage:", logErr);
+      }
+    }
 
     return Response.json({
       ok: true,
