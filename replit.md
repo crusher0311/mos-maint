@@ -47,6 +47,15 @@ The application features a modern SaaS-style design.
 -   **Webhook Integration**: Protractor webhook triggers revenue attribution on completed work orders
 -   **Data Model**: `enterprise_accounts` collection with `shopIds` array; shops have `enterpriseId` field; work orders store `packageSummaries` with pricing breakdown
 
+**Platform Admin Panel (Dec 2024):**
+-   **Internal MOS staff panel** (`/platform-admin`): Separate from customer-facing features, for MOS company use
+-   **Overview**: Platform-wide statistics (total shops, users, API costs, requests)
+-   **Shops Management** (`/platform-admin/shops`): View all client shops with user counts, vehicle counts, and integration status
+-   **Users Directory** (`/platform-admin/users`): View all users across all shops with role filtering
+-   **Usage & Costs** (`/platform-admin/usage`): Track OpenAI API usage per shop with cost breakdowns by model and date
+-   **Access Control**: Users with `isPlatformAdmin: true` flag can access; set via `scripts/set-platform-admin.ts`
+-   **Usage Logging**: OpenAI API calls log to `usage_logs` collection with shopId, model, tokens, and estimated cost
+
 **Technical Implementations:**
 -   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses (DataOne, Protractor, AutoVitals, CARFAX) with defined TTLs to improve performance.
 -   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations like Protractor.
