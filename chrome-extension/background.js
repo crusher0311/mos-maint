@@ -22,8 +22,30 @@ chrome.runtime.onInstalled.addListener(() => {
     apiKey: '',
     shopName: '',
     syncCount: 0,
+    vehicleCount: 0,
     lastSync: null
   });
+  
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (!tab.url) return;
+  
+  const isAutoVitals = tab.url.includes('autovitals');
+  
+  await chrome.sidePanel.setOptions({
+    tabId,
+    path: 'sidepanel.html',
+    enabled: isAutoVitals
+  });
+  
+  if (isAutoVitals) {
+    chrome.action.setBadgeText({ tabId, text: 'MOS' });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: '#3b82f6' });
+  } else {
+    chrome.action.setBadgeText({ tabId, text: '' });
+  }
 });
 
 chrome.action.onClicked.addListener((tab) => {
