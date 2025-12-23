@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MOS AutoVitals Sync",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Sync vehicle data from AutoVitals and view OEM, CARFAX, and maintenance plans",
   "permissions": [
     "storage",

@@ -66,6 +66,47 @@
       }
     }
     
+    // Extract vehicle from AutoVitals appointment record
+    function extractFromAppointment(record) {
+      // Look for VIN in various field names
+      const vinFields = ['VIN', 'Vin', 'vin', 'VehicleVin', 'vehicleVin', 'VVIN'];
+      let vin = null;
+      for (const field of vinFields) {
+        if (record[field] && typeof record[field] === 'string' && record[field].length === 17) {
+          vin = record[field].toUpperCase();
+          break;
+        }
+      }
+      
+      // Parse YMM (Year Make Model) field like "2020 RAM 1500 Classic"
+      let year = null, make = null, model = null;
+      if (record.YMM && typeof record.YMM === 'string') {
+        const ymmMatch = record.YMM.match(/^(\d{4})\s+(\S+)\s+(.+)$/);
+        if (ymmMatch) {
+          year = parseInt(ymmMatch[1]);
+          make = ymmMatch[2];
+          model = ymmMatch[3];
+        }
+      }
+      
+      // Also check individual fields
+      year = year || record.Year || record.year || record.VY;
+      make = make || record.Make || record.make || record.VM;
+      model = model || record.Model || record.model;
+      
+      const customerName = record.CN || record.CustomerName || record.customerName;
+      const vehicleId = record.VID || record.VehicleId || record.vehicleId;
+      
+      // Log first record's full keys for debugging
+      if (!window._mosLoggedKeys) {
+        window._mosLoggedKeys = true;
+        console.log('[MOS] Full appointment record keys:', Object.keys(record));
+        console.log('[MOS] Checking for VIN in record:', JSON.stringify(record).substring(0, 2000));
+      }
+      
+      return { vin, year, make, model, customerName, vehicleId, source: 'autovitals_network' };
+    }
+    
     function findVINInString(str) {
       if (typeof str !== 'string') return null;
       const match = str.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i);
@@ -129,6 +170,22 @@
           if (Array.isArray(obj[key]) || (typeof obj[key] === 'object' && obj[key] !== null)) {
             processDeep(obj[key], depth + 1);
           }
+        }
+      }
+    }
+    
+    // Special handling for AutoVitals Table structure
+    if (data && typeof data === 'object' && data.Table && Array.isArray(data.Table)) {
+      console.log('[MOS] Processing AutoVitals Table structure with', data.Table.length, 'records');
+      
+      // Process each appointment record
+      for (const record of data.Table) {
+        const vehicle = extractFromAppointment(record);
+        if (vehicle.vin) {
+          addVehicle(vehicle);
+        } else if (vehicle.vehicleId) {
+          // Even without VIN, we can store the vehicle with its AV ID
+          console.log('[MOS] Vehicle without VIN - VID:', vehicle.vehicleId, 'YMM:', record.YMM);
         }
       }
     }
