@@ -25,6 +25,20 @@
     const vehicles = [];
     const seenVINs = new Set();
     
+    if (data && data.d) {
+      console.log('[MOS] Unwrapping ASP.NET "d" wrapper');
+      if (typeof data.d === 'string') {
+        try {
+          data = JSON.parse(data.d);
+        } catch (e) {
+          data = data.d;
+        }
+      } else {
+        data = data.d;
+      }
+      console.log('[MOS] Unwrapped data type:', typeof data, Array.isArray(data) ? `array[${data.length}]` : '');
+    }
+    
     function addVehicle(vehicle) {
       if (vehicle.vin && !seenVINs.has(vehicle.vin)) {
         seenVINs.add(vehicle.vin);

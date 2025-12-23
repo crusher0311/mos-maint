@@ -1,0 +1,44 @@
+content.js:7 [MOS AutoVitals] Content script loaded
+content.js:629 [MOS AutoVitals] Processing dashboard page (attempt 1)
+content.js:752 [MOS AutoVitals] Content script initialized
+inject.js:231 [MOS AutoVitals] Network interceptor v1.4.0 installed
+content.js:16 [MOS AutoVitals] Network interceptor injected
+contentscript.js:25 [contentscript] No benefits on init, will wait for fetch
+inject.js:214 [MOS] Captured XHR: https://esp.aptrinsic.com/rte/api/v1/feature/client?p=AP-IYA7VJMPTTJW-2&sv=0.56.7&v=AP-IYA7VJMPTTJW-2-1766333027022-75874263&vt=2&ai=5a5f5cde-f23f-42f0-9420-829d785e6ef8&s=AP-IYA7VJMPTTJW-2-1766460404131-82599811&wsv=0.56.7 type: application/json;charset=utf-8
+inject.js:220 [MOS] No vehicles found in XHR response, keys: ['0']
+inject.js:214 [MOS] Captured XHR: TvpxService.asmx/GetAuthByCookie type: application/json; charset=utf-8
+inject.js:220 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=ServiceAdvisors_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=SpecialMessage_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=MessageCounters_Get3 type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=ShopInfo_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=UserSettings_Get2 type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=TechInfo_Get2 type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=WorkflowSteps_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=HelpTips_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+content.js:267 [MOS AutoVitals] Checking 1 cards with selector: [class*="tile"]
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+content.js:646 [MOS AutoVitals] No vehicles found on dashboard
+content.js:676 [MOS AutoVitals] Will retry (1/5)
+jquery-3.4.1.min.js?v=947622386:2 [Violation] 'load' handler took 879ms
+content.js:629 [MOS AutoVitals] Processing dashboard page (attempt 2)
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=Appointments_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: ['d']
+[Violation] Forced reflow while executing JavaScript took 61ms
+content.js:267 [MOS AutoVitals] Checking 2665 cards with selector: [class*="tile"]
+content.js:267 [MOS AutoVitals] Checking 539 cards with selector: .tile
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .vehicle-row
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .customer-row
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+content.js:646 [MOS AutoVitals] No vehicles found on dashboard
+content.js:676 [MOS AutoVitals] Will retry (2/5)
