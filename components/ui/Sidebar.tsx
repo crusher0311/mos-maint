@@ -17,7 +17,10 @@ import {
   Puzzle,
   Workflow,
   Search,
-  HelpCircle
+  HelpCircle,
+  Shield,
+  DollarSign,
+  Building2
 } from "lucide-react";
 import { PlanLauncher } from "./PlanLauncher";
 
@@ -54,6 +57,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
     return pathname === href || pathname?.startsWith(href + "/");
   };
 
+  const isAdminUser = userRole === "owner" || userRole === "admin";
+
   const navItems: NavItem[] = [
     {
       name: "Vehicles",
@@ -85,7 +90,16 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         { name: "Customer Workflows", href: "/dashboard/settings/workflows" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
-    }
+    },
+    ...(isAdminUser ? [{
+      name: "Admin",
+      href: "/admin",
+      icon: <Shield className="w-5 h-5" />,
+      children: [
+        { name: "Usage & Costs", href: "/admin/usage" },
+        { name: "Enterprise", href: "/admin/enterprise" }
+      ]
+    }] : [])
   ];
 
   return (
