@@ -1,0 +1,100 @@
+content.js:7 [MOS AutoVitals] Content script loaded
+content.js:629 [MOS AutoVitals] Processing dashboard page (attempt 1)
+content.js:752 [MOS AutoVitals] Content script initialized
+inject.js:265 [MOS AutoVitals] Network interceptor v1.4.0 installed
+content.js:16 [MOS AutoVitals] Network interceptor injected
+inject.js:248 [MOS] Captured XHR: https://esp.aptrinsic.com/rte/api/v1/feature/client?p=AP-IYA7VJMPTTJW-2&sv=0.56.7&v=AP-IYA7VJMPTTJW-2-1766333027022-75874263&vt=2&ai=5a5f5cde-f23f-42f0-9420-829d785e6ef8&s=AP-IYA7VJMPTTJW-2-1766460404131-82599811&wsv=0.56.7 type: application/json;charset=utf-8
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+contentscript.js:25 [contentscript] No benefits on init, will wait for fetch
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetAuthByCookie type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(2)
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=SpecialMessage_Get type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(1)
+inject.js:51 [MOS] First value type: object array[0]
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=ServiceAdvisors_Get type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(1)
+inject.js:51 [MOS] First value type: object array[14]
+inject.js:53 [MOS] First Table item keys: Array(3)
+inject.js:54 [MOS] First Table item sample: {"Id":1700093933,"Name":"Aaron Spann","Initials":null}
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=MessageCounters_Get3 type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(3)
+inject.js:51 [MOS] First value type: object array[1]
+inject.js:53 [MOS] First Table item keys: Array(5)
+inject.js:54 [MOS] First Table item sample: {"Incoming":0,"Unseen":0,"Tasks":0,"TotalTasks":88,"PmIsOnline":false}
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=ShopInfo_Get type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(1)
+inject.js:51 [MOS] First value type: object array[1]
+inject.js:53 [MOS] First Table item keys: Array(86)
+inject.js:54 [MOS] First Table item sample: {"SmsShopId":305158,"ShopId":11876,"ShopName":"Harrell's Tire & Auto Service - Gillespie","TimeZone":"America/New_York","DistanceUnitSystem":2,"OemRecsMinusOdometer":5000,"GuidedMode":false,"CanUpdatePoS":true,"CanUpdateSFAddOn":false,"CanUpdateVinOdo":true,"ShowTechInitials":false,"ShowCompanyName":true,"LoyaltyProgram":false,"LoyaltyPointValue":0.08,"MinLoyaltyPointsToRedeem":500,"ShowOnboardingScreen":false,"CanEditSpecialMarkers":true,"CanSelectWorkflowStep":true,"CanShowWorkflowView":true,"CanShowConversationCenter":true,"CanExpandCollapseTiles":true,"CanFreezeWorkOrder":false,"HasSpecialMarkers":true,"ShowTechHours":true,"ShowCRMTextVisitTab":true,"CanHandlePickup":true,"ShowTaskManager":true,"CanShowBCP":true,"CanScheduleAppointment":true,"CanUseRetentionCampaigns":true,"CanUseTeETimes":true,"CanSeeReviews":true,"DemoShop":false,"HasPM":false,"DataReady":true,"Message":null,"PackageName":"SmartFlow X","ScheduleExactTime":true,"IsDemo":false,"CrmOptionReminderDate":null,"HasHunte
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=UserSettings_Get2 type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(2)
+inject.js:51 [MOS] First value type: object array[1]
+inject.js:53 [MOS] First Table item keys: Array(4)
+inject.js:54 [MOS] First Table item sample: {"Id":43512,"Name":"Default","ViewId":1,"UserSettings":"{\"columnCount\":11,\"sortOrder\":3,\"columnConfig\":\"-1/1,2000060696/1,2000060698/1,2000060700/1,2000091584/1,2000103112/1,2000140875/1,2000143997/1,2000147612/1,2000148092/1,2000150219/1,-2/1\",\"collapsed\":false,\"notifications\":false,\"guidedMode\":false,\"notificationSoundFile\":\"chimes.wav\",\"notificationSoundVolume\":50}"}
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=TechInfo_Get2 type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(2)
+inject.js:51 [MOS] First value type: object array[12]
+inject.js:53 [MOS] First Table item keys: Array(17)
+inject.js:54 [MOS] First Table item sample: {"Id":"-1","Name":"NO TECH","ARON":null,"BH":0,"WH":0,"TBBH":0,"TNABH":0,"TNFBH":0,"DG":0,"UD":0,"OOTA":null,"AIDS":"1231387202,1231767551,1231784502,1231932823,1225626472,1232295872,1231776326,1232358040,1232674408,1233081205,1232913310,1233196320,1233320503,1233400446,1233420951,1233467100","CA":"","AD":null,"IDL":1,"BHC":null,"WHC":null}
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=WorkflowSteps_Get type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(1)
+inject.js:51 [MOS] First value type: object array[12]
+inject.js:53 [MOS] First Table item keys: Array(17)
+inject.js:54 [MOS] First Table item sample: {"Id":-99,"ShopId":11876,"SmsStatusCode":null,"RoStatus":null,"StatusName":"Today's Appointments","ShowInTechView":0,"ShowOnTablet":0,"Index":-5,"Active":1,"ExistingJobsAuthorized":0,"AddedJobsAuthorized":0,"PickupStep":0,"EstimateStep":0,"ApprovalStep":0,"WorkStep":0,"SuperIndex":0,"StepNumber":0}
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+inject.js:248 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=HelpTips_Get type: application/json; charset=utf-8
+inject.js:29 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+inject.js:33 [MOS] Parsed JSON from string d
+inject.js:48 [MOS] Unwrapped to object with keys: Array(1)
+inject.js:51 [MOS] First value type: object array[100]
+inject.js:53 [MOS] First Table item keys: Array(7)
+inject.js:54 [MOS] First Table item sample: {"Id":50,"GroupCode":"chat_bubble","TipCode":"Ask_Tech_Support","Title":"Ask Tech Support for Help","Tip":"Click here to report a problem to AutoVitals Tech Support.<br/><br/>Once a help ticket is created, tech support will get on it as fast as possible. If they have a question about the ticket they will open a chat back to the submitter of the help ticket, which will appear as Tech Support Chat below (heartbeat icon).","Url":"http://support.autovitals.com","Tooltip":"Click to reach out to AutoVitals Tech Support"}
+inject.js:254 [MOS] No vehicles found in XHR response, keys: Array(1)
+e0cf27d6ab22a0204aa3.js:2 [MOS] Captured XHR: TvpxService.asmx/GetData?sp=Appointments_Get type: application/json; charset=utf-8
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapping ASP.NET "d" wrapper, d type: string
+e0cf27d6ab22a0204aa3.js:2 [MOS] Parsed JSON from string d
+e0cf27d6ab22a0204aa3.js:2 [MOS] Unwrapped to object with keys: Array(7)
+e0cf27d6ab22a0204aa3.js:2 [MOS] First value type: object array[113]
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item keys: Array(41)
+e0cf27d6ab22a0204aa3.js:2 [MOS] First Table item sample: {"AID":1231450651,"KT":"110","ROID":"29110","TID":"2000091584","SAID":"1700087198","SAN":"Brad Nordan","SAI":null,"VID":2036006911,"VS":10259,"YMM":"2020 RAM 1500 Classic","CID":2009635170,"CN":"GSA ","CS":8030,"PT":"2025-11-26T22:00:00","CT":null,"CC":null,"CO":null,"ART":null,"RWIR":2,"RWOIR":0,"MP":1,"OOT":0,"TBH":2.4,"FBH":0,"WS":675,"CCS":2,"DEL":0,"FIT":30,"IDL":true,"WOF":false,"DRO":true,"LP":false,"AD":"2025-11-26T16:30:09","PYD":false,"PS":null,"SMSROID":"3f538d5a-ba65-4dde-b0c2-64b469d71a3c","IP":1,"UM":0,"UC":1,"IRID":1720719402,"IRURL":"https://tvpx.autovitals.com/InspectionResults?jobs=true&forcustomer=false&datax=false&sid=11876&inspectionResultId=1720719402&mode=manage&digest=fpeHtCPwKulfry6haU8VLA"}
+e0cf27d6ab22a0204aa3.js:2 [MOS] No vehicles found in XHR response, keys: Array(1)
+content.js:267 [MOS AutoVitals] Checking 2665 cards with selector: [class*="tile"]
+content.js:267 [MOS AutoVitals] Checking 539 cards with selector: .tile
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .vehicle-row
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .customer-row
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+content.js:646 [MOS AutoVitals] No vehicles found on dashboard
+content.js:676 [MOS AutoVitals] Will retry (1/5)
+content.js:629 [MOS AutoVitals] Processing dashboard page (attempt 2)
+content.js:267 [MOS AutoVitals] Checking 2665 cards with selector: [class*="tile"]
+content.js:267 [MOS AutoVitals] Checking 539 cards with selector: .tile
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .vehicle-row
+content.js:332 [MOS AutoVitals] Checking 108 elements with selector: .customer-row
+content.js:356 [MOS AutoVitals] Trying text-based VIN extraction...
+content.js:369 [MOS AutoVitals] Extracted 0 vehicles from dashboard
+content.js:646 [MOS AutoVitals] No vehicles found on dashboard
+content.js:676 [MOS AutoVitals] Will retry (2/5)
