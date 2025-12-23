@@ -154,10 +154,10 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
   return hmac.digest("base64");
 }
 
-export async function resolveProtractorConfig(shopId: number): Promise<ProtractorConfig> {
+export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
-    { shopId },
+    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
     {
       projection: {
         protractor: 1,
@@ -308,7 +308,7 @@ export async function fetchActiveWorkOrders(
 }
 
 export async function fetchWorkOrderById(
-  shopId: number,
+  shopId: number | string,
   workOrderId: string
 ): Promise<{ ok: boolean; workOrder?: ProtractorWorkOrder; error?: string }> {
   const config = await resolveProtractorConfig(shopId);

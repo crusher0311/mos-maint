@@ -312,6 +312,19 @@ export async function getRepairOrder(roId: number): Promise<TekmetricRepairOrder
   return tekmetricRequest(`/repair-orders/${roId}`);
 }
 
+export async function getTekmetricWorkOrderStatus(
+  shopId: number,
+  workOrderId: string
+): Promise<string | null> {
+  try {
+    const response = await tekmetricRequest(`/repair-orders/${workOrderId}`);
+    return response?.repairOrderStatus?.code || response?.repairOrderStatus?.name || response?.status || null;
+  } catch (err) {
+    console.error("Error fetching Tekmetric RO status:", err);
+    return null;
+  }
+}
+
 export async function getJobs(
   shopId: number,
   params: {
