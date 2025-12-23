@@ -326,49 +326,56 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray();
 
-    // Fetch Tekmetric vehicles (stored in vehicles collection with tekmetric field)
-    const tekmetricRows = await db.collection("vehicles").aggregate([
-      {
-        $match: {
-          "tekmetric.shopId": { $exists: true },
-          "tekmetric.repairOrderNumber": { $exists: true },
-          vin: { $ne: null, $type: "string" }
-        }
-      },
-      { $sort: { updatedAt: -1 } },
-      {
-        $project: {
-          _id: 0,
-          updatedAt: { $ifNull: ["$updatedAt", new Date()] },
-          displayName: {
-            $cond: [
-              { $and: [{ $ifNull: ["$customer.firstName", false] }, { $ifNull: ["$customer.lastName", false] }] },
-              { $concat: ["$customer.firstName", " ", "$customer.lastName"] },
-              { $ifNull: ["$customer.firstName", { $ifNull: ["$customer.lastName", "Unknown Customer"] }] }
-            ]
-          },
-          displayVehicle: {
-            $concat: [
-              { $toString: { $ifNull: ["$year", ""] } },
-              { $cond: [{ $ifNull: ["$year", false] }, " ", ""] },
-              { $ifNull: ["$make", ""] },
-              { $cond: [{ $ifNull: ["$make", false] }, " ", ""] },
-              { $ifNull: ["$model", ""] }
-            ]
-          },
-          displayVin: { $toUpper: "$vin" },
-          displayMiles: "$mileage",
-          displayRo: "$tekmetric.repairOrderNumber",
-          dviDone: { $literal: false },
-          source: { $literal: "tekmetric" },
-          af: {
-            status: { $ifNull: ["$tekmetric.roLabel", { $ifNull: ["$tekmetric.roStatus", "Open"] }] },
-            createdAt: "$tekmetric.lastSynced",
-            miles: "$mileage"
+    // Check if Tekmetric is connected before fetching Tekmetric vehicles
+    const shop = await db.collection("shops").findOne({});
+    const tekmetricConnected = !!shop?.tekmetric?.shopId;
+    
+    // Fetch Tekmetric vehicles only if Tekmetric is connected
+    let tekmetricRows: any[] = [];
+    if (tekmetricConnected) {
+      tekmetricRows = await db.collection("vehicles").aggregate([
+        {
+          $match: {
+            "tekmetric.shopId": { $exists: true },
+            "tekmetric.repairOrderNumber": { $exists: true },
+            vin: { $ne: null, $type: "string" }
+          }
+        },
+        { $sort: { updatedAt: -1 } },
+        {
+          $project: {
+            _id: 0,
+            updatedAt: { $ifNull: ["$updatedAt", new Date()] },
+            displayName: {
+              $cond: [
+                { $and: [{ $ifNull: ["$customer.firstName", false] }, { $ifNull: ["$customer.lastName", false] }] },
+                { $concat: ["$customer.firstName", " ", "$customer.lastName"] },
+                { $ifNull: ["$customer.firstName", { $ifNull: ["$customer.lastName", "Unknown Customer"] }] }
+              ]
+            },
+            displayVehicle: {
+              $concat: [
+                { $toString: { $ifNull: ["$year", ""] } },
+                { $cond: [{ $ifNull: ["$year", false] }, " ", ""] },
+                { $ifNull: ["$make", ""] },
+                { $cond: [{ $ifNull: ["$make", false] }, " ", ""] },
+                { $ifNull: ["$model", ""] }
+              ]
+            },
+            displayVin: { $toUpper: "$vin" },
+            displayMiles: "$mileage",
+            displayRo: "$tekmetric.repairOrderNumber",
+            dviDone: { $literal: false },
+            source: { $literal: "tekmetric" },
+            af: {
+              status: { $ifNull: ["$tekmetric.roLabel", { $ifNull: ["$tekmetric.roStatus", "Open"] }] },
+              createdAt: "$tekmetric.lastSynced",
+              miles: "$mileage"
+            }
           }
         }
-      }
-    ]).toArray();
+      ]).toArray();
+    }
 
     // Merge and deduplicate by VIN (AutoFlow takes priority, then Protractor, then Tekmetric)
     const autoflowVins = new Set(autoflowRows.map((r: any) => r.displayVin?.toUpperCase()));
