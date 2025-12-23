@@ -51,6 +51,7 @@ interface VehicleDetailClientProps {
   latestRoNumber: string | null;
   cfg: { configured: boolean };
   carfaxCfg: { configured: boolean };
+  tekmetricConnected?: boolean;
 }
 
 type TabId = "attributes" | "recs" | "history";
@@ -66,7 +67,8 @@ export default function VehicleDetailClient({
   mpd,
   latestRoNumber,
   cfg,
-  carfaxCfg
+  carfaxCfg,
+  tekmetricConnected = false
 }: VehicleDetailClientProps) {
   const [activeTab, setActiveTab] = useState<TabId>("attributes");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -374,7 +376,9 @@ export default function VehicleDetailClient({
                   </div>
                   <h3 className="font-medium text-gray-900 mb-2">No DVI Inspection</h3>
                   <p className="text-sm text-gray-500 mb-4">
-                    {!cfg.configured 
+                    {tekmetricConnected
+                      ? "Tekmetric DVI integration coming soon."
+                      : !cfg.configured 
                       ? "AutoFlow is not connected. Connect it to view DVI results."
                       : !latestRoNumber
                       ? "No repair orders found for this vehicle."
@@ -382,7 +386,7 @@ export default function VehicleDetailClient({
                       ? "No inspection was performed for the latest repair order."
                       : dvi?.error || "Unable to load DVI results."}
                   </p>
-                  {!cfg.configured && (
+                  {!cfg.configured && !tekmetricConnected && (
                     <Link
                       href="/dashboard/settings/autoflow"
                       className="text-sm text-blue-600 hover:text-blue-700 font-medium"

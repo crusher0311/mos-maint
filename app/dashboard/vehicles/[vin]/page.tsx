@@ -419,6 +419,10 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     source: oemData.source,
   };
 
+  // Check if shop has Tekmetric connected
+  const shop = await db.collection("shops").findOne({});
+  const tekmetricConnected = !!shop?.tekmetric?.shopId;
+
   return (
     <VehicleDetailClient
       vehicle={{
@@ -449,6 +453,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       latestRoNumber={latestRoNumber}
       cfg={{ configured: cfg.configured }}
       carfaxCfg={{ configured: carfaxCfg.configured }}
+      tekmetricConnected={tekmetricConnected}
     />
   );
 }
