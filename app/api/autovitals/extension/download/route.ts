@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
       "popup.js",
       "content.js",
       "background.js",
+      "sidepanel.html",
+      "sidepanel.js",
     ];
     
     for (const file of filesToInclude) {
