@@ -49,6 +49,10 @@
         const firstKey = Object.keys(data)[0];
         if (firstKey && data[firstKey]) {
           console.log('[MOS] First value type:', typeof data[firstKey], Array.isArray(data[firstKey]) ? `array[${data[firstKey].length}]` : '');
+          if (Array.isArray(data[firstKey]) && data[firstKey].length > 0) {
+            console.log('[MOS] First Table item keys:', Object.keys(data[firstKey][0] || {}));
+            console.log('[MOS] First Table item sample:', JSON.stringify(data[firstKey][0]).substring(0, 1000));
+          }
         }
       } else {
         console.log('[MOS] Unwrapped to:', typeof data);
