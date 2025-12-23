@@ -250,7 +250,7 @@ export async function GET() {
         } 
       },
       // Limit to a reasonable count
-      { $limit: 100 }
+      { $limit: 500 }
     ]).toArray();
 
     // Fetch Protractor work orders directly (they have the odometer)
@@ -321,7 +321,7 @@ export async function GET() {
           }
         }
       },
-      { $limit: 100 }
+      { $limit: 500 }
     ]).toArray();
 
     // Fetch Tekmetric vehicles (stored in vehicles collection with tekmetric field)
@@ -366,7 +366,7 @@ export async function GET() {
           }
         }
       },
-      { $limit: 100 }
+      { $limit: 500 }
     ]).toArray();
 
     // Merge and deduplicate by VIN (AutoFlow takes priority, then Protractor, then Tekmetric)
