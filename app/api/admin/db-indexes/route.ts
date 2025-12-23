@@ -83,6 +83,25 @@ export async function POST(req: NextRequest) {
     await ensure(customers, { shopId: 1, externalId: 1 }, { unique: false, name: "customers_shop_extid" });
     await ensure(customers, { shopId: 1, emailLower: 1 }, { unique: false, name: "customers_shop_email" });
 
+    // events (critical for dashboard performance)
+    const events = db.collection("events");
+    await ensure(events, { shopId: 1, provider: 1, createdAt: -1 }, { name: "events_shop_provider_recent" });
+    await ensure(events, { shopId: 1, vehicleVin: 1, createdAt: -1 }, { name: "events_shop_vin_recent" });
+    await ensure(events, { provider: 1, createdAt: -1 }, { name: "events_provider_recent" });
+
+    // vehicles
+    const vehicles = db.collection("vehicles");
+    await ensure(vehicles, { vin: 1 }, { unique: true, sparse: true, name: "vehicles_vin_unique" });
+    await ensure(vehicles, { shopId: 1 }, { name: "vehicles_shop" });
+    await ensure(vehicles, { "tekmetric.shopId": 1 }, { sparse: true, name: "vehicles_tekmetric_shop" });
+
+    // protractor collections
+    const protractorWO = db.collection("protractor_work_orders");
+    await ensure(protractorWO, { shopId: 1, vin: 1, fetchedAt: -1 }, { name: "protractor_wo_shop_vin_recent" });
+    
+    const protractorVehicles = db.collection("protractor_vehicles");
+    await ensure(protractorVehicles, { shopId: 1, vin: 1 }, { name: "protractor_vehicles_shop_vin" });
+
     const counterNow = await counters.findOne({ _id: "shopId" });
 
     return NextResponse.json({
@@ -100,6 +119,14 @@ export async function POST(req: NextRequest) {
         "password_resets.expiresAt (TTL)",
         "customers {shopId,externalId}",
         "customers {shopId,emailLower}",
+        "events {shopId,provider,createdAt}",
+        "events {shopId,vehicleVin,createdAt}",
+        "events {provider,createdAt}",
+        "vehicles.vin (unique, sparse)",
+        "vehicles.shopId",
+        "vehicles.tekmetric.shopId (sparse)",
+        "protractor_work_orders {shopId,vin,fetchedAt}",
+        "protractor_vehicles {shopId,vin}",
       ],
       counter: counterNow,
       maxExisting,
