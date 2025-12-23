@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { fetchWorkOrderById } from "@/lib/integrations/protractor";
-import { getTekmetricWorkOrderStatus } from "@/lib/tekmetric";
+import { getTekmetricWorkOrderWithMileage } from "@/lib/tekmetric";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,51 +27,75 @@ export async function POST(request: NextRequest) {
     }).toArray();
 
     if (activeVehicles.length === 0) {
-      return NextResponse.json({ checked: 0, closed: 0 });
+      return NextResponse.json({ checked: 0, closed: 0, mileageUpdated: 0 });
     }
 
     let checkedCount = 0;
     let closedCount = 0;
-    const closedOrders: { vin: string; workOrderId: string; provider: string }[] = [];
+    let mileageUpdatedCount = 0;
+    const closedOrders: { vin: string; workOrderId: string; provider: string; mileage?: number }[] = [];
 
     for (const vehicle of activeVehicles) {
       const sources = vehicle.status?.sources || [];
+      let currentMileage = vehicle.mileage || vehicle.odometer || vehicle.lastMileage || 0;
       
       for (const source of sources) {
         checkedCount++;
         
         let isClosed = false;
+        let workOrderMileage: number | undefined;
         
         if (source.provider === "protractor") {
           try {
             const result = await fetchWorkOrderById(shopId, String(source.workOrderId));
             if (result.ok && result.workOrder) {
-              const status = (result.workOrder.Status || result.workOrder.WorkflowStage || "").toUpperCase();
+              const wo = result.workOrder;
+              const status = (wo.Status || wo.WorkflowStage || "").toUpperCase();
               isClosed = status === "INVOICED" || status === "INVOICE" || 
                          status === "CLOSED" || status === "VOID";
+              workOrderMileage = wo.Odometer || wo.InUsage || wo.OutUsage ||
+                                 (wo as any).ServiceItems?.[0]?.Odometer ||
+                                 (wo as any).ServiceItem?.Odometer;
             }
           } catch (err) {
             console.error(`Error checking Protractor WO ${source.workOrderId}:`, err);
           }
         } else if (source.provider === "tekmetric" && shop.tekmetric?.shopId) {
           try {
-            const status = await getTekmetricWorkOrderStatus(
-              shop.tekmetric.shopId,
-              source.workOrderId
-            );
-            const normalizedStatus = status?.toUpperCase();
-            isClosed = normalizedStatus === "INVOICED" || normalizedStatus === "INVOICE" || 
-                       normalizedStatus === "VOID" || normalizedStatus === "CLOSED";
+            const woData = await getTekmetricWorkOrderWithMileage(source.workOrderId);
+            if (woData) {
+              const normalizedStatus = woData.status?.toUpperCase();
+              isClosed = normalizedStatus === "INVOICED" || normalizedStatus === "INVOICE" || 
+                         normalizedStatus === "VOID" || normalizedStatus === "CLOSED";
+              workOrderMileage = woData.mileageOut ?? woData.mileageIn ?? undefined;
+            }
           } catch (err) {
             console.error(`Error checking Tekmetric RO ${source.workOrderId}:`, err);
           }
+        }
+
+        if (workOrderMileage && workOrderMileage > 0 && workOrderMileage > currentMileage) {
+          await db.collection("vehicles").updateOne(
+            { _id: vehicle._id },
+            {
+              $set: {
+                mileage: workOrderMileage,
+                mileageSource: source.provider,
+                mileageUpdatedAt: new Date(),
+                updatedAt: new Date()
+              }
+            }
+          );
+          currentMileage = workOrderMileage;
+          mileageUpdatedCount++;
         }
 
         if (isClosed) {
           closedOrders.push({
             vin: vehicle.vin,
             workOrderId: String(source.workOrderId),
-            provider: source.provider
+            provider: source.provider,
+            mileage: workOrderMileage
           });
         }
       }
@@ -112,6 +136,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       checked: checkedCount,
       closed: closedCount,
+      mileageUpdated: mileageUpdatedCount,
       closedOrders: closedOrders.map(o => `${o.vin} (${o.provider} #${o.workOrderId})`)
     });
 
