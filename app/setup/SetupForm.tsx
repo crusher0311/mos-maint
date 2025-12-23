@@ -50,7 +50,7 @@ export default function SetupForm() {
       <input
         type="email"
         className="w-full border rounded p-2"
-        placeholder="Owner email"
+        placeholder="Your email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         required
