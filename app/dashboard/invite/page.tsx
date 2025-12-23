@@ -33,7 +33,7 @@ export default function InvitePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed");
-      setInviteUrl(data.inviteUrl);
+      setInviteUrl(data.setupUrl);
       setMsg("âœ… Invite created");
     } catch (e: any) {
       setMsg("âŒ " + (e?.message || "Error"));
