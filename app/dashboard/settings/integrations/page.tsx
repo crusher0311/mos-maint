@@ -88,7 +88,8 @@ export default function IntegrationsPage() {
     { id: "carfax", label: "CARFAX", status: statuses.carfax.configured },
     { id: "autoflow", label: "AutoFlow", status: statuses.autoflow.configured },
     { id: "protractor", label: "Protractor", status: statuses.protractor.configured },
-    { id: "autovitals", label: "AutoVitals", status: statuses.autovitals.configured },
+    // AutoVitals hidden until VIN data access is clarified
+    // { id: "autovitals", label: "AutoVitals", status: statuses.autovitals.configured },
   ];
 
   if (loading) {
