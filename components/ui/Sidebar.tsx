@@ -30,10 +30,12 @@ interface NavItem {
 
 interface SidebarProps {
   shopName?: string;
+  userEmail?: string;
+  userRole?: string;
   userInitials?: string;
 }
 
-export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS" }: SidebarProps) {
   const pathname = usePathname();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
   const [searchQuery, setSearchQuery] = useState("");
@@ -171,17 +173,20 @@ export function Sidebar({ shopName = "My Shop", userInitials = "MS" }: SidebarPr
       </nav>
 
       <div className="p-4 border-t border-slate-700">
-        <div className="flex items-center gap-3">
+        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-slate-800 rounded-lg p-2 -m-2 transition-colors">
           <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
             {userInitials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Account</p>
+            <p className="text-sm font-medium text-white truncate">{userEmail || "Account"}</p>
+            {userRole && (
+              <p className="text-xs text-slate-400 capitalize">{userRole}</p>
+            )}
           </div>
           <button className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors">
             <HelpCircle className="w-5 h-5" />
           </button>
-        </div>
+        </Link>
       </div>
     </aside>
   );
