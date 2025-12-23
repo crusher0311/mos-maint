@@ -102,7 +102,7 @@ export async function removeShopFromEnterprise(enterpriseId: ObjectId | string, 
   return db.collection("enterprise_accounts").updateOne(
     { _id: id },
     { 
-      $pull: { shopIds: shopId },
+      $pull: { shopIds: shopId } as any,
       $set: { updatedAt: new Date() }
     }
   );
@@ -252,4 +252,74 @@ export async function getShopsForEnterprise(enterpriseId: ObjectId | string) {
   return db.collection("shops")
     .find({ shopId: { $in: enterprise.shopIds } })
     .toArray();
+}
+
+export async function attributeRevenueFromWorkOrder(
+  shopId: number,
+  workOrderId: string,
+  vin: string,
+  packageSummaries: Array<{
+    id: string;
+    code: string;
+    title: string;
+    laborTotal: number;
+    partsTotal: number;
+    otherTotal: number;
+    total: number;
+  }>,
+  provider: "protractor" | "tekmetric" = "protractor"
+) {
+  const db = await getDb();
+  
+  const addedEvents = await db.collection<RecommendationEvent>("recommendation_events")
+    .find({
+      shopId,
+      workOrderId: String(workOrderId),
+      eventType: "recommendation_added"
+    })
+    .toArray();
+  
+  if (addedEvents.length === 0) {
+    return { matched: 0, revenue: 0 };
+  }
+  
+  let matched = 0;
+  let totalRevenue = 0;
+  
+  for (const event of addedEvents) {
+    const matchedPkg = packageSummaries.find(pkg => 
+      pkg.code.toLowerCase() === (event.serviceCode || "").toLowerCase() ||
+      pkg.id === event.serviceCode
+    );
+    
+    if (matchedPkg) {
+      const alreadySold = await db.collection<RecommendationEvent>("recommendation_events").findOne({
+        shopId,
+        workOrderId: String(workOrderId),
+        serviceCode: event.serviceCode,
+        eventType: "recommendation_sold"
+      });
+      
+      if (!alreadySold) {
+        await logRecommendationEvent({
+          shopId,
+          vin,
+          workOrderId: String(workOrderId),
+          provider,
+          eventType: "recommendation_sold",
+          recommendationType: event.recommendationType,
+          serviceCode: event.serviceCode,
+          serviceName: event.serviceName,
+          laborPrice: matchedPkg.laborTotal,
+          partsPrice: matchedPkg.partsTotal,
+          totalPrice: matchedPkg.total,
+        });
+        
+        matched++;
+        totalRevenue += matchedPkg.total;
+      }
+    }
+  }
+  
+  return { matched, revenue: totalRevenue };
 }

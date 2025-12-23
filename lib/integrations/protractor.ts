@@ -477,6 +477,58 @@ export async function upsertProtractorWorkOrderSnapshot(
   
   const companyName = workOrder.Contact?.Company || null;
   
+  const servicePackagesRaw = workOrder.ServicePackages ?? [];
+  const packages = Array.isArray(servicePackagesRaw) 
+    ? servicePackagesRaw 
+    : (servicePackagesRaw as any)?.ItemCollection || [];
+  
+  let totalLabor = 0;
+  let totalParts = 0;
+  let totalOther = 0;
+  const packageSummaries: Array<{
+    id: string;
+    code: string;
+    title: string;
+    laborTotal: number;
+    partsTotal: number;
+    otherTotal: number;
+    total: number;
+  }> = [];
+  
+  for (const pkg of packages) {
+    const lines = pkg.ServicePackageLines?.ItemCollection || pkg.ServicePackageLines || [];
+    let pkgLabor = 0;
+    let pkgParts = 0;
+    let pkgOther = 0;
+    
+    for (const line of lines) {
+      const amount = line.ExtendedTotal ?? line.Total ?? line.ExtendedPrice ?? 
+        ((line.Quantity || 1) * (line.Price || line.UnitPrice || 0));
+      const lineType = (line.Type || line.LineType || "").toLowerCase();
+      
+      if (lineType.includes("labor")) {
+        pkgLabor += amount;
+        totalLabor += amount;
+      } else if (lineType.includes("part")) {
+        pkgParts += amount;
+        totalParts += amount;
+      } else {
+        pkgOther += amount;
+        totalOther += amount;
+      }
+    }
+    
+    packageSummaries.push({
+      id: pkg.ID || "",
+      code: pkg.ServicePackageHeader?.Code || pkg.Code || pkg.ServicePackageTemplateID || "",
+      title: pkg.ServicePackageHeader?.Title || pkg.Title || "",
+      laborTotal: pkgLabor,
+      partsTotal: pkgParts,
+      otherTotal: pkgOther,
+      total: pkgLabor + pkgParts + pkgOther,
+    });
+  }
+  
   await db.collection("protractor_work_orders").updateOne(
     { shopId, workOrderId: workOrder.ID },
     {
@@ -497,6 +549,13 @@ export async function upsertProtractorWorkOrderSnapshot(
         scheduledTime: workOrder.ScheduledTime ?? null,
         promisedTime: workOrder.PromisedTime ?? null,
         servicePackages: workOrder.ServicePackages ?? [],
+        packageSummaries,
+        pricing: {
+          laborTotal: totalLabor,
+          partsTotal: totalParts,
+          otherTotal: totalOther,
+          grandTotal: totalLabor + totalParts + totalOther,
+        },
         fetchedAt: now,
         source: "protractor",
       },

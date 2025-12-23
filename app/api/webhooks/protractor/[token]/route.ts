@@ -6,6 +6,7 @@ import {
   upsertProtractorVehicleSnapshot,
   upsertProtractorWorkOrderSnapshot,
 } from "@/lib/integrations/protractor";
+import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +95,29 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
       if (result.ok && result.workOrder) {
         await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
         console.log(`[Protractor Webhook] Updated work order snapshot ${objectId}`);
+        
+        if (result.workOrder.Completed) {
+          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+          if (vin) {
+            const savedWO = await db.collection("protractor_work_orders").findOne({
+              shopId,
+              workOrderId: objectId
+            });
+            
+            if (savedWO?.packageSummaries?.length > 0) {
+              const attribution = await attributeRevenueFromWorkOrder(
+                shopId,
+                objectId,
+                vin,
+                savedWO.packageSummaries,
+                "protractor"
+              );
+              if (attribution.matched > 0) {
+                console.log(`[Protractor Webhook] Revenue attribution: ${attribution.matched} jobs, $${attribution.revenue.toFixed(2)}`);
+              }
+            }
+          }
+        }
       }
     }
 
