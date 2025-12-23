@@ -31,13 +31,14 @@ export async function GET() {
     }
 
     // Build rows from latest AutoFlow events per VIN (same logic as dashboard page)
+    // Limit to last 30 days for performance
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const autoflowRows = await db.collection("events").aggregate([
       {
         $match: {
-          $and: [
-            { $or: [{ shopId: String(user.shopId) }, { shopId: Number(user.shopId) }] },
-            { provider: "autoflow" }
-          ]
+          shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+          provider: "autoflow",
+          createdAt: { $gte: thirtyDaysAgo }
         }
       },
       // Normalize basic fields we need from events
