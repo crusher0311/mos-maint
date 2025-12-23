@@ -348,7 +348,10 @@ export async function GET(request: NextRequest) {
         for (const ro of roResponse.content) {
           try {
             const vehicle = await getVehicle(ro.vehicleId);
-            if (!vehicle.vin) continue;
+            if (!vehicle.vin) {
+              console.log(`[Tekmetric] Skipping RO #${ro.repairOrderNumber} - vehicle ${ro.vehicleId} has no VIN`);
+              continue;
+            }
             
             let customerName = 'Unknown Customer';
             try {
