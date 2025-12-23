@@ -23,6 +23,15 @@ export async function DELETE() {
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
     });
 
+    const protractorWoResult = await db.collection("protractor_work_orders").deleteMany({ shopId });
+    const protractorVehiclesResult = await db.collection("protractor_vehicles").deleteMany({ shopId });
+    const autovitalsVehiclesResult = await db.collection("autovitals_vehicles").deleteMany({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
+    const autovitalsAppointmentsResult = await db.collection("autovitals_appointments").deleteMany({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
+
     return NextResponse.json({
       ok: true,
       deleted: {
@@ -30,6 +39,10 @@ export async function DELETE() {
         plans: plansResult.deletedCount,
         customers: customersResult.deletedCount,
         events: eventsResult.deletedCount,
+        protractorWorkOrders: protractorWoResult.deletedCount,
+        protractorVehicles: protractorVehiclesResult.deletedCount,
+        autovitalsVehicles: autovitalsVehiclesResult.deletedCount,
+        autovitalsAppointments: autovitalsAppointmentsResult.deletedCount,
       },
     });
   } catch (e: any) {
