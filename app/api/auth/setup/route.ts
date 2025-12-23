@@ -66,12 +66,12 @@ export async function POST(req: NextRequest) {
     // Hash password
     const passwordHash = await bcrypt.hash(adminPassword, 12);
 
-    // Create admin user
+    // Create owner user (shop-level superuser)
     const userDoc = {
       shopId,
       email: adminEmail,
       emailLower: adminEmail,
-      role: "admin",
+      role: "owner",
       passwordHash,
       createdAt: now,
       updatedAt: now,
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       ok: true, 
       redirect: "/dashboard", 
       shopId, 
-      role: "admin",
+      role: "owner",
       message: "Setup completed successfully"
     });
     

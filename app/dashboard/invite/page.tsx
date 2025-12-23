@@ -56,11 +56,11 @@ export default function InvitePage() {
     );
   }
 
-  if (me.role !== "owner") {
+  if (me.role !== "owner" && me.role !== "admin") {
     return (
       <main className="mx-auto max-w-xl p-6">
         <h1 className="text-2xl font-bold">Invite User</h1>
-        <p className="text-sm">Only owners can invite.</p>
+        <p className="text-sm">Only owners and admins can invite users.</p>
       </main>
     );
   }

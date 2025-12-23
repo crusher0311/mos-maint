@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { sessionCookieOptions } from "@/lib/auth";
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,8 +40,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email does not match invite" }, { status: 403 });
     }
 
-    // role: from invite OR default to "owner" (first user case)
-    const role = invite.role || "owner";
+    // role: from invite OR default to "staff"
+    const role = invite.role || "staff";
 
     // ensure uniqueness per shop
     const exists = await users.findOne({ shopId, emailLower: email });
@@ -47,12 +49,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User already exists for this shop" }, { status: 409 });
     }
 
-    // hash password (scrypt)
-    const salt = crypto.randomBytes(16).toString("hex");
-    const derived = await new Promise<Buffer>((resolve, reject) => {
-      crypto.scrypt(password, salt, 64, (err, buf) => (err ? reject(err) : resolve(buf)));
-    });
-    const passwordHash = `scrypt:1:${salt}:${derived.toString("hex")}`;
+    // hash password with bcrypt (consistent with login/setup)
+    const passwordHash = await bcrypt.hash(password, 12);
 
     // create user
     const now2 = new Date();
@@ -70,11 +68,11 @@ export async function POST(req: NextRequest) {
     await setup.deleteOne({ _id: invite._id });
 
     // create session
-    const sid = crypto.randomBytes(24).toString("hex");
+    const sessionToken = crypto.randomBytes(32).toString("hex");
     const ttlDays = 30;
     const expiresAt = new Date(now2.getTime() + ttlDays * 24 * 60 * 60 * 1000);
     await sessions.insertOne({
-      token: sid,
+      token: sessionToken,
       userId: insert.insertedId,
       shopId,
       createdAt: now2,
@@ -82,15 +80,10 @@ export async function POST(req: NextRequest) {
     });
 
     const res = NextResponse.json({ ok: true, redirect: "/dashboard", shopId, role });
-    res.cookies.set("sid", sid, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      expires: expiresAt,
-    });
+    res.cookies.set("session_token", sessionToken, sessionCookieOptions(ttlDays * 24 * 60 * 60));
     return res;
   } catch (e: any) {
+    console.error("Complete setup error:", e);
     return NextResponse.json({ error: e?.message || "Unknown error" }, { status: 500 });
   }
 }
