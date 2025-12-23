@@ -13,7 +13,10 @@ export async function GET() {
 
   const shop = await db.collection("shops").findOne({ shopId: sess.shopId });
 
-  const vehicleCount = await db.collection("vehicles").countDocuments({ shopId: String(sess.shopId) });
+  const vehicleCount = await db.collection("vehicles").countDocuments({ 
+    shopId: String(sess.shopId),
+    "status.active": true,
+  });
 
   const billing = shop?.billing || {};
 

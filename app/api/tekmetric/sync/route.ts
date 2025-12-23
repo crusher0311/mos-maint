@@ -71,6 +71,15 @@ export async function POST(request: NextRequest) {
       const vin = vehicle.vin!.toUpperCase();
       const existing = await db.collection("vehicles").findOne({ vin });
       
+      // Build the active source entry for this work order
+      const workOrderSource = {
+        provider: "tekmetric",
+        workOrderId: String(ro.id),
+        workOrderNumber: ro.repairOrderNumber,
+        status: ro.status || "Open",
+        addedAt: new Date(),
+      };
+      
       const vehicleData: Record<string, any> = {
         vin,
         year: vehicle.year,
@@ -105,15 +114,43 @@ export async function POST(request: NextRequest) {
       };
       
       if (existing) {
+        // Update existing vehicle, add/update this work order source
+        const existingSources = existing.status?.sources || [];
+        const sourceIndex = existingSources.findIndex(
+          (s: any) => s.provider === "tekmetric" && s.workOrderId === String(ro.id)
+        );
+        
+        let updatedSources;
+        if (sourceIndex >= 0) {
+          // Update existing source
+          updatedSources = [...existingSources];
+          updatedSources[sourceIndex] = workOrderSource;
+        } else {
+          // Add new source
+          updatedSources = [...existingSources, workOrderSource];
+        }
+
         await db.collection("vehicles").updateOne(
           { vin },
-          { $set: vehicleData }
+          { 
+            $set: {
+              ...vehicleData,
+              "status.active": true,
+              "status.sources": updatedSources,
+              "status.updatedAt": new Date(),
+            }
+          }
         );
         stats.vehiclesUpdated++;
       } else {
         await db.collection("vehicles").insertOne({
           ...vehicleData,
           shopId: shop._id,
+          status: {
+            active: true,
+            sources: [workOrderSource],
+            updatedAt: new Date(),
+          },
           createdAt: new Date(),
         });
         stats.vehiclesImported++;

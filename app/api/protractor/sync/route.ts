@@ -217,29 +217,75 @@ export async function POST(req: NextRequest) {
         if (vin) {
           await upsertProtractorVehicleSnapshot(shopId, vin, vehicle);
           
-          await db.collection("vehicles").updateOne(
-            { 
-              $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
-              vin 
-            },
-            {
-              $setOnInsert: {
-                shopId,
-                vin,
-                createdAt: new Date(),
-              },
-              $set: {
-                year: vehicle.Year,
-                make: vehicle.Make,
-                model: vehicle.Model,
-                license: vehicle.LicensePlate,
-                lastMileage: currentOdometer,
+          // Build the active source entry for this work order
+          const workOrderSource = {
+            provider: "protractor",
+            workOrderId: String(wo.ID),
+            workOrderNumber: wo.WorkOrderNumber,
+            status: wo.Status || "Open",
+            addedAt: new Date(),
+          };
+
+          // Check if vehicle already exists
+          const existingVehicle = await db.collection("vehicles").findOne({
+            $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+            vin,
+          });
+
+          if (existingVehicle) {
+            // Update existing vehicle, add/update this work order source
+            const existingSources = existingVehicle.status?.sources || [];
+            const sourceIndex = existingSources.findIndex(
+              (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(wo.ID)
+            );
+            
+            let updatedSources;
+            if (sourceIndex >= 0) {
+              // Update existing source
+              updatedSources = [...existingSources];
+              updatedSources[sourceIndex] = workOrderSource;
+            } else {
+              // Add new source
+              updatedSources = [...existingSources, workOrderSource];
+            }
+
+            await db.collection("vehicles").updateOne(
+              { _id: existingVehicle._id },
+              {
+                $set: {
+                  year: vehicle.Year,
+                  make: vehicle.Make,
+                  model: vehicle.Model,
+                  license: vehicle.LicensePlate,
+                  lastMileage: currentOdometer,
+                  updatedAt: new Date(),
+                  protractorId: vehicle.ID,
+                  "status.active": true,
+                  "status.sources": updatedSources,
+                  "status.updatedAt": new Date(),
+                },
+              }
+            );
+          } else {
+            // Insert new vehicle with active status
+            await db.collection("vehicles").insertOne({
+              shopId: String(shopId),
+              vin,
+              year: vehicle.Year,
+              make: vehicle.Make,
+              model: vehicle.Model,
+              license: vehicle.LicensePlate,
+              lastMileage: currentOdometer,
+              protractorId: vehicle.ID,
+              status: {
+                active: true,
+                sources: [workOrderSource],
                 updatedAt: new Date(),
-                protractorId: vehicle.ID,
               },
-            },
-            { upsert: true }
-          );
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
 
           results.vehiclesSynced++;
           results.vehicleDetails.push({
