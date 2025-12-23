@@ -85,6 +85,11 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
+    await db.collection("protractor_canned_jobs").deleteOne({ shopId });
+    await db.collection("protractor_vehicles").deleteMany({ shopId });
+    await db.collection("protractor_work_orders").deleteMany({ shopId });
+    await db.collection("protractor_deferred_work").deleteMany({ shopId });
+
     return NextResponse.json({
       ok: true,
       message: "Protractor connected successfully",
@@ -122,6 +127,9 @@ export async function DELETE(req: NextRequest) {
     );
 
     await db.collection("protractor_canned_jobs").deleteOne({ shopId });
+    await db.collection("protractor_vehicles").deleteMany({ shopId });
+    await db.collection("protractor_work_orders").deleteMany({ shopId });
+    await db.collection("protractor_deferred_work").deleteMany({ shopId });
 
     return NextResponse.json({ ok: true, message: "Protractor disconnected" });
   } catch (err: any) {
