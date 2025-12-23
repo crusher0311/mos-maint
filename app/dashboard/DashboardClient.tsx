@@ -1,65 +1,105 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, TrendingUp, Search, Filter, MoreVertical, ExternalLink, ChevronRight, HelpCircle } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft } from "lucide-react";
+
+type PaginationInfo = {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+};
 
 type DashboardData = {
   rows: any[];
+  pagination?: PaginationInfo;
   user: any;
 };
+
+const PAGE_SIZE = 50;
+
+async function fetchDashboardData(page: number, search: string): Promise<DashboardData | null> {
+  try {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      pageSize: PAGE_SIZE.toString(),
+    });
+    if (search) params.set('search', search);
+    
+    const response = await fetch(`/api/dashboard/data?${params}`, {
+      cache: 'no-store'
+    });
+    
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (error) {
+    console.error('Failed to fetch dashboard data:', error);
+  }
+  return null;
+}
 
 export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
   const [data, setData] = useState(initialData);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadData = async (page: number, search: string) => {
+    setIsRefreshing(true);
+    const newData = await fetchDashboardData(page, search);
+    if (newData) {
+      setData(newData);
+      setLastUpdated(new Date());
+    }
+    setIsRefreshing(false);
+  };
 
   useEffect(() => {
     setLastUpdated(new Date());
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      await refreshData();
+    const interval = setInterval(() => {
+      loadData(currentPage, searchQuery);
     }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentPage, searchQuery]);
 
-  const refreshData = async () => {
-    try {
-      setIsRefreshing(true);
-      const response = await fetch('/api/dashboard/data', {
-        cache: 'no-store'
-      });
-      
-      if (response.ok) {
-        const newData = await response.json();
-        setData(newData);
-        setLastUpdated(new Date());
-      }
-    } catch (error) {
-      console.error('Failed to refresh dashboard data:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      setCurrentPage(1);
+      loadData(1, value);
+    }, 300);
   };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    loadData(newPage, searchQuery);
+  };
+
+  const refreshData = () => loadData(currentPage, searchQuery);
 
   const VEHICLE_HREF = (vin: string) => `/dashboard/vehicles/${encodeURIComponent(vin)}`;
 
-  const filteredRows = data.rows.filter(row => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      row.displayName?.toLowerCase().includes(query) ||
-      row.displayVin?.toLowerCase().includes(query) ||
-      row.displayVehicle?.toLowerCase().includes(query) ||
-      row.displayRo?.toString().includes(query)
-    );
-  });
+  const pagination = data.pagination || {
+    page: 1,
+    pageSize: 50,
+    totalCount: data.rows.length,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: false
+  };
 
   const stats = {
-    total: data.rows.length,
+    total: pagination.totalCount,
     dviComplete: data.rows.filter(r => r.dviDone).length,
     inProgress: data.rows.filter(r => !r.dviDone).length
   };
@@ -71,7 +111,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           <div className="flex items-center gap-3">
             <Car className="w-6 h-6 text-gray-600" />
             <h1 className="text-xl font-semibold text-gray-900">Vehicles</h1>
-            <span className="text-sm text-gray-500">({stats.total} active)</span>
+            <span className="text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -102,8 +142,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 <Car className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Active Vehicles</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-sm text-gray-500">Total Vehicles</p>
+                <p className="text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
               </div>
             </div>
           </div>
@@ -114,7 +154,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">DVI Complete</p>
+                <p className="text-sm text-gray-500">DVI Complete (this page)</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
               </div>
             </div>
@@ -126,7 +166,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 <Clock className="w-6 h-6 text-yellow-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">In Progress</p>
+                <p className="text-sm text-gray-500">In Progress (this page)</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.inProgress}</p>
               </div>
             </div>
@@ -142,15 +182,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   type="text"
                   placeholder="Search vehicles..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <button className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Filter className="w-4 h-4" />
-                  Filter
-                </button>
+              <div className="flex items-center gap-4 text-sm text-gray-500">
+                <span>
+                  Showing {((pagination.page - 1) * pagination.pageSize) + 1}-{Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
+                </span>
               </div>
             </div>
           </div>
@@ -170,7 +209,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredRows.map((r: any) => {
+                {data.rows.map((r: any) => {
                   const vin = r.displayVin || "";
                   const statusText = r.af?.status || "Unknown";
                   
@@ -235,7 +274,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                     </tr>
                   );
                 })}
-                {filteredRows.length === 0 && (
+                {data.rows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
@@ -255,6 +294,60 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </tbody>
             </table>
           </div>
+
+          {pagination.totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                Page {pagination.page} of {pagination.totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={!pagination.hasPrevPage || isRefreshing}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (pagination.totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (pagination.page <= 3) {
+                      pageNum = i + 1;
+                    } else if (pagination.page >= pagination.totalPages - 2) {
+                      pageNum = pagination.totalPages - 4 + i;
+                    } else {
+                      pageNum = pagination.page - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        disabled={isRefreshing}
+                        className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          pageNum === pagination.page
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={!pagination.hasNextPage || isRefreshing}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
