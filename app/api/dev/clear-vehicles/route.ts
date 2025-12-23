@@ -18,6 +18,10 @@ export async function DELETE() {
     const vehiclesResult = await db.collection("vehicles").deleteMany({ shopId });
     const plansResult = await db.collection("plans").deleteMany({ shopId });
     const customersResult = await db.collection("customers").deleteMany({ shopId });
+    
+    const eventsResult = await db.collection("events").deleteMany({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
 
     return NextResponse.json({
       ok: true,
@@ -25,6 +29,7 @@ export async function DELETE() {
         vehicles: vehiclesResult.deletedCount,
         plans: plansResult.deletedCount,
         customers: customersResult.deletedCount,
+        events: eventsResult.deletedCount,
       },
     });
   } catch (e: any) {
