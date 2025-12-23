@@ -310,13 +310,23 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           : "—"}
                       </td>
                       <td className="px-6 py-4">
-                        <Link
-                          href={VEHICLE_HREF(vin)}
-                          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                        >
-                          View
-                          <ChevronRight className="w-4 h-4" />
-                        </Link>
+                        {r.displayMiles != null && r.displayMiles > 0 ? (
+                          <Link
+                            href={VEHICLE_HREF(vin)}
+                            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                          >
+                            View
+                            <ChevronRight className="w-4 h-4" />
+                          </Link>
+                        ) : (
+                          <span 
+                            className="flex items-center gap-1 text-sm text-gray-400 cursor-not-allowed"
+                            title="Mileage required for recommendations"
+                          >
+                            View
+                            <ChevronRight className="w-4 h-4" />
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
