@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown } from "lucide-react";
+
+type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
+type SortDirection = 'asc' | 'desc';
 
 type PaginationInfo = {
   page: number;
@@ -50,7 +53,64 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn>('mileage');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection(column === 'mileage' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedRows = [...(data.rows || [])].sort((a, b) => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    
+    const getMileage = (r: any) => r.displayMiles ?? r.af?.miles ?? 0;
+    const hasMileageA = getMileage(a) > 0;
+    const hasMileageB = getMileage(b) > 0;
+    if (hasMileageA !== hasMileageB) {
+      return hasMileageA ? -1 : 1;
+    }
+    
+    switch (sortColumn) {
+      case 'customer':
+        return dir * ((a.displayName || '').localeCompare(b.displayName || ''));
+      case 'vehicle':
+        return dir * ((a.displayVehicle || '').localeCompare(b.displayVehicle || ''));
+      case 'vin':
+        return dir * ((a.displayVin || '').localeCompare(b.displayVin || ''));
+      case 'ro':
+        return dir * ((a.displayRo || '').localeCompare(b.displayRo || ''));
+      case 'status':
+        return dir * ((a.af?.status || '').localeCompare(b.af?.status || ''));
+      case 'dvi':
+        return dir * ((a.dviDone ? 1 : 0) - (b.dviDone ? 1 : 0));
+      case 'mileage':
+        return dir * (getMileage(a) - getMileage(b));
+      default:
+        return 0;
+    }
+  });
+
+  const SortHeader = ({ column, children }: { column: SortColumn; children: React.ReactNode }) => (
+    <th 
+      className="px-6 py-3 font-medium cursor-pointer hover:bg-gray-100 select-none"
+      onClick={() => handleSort(column)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {sortColumn === column && (
+          sortDirection === 'asc' 
+            ? <ArrowUp className="w-3 h-3" />
+            : <ArrowDown className="w-3 h-3" />
+        )}
+      </div>
+    </th>
+  );
 
   const loadData = async (page: number, search: string, archived: boolean = false) => {
     setIsRefreshing(true);
@@ -244,18 +304,18 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <table className="w-full">
               <thead className="bg-gray-50 text-left text-sm text-gray-600">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Customer</th>
-                  <th className="px-6 py-3 font-medium">Vehicle</th>
-                  <th className="px-6 py-3 font-medium">VIN</th>
-                  <th className="px-6 py-3 font-medium">RO #</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 font-medium">DVI</th>
-                  <th className="px-6 py-3 font-medium">Mileage</th>
+                  <SortHeader column="customer">Customer</SortHeader>
+                  <SortHeader column="vehicle">Vehicle</SortHeader>
+                  <SortHeader column="vin">VIN</SortHeader>
+                  <SortHeader column="ro">RO #</SortHeader>
+                  <SortHeader column="status">Status</SortHeader>
+                  <SortHeader column="dvi">DVI</SortHeader>
+                  <SortHeader column="mileage">Mileage</SortHeader>
                   <th className="px-6 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {data.rows.map((r: any, index: number) => {
+                {sortedRows.map((r: any, index: number) => {
                   const vin = r.displayVin || "";
                   const statusText = r.af?.status || "Unknown";
                   const rowKey = r.displayRo ? `${vin}-${r.displayRo}` : `${vin}-${index}`;
@@ -331,7 +391,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                     </tr>
                   );
                 })}
-                {data.rows.length === 0 && (
+                {sortedRows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
