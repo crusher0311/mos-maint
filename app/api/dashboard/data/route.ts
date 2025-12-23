@@ -360,7 +360,7 @@ export async function GET() {
           dviDone: { $literal: false },
           source: { $literal: "tekmetric" },
           af: {
-            status: { $ifNull: ["$tekmetric.roStatus", "Open"] },
+            status: { $ifNull: ["$tekmetric.roLabel", { $ifNull: ["$tekmetric.roStatus", "Open"] }] },
             createdAt: "$tekmetric.lastSynced",
             miles: "$mileage"
           }

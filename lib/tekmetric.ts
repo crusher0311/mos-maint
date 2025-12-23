@@ -96,6 +96,11 @@ export interface TekmetricRepairOrder {
   customerId: number;
   vehicleId: number;
   status?: string;
+  label?: {
+    id?: number;
+    text?: string;
+    colorCode?: string;
+  };
   mileageIn?: number;
   mileageOut?: number;
   poNumber?: string;

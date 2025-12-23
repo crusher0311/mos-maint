@@ -94,6 +94,8 @@ export async function POST(request: NextRequest) {
           repairOrderId: ro.id,
           repairOrderNumber: ro.repairOrderNumber,
           roStatus: ro.status,
+          roLabel: ro.label?.text || null,
+          roLabelColor: ro.label?.colorCode || null,
           lastSynced: new Date(),
         },
         updatedAt: new Date(),
