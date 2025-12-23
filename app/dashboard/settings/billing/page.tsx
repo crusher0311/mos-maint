@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CreditCard, Check, AlertCircle, Loader2 } from "lucide-react";
+import { CreditCard, Check, AlertCircle, Loader2, Zap } from "lucide-react";
 
 interface BillingInfo {
   plan: string;
@@ -28,17 +28,17 @@ export default function BillingSettingsPage() {
       } else {
         setBilling({
           plan: "Free Trial",
-          status: "active",
+          status: "trial",
           vehicleCount: 0,
-          vehicleLimit: 50,
+          vehicleLimit: 25,
         });
       }
     } catch (err) {
       setBilling({
         plan: "Free Trial",
-        status: "active",
+        status: "trial",
         vehicleCount: 0,
-        vehicleLimit: 50,
+        vehicleLimit: 25,
       });
     } finally {
       setLoading(false);
@@ -47,43 +47,51 @@ export default function BillingSettingsPage() {
 
   const plans = [
     {
-      name: "Starter",
-      price: "$49",
-      period: "/month",
+      name: "Free Trial",
+      price: "Free",
+      period: "",
+      description: "Try with your first 25 vehicles",
       features: [
-        "Up to 100 vehicles",
-        "Basic OEM schedules",
-        "Email support",
-        "1 user",
+        "25 vehicles included",
+        "OEM maintenance schedules",
+        "CARFAX integration",
+        "Protractor sync",
+        "No credit card required",
       ],
-      current: billing?.plan === "Starter",
+      current: billing?.plan === "Free Trial",
+      trial: true,
     },
     {
       name: "Professional",
-      price: "$99",
+      price: "$199",
       period: "/month",
+      description: "For single-location shops",
       features: [
-        "Up to 500 vehicles",
-        "All integrations",
+        "Unlimited vehicles",
+        "Full Protractor integration",
+        "CARFAX service history",
+        "OEM + custom intervals",
+        "Declined service tracking",
+        "Up to 5 users",
         "Priority support",
-        "5 users",
-        "Custom intervals",
       ],
       current: billing?.plan === "Professional",
       popular: true,
     },
     {
-      name: "Enterprise",
-      price: "Custom",
-      period: "",
+      name: "Multi-Shop",
+      price: "$149",
+      period: "/location/month",
+      description: "For 3+ locations",
       features: [
-        "Unlimited vehicles",
-        "Dedicated support",
+        "Everything in Professional",
+        "Multi-location management",
         "Unlimited users",
+        "Dedicated onboarding",
         "API access",
-        "Custom features",
+        "Volume discount",
       ],
-      current: billing?.plan === "Enterprise",
+      current: billing?.plan === "Multi-Shop",
     },
   ];
 
@@ -116,16 +124,22 @@ export default function BillingSettingsPage() {
             <div>
               <p className="text-2xl font-bold text-gray-900">{billing?.plan || "Free Trial"}</p>
               <p className="text-sm text-gray-500">
-                {billing?.vehicleCount || 0} of {billing?.vehicleLimit || 50} vehicles used
+                {billing?.vehicleCount || 0} of {billing?.vehicleLimit || 25} vehicles used
               </p>
+              <div className="mt-2 w-full bg-gray-200 rounded-full h-2 max-w-xs">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, ((billing?.vehicleCount || 0) / (billing?.vehicleLimit || 25)) * 100)}%` }}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                 billing?.status === "active" 
                   ? "bg-green-100 text-green-800" 
-                  : "bg-yellow-100 text-yellow-800"
+                  : "bg-blue-100 text-blue-800"
               }`}>
-                {billing?.status === "active" ? "Active" : "Trial"}
+                {billing?.status === "active" ? "Active" : "Free Trial"}
               </span>
             </div>
           </div>
@@ -134,6 +148,17 @@ export default function BillingSettingsPage() {
               Next billing date: {new Date(billing.nextBillingDate).toLocaleDateString()}
             </p>
           )}
+        </div>
+
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+          <div className="flex items-center gap-3 mb-2">
+            <Zap className="w-5 h-5" />
+            <h3 className="font-semibold">The Only Maintenance Tool for Protractor Shops</h3>
+          </div>
+          <p className="text-blue-100 text-sm">
+            MOS is the first maintenance recommendation platform with full Protractor integration. 
+            Sync vehicles, work orders, and add service packages directly to repair orders.
+          </p>
         </div>
 
         <div>
@@ -166,7 +191,8 @@ export default function BillingSettingsPage() {
                 )}
                 <div className="mb-4">
                   <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
-                  <div className="mt-2">
+                  <p className="text-sm text-gray-500 mt-1">{(plan as any).description}</p>
+                  <div className="mt-3">
                     <span className="text-3xl font-bold text-gray-900">{plan.price}</span>
                     <span className="text-gray-500">{plan.period}</span>
                   </div>
@@ -180,14 +206,16 @@ export default function BillingSettingsPage() {
                   ))}
                 </ul>
                 <button
-                  disabled={plan.current}
+                  disabled={plan.current || (plan as any).trial}
                   className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
                     plan.current
                       ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
+                      : (plan as any).trial
+                        ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
                   }`}
                 >
-                  {plan.current ? "Current Plan" : "Upgrade"}
+                  {plan.current ? "Current Plan" : (plan as any).trial ? "Active" : "Upgrade"}
                 </button>
               </div>
             ))}
@@ -198,10 +226,10 @@ export default function BillingSettingsPage() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-semibold text-amber-900">Need to upgrade?</h3>
+              <h3 className="font-semibold text-amber-900">Ready to upgrade?</h3>
               <p className="text-sm text-amber-800 mt-1">
-                Contact our sales team for custom pricing or to discuss your specific needs.
-                Email us at support@mosmaintenance.com
+                Unlock unlimited vehicles and full functionality. 
+                Questions? Email us at support@mosmaintenance.com
               </p>
             </div>
           </div>
