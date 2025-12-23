@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive } from "lucide-react";
 
 type PaginationInfo = {
   page: number;
@@ -21,13 +21,14 @@ type DashboardData = {
 
 const PAGE_SIZE = 50;
 
-async function fetchDashboardData(page: number, search: string): Promise<DashboardData | null> {
+async function fetchDashboardData(page: number, search: string, archived: boolean = false): Promise<DashboardData | null> {
   try {
     const params = new URLSearchParams({
       page: page.toString(),
       pageSize: PAGE_SIZE.toString(),
     });
     if (search) params.set('search', search);
+    if (archived) params.set('archived', 'true');
     
     const response = await fetch(`/api/dashboard/data?${params}`, {
       cache: 'no-store'
@@ -48,11 +49,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showArchived, setShowArchived] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadData = async (page: number, search: string) => {
+  const loadData = async (page: number, search: string, archived: boolean = false) => {
     setIsRefreshing(true);
-    const newData = await fetchDashboardData(page, search);
+    const newData = await fetchDashboardData(page, search, archived);
     if (newData) {
       setData(newData);
       setLastUpdated(new Date());
@@ -66,26 +68,33 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   useEffect(() => {
     const interval = setInterval(() => {
-      loadData(currentPage, searchQuery);
+      loadData(currentPage, searchQuery, showArchived);
     }, 30000);
     return () => clearInterval(interval);
-  }, [currentPage, searchQuery]);
+  }, [currentPage, searchQuery, showArchived]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
       setCurrentPage(1);
-      loadData(1, value);
+      loadData(1, value, showArchived);
     }, 300);
   };
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
-    loadData(newPage, searchQuery);
+    loadData(newPage, searchQuery, showArchived);
   };
 
-  const refreshData = () => loadData(currentPage, searchQuery);
+  const handleToggleArchived = () => {
+    const newArchived = !showArchived;
+    setShowArchived(newArchived);
+    setCurrentPage(1);
+    loadData(1, searchQuery, newArchived);
+  };
+
+  const refreshData = () => loadData(currentPage, searchQuery, showArchived);
 
   const VEHICLE_HREF = (vin: string) => `/dashboard/vehicles/${encodeURIComponent(vin)}`;
 
@@ -114,6 +123,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <span className="text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={handleToggleArchived}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                showArchived 
+                  ? 'bg-gray-800 text-white hover:bg-gray-700' 
+                  : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Archive className="w-4 h-4" />
+              {showArchived ? "Showing Archived" : "Show Archived"}
+            </button>
             <button
               onClick={refreshData}
               disabled={isRefreshing}

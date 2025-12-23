@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(10, parseInt(searchParams.get('pageSize') || '50', 10)));
     const search = searchParams.get('search')?.toLowerCase() || '';
+    const showArchived = searchParams.get('archived') === 'true';
     // Session check
     const store = await cookies();
     const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
@@ -34,6 +35,68 @@ export async function GET(request: NextRequest) {
     );
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // If showing archived vehicles, fetch from vehicles collection directly
+    if (showArchived) {
+      const archivedQuery: any = {
+        shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+        "status.active": { $ne: true },
+      };
+
+      if (search) {
+        archivedQuery.$or = [
+          { vin: { $regex: search, $options: 'i' } },
+          { make: { $regex: search, $options: 'i' } },
+          { model: { $regex: search, $options: 'i' } },
+          { "customer.name": { $regex: search, $options: 'i' } },
+          { "customer.firstName": { $regex: search, $options: 'i' } },
+          { "customer.lastName": { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      const totalCount = await db.collection("vehicles").countDocuments(archivedQuery);
+      const archivedVehicles = await db.collection("vehicles")
+        .find(archivedQuery)
+        .sort({ "status.lastClosedAt": -1, updatedAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .toArray();
+
+      const rows = archivedVehicles.map((v: any) => ({
+        updatedAt: v.status?.lastClosedAt || v.updatedAt || new Date(),
+        displayName: v.customer?.name || v.customer?.firstName ? 
+          `${v.customer.firstName || ''} ${v.customer.lastName || ''}`.trim() : 
+          'Unknown Customer',
+        displayVehicle: [v.year, v.make, v.model].filter(Boolean).join(' '),
+        displayVin: v.vin,
+        displayMiles: v.mileage || v.lastMileage || null,
+        displayRo: v.tekmetric?.repairOrderNumber || null,
+        dviDone: false,
+        archived: true,
+        af: {
+          status: 'Archived',
+          createdAt: v.status?.lastClosedAt || v.updatedAt,
+          miles: v.mileage || v.lastMileage || null,
+        },
+      }));
+
+      return NextResponse.json({
+        rows,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages: Math.ceil(totalCount / pageSize),
+          hasNextPage: page < Math.ceil(totalCount / pageSize),
+          hasPrevPage: page > 1,
+        },
+        user: {
+          email: user.email,
+          role: user.role,
+          shopId: user.shopId,
+        },
+      });
     }
 
     // Build rows from latest AutoFlow events per VIN (same logic as dashboard page)
