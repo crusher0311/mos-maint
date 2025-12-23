@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     
     const shop = await db.collection("shops").findOne({
-      autovitalsApiKey: apiKey
+      "autovitalsExtension.apiKeys.value": apiKey
     });
 
     if (!shop) {

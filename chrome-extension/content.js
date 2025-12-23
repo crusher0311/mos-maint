@@ -4,6 +4,88 @@
 
   console.log('[MOS AutoVitals] Content script loaded');
 
+  function detectCurrentVIN() {
+    const vinSelectors = [
+      '[data-vin]',
+      '[data-vehicle-vin]',
+      '.vin-display',
+      '.vin-number',
+      '.vehicle-vin',
+      '[class*="vin"]',
+      'input[name*="vin"]',
+    ];
+    
+    for (const selector of vinSelectors) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        for (const el of elements) {
+          const vin = el.dataset?.vin || el.dataset?.vehicleVin || el.value || el.textContent;
+          if (vin && /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin.trim())) {
+            return vin.trim().toUpperCase();
+          }
+        }
+      } catch (e) {}
+    }
+    
+    const pageType = getPageType();
+    
+    if (pageType === 'inspection') {
+      const headerAreas = document.querySelectorAll(
+        'header, .header, [class*="header"], [class*="vehicle-info"], ' +
+        '[class*="inspection-header"], .top-section, .vehicle-details'
+      );
+      
+      for (const area of headerAreas) {
+        const areaText = area.innerText || '';
+        const vinMatch = areaText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i);
+        if (vinMatch) {
+          return vinMatch[0].toUpperCase();
+        }
+      }
+      
+      const titleArea = document.querySelector('h1, h2, .title, [class*="title"]');
+      if (titleArea) {
+        const text = titleArea.innerText || '';
+        const vinMatch = text.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i);
+        if (vinMatch) {
+          return vinMatch[0].toUpperCase();
+        }
+      }
+    }
+    
+    const activeRow = document.querySelector(
+      'tr.selected, tr.active, [class*="selected"], [class*="active-row"], ' +
+      '[aria-selected="true"], [class*="highlighted"]'
+    );
+    if (activeRow) {
+      const rowText = activeRow.innerText || '';
+      const vinMatch = rowText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i);
+      if (vinMatch) {
+        return vinMatch[0].toUpperCase();
+      }
+    }
+    
+    const pageText = document.body.innerText || '';
+    const allVINs = pageText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/gi) || [];
+    
+    if (allVINs.length === 1) {
+      return allVINs[0].toUpperCase();
+    }
+    
+    if (allVINs.length > 1) {
+      const mainContent = document.querySelector('main, .main, [class*="content"], article');
+      if (mainContent) {
+        const contentText = mainContent.innerText || '';
+        const contentVINs = contentText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/gi) || [];
+        if (contentVINs.length === 1) {
+          return contentVINs[0].toUpperCase();
+        }
+      }
+    }
+    
+    return null;
+  }
+
   function extractVINFromText(text) {
     const vinPattern = /\b[A-HJ-NPR-Z0-9]{17}\b/gi;
     const matches = text.match(vinPattern);
@@ -508,17 +590,9 @@
     }
     
     if (message.type === 'GET_CURRENT_VIN') {
-      const pageText = document.body.innerText || '';
-      const vinPattern = /\b[A-HJ-NPR-Z0-9]{17}\b/gi;
-      const matches = pageText.match(vinPattern);
-      
-      if (matches && matches.length > 0) {
-        const vin = matches[0].toUpperCase();
-        console.log('[MOS AutoVitals] Current VIN:', vin);
-        sendResponse({ vin });
-      } else {
-        sendResponse({ vin: null });
-      }
+      const vin = detectCurrentVIN();
+      console.log('[MOS AutoVitals] Current VIN:', vin);
+      sendResponse({ vin });
       return true;
     }
   });
