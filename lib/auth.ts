@@ -12,6 +12,7 @@ export type SessionInfo = {
   shopId: number;
   email: string;
   role: string;
+  isPlatformAdmin?: boolean;
 };
 
 export async function getSession(): Promise<SessionInfo | null> {
@@ -42,7 +43,7 @@ export async function getSession(): Promise<SessionInfo | null> {
 
   const user = await db.collection("users").findOne(
     { _id: sess.userId },
-    { projection: { email: 1, role: 1 } }
+    { projection: { email: 1, role: 1, isPlatformAdmin: 1 } }
   );
   if (!user) return null;
 
@@ -51,7 +52,15 @@ export async function getSession(): Promise<SessionInfo | null> {
     shopId: Number(sess.shopId),
     email: String(user.email),
     role: String(user.role ?? "owner"),
+    isPlatformAdmin: Boolean(user.isPlatformAdmin),
   };
+}
+
+export async function requirePlatformAdmin(): Promise<SessionInfo> {
+  const s = await getSession();
+  if (!s) redirect("/login");
+  if (!s.isPlatformAdmin) redirect("/dashboard");
+  return s!; // Non-null assertion since redirect throws
 }
 
 export async function requireSession(): Promise<SessionInfo> {

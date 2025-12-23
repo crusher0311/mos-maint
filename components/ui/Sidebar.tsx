@@ -36,9 +36,10 @@ interface SidebarProps {
   userEmail?: string;
   userRole?: string;
   userInitials?: string;
+  isPlatformAdmin?: boolean;
 }
 
-export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS" }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin }: SidebarProps) {
   const pathname = usePathname();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,8 +57,6 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   const isActive = (href: string) => {
     return pathname === href || pathname?.startsWith(href + "/");
   };
-
-  const isAdminUser = userRole === "owner" || userRole === "admin";
 
   const navItems: NavItem[] = [
     {
@@ -90,16 +89,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         { name: "Customer Workflows", href: "/dashboard/settings/workflows" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
-    },
-    ...(isAdminUser ? [{
-      name: "Admin",
-      href: "/admin",
-      icon: <Shield className="w-5 h-5" />,
-      children: [
-        { name: "Usage & Costs", href: "/admin/usage" },
-        { name: "Enterprise", href: "/admin/enterprise" }
-      ]
-    }] : [])
+    }
   ];
 
   return (
@@ -185,6 +175,18 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
           ))}
         </ul>
       </nav>
+
+      {isPlatformAdmin && (
+        <div className="px-3 pb-2">
+          <Link
+            href="/platform-admin"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition-colors"
+          >
+            <Shield className="w-5 h-5" />
+            <span>MOS Admin Panel</span>
+          </Link>
+        </div>
+      )}
 
       <div className="p-4 border-t border-slate-700">
         <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-slate-800 rounded-lg p-2 -m-2 transition-colors">
