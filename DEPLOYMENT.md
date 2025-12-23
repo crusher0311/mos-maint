@@ -1,110 +1,215 @@
-# 🚀 Vercel Deployment Checklist
+# Deployment Guide
 
-## ✅ Pre-Deployment Checklist
-
-### 1. **Environment Variables Setup**
-Before deploying, make sure to configure these **REQUIRED** environment variables in your Vercel dashboard:
-
-**Required Variables:**
-- `MONGODB_URI` - Your MongoDB connection string
-- `MONGODB_DB` - Database name (e.g., "mos-maintenance-mvp")  
-- `SESSION_SECRET` - 32+ character random string for session encryption
-- `ADMIN_TOKEN` - Token for admin API access
-- `NEXT_PUBLIC_APP_URL` - Your production URL (e.g., "https://your-app.vercel.app")
-- `NODE_ENV` - Set to "production"
-
-**Optional Variables:**
-- `OPENAI_API_KEY` - For AI features
-- `SMTP_*` variables - For email functionality
-- `AUTOFLOW_*` variables - For AutoFlow integration
-- `CARFAX_*` variables - For Carfax integration
-
-### 2. **Files Ready for Deployment**
-✅ `package.json` - Contains `vercel-build` script  
-✅ `next.config.js` - Configured to ignore TypeScript/ESLint errors during build  
-✅ `vercel.json` - Vercel-specific configuration  
-✅ `.env.template` - Environment variable template  
-✅ `.gitignore` - Properly excludes sensitive files  
-✅ All UI components created and tested  
-
-### 3. **Database Preparation**
-Make sure your MongoDB database is accessible from Vercel:
-- Use MongoDB Atlas (recommended) or ensure your database accepts connections from Vercel IPs
-- Database should be populated with any necessary initial data
-- Indexes should be created (run migration scripts if needed)
-
-### 4. **Git Repository**
-1. Commit all recent changes:
-   ```bash
-   git add .
-   git commit -m "Phase 3: Complete UI/UX enhancement with design system"
-   git push origin main
-   ```
-
-2. **Vercel will automatically deploy when you push to your connected branch!**
-
-## 🔧 Vercel Configuration Steps
-
-### If this is your first deployment:
-
-1. **Connect Repository**
-   - Go to [vercel.com](https://vercel.com)
-   - Click "New Project"
-   - Import your Git repository
-   - Select the repository and click "Import"
-
-2. **Configure Build Settings**
-   - Framework: Next.js (should auto-detect)
-   - Build Command: `npm run vercel-build` (or leave default)
-   - Install Command: `npm install` (default)
-   - Output Directory: `.next` (default)
-
-3. **Set Environment Variables**
-   - In project settings → Environment Variables
-   - Add all required variables from the list above
-   - Make sure to set them for "Production" environment
-
-4. **Deploy!**
-   - Click "Deploy"
-   - Vercel will build and deploy automatically
-
-### For subsequent deployments:
-✅ **Just push to Git - Vercel auto-deploys!**
-
-## 🎯 Post-Deployment Testing
-
-After deployment, test these key features:
-- [ ] Login/Registration works
-- [ ] Dashboard loads correctly
-- [ ] Vehicle data displays
-- [ ] Admin panel accessible (if you're an admin)
-- [ ] Database connections work
-- [ ] UI components render properly
-
-## 🐛 Common Deployment Issues & Solutions
-
-**Build Fails:**
-- Check that all environment variables are set
-- Ensure MongoDB is accessible from Vercel
-- Review build logs in Vercel dashboard
-
-**Runtime Errors:**
-- Verify environment variables in production
-- Check that database connections work
-- Look at function logs in Vercel dashboard
-
-**UI Issues:**
-- Ensure all component imports are correct
-- Check that Tailwind CSS is building properly
-- Verify all assets are included
-
-## 📞 Need Help?
-If you encounter issues:
-1. Check Vercel deployment logs
-2. Verify all environment variables are set correctly
-3. Test the build locally first (if possible)
-4. Check MongoDB connectivity
+This guide covers deploying MOS Maintenance MVP to any hosting platform.
 
 ---
 
-**Your MOS Maintenance MVP is ready for production! 🎉**
+## Environment Variables
+
+### Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `MONGODB_URI` | Full MongoDB connection string | `mongodb+srv://user:pass@cluster.mongodb.net/db` |
+| `MONGODB_DB` | Database name | `mos-maintenance-mvp` |
+| `SESSION_SECRET` | 32+ character random string | `your-secret-key-here-32-chars-min` |
+| `NODE_ENV` | Environment mode | `production` |
+
+**Alternative MongoDB Config** (if not using MONGODB_URI):
+| Variable | Description |
+|----------|-------------|
+| `MONGODB_USERNAME` | MongoDB Atlas username |
+| `MONGODB_PASSWORD` | MongoDB Atlas password |
+
+### OpenAI Configuration
+
+The app supports two OpenAI modes:
+
+| Variable | When to Use |
+|----------|-------------|
+| `OPENAI_API_KEY` | **Self-hosted**: Your own OpenAI API key |
+| `AI_INTEGRATIONS_OPENAI_API_KEY` | **Replit only**: Auto-provided by Replit |
+| `AI_INTEGRATIONS_OPENAI_BASE_URL` | **Replit only**: Auto-provided by Replit |
+
+**Priority**: If `OPENAI_API_KEY` is set, it will be used. Otherwise falls back to Replit's integration.
+
+### Integration Variables (Optional)
+
+| Variable | Integration |
+|----------|-------------|
+| `TEKMETRIC_API_TOKEN` | Tekmetric shop management |
+| `CARFAX_PDI` | CARFAX vehicle history |
+| `CARFAX_POST_URL` | CARFAX API endpoint |
+| `DATAONE_API_URL` | DataOne VIN decoder |
+
+### Development Only (Do NOT set in production)
+
+| Variable | Description |
+|----------|-------------|
+| `DEV_AUTO_LOGIN` | Auto-login bypass (development only) |
+| `DEV_SHOP_ID` | Dev shop ID |
+| `DEV_USER_EMAIL` | Dev user email |
+
+---
+
+## Deployment Options
+
+### Option 1: Vercel (Recommended)
+
+1. **Connect Repository**
+   ```bash
+   # Push to GitHub first
+   git push origin main
+   ```
+
+2. **Import to Vercel**
+   - Go to [vercel.com](https://vercel.com)
+   - Click "New Project" → Import your repository
+   - Framework: Next.js (auto-detected)
+
+3. **Configure Environment Variables**
+   - Go to Project Settings → Environment Variables
+   - Add all required variables from the table above
+   - Set for "Production" environment
+
+4. **Deploy**
+   - Vercel auto-deploys on every push to main
+
+### Option 2: VPS / Self-Hosted
+
+1. **Prerequisites**
+   ```bash
+   # Node.js 20+
+   node --version  # Should be 20.x or higher
+   
+   # npm or yarn
+   npm --version
+   ```
+
+2. **Clone & Install**
+   ```bash
+   git clone https://github.com/crusher0311/mos-maint.git
+   cd mos-maint
+   npm install
+   ```
+
+3. **Create Environment File**
+   ```bash
+   # Create .env.local (never commit this file)
+   cat > .env.local << EOF
+   NODE_ENV=production
+   MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/db
+   MONGODB_DB=mos-maintenance-mvp
+   SESSION_SECRET=your-32-character-secret-here
+   OPENAI_API_KEY=sk-your-openai-key
+   EOF
+   ```
+
+4. **Build & Start**
+   ```bash
+   npm run build
+   npm start
+   ```
+
+5. **Production Process Manager (recommended)**
+   ```bash
+   # Using PM2
+   npm install -g pm2
+   pm2 start npm --name "mos-maint" -- start
+   pm2 save
+   pm2 startup
+   ```
+
+### Option 3: Docker
+
+1. **Create Dockerfile** (if not present)
+   ```dockerfile
+   FROM node:20-alpine
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm ci --only=production
+   COPY . .
+   RUN npm run build
+   EXPOSE 3000
+   CMD ["npm", "start"]
+   ```
+
+2. **Build & Run**
+   ```bash
+   docker build -t mos-maint .
+   docker run -p 3000:3000 --env-file .env.local mos-maint
+   ```
+
+---
+
+## Database Setup
+
+### MongoDB Atlas (Recommended)
+
+1. Create a cluster at [mongodb.com/atlas](https://mongodb.com/atlas)
+2. Create a database user with read/write permissions
+3. Whitelist your server's IP (or 0.0.0.0/0 for Vercel)
+4. Copy the connection string to `MONGODB_URI`
+
+### Create Indexes
+
+Run the index creation script after first deployment:
+```bash
+npx tsx scripts/add-indexes.ts
+```
+
+---
+
+## Post-Deployment Checklist
+
+- [ ] All environment variables configured
+- [ ] MongoDB accessible from deployment server
+- [ ] Login/registration works
+- [ ] Dashboard loads correctly
+- [ ] OpenAI features functional (test a vehicle analysis)
+- [ ] Integrations connected (Tekmetric, CARFAX, etc.)
+
+---
+
+## Troubleshooting
+
+### Build Failures
+- Verify all environment variables are set
+- Check MongoDB connectivity
+- Review build logs
+
+### OpenAI Not Working
+- Verify `OPENAI_API_KEY` is set correctly
+- Test with a simple API call
+- Check usage limits on your OpenAI account
+
+### Session/Auth Issues
+- Ensure `SESSION_SECRET` is set and consistent
+- Check cookie settings match your domain (HTTPS required)
+- Verify MongoDB sessions collection is accessible
+
+### Database Connection Errors
+- Confirm MongoDB URI is correct
+- Check IP whitelist includes your server
+- Verify database user permissions
+
+---
+
+## Replit vs Self-Hosted Differences
+
+| Feature | Replit | Self-Hosted |
+|---------|--------|-------------|
+| OpenAI | Uses AI_INTEGRATIONS_* (auto) | Use your own OPENAI_API_KEY |
+| Port | 5000 (required) | 3000 (default) or custom |
+| HTTPS | Auto-managed | Configure reverse proxy (nginx) |
+| Database | MongoDB Atlas | MongoDB Atlas or self-hosted |
+
+---
+
+## Security Reminders
+
+- Never commit `.env.local` or secrets to git
+- Use strong, unique `SESSION_SECRET`
+- Rotate API keys periodically
+- Keep `DEV_AUTO_LOGIN` disabled in production
+- Use HTTPS in production (Vercel handles this automatically)
