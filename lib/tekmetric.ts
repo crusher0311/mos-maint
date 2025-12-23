@@ -203,12 +203,47 @@ export async function getVehicle(vehicleId: number): Promise<TekmetricVehicle> {
   return tekmetricRequest(`/vehicles/${vehicleId}`);
 }
 
+export interface TekmetricRepairOrderFull {
+  id: number;
+  repairOrderNumber: number;
+  shopId: number;
+  repairOrderStatus?: {
+    id: number;
+    code: string;
+    name: string;
+  };
+  repairOrderLabel?: {
+    id: number;
+    code: string;
+    name: string;
+  };
+  repairOrderCustomLabel?: {
+    name: string;
+  };
+  color?: string;
+  customerId: number;
+  vehicleId: number;
+  milesIn?: number;
+  milesOut?: number;
+  completedDate?: string;
+  postedDate?: string;
+  createdDate?: string;
+  updatedDate?: string;
+  deletedDate?: string;
+  jobs?: Array<{
+    id: number;
+    name: string;
+    authorized: boolean;
+  }>;
+}
+
 export async function getRepairOrders(
   shopId: number,
   params: {
     customerId?: number;
     vehicleId?: number;
     status?: string;
+    repairOrderStatusId?: number[];
     page?: number;
     size?: number;
     updatedDateStart?: string;
@@ -216,11 +251,14 @@ export async function getRepairOrders(
     sort?: string;
     sortDirection?: 'ASC' | 'DESC';
   } = {}
-): Promise<PaginatedResponse<TekmetricRepairOrder>> {
+): Promise<PaginatedResponse<TekmetricRepairOrderFull>> {
   const queryParams = new URLSearchParams({ shop: shopId.toString() });
   if (params.customerId) queryParams.set('customerId', params.customerId.toString());
   if (params.vehicleId) queryParams.set('vehicleId', params.vehicleId.toString());
   if (params.status) queryParams.set('status', params.status);
+  if (params.repairOrderStatusId) {
+    params.repairOrderStatusId.forEach(id => queryParams.append('repairOrderStatusId', id.toString()));
+  }
   if (params.page !== undefined) queryParams.set('page', params.page.toString());
   if (params.size !== undefined) queryParams.set('size', params.size.toString());
   if (params.updatedDateStart) queryParams.set('updatedDateStart', params.updatedDateStart);

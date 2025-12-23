@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import { getRepairOrders, getVehicle, getCustomer } from "@/lib/tekmetric";
 
 export async function GET(request: NextRequest) {
   try {
@@ -330,51 +331,62 @@ export async function GET(request: NextRequest) {
     const shop = await db.collection("shops").findOne({});
     const tekmetricConnected = !!shop?.tekmetric?.shopId;
     
-    // Fetch Tekmetric vehicles only if Tekmetric is connected
+    // Fetch Tekmetric vehicles directly from API if connected
     let tekmetricRows: any[] = [];
-    if (tekmetricConnected) {
-      tekmetricRows = await db.collection("vehicles").aggregate([
-        {
-          $match: {
-            "tekmetric.shopId": { $exists: true },
-            "tekmetric.repairOrderNumber": { $exists: true },
-            vin: { $ne: null, $type: "string" }
-          }
-        },
-        { $sort: { updatedAt: -1 } },
-        {
-          $project: {
-            _id: 0,
-            updatedAt: { $ifNull: ["$updatedAt", new Date()] },
-            displayName: {
-              $cond: [
-                { $and: [{ $ifNull: ["$customer.firstName", false] }, { $ifNull: ["$customer.lastName", false] }] },
-                { $concat: ["$customer.firstName", " ", "$customer.lastName"] },
-                { $ifNull: ["$customer.firstName", { $ifNull: ["$customer.lastName", "Unknown Customer"] }] }
-              ]
-            },
-            displayVehicle: {
-              $concat: [
-                { $toString: { $ifNull: ["$year", ""] } },
-                { $cond: [{ $ifNull: ["$year", false] }, " ", ""] },
-                { $ifNull: ["$make", ""] },
-                { $cond: [{ $ifNull: ["$make", false] }, " ", ""] },
-                { $ifNull: ["$model", ""] }
-              ]
-            },
-            displayVin: { $toUpper: "$vin" },
-            displayMiles: "$mileage",
-            displayRo: "$tekmetric.repairOrderNumber",
-            dviDone: { $literal: false },
-            source: { $literal: "tekmetric" },
-            af: {
-              status: { $ifNull: ["$tekmetric.roLabel", { $ifNull: ["$tekmetric.roStatus", "Open"] }] },
-              createdAt: "$tekmetric.lastSynced",
-              miles: "$mileage"
-            }
+    if (tekmetricConnected && process.env.TEKMETRIC_API_TOKEN) {
+      try {
+        // Fetch active repair orders: Estimate(1), Work-in-Progress(2), Complete(3)
+        const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
+          repairOrderStatusId: [1, 2, 3],
+          size: 100,
+          sortDirection: 'DESC'
+        });
+        
+        // Get unique vehicles from repair orders and fetch their details
+        const vehicleMap = new Map<number, any>();
+        for (const ro of roResponse.content) {
+          if (!vehicleMap.has(ro.vehicleId)) {
+            vehicleMap.set(ro.vehicleId, ro);
           }
         }
-      ]).toArray();
+        
+        // Fetch vehicle and customer details for each RO
+        for (const [vehicleId, ro] of vehicleMap.entries()) {
+          try {
+            const vehicle = await getVehicle(vehicleId);
+            if (!vehicle.vin) continue;
+            
+            let customerName = 'Unknown Customer';
+            try {
+              const customer = await getCustomer(ro.customerId);
+              customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'Unknown Customer';
+            } catch (e) {}
+            
+            const displayVehicle = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
+            const statusLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || ro.repairOrderStatus?.name || 'Open';
+            
+            tekmetricRows.push({
+              updatedAt: ro.updatedDate ? new Date(ro.updatedDate) : new Date(),
+              displayName: customerName,
+              displayVehicle,
+              displayVin: vehicle.vin.toUpperCase(),
+              displayMiles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null,
+              displayRo: ro.repairOrderNumber,
+              dviDone: false,
+              source: 'tekmetric',
+              af: {
+                status: statusLabel,
+                createdAt: ro.createdDate ? new Date(ro.createdDate) : new Date(),
+                miles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null
+              }
+            });
+          } catch (e) {
+            console.error(`Error fetching vehicle ${vehicleId}:`, e);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching Tekmetric repair orders:', error);
+      }
     }
 
     // Merge and deduplicate by VIN (AutoFlow takes priority, then Protractor, then Tekmetric)
