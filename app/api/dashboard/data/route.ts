@@ -342,18 +342,12 @@ export async function GET(request: NextRequest) {
           sortDirection: 'DESC'
         });
         
-        // Get unique vehicles from repair orders and fetch their details
-        const vehicleMap = new Map<number, any>();
-        for (const ro of roResponse.content) {
-          if (!vehicleMap.has(ro.vehicleId)) {
-            vehicleMap.set(ro.vehicleId, ro);
-          }
-        }
+        console.log(`[Tekmetric] Fetched ${roResponse.content.length} repair orders, total: ${roResponse.totalElements}`);
         
-        // Fetch vehicle and customer details for each RO
-        for (const [vehicleId, ro] of vehicleMap.entries()) {
+        // Fetch vehicle and customer details for each RO (show each RO as its own row)
+        for (const ro of roResponse.content) {
           try {
-            const vehicle = await getVehicle(vehicleId);
+            const vehicle = await getVehicle(ro.vehicleId);
             if (!vehicle.vin) continue;
             
             let customerName = 'Unknown Customer';
@@ -381,7 +375,7 @@ export async function GET(request: NextRequest) {
               }
             });
           } catch (e) {
-            console.error(`Error fetching vehicle ${vehicleId}:`, e);
+            console.error(`Error fetching vehicle ${ro.vehicleId}:`, e);
           }
         }
       } catch (error) {
