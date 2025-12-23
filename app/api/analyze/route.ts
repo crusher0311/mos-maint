@@ -200,6 +200,7 @@ Instructions:
 
     const inputTokens = data?.usage?.prompt_tokens ?? estimateTokens(systemPrompt + userPrompt);
     const outputTokens = data?.usage?.completion_tokens ?? estimateTokens(raw);
+    const cost = estimateCost(model, inputTokens, outputTokens);
     
     if (shopId) {
       try {
@@ -211,6 +212,7 @@ Instructions:
           inputTokens,
           outputTokens,
           totalTokens: inputTokens + outputTokens,
+          estimatedCost: cost,
           vin: vin || undefined,
         });
       } catch (logErr) {
