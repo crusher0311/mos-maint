@@ -3,7 +3,7 @@ import { useState } from "react";
 
 export default function InviteForm() {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("staff");
+  const [role, setRole] = useState("user");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -46,7 +46,7 @@ export default function InviteForm() {
           value={role}
           onChange={(e) => setRole(e.target.value)}
         >
-          <option value="staff">Staff</option>
+          <option value="user">User</option>
           <option value="manager">Manager</option>
         </select>
         <button

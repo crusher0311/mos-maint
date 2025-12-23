@@ -7,7 +7,7 @@ type Me = { ok: true; email: string; role: string; shopId: number };
 export default function InvitePage() {
   const [me, setMe] = useState<Me | null>(null);
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("staff");
+  const [role, setRole] = useState("user");
   const [days, setDays] = useState(7);
   const [inviteUrl, setInviteUrl] = useState("");
   const [msg, setMsg] = useState("");
@@ -85,9 +85,9 @@ export default function InvitePage() {
             value={role}
             onChange={e => setRole(e.target.value)}
           >
-            <option value="staff">staff</option>
-            <option value="manager">manager</option>
-            <option value="owner">owner</option>
+            <option value="user">User</option>
+            <option value="manager">Manager</option>
+            <option value="owner">Owner</option>
           </select>
           <input
             type="number"

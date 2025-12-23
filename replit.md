@@ -94,7 +94,7 @@ The `chrome-extension/` folder contains a Chrome extension that integrates with 
 -   **Tekmetric DVI**: Now receives and displays Tekmetric inspection data when available
 
 ### Authentication & Authorization (Dec 2024)
--   **Role Hierarchy**: Standardized roles - `owner` (shop superuser), `admin` (platform staff), `manager`, `staff`, `viewer`
+-   **Role Hierarchy**: Standardized roles - `owner` (shop superuser), `admin` (platform staff), `manager`, `user`, `viewer`
 -   **Setup Flow**: New shops go through `/setup` wizard; invited users complete via token-based `/setup?token=...`
 -   **Password Hashing**: All routes now use bcrypt (cost factor 12); login handles legacy scrypt/plaintext with auto-upgrade
 -   **Session Consistency**: All auth routes use `session_token` cookie with consistent options

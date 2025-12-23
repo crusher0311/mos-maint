@@ -80,7 +80,7 @@ export default function UsersSettingsPage() {
     owner: "bg-purple-100 text-purple-800",
     admin: "bg-red-100 text-red-800",
     manager: "bg-blue-100 text-blue-800",
-    staff: "bg-green-100 text-green-800",
+    user: "bg-green-100 text-green-800",
     viewer: "bg-gray-100 text-gray-800",
   };
 
@@ -207,7 +207,7 @@ export default function UsersSettingsPage() {
           <ul className="space-y-2 text-sm text-blue-800">
             <li><strong>Owner:</strong> Full access, can manage users and billing</li>
             <li><strong>Manager:</strong> Can manage vehicles and view all data</li>
-            <li><strong>Staff:</strong> Can view and update vehicle recommendations</li>
+            <li><strong>User:</strong> Can view and update vehicle recommendations</li>
             <li><strong>Viewer:</strong> Read-only access to vehicle data</li>
           </ul>
         </div>
