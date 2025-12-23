@@ -23,13 +23,14 @@ import {
   Download,
 } from "lucide-react";
 
-type IntegrationTab = "carfax" | "autoflow" | "protractor" | "autovitals";
+type IntegrationTab = "carfax" | "autoflow" | "protractor" | "autovitals" | "tekmetric";
 
 interface IntegrationStatus {
   carfax: { configured: boolean; locationId?: string };
   autoflow: { configured: boolean };
   protractor: { configured: boolean; connectionId?: string };
   autovitals: { configured: boolean; shopName?: string };
+  tekmetric: { configured: boolean; shopId?: number; shopName?: string; lastSync?: string };
 }
 
 export default function IntegrationsPage() {
@@ -40,6 +41,7 @@ export default function IntegrationsPage() {
     autoflow: { configured: false },
     protractor: { configured: false },
     autovitals: { configured: false },
+    tekmetric: { configured: false },
   });
 
   useEffect(() => {
@@ -48,17 +50,19 @@ export default function IntegrationsPage() {
 
   async function fetchAllStatuses() {
     try {
-      const [carfaxRes, autoflowRes, protractorRes, autovitalsRes] = await Promise.all([
+      const [carfaxRes, autoflowRes, protractorRes, autovitalsRes, tekmetricRes] = await Promise.all([
         fetch("/api/settings/carfax").catch(() => null),
         fetch("/api/settings/autoflow").catch(() => null),
         fetch("/api/settings/protractor").catch(() => null),
         fetch("/api/autovitals/settings").catch(() => null),
+        fetch("/api/settings/tekmetric").catch(() => null),
       ]);
 
       const carfaxData = carfaxRes?.ok ? await carfaxRes.json() : {};
       const autoflowData = autoflowRes?.ok ? await autoflowRes.json() : {};
       const protractorData = protractorRes?.ok ? await protractorRes.json() : {};
       const autovitalsData = autovitalsRes?.ok ? await autovitalsRes.json() : {};
+      const tekmetricData = tekmetricRes?.ok ? await tekmetricRes.json() : {};
 
       setStatuses({
         carfax: { 
@@ -76,6 +80,12 @@ export default function IntegrationsPage() {
           configured: Boolean(autovitalsData.isConfigured), 
           shopName: autovitalsData.shopName 
         },
+        tekmetric: {
+          configured: Boolean(tekmetricData.configured),
+          shopId: tekmetricData.shopId,
+          shopName: tekmetricData.shopName,
+          lastSync: tekmetricData.lastSync,
+        },
       });
     } catch (err) {
       console.error("Failed to fetch integration statuses:", err);
@@ -88,6 +98,7 @@ export default function IntegrationsPage() {
     { id: "carfax", label: "CARFAX", status: statuses.carfax.configured },
     { id: "autoflow", label: "AutoFlow", status: statuses.autoflow.configured },
     { id: "protractor", label: "Protractor", status: statuses.protractor.configured },
+    { id: "tekmetric", label: "Tekmetric", status: statuses.tekmetric.configured },
     // AutoVitals hidden until VIN data access is clarified
     // { id: "autovitals", label: "AutoVitals", status: statuses.autovitals.configured },
   ];
@@ -140,6 +151,7 @@ export default function IntegrationsPage() {
         {activeTab === "autoflow" && <AutoflowSection onUpdate={fetchAllStatuses} />}
         {activeTab === "protractor" && <ProtractorSection onUpdate={fetchAllStatuses} />}
         {activeTab === "autovitals" && <AutovitalsSection onUpdate={fetchAllStatuses} />}
+        {activeTab === "tekmetric" && <TekmetricSection onUpdate={fetchAllStatuses} />}
       </div>
 
       <DevToolsSection />
@@ -1147,6 +1159,264 @@ function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
           message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
         }`}>
           {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          <span>{message.text}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TekmetricSection({ onUpdate }: { onUpdate: () => void }) {
+  const [shopId, setShopId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [config, setConfig] = useState<{
+    configured: boolean;
+    shopId?: number;
+    shopName?: string;
+    lastSync?: string;
+  }>({ configured: false });
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  async function fetchSettings() {
+    try {
+      const res = await fetch("/api/settings/tekmetric");
+      if (res.ok) {
+        const data = await res.json();
+        setConfig(data);
+        if (data.shopId) {
+          setShopId(data.shopId.toString());
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch Tekmetric settings:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleConnect() {
+    if (!shopId.trim()) {
+      setMessage({ type: "error", text: "Please enter your Tekmetric Shop ID" });
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings/tekmetric", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId: shopId.trim() }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setConfig({
+          configured: true,
+          shopId: data.shopId,
+          shopName: data.shopName,
+        });
+        setMessage({ type: "success", text: `Connected to ${data.shopName || 'shop'}` });
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to connect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to connect to Tekmetric" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/tekmetric/sync", { method: "POST" });
+      const data = await res.json();
+
+      if (res.ok) {
+        const { stats } = data;
+        setMessage({
+          type: "success",
+          text: `Synced ${stats.vehiclesImported} new vehicles, updated ${stats.vehiclesUpdated}`,
+        });
+        fetchSettings();
+      } else {
+        setMessage({ type: "error", text: data.error || "Sync failed" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Sync failed" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Are you sure you want to disconnect Tekmetric?")) return;
+
+    setDisconnecting(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings/tekmetric", { method: "DELETE" });
+      if (res.ok) {
+        setConfig({ configured: false });
+        setShopId("");
+        setMessage({ type: "success", text: "Disconnected from Tekmetric" });
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: "Failed to disconnect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to disconnect" });
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+          <Settings className="w-6 h-6 text-purple-600" />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold text-gray-900">Tekmetric</h2>
+          <p className="text-sm text-gray-500">
+            Sync vehicles, customers, and repair orders from Tekmetric
+          </p>
+        </div>
+        {config.configured && (
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-500" />
+            <span className="text-sm text-green-600">Connected</span>
+          </div>
+        )}
+      </div>
+
+      {config.configured ? (
+        <div className="space-y-4">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500">Shop ID:</span>
+                <span className="ml-2 font-medium">{config.shopId}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">Shop Name:</span>
+                <span className="ml-2 font-medium">{config.shopName || "N/A"}</span>
+              </div>
+              {config.lastSync && (
+                <div className="col-span-2">
+                  <span className="text-gray-500">Last Sync:</span>
+                  <span className="ml-2 font-medium">
+                    {new Date(config.lastSync).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {syncing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Sync Now
+            </button>
+            <button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tekmetric Shop ID
+            </label>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={shopId}
+                onChange={(e) => setShopId(e.target.value)}
+                placeholder="Enter your shop ID (e.g., 12345)"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+              <button
+                onClick={handleConnect}
+                disabled={saving || !shopId.trim()}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Link2 className="w-4 h-4" />
+                )}
+                Connect
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              You can find your Shop ID in your Tekmetric account settings
+            </p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex gap-3">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-medium mb-1">About Tekmetric Integration</p>
+                <p>
+                  MOS will import your vehicles, customers, and repair order history
+                  from Tekmetric to provide maintenance recommendations.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div
+          className={`flex items-center gap-2 p-3 rounded-lg ${
+            message.type === "success"
+              ? "bg-green-50 text-green-700"
+              : "bg-red-50 text-red-700"
+          }`}
+        >
+          {message.type === "success" ? (
+            <CheckCircle className="w-5 h-5" />
+          ) : (
+            <XCircle className="w-5 h-5" />
+          )}
           <span>{message.text}</span>
         </div>
       )}
