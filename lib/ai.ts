@@ -1,19 +1,19 @@
 // lib/ai.ts
 
-// Available OpenAI models
+// Available OpenAI models via Replit AI Integrations
 export const MODELS = [
   "gpt-4o-mini",
   "gpt-4o",
-  "gpt-4",
-  "gpt-4-turbo", 
-  "gpt-3.5-turbo",
+  "gpt-4.1-mini",
+  "gpt-4.1",
+  "o3-mini",
 ] as const;
 
 export const DEFAULT_MODEL = "gpt-4o-mini";
 
-// Get the OpenAI API key from available sources
+// Get the OpenAI configuration from available sources
 // Priority: 1) OPENAI_API_KEY (self-hosted), 2) AI_INTEGRATIONS_OPENAI_API_KEY (Replit integration)
-export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } | null {
+export function getOpenAIConfig(): { apiKey: string; baseUrl: string; source: 'direct' | 'replit' } | null {
   if (typeof window !== 'undefined') return null;
   
   try {
@@ -21,12 +21,20 @@ export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } 
     
     // Check for direct API key first (self-hosted)
     if (env?.OPENAI_API_KEY) {
-      return { apiKey: env.OPENAI_API_KEY, source: 'direct' };
+      return { 
+        apiKey: env.OPENAI_API_KEY, 
+        baseUrl: 'https://api.openai.com/v1',
+        source: 'direct' 
+      };
     }
     
     // Fall back to Replit's AI integration
     if (env?.AI_INTEGRATIONS_OPENAI_API_KEY) {
-      return { apiKey: env.AI_INTEGRATIONS_OPENAI_API_KEY, source: 'replit' };
+      return { 
+        apiKey: env.AI_INTEGRATIONS_OPENAI_API_KEY, 
+        baseUrl: env.AI_INTEGRATIONS_OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        source: 'replit' 
+      };
     }
     
     return null;
@@ -35,21 +43,29 @@ export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } 
   }
 }
 
+// Legacy function for backwards compatibility
+export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } | null {
+  const config = getOpenAIConfig();
+  if (!config) return null;
+  return { apiKey: config.apiKey, source: config.source };
+}
+
 // OpenAI client wrapper
 export function getOpenAI() {
-  const keyInfo = getOpenAIKey();
+  const config = getOpenAIConfig();
   
-  if (!keyInfo) {
+  if (!config) {
     throw new Error("No OpenAI API key configured. Set OPENAI_API_KEY or use Replit's AI integration.");
   }
   
-  const { apiKey } = keyInfo;
+  const { apiKey, baseUrl, source } = config;
   
   return {
     apiKey,
-    source: keyInfo.source,
+    baseUrl,
+    source,
     async chat(messages: any[], model = DEFAULT_MODEL) {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
@@ -77,16 +93,16 @@ export async function runResponse(model: string, input: string): Promise<{
   error?: string;
   source?: 'direct' | 'replit';
 }> {
-  const keyInfo = getOpenAIKey();
+  const config = getOpenAIConfig();
   
-  if (!keyInfo) {
+  if (!config) {
     return { ok: false, error: "No OpenAI API key configured. Set OPENAI_API_KEY or use Replit's AI integration." };
   }
   
-  const { apiKey, source } = keyInfo;
+  const { apiKey, baseUrl, source } = config;
 
   try {
-    const resp = await fetch("https://api.openai.com/v1/responses", {
+    const resp = await fetch(`${baseUrl}/responses`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
