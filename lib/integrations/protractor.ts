@@ -871,7 +871,7 @@ export async function fetchServicePackageTemplateDetail(
       config
     );
 
-    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, status=${result.status || 'N/A'}`);
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}`);
     
     if (result.ok && result.data) {
       const template = (result.data as any).ServicePackageTemplate || result.data;
@@ -1059,7 +1059,7 @@ export async function applyCannedJobToWorkOrder(
       };
       
       // Get existing work order and add service package
-      const existingPackagesRaw = existingWorkOrder.ServicePackages;
+      const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
       const existingPackages = Array.isArray(existingPackagesRaw) 
         ? existingPackagesRaw 
         : (existingPackagesRaw?.ItemCollection || []);
@@ -1084,7 +1084,7 @@ export async function applyCannedJobToWorkOrder(
         }
       );
       
-      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}, status=${updateResult.status || 'N/A'}`);
+      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
       console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data || {}).substring(0, 500));
       
       if (updateResult.ok) {
@@ -1260,7 +1260,7 @@ export async function applyCannedJobToWorkOrder(
   };
   
   // Per docs: "WorkOrder object serialized in string format" - include full work order structure
-  const existingPackagesRaw = existingWorkOrder.ServicePackages;
+  const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
   const existingPackages = Array.isArray(existingPackagesRaw) 
     ? existingPackagesRaw 
     : (existingPackagesRaw?.ItemCollection || []);

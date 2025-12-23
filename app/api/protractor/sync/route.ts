@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
     
     // Get from deferred work
     const deferredWork = await db.collection("protractor_deferred_work").find({ shopId }).toArray();
+    console.log(`[Protractor Sync] Checking ${deferredWork.length} deferred work records for service packages...`);
     for (const dw of deferredWork) {
       const items = dw.items || dw.deferredWork || [];
       for (const item of items) {
@@ -140,17 +141,19 @@ export async function POST(req: NextRequest) {
     
     // Get from work orders service packages
     const workOrders = await db.collection("protractor_work_orders").find({ shopId }).toArray();
+    console.log(`[Protractor Sync] Checking ${workOrders.length} work orders for service packages...`);
     for (const wo of workOrders) {
       const packages = wo.servicePackages || wo.ServicePackages || [];
-      const pkgArray = Array.isArray(packages) ? packages : (packages.ItemCollection || []);
+      const pkgArray = Array.isArray(packages) ? packages : (packages?.ItemCollection || []);
       for (const pkg of pkgArray) {
-        const code = pkg.Code || pkg.code;
-        const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.title;
+        const code = pkg.Code || pkg.code || pkg.ServicePackageTemplateCode;
+        const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.title || pkg.Description;
+        const id = pkg.ID || pkg.id || pkg.ServicePackageTemplateID || code;
         if (code && !discovered.has(code.toLowerCase())) {
           discovered.set(code.toLowerCase(), {
-            id: code,
+            id: id || code,
             title: title || code,
-            description: pkg.ServicePackageHeader?.Description || pkg.Description || "",
+            description: pkg.ServicePackageHeader?.Description || pkg.Description || pkg.description || "",
             chapter: pkg.Chapter || pkg.chapter || "Service",
             code: code,
           });
@@ -158,6 +161,7 @@ export async function POST(req: NextRequest) {
       }
     }
     
+    console.log(`[Protractor Sync] Discovered ${discovered.size} unique service packages from cached data`);
     return Array.from(discovered.values());
   }
   
@@ -271,6 +275,21 @@ export async function POST(req: NextRequest) {
       await upsertProtractorWorkOrderSnapshot(shopId, wo);
     } catch (err: any) {
       results.errors.push(`Work order ${wo.ID}: ${err.message}`);
+    }
+  }
+
+  // If we didn't get canned jobs from the API, try discovering from the just-synced data
+  if (results.cannedJobsSynced === 0) {
+    console.log(`[Protractor Sync] No canned jobs from API, attempting discovery from synced data...`);
+    try {
+      const discovered = await discoverCannedJobsFromCache(shopId);
+      if (discovered.length > 0) {
+        await mergeCannedJobsToCache(shopId, discovered);
+        results.cannedJobsSynced = discovered.length;
+        console.log(`[Protractor Sync] Discovered ${discovered.length} service packages from synced data`);
+      }
+    } catch (err: any) {
+      console.log(`[Protractor Sync] Discovery exception: ${err.message}`);
     }
   }
 
