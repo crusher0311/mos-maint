@@ -38,6 +38,14 @@ The application features a modern SaaS-style design.
 -   **Customer Workflows** (`/dashboard/workflows`): View workflow runs and delivery stats
 -   **Shop Onboarding** (`/dashboard/onboarding`): Guided setup checklist for new shops
 
+**Enterprise Features (Dec 2024):**
+-   **Enterprise Dashboard** (`/admin/enterprise`): Multi-location analytics and KPI cards
+-   **Shop Management** (`/admin/enterprise/shops`): Add/remove shops from enterprise accounts
+-   **Shared Mappings** (`/admin/enterprise/mappings`): Configure canned job mappings across all locations
+-   **Recommendation Events**: Tracks when MOS recommendations are added to repair orders
+-   **Revenue Attribution**: Links sold services back to MOS recommendations for ROI tracking
+-   **Data Model**: `enterprise_accounts` collection with `shopIds` array; shops have `enterpriseId` field
+
 **Technical Implementations:**
 -   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses (DataOne, Protractor, AutoVitals, CARFAX) with defined TTLs to improve performance.
 -   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations like Protractor.
