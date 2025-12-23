@@ -1,5 +1,64 @@
 # MOS Maintenance MVP
 
+**Current Version:** 1.0.0  
+**Last Updated:** December 23, 2024
+
+---
+
+## Version History
+
+| Version | Date | Description |
+|---------|------|-------------|
+| 1.0.0 | Dec 23, 2024 | Initial release with platform admin panel, enterprise features, dual OpenAI support |
+
+---
+
+## Development & Deployment Workflow
+
+### Environments
+- **Development (Replit)**: Primary development environment. All coding and testing happens here.
+- **QA (GitHub `qa` branch)**: Testing/staging environment. Code is pushed here when ready for QA testing.
+- **Production (GitHub `main` branch)**: Live production environment. Code is pushed here after QA approval.
+
+### Git Repository
+- **URL**: https://github.com/crusher0311/mos-maint.git
+- **Branches**:
+  - `main` - Production-ready code
+  - `qa` - QA/staging code for testing
+
+### Release Process
+1. **Develop** - Work on features/fixes in Replit
+2. **Publish on Replit** - When ready for QA, publish the Replit deployment
+3. **Push to QA** - After QA testing passes in Replit:
+   ```bash
+   git add .
+   git commit -m "v1.x.x - Description of changes"
+   git push origin qa
+   ```
+4. **QA Testing** - Test in QA environment
+5. **Push to Main** - After QA is confirmed good:
+   ```bash
+   git checkout main
+   git merge qa
+   git push origin main
+   git checkout qa
+   ```
+
+### Versioning (Semantic Versioning)
+We follow [Semantic Versioning](https://semver.org/):
+- **MAJOR.MINOR.PATCH** (e.g., 1.2.3)
+- **MAJOR**: Breaking changes (API changes, database migrations)
+- **MINOR**: New features (backwards compatible)
+- **PATCH**: Bug fixes and small improvements
+
+### Agent Helper Commands
+When assisting with releases:
+- To push to QA: `git add . && git commit -m "v1.x.x - message" && git push origin qa`
+- To promote QA to Main: `git checkout main && git merge qa && git push origin main && git checkout qa`
+- Always update version in this file when releasing
+
+---
+
 ## Overview
 This Next.js-based automotive maintenance management system aims to streamline operations for auto shops. It provides tools for managing vehicle maintenance recommendations, customer data, and integrates with various third-party services such as AutoFlow, CARFAX, DataOne, Protractor, and AutoVitals. The system offers AI-powered insights, multi-shop user management, and a comprehensive dashboard for tracking customers and vehicles, ultimately enhancing shop efficiency and customer satisfaction.
 
