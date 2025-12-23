@@ -209,12 +209,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {data.rows.map((r: any) => {
+                {data.rows.map((r: any, index: number) => {
                   const vin = r.displayVin || "";
                   const statusText = r.af?.status || "Unknown";
+                  const rowKey = r.displayRo ? `${vin}-${r.displayRo}` : `${vin}-${index}`;
                   
                   return (
-                    <tr key={vin} className="hover:bg-gray-50 transition-colors">
+                    <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <Link href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors">
                           {r.displayName || "Unknown"}
