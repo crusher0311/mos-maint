@@ -74,6 +74,21 @@ The `chrome-extension/` folder contains a Chrome extension that integrates with 
 
 ## Recent Technical Changes (Dec 2024)
 
+### Active Vehicles Only (VIN-Based Billing)
+-   **Active Status Tracking**: Vehicles now have a `status` field with `active`, `sources`, and `lastClosedAt`
+-   **Sources Array**: Tracks which open work orders make a vehicle "active" (provider, workOrderId, workOrderNumber)
+-   **Billing Counts Only Active**: VIN billing counts only vehicles where `status.active = true`
+-   **Automatic Deactivation**: When all work orders for a vehicle are invoiced/closed, the vehicle becomes "archived"
+-   **Dashboard Filter**: "Show Archived" toggle button to view previously active vehicles
+-   **Sync Behavior**: Protractor and Tekmetric sync only import vehicles from open work orders (not historical)
+-   **Close Endpoint**: `/api/vehicles/close-work-order` removes sources and sets `active=false` when no sources remain
+
+### Billing & Pricing (Dec 2024)
+-   **Free Trial**: 25 active vehicles (VIN-based, not time-based)
+-   **Professional Plan**: $199/month for unlimited vehicles
+-   **Multi-Shop Plan**: $149/location/month for 3+ locations
+-   **Protractor Positioning**: "The Only Maintenance Tool for Protractor Shops"
+
 ### Performance Optimizations
 -   **Tekmetric Caching**: 2-minute cache for dashboard data stored in `tekmetric_cache` collection
 -   **MongoDB Indexes**: Added compound indexes on key collections:
