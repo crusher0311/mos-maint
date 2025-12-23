@@ -26,6 +26,8 @@ export default function AutoVitalsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [bulkSyncing, setBulkSyncing] = useState(false);
+  const [bulkSyncStats, setBulkSyncStats] = useState<any>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showUpdateSession, setShowUpdateSession] = useState(false);
   const [newSessionCookie, setNewSessionCookie] = useState("");
@@ -137,6 +139,34 @@ export default function AutoVitalsSettingsPage() {
     }
   }
 
+  async function handleBulkSync() {
+    setBulkSyncing(true);
+    setError(null);
+    setBulkSyncStats(null);
+
+    try {
+      const res = await fetch("/api/autovitals/bulk-sync", {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Bulk sync failed");
+      }
+
+      setBulkSyncStats(data.stats);
+      setTestResult({ 
+        success: true, 
+        message: data.message || `Synced ${data.stats?.vehiclesSynced || 0} vehicles` 
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk sync failed");
+    } finally {
+      setBulkSyncing(false);
+    }
+  }
+
   async function handleDisconnect() {
     if (!confirm("Are you sure you want to disconnect AutoVitals?")) return;
 
@@ -236,6 +266,44 @@ export default function AutoVitalsSettingsPage() {
                 Disconnect
               </button>
             </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Bulk Import Vehicles</h2>
+            <p className="text-gray-600 mb-4">
+              Import all vehicles from AutoVitals into MOS. This populates the Chrome extension sidebar 
+              with data for any vehicle you view, without needing to open each one individually.
+            </p>
+            
+            <button
+              onClick={handleBulkSync}
+              disabled={bulkSyncing}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {bulkSyncing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Import All Vehicles
+                </>
+              )}
+            </button>
+
+            {bulkSyncStats && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
+                <p className="font-medium text-gray-900 mb-2">Import Results:</p>
+                <ul className="space-y-1 text-gray-600">
+                  <li>Appointments processed: {bulkSyncStats.appointments}</li>
+                  <li>Vehicles synced: {bulkSyncStats.vehiclesSynced}</li>
+                  <li>New vehicles imported: {bulkSyncStats.vehiclesImported}</li>
+                  <li>Inspections synced: {bulkSyncStats.inspectionsSynced}</li>
+                </ul>
+              </div>
+            )}
           </div>
 
           {testResult && (

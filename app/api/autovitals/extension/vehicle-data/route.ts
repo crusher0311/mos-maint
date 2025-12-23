@@ -86,17 +86,38 @@ export async function GET(req: NextRequest) {
       description: record.description,
     })) || [];
 
-    const latestDvi = await db.collection("autovitals_inspections").findOne(
-      { shopId, vin },
-      { sort: { syncedAt: -1 } }
-    );
+    const shopIdStr = String(shopId);
     
-    const dviResults = latestDvi?.results?.map((result: any) => ({
-      description: result.description,
-      status: result.status,
-      notes: result.notes,
-      pictures: result.pictures || [],
-    })) || [];
+    const avVehicle = await db.collection("autovitals_vehicles").findOne({
+      shopId: shopIdStr,
+      vin: { $regex: new RegExp(`^${vin}$`, 'i') }
+    });
+
+    let dviResults: any[] = [];
+    
+    if (avVehicle?.vehicleId) {
+      const latestAppointment = await db.collection("autovitals_appointments").findOne(
+        { shopId: shopIdStr, vehicleId: avVehicle.vehicleId },
+        { sort: { updatedAt: -1 } }
+      );
+
+      if (latestAppointment?.appointmentId) {
+        const latestDvi = await db.collection("autovitals_inspections").findOne(
+          { shopId: shopIdStr, appointmentId: latestAppointment.appointmentId },
+          { sort: { updatedAt: -1 } }
+        );
+
+        if (latestDvi?.items) {
+          dviResults = latestDvi.items.map((item: any) => ({
+            name: item.name || item.Name,
+            category: item.category || item.Category,
+            status: item.status || (item.Status === 0 ? 'red' : item.Status === 1 ? 'yellow' : 'green'),
+            notes: item.notes || item.techNotes,
+            photos: item.photos || [],
+          }));
+        }
+      }
+    }
 
     return NextResponse.json({
       ok: true,
