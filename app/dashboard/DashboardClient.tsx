@@ -78,15 +78,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     
     switch (sortColumn) {
       case 'customer':
-        return dir * ((a.displayName || '').localeCompare(b.displayName || ''));
+        return dir * (String(a.displayName || '').localeCompare(String(b.displayName || '')));
       case 'vehicle':
-        return dir * ((a.displayVehicle || '').localeCompare(b.displayVehicle || ''));
+        return dir * (String(a.displayVehicle || '').localeCompare(String(b.displayVehicle || '')));
       case 'vin':
-        return dir * ((a.displayVin || '').localeCompare(b.displayVin || ''));
+        return dir * (String(a.displayVin || '').localeCompare(String(b.displayVin || '')));
       case 'ro':
-        return dir * ((a.displayRo || '').localeCompare(b.displayRo || ''));
+        return dir * (String(a.displayRo || '').localeCompare(String(b.displayRo || '')));
       case 'status':
-        return dir * ((a.af?.status || '').localeCompare(b.af?.status || ''));
+        return dir * (String(a.af?.status || '').localeCompare(String(b.af?.status || '')));
       case 'dvi':
         return dir * ((a.dviDone ? 1 : 0) - (b.dviDone ? 1 : 0));
       case 'mileage':
