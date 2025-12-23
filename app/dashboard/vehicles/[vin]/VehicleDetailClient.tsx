@@ -28,6 +28,72 @@ interface DeclinedService {
   declinedAt: string;
 }
 
+interface TekmetricInspectionItem {
+  name: string;
+  status: string;
+  notes?: string;
+  source: 'tekmetric';
+}
+
+interface TekmetricDvi {
+  ok: boolean;
+  source: 'tekmetric';
+  inspections: TekmetricInspectionItem[];
+  items: TekmetricInspectionItem[];
+}
+
+interface RepairOrderSummary {
+  roNumber: string;
+  status?: string;
+  mileage?: number;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+interface DviCategory {
+  name?: string;
+  video?: boolean;
+  items?: Array<{
+    name: string;
+    status: string;
+    notes?: string;
+  }>;
+}
+
+interface DviResult {
+  ok: boolean;
+  categories?: DviCategory[];
+  error?: string;
+}
+
+interface CarfaxResult {
+  ok: boolean;
+  serviceRecords?: Array<{
+    date?: string;
+    odometer?: number;
+    description?: string;
+    source?: string;
+  }>;
+  error?: string;
+}
+
+interface OemItem {
+  name: string;
+  category?: string;
+  miles?: number;
+  months?: number;
+}
+
+interface LocalOeData {
+  items?: OemItem[];
+}
+
+interface MpdData {
+  mpdFromToday?: number | null;
+  mpdFromTwo?: number | null;
+  mpdBlended?: number | null;
+}
+
 interface VehicleDetailClientProps {
   vehicle: {
     vin: string;
@@ -42,12 +108,13 @@ interface VehicleDetailClientProps {
     declinedServices?: DeclinedService[];
   };
   ownerName: string;
-  ros: any[];
+  ros: RepairOrderSummary[];
   resolvedMiles: number | null;
-  dvi: any;
-  carfax: any;
-  localOe: any;
-  mpd: any;
+  dvi: DviResult;
+  tekmetricDvi?: TekmetricDvi | null;
+  carfax: CarfaxResult;
+  localOe: LocalOeData;
+  mpd: MpdData;
   latestRoNumber: string | null;
   cfg: { configured: boolean };
   carfaxCfg: { configured: boolean };
@@ -62,6 +129,7 @@ export default function VehicleDetailClient({
   ros,
   resolvedMiles,
   dvi,
+  tekmetricDvi,
   carfax,
   localOe,
   mpd,
@@ -288,6 +356,54 @@ export default function VehicleDetailClient({
 
           {activeTab === "recs" && (
             <div className="space-y-6">
+              {/* Tekmetric DVI Inspections */}
+              {tekmetricDvi?.ok && tekmetricDvi.items && tekmetricDvi.items.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900">Tekmetric Inspection</h3>
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                          Tekmetric
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">{tekmetricDvi.items.length} items</span>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {tekmetricDvi.items.map((item, j: number) => (
+                      <div 
+                        key={j} 
+                        className={`px-6 py-3 flex items-center justify-between ${
+                          item.status === "red" || item.status === "fail" ? "bg-red-50 border-l-4 border-red-500" :
+                          item.status === "yellow" || item.status === "caution" ? "bg-yellow-50 border-l-4 border-yellow-400" :
+                          ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {item.status === "pass" || item.status === "green" ? (
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                          ) : item.status === "yellow" || item.status === "caution" ? (
+                            <AlertCircle className="w-5 h-5 text-yellow-500" />
+                          ) : item.status === "red" || item.status === "fail" ? (
+                            <XCircle className="w-5 h-5 text-red-600" />
+                          ) : (
+                            <Clock className="w-5 h-5 text-gray-400" />
+                          )}
+                          <span className="text-sm text-gray-700">{item.name}</span>
+                        </div>
+                        {item.notes && (
+                          <span className="text-xs text-gray-500 max-w-xs truncate">
+                            {item.notes}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AutoFlow DVI */}
               {dvi?.ok && Array.isArray(dvi.categories) && dvi.categories.length > 0 ? (
                 <div className="space-y-4">
                   {dvi.categories.map((cat: any, i: number) => {
@@ -376,12 +492,12 @@ export default function VehicleDetailClient({
                   </div>
                   <h3 className="font-medium text-gray-900 mb-2">No DVI Inspection</h3>
                   <p className="text-sm text-gray-500 mb-4">
-                    {tekmetricConnected
-                      ? "Tekmetric DVI integration coming soon."
-                      : !cfg.configured 
-                      ? "AutoFlow is not connected. Connect it to view DVI results."
+                    {!cfg.configured && !tekmetricConnected
+                      ? "No inspection system is connected. Connect AutoFlow or Tekmetric to view DVI results."
                       : !latestRoNumber
                       ? "No repair orders found for this vehicle."
+                      : tekmetricConnected && !tekmetricDvi?.ok
+                      ? "No Tekmetric inspection data available for this vehicle."
                       : dvi?.ok
                       ? "No inspection was performed for the latest repair order."
                       : dvi?.error || "Unable to load DVI results."}

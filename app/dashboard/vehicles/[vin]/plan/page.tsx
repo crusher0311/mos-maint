@@ -292,6 +292,7 @@ type DeclinedServiceEntry = {
 
 type TriagedItem = {
   key: string;
+  serviceKey: string;
   title: string;
   category?: string;
   intervalMiles?: number | null;
@@ -392,11 +393,12 @@ function triage({
   const usedDviKeys = new Set<string>();
 
   for (const o of oemItems) {
-    const key = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
-    const last = lastMap.get(key) ?? null;
+    const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
+    const uniqueKey = `${serviceKey}_${o.maintenance_id}`;
+    const last = lastMap.get(serviceKey) ?? null;
     
     // Check for shop interval override
-    const shopOverride = shopIntervals[key];
+    const shopOverride = shopIntervals[serviceKey];
     const usingShopInterval = shopOverride?.useShop === true;
     const intervalMiles = usingShopInterval && shopOverride.miles != null 
       ? shopOverride.miles 
@@ -406,7 +408,7 @@ function triage({
       : (o.months ?? null);
 
     // Track that we've used this DVI key
-    if (dviMap.has(key)) usedDviKeys.add(key);
+    if (dviMap.has(serviceKey)) usedDviKeys.add(serviceKey);
 
     let dueAtMiles: number | null = null;
     let dueAtDate: Date | null = null;
@@ -441,10 +443,11 @@ function triage({
     const daysToGo =
       dueAtDate != null ? Math.ceil((dueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
-    const dviInfo = dviMap.get(key);
-    const declinedInfo = declinedMap.get(key) || null;
+    const dviInfo = dviMap.get(serviceKey);
+    const declinedInfo = declinedMap.get(serviceKey) || null;
     triaged.push({
-      key,
+      key: uniqueKey,
+      serviceKey,
       title: o.name,
       category: o.category,
       intervalMiles,
@@ -463,10 +466,11 @@ function triage({
   }
 
   // Add standalone DVI findings (red/yellow items not matched to OEM)
-  for (const [key, dviInfo] of dviMap) {
-    if (usedDviKeys.has(key)) continue; // already matched to OEM item
+  for (const [dviKey, dviInfo] of dviMap) {
+    if (usedDviKeys.has(dviKey)) continue; // already matched to OEM item
     triaged.push({
-      key: `dvi_${key}`,
+      key: `dvi_${dviKey}`,
+      serviceKey: dviKey,
       title: dviInfo.name,
       category: "DVI Finding",
       intervalMiles: null,
@@ -493,8 +497,10 @@ function triage({
       || dw.ServicePackageHeader?.Description
       || "Deferred Service";
     
+    const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
     triaged.push({
       key: `protractor_${dw.ID}`,
+      serviceKey: protractorServiceKey,
       title,
       category: "Shop Recommendation",
       intervalMiles: null,
@@ -971,11 +977,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       </div>
                     </div>
                     {(() => {
-                      const opts = getCannedJobOptionsForService(t.key);
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
                       return opts.length > 0 ? (
                         <AddToROButton
                           vin={vin}
-                          serviceKey={t.key}
+                          serviceKey={t.serviceKey}
                           cannedJobOptions={opts}
                           workOrderId={latestRoNumber ?? undefined}
                         />
@@ -1086,11 +1092,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       </span>
                     )}
                     {(() => {
-                      const opts = getCannedJobOptionsForService(t.key);
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
                       return opts.length > 0 ? (
                         <AddToROButton
                           vin={vin}
-                          serviceKey={t.key}
+                          serviceKey={t.serviceKey}
                           cannedJobOptions={opts}
                           workOrderId={latestRoNumber ?? undefined}
                         />
@@ -1186,11 +1192,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       </span>
                     )}
                     {(() => {
-                      const opts = getCannedJobOptionsForService(t.key);
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
                       return opts.length > 0 ? (
                         <AddToROButton
                           vin={vin}
-                          serviceKey={t.key}
+                          serviceKey={t.serviceKey}
                           cannedJobOptions={opts}
                           workOrderId={latestRoNumber ?? undefined}
                         />

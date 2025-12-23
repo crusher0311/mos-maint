@@ -60,3 +60,28 @@ The `chrome-extension/` folder contains a Chrome extension that integrates with 
 -   **Vehicle Sync**: Imports vehicles from AutoVitals dashboard pages into MOS
 -   **API Keys**: Extension uses dedicated API keys (mos_av_*) stored in shop.autovitalsExtension.apiKeys
 -   **Files**: manifest.json, sidepanel.html/js, content.js, background.js, popup.html/js
+
+## Recent Technical Changes (Dec 2024)
+
+### Performance Optimizations
+-   **Tekmetric Caching**: 2-minute cache for dashboard data stored in `tekmetric_cache` collection
+-   **MongoDB Indexes**: Added compound indexes on key collections:
+    - `vehicles`: (vin, updatedAt), (shopId, createdAt)
+    - `repair_orders`: (vin, updatedAt), (shopId, createdAt)
+    - `events`: (vin, updatedAt), (shopId, provider, createdAt)
+    - `tekmetric_cache`: TTL index (2 minutes)
+    - `dataone_cache`, `carfax_cache`: VIN indexes
+-   **Index Script**: `scripts/add-indexes.ts` to recreate indexes if needed
+
+### Bug Fixes
+-   **Mileage Resolution**: Now checks `mileage` field (Tekmetric format) in addition to `odometer` and `lastMileage`
+-   **Duplicate React Keys**: Plan page uses `uniqueKey` combining `serviceKey` with `maintenance_id` to prevent duplicate key warnings
+-   **ShopId Consistency**: All vehicle storage uses `String(shopId)` for consistent querying
+
+### Type Improvements
+-   **VehicleDetailClient**: Proper TypeScript interfaces for DviResult, CarfaxResult, RepairOrderSummary, OemItem, TekmetricDvi
+-   **Tekmetric DVI**: Now receives and displays Tekmetric inspection data when available
+
+## Known Limitations
+-   **Tekmetric ROs without VIN**: Repair orders without VINs (e.g., #4084, #4100) cannot be displayed
+-   **Tekmetric Inspections API**: Endpoint may return 404 if not enabled for the API token
