@@ -25,18 +25,34 @@
     const vehicles = [];
     const seenVINs = new Set();
     
-    if (data && data.d) {
-      console.log('[MOS] Unwrapping ASP.NET "d" wrapper');
+    if (data && data.d !== undefined) {
+      console.log('[MOS] Unwrapping ASP.NET "d" wrapper, d type:', typeof data.d);
       if (typeof data.d === 'string') {
         try {
           data = JSON.parse(data.d);
+          console.log('[MOS] Parsed JSON from string d');
         } catch (e) {
           data = data.d;
         }
       } else {
         data = data.d;
       }
-      console.log('[MOS] Unwrapped data type:', typeof data, Array.isArray(data) ? `array[${data.length}]` : '');
+      
+      if (Array.isArray(data)) {
+        console.log('[MOS] Unwrapped to array with', data.length, 'items');
+        if (data.length > 0) {
+          console.log('[MOS] First item keys:', Object.keys(data[0] || {}));
+          console.log('[MOS] First item sample:', JSON.stringify(data[0]).substring(0, 500));
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        console.log('[MOS] Unwrapped to object with keys:', Object.keys(data));
+        const firstKey = Object.keys(data)[0];
+        if (firstKey && data[firstKey]) {
+          console.log('[MOS] First value type:', typeof data[firstKey], Array.isArray(data[firstKey]) ? `array[${data[firstKey].length}]` : '');
+        }
+      } else {
+        console.log('[MOS] Unwrapped to:', typeof data);
+      }
     }
     
     function addVehicle(vehicle) {
