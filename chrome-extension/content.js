@@ -716,32 +716,45 @@
     }
   });
 
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-        processPage();
-        break;
+  function initObservers() {
+    if (!document.body) {
+      setTimeout(initObservers, 100);
+      return;
+    }
+    
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          processPage();
+          break;
+        }
       }
-    }
-  });
+    });
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
 
-  processPage();
+    processPage();
 
-  let lastUrl = location.href;
-  new MutationObserver(() => {
-    const url = location.href;
-    if (url !== lastUrl) {
-      lastUrl = url;
-      lastProcessedUrl = '';
-      retryCount = 0;
-      processPage();
-    }
-  }).observe(document, { subtree: true, childList: true });
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+      const url = location.href;
+      if (url !== lastUrl) {
+        lastUrl = url;
+        lastProcessedUrl = '';
+        retryCount = 0;
+        processPage();
+      }
+    }).observe(document, { subtree: true, childList: true });
 
-  console.log('[MOS AutoVitals] Content script initialized');
+    console.log('[MOS AutoVitals] Content script initialized');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initObservers);
+  } else {
+    initObservers();
+  }
 })();
