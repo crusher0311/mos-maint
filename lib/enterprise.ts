@@ -96,6 +96,18 @@ export async function addShopToEnterprise(enterpriseId: ObjectId | string, shopI
   );
 }
 
+export async function removeShopFromEnterprise(enterpriseId: ObjectId | string, shopId: number) {
+  const db = await getDb();
+  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
+  return db.collection("enterprise_accounts").updateOne(
+    { _id: id },
+    { 
+      $pull: { shopIds: shopId },
+      $set: { updatedAt: new Date() }
+    }
+  );
+}
+
 export async function logRecommendationEvent(event: Omit<RecommendationEvent, "_id" | "createdAt">) {
   const db = await getDb();
   const doc: RecommendationEvent = {

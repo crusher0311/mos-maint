@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 import { getEnterpriseById } from "@/lib/enterprise";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function requireAdminAuth() {
+  const session = await getSession();
+  if (!session) {
+    return { error: "Unauthorized", status: 401 };
+  }
+  if (!["owner", "admin"].includes(session.role || "")) {
+    return { error: "Forbidden - admin access required", status: 403 };
+  }
+  return { session };
+}
+
 export async function GET(req: NextRequest) {
+  const auth = await requireAdminAuth();
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const enterpriseId = searchParams.get("enterpriseId");
@@ -30,6 +47,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminAuth();
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const body = await req.json();
     const { enterpriseId, mappings, applyToAllShops } = body;
