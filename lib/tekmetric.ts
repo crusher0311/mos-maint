@@ -325,6 +325,22 @@ export async function getTekmetricWorkOrderStatus(
   }
 }
 
+export async function getTekmetricWorkOrderWithMileage(
+  workOrderId: string
+): Promise<{ status: string | null; mileageIn: number | null; mileageOut: number | null } | null> {
+  try {
+    const response = await tekmetricRequest(`/repair-orders/${workOrderId}`);
+    return {
+      status: response?.repairOrderStatus?.code || response?.repairOrderStatus?.name || response?.status || null,
+      mileageIn: response?.milesIn || response?.mileageIn || null,
+      mileageOut: response?.milesOut || response?.mileageOut || null
+    };
+  } catch (err) {
+    console.error("Error fetching Tekmetric RO with mileage:", err);
+    return null;
+  }
+}
+
 export async function getJobs(
   shopId: number,
   params: {
