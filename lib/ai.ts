@@ -2,29 +2,52 @@
 
 // Available OpenAI models
 export const MODELS = [
+  "gpt-4o-mini",
+  "gpt-4o",
   "gpt-4",
   "gpt-4-turbo", 
   "gpt-3.5-turbo",
 ] as const;
 
-export const DEFAULT_MODEL = "gpt-3.5-turbo";
+export const DEFAULT_MODEL = "gpt-4o-mini";
+
+// Get the OpenAI API key from available sources
+// Priority: 1) OPENAI_API_KEY (self-hosted), 2) AI_INTEGRATIONS_OPENAI_API_KEY (Replit integration)
+export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } | null {
+  if (typeof window !== 'undefined') return null;
+  
+  try {
+    const env = (globalThis as any).process?.env;
+    
+    // Check for direct API key first (self-hosted)
+    if (env?.OPENAI_API_KEY) {
+      return { apiKey: env.OPENAI_API_KEY, source: 'direct' };
+    }
+    
+    // Fall back to Replit's AI integration
+    if (env?.AI_INTEGRATIONS_OPENAI_API_KEY) {
+      return { apiKey: env.AI_INTEGRATIONS_OPENAI_API_KEY, source: 'replit' };
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // OpenAI client wrapper
 export function getOpenAI() {
-  // Safe access to environment variable
-  let apiKey: string | undefined;
-  try {
-    apiKey = typeof window === 'undefined' ? (globalThis as any).process?.env?.OPENAI_API_KEY : undefined;
-  } catch {
-    apiKey = undefined;
+  const keyInfo = getOpenAIKey();
+  
+  if (!keyInfo) {
+    throw new Error("No OpenAI API key configured. Set OPENAI_API_KEY or use Replit's AI integration.");
   }
   
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
-  }
+  const { apiKey } = keyInfo;
   
   return {
     apiKey,
+    source: keyInfo.source,
     async chat(messages: any[], model = DEFAULT_MODEL) {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -52,16 +75,15 @@ export async function runResponse(model: string, input: string): Promise<{
   ok: boolean;
   text?: string;
   error?: string;
+  source?: 'direct' | 'replit';
 }> {
-  // Safe access to environment variable
-  let apiKey: string | undefined;
-  try {
-    apiKey = typeof window === 'undefined' ? (globalThis as any).process?.env?.OPENAI_API_KEY : undefined;
-  } catch {
-    apiKey = undefined;
+  const keyInfo = getOpenAIKey();
+  
+  if (!keyInfo) {
+    return { ok: false, error: "No OpenAI API key configured. Set OPENAI_API_KEY or use Replit's AI integration." };
   }
   
-  if (!apiKey) return { ok: false, error: "OPENAI_API_KEY is not set" };
+  const { apiKey, source } = keyInfo;
 
   try {
     const resp = await fetch("https://api.openai.com/v1/responses", {
@@ -80,9 +102,9 @@ export async function runResponse(model: string, input: string): Promise<{
 
     const data: any = await resp.json();
     const text = data?.output_text ?? extractTextFromResponse(data);
-    return { ok: true, text: typeof text === "string" ? text : JSON.stringify(data) };
+    return { ok: true, text: typeof text === "string" ? text : JSON.stringify(data), source };
   } catch (e: any) {
-    return { ok: false, error: e?.message ?? "OpenAI request failed" };
+    return { ok: false, error: e?.message ?? "OpenAI request failed", source };
   }
 }
 
