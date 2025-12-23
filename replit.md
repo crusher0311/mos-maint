@@ -43,3 +43,11 @@ The application features a modern SaaS-style design.
 -   **Shop Management & Repair Orders**: AutoFlow, Protractor
 -   **Vehicle History Reports**: CARFAX
 -   **Digital Vehicle Inspections (DVI)**: AutoVitals
+
+## Chrome Extension (AutoVitals Integration)
+The `chrome-extension/` folder contains a Chrome extension that integrates with AutoVitals:
+-   **Side Panel**: Displays OEM maintenance schedule, CARFAX history, maintenance plan, and DVI results for the current vehicle being viewed in AutoVitals
+-   **VIN Detection**: Automatically detects the vehicle VIN from the AutoVitals page using DOM heuristics
+-   **Vehicle Sync**: Imports vehicles from AutoVitals dashboard pages into MOS
+-   **API Keys**: Extension uses dedicated API keys (mos_av_*) stored in shop.autovitalsExtension.apiKeys
+-   **Files**: manifest.json, sidepanel.html/js, content.js, background.js, popup.html/js
