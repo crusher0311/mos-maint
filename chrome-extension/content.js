@@ -1,8 +1,62 @@
 (() => {
   let lastProcessedUrl = '';
   let isProcessing = false;
+  let capturedVehicles = [];
+  let networkCaptureTimeout = null;
 
   console.log('[MOS AutoVitals] Content script loaded');
+
+  function injectNetworkInterceptor() {
+    if (document.getElementById('mos-autovitals-inject')) return;
+    
+    const script = document.createElement('script');
+    script.id = 'mos-autovitals-inject';
+    script.src = chrome.runtime.getURL('inject.js');
+    script.onload = function() {
+      console.log('[MOS AutoVitals] Network interceptor injected');
+    };
+    (document.head || document.documentElement).appendChild(script);
+  }
+
+  window.addEventListener('message', async (event) => {
+    if (event.source !== window) return;
+    if (event.data?.type !== 'MOS_AUTOVITALS_NETWORK_DATA') return;
+
+    const payload = event.data.payload;
+    console.log('[MOS AutoVitals] Received network data:', payload);
+
+    if (payload.type === 'vehicles' && payload.vehicles?.length > 0) {
+      const seenVINs = new Set(capturedVehicles.map(v => v.vin));
+      payload.vehicles.forEach(v => {
+        if (v.vin && !seenVINs.has(v.vin)) {
+          capturedVehicles.push(v);
+          seenVINs.add(v.vin);
+        }
+      });
+      
+      console.log(`[MOS AutoVitals] Total captured vehicles: ${capturedVehicles.length}`);
+      
+      if (networkCaptureTimeout) clearTimeout(networkCaptureTimeout);
+      networkCaptureTimeout = setTimeout(async () => {
+        if (capturedVehicles.length > 0) {
+          console.log('[MOS AutoVitals] Syncing captured vehicles:', capturedVehicles.length);
+          await syncData({
+            vehicles: capturedVehicles,
+            source: 'autovitals-network',
+            pageUrl: window.location.href,
+            extractedAt: new Date().toISOString(),
+          }, '/api/autovitals/extension/sync-vehicles');
+          capturedVehicles = [];
+        }
+      }, 2000);
+    }
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectNetworkInterceptor);
+  } else {
+    injectNetworkInterceptor();
+  }
 
   function detectCurrentVIN() {
     const vinSelectors = [
@@ -190,6 +244,70 @@
   function extractVehiclesFromDashboard() {
     const vehicles = [];
     const seenVINs = new Set();
+    
+    const cardSelectors = [
+      '[class*="card"]',
+      '[class*="tile"]',
+      '[class*="panel"]',
+      '[class*="vehicle-card"]',
+      '[class*="customer-card"]',
+      '[class*="appointment"]',
+      '.card',
+      '.tile',
+      '.panel',
+      '[data-vehicle]',
+      '[data-customer]',
+      '[data-appointment]',
+    ];
+    
+    for (const selector of cardSelectors) {
+      try {
+        const cards = document.querySelectorAll(selector);
+        if (cards.length > 0) {
+          console.log(`[MOS AutoVitals] Checking ${cards.length} cards with selector: ${selector}`);
+          
+          cards.forEach((card) => {
+            const cardText = card.innerText || card.textContent || '';
+            const vin = extractVINFromText(cardText);
+            
+            if (vin && !seenVINs.has(vin)) {
+              seenVINs.add(vin);
+              
+              const vehicle = {
+                vin,
+                year: null,
+                make: null,
+                model: null,
+                mileage: extractMileageFromText(cardText),
+                customerName: null,
+                licensePlate: null,
+              };
+              
+              const ymm = cardText.match(/\b(19|20)\d{2}\s+([A-Za-z]+)\s+([A-Za-z0-9]+)/);
+              if (ymm) {
+                vehicle.year = parseInt(ymm[0].substring(0, 4), 10);
+                vehicle.make = ymm[2];
+                vehicle.model = ymm[3];
+              }
+              
+              const nameMatch = cardText.match(/([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+              if (nameMatch) {
+                vehicle.customerName = nameMatch[1];
+              }
+              
+              vehicles.push(vehicle);
+            }
+          });
+        }
+      } catch (err) {
+        console.log(`[MOS AutoVitals] Error with card selector ${selector}:`, err);
+      }
+    }
+    
+    if (vehicles.length > 0) {
+      console.log(`[MOS AutoVitals] Found ${vehicles.length} vehicles from cards`);
+      return vehicles;
+    }
     
     const tableSelectors = [
       'table tbody tr',
@@ -574,9 +692,9 @@
     
     if (message.type === 'GET_PAGE_INFO') {
       const pageType = getPageType();
-      let vehicleCount = 0;
+      let vehicleCount = capturedVehicles.length;
       
-      if (pageType === 'dashboard') {
+      if (vehicleCount === 0 && pageType === 'dashboard') {
         const vehicles = extractVehiclesFromDashboard();
         vehicleCount = vehicles.length;
       }
@@ -584,6 +702,7 @@
       sendResponse({
         pageType,
         vehicleCount,
+        capturedFromNetwork: capturedVehicles.length,
         url: window.location.href,
       });
       return true;
