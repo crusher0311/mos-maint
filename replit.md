@@ -40,9 +40,18 @@ The application features a modern SaaS-style design.
 -   **Database**: MongoDB Atlas
 -   **AI**: OpenAI API (for AI-powered maintenance recommendations)
 -   **VIN Decoding & OEM Schedules**: DataOne API
--   **Shop Management & Repair Orders**: AutoFlow, Protractor
+-   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
 -   **Vehicle History Reports**: CARFAX
 -   **Digital Vehicle Inspections (DVI)**: AutoVitals
+
+## Tekmetric Integration
+The Tekmetric integration syncs vehicles, customers, and repair orders from Tekmetric shop management system:
+-   **Authentication**: MOS uses a vendor API Bearer Token (TEKMETRIC_API_TOKEN secret). Users only need to enter their Shop ID.
+-   **Production Endpoint**: `https://shop.tekmetric.com/api/v1`
+-   **Features**: Vehicle sync with VIN, mileage, and customer data; Repair order access
+-   **Configuration**: Settings > Integrations > Tekmetric tab
+-   **Files**: `lib/tekmetric.ts`, `app/api/settings/tekmetric/route.ts`, `app/api/tekmetric/sync/route.ts`
+-   **Note**: AutoVitals tab is currently hidden pending VIN data access clarification from the vendor
 
 ## Chrome Extension (AutoVitals Integration)
 The `chrome-extension/` folder contains a Chrome extension that integrates with AutoVitals:
