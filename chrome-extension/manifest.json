@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MOS AutoVitals Sync",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Sync vehicle data from AutoVitals and view OEM, CARFAX, and maintenance plans",
   "permissions": [
     "storage",
@@ -33,10 +33,16 @@
     {
       "matches": ["https://*.autovitals.com/*", "https://*.autovitalsapp.com/*"],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["https://*.autovitals.com/*", "https://*.autovitalsapp.com/*"]
+    }
+  ]
 }
