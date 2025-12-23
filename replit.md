@@ -27,6 +27,17 @@ The application features a modern SaaS-style design.
 -   **Data Source Badges**: Visual indicators (OEM, DVI, CARFAX, Shop, Protractor) on recommendations.
 -   **Loading Indicators**: `loading.tsx` for Plan and Vehicle Detail pages to show progress during API calls.
 
+**Settings Pages (Dec 2024):**
+-   **Users** (`/dashboard/settings/users`): Manage team members and pending invites with role-based permissions
+-   **Billing** (`/dashboard/settings/billing`): View current plan, usage, and upgrade options
+-   **Inspection** (`/dashboard/settings/inspection`): Map DVI findings to service recommendations
+-   **Extensions** (`/dashboard/settings/extensions`): Manage Chrome extension API keys (owner/admin only)
+-   **Workflows** (`/dashboard/settings/workflows`): Configure automated customer communications
+
+**Dashboard Pages (Dec 2024):**
+-   **Customer Workflows** (`/dashboard/workflows`): View workflow runs and delivery stats
+-   **Shop Onboarding** (`/dashboard/onboarding`): Guided setup checklist for new shops
+
 **Technical Implementations:**
 -   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses (DataOne, Protractor, AutoVitals, CARFAX) with defined TTLs to improve performance.
 -   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations like Protractor.
