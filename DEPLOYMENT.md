@@ -75,7 +75,40 @@ The app supports two OpenAI modes:
 4. **Deploy**
    - Vercel auto-deploys on every push to main
 
-### Option 2: VPS / Self-Hosted
+### Option 2: Render
+
+1. **Create Web Service**
+   - Go to [render.com](https://render.com)
+   - Click "New" → "Web Service"
+   - Connect your GitHub repository
+
+2. **Configure Settings**
+   - **Name**: `mos-maintenance`
+   - **Runtime**: Node
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - **Instance Type**: Starter or higher
+
+3. **Add Environment Variables**
+   In the "Environment" section, add:
+   ```
+   NODE_ENV=production
+   MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/db
+   MONGODB_DB=mos-maintenance-mvp
+   SESSION_SECRET=your-32-character-secret-here
+   OPENAI_API_KEY=sk-your-openai-key
+   ```
+
+4. **Deploy**
+   - Click "Create Web Service"
+   - Render will build and deploy automatically
+   - Auto-deploys on every push to your connected branch
+
+5. **Custom Domain (Optional)**
+   - Go to Settings → Custom Domains
+   - Add your domain and configure DNS
+
+### Option 3: VPS / Self-Hosted
 
 1. **Prerequisites**
    ```bash
