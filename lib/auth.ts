@@ -58,7 +58,7 @@ export async function getSession(): Promise<SessionInfo | null> {
 
 export async function requirePlatformAdmin(): Promise<SessionInfo> {
   const s = await getSession();
-  if (!s) redirect("/login");
+  if (!s) redirect("/admin-login");
   if (!s.isPlatformAdmin) redirect("/dashboard");
   return s!; // Non-null assertion since redirect throws
 }
