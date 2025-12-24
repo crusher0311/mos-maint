@@ -1,0 +1,243 @@
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+⚠️ Environment validation failed, using defaults
+   Generating static pages (0/74) ...
+[AutoVitals Vehicles] Error: n [Error]: Dynamic server usage: Route /api/autovitals/vehicles couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+    at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1791)
+    at s (/opt/render/project/src/.next/server/chunks/9396.js:1:208)
+    at u (/opt/render/project/src/.next/server/app/api/autovitals/vehicles/route.js:1:889)
+    at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+    at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+  description: "Route /api/autovitals/vehicles couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (18/74) 
+Dashboard data error: q [Error]: Dynamic server usage: Route /api/dashboard/data couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at W (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:21106)
+    at Object.get (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:28459)
+    at u (/opt/render/project/src/.next/server/app/api/dashboard/data/route.js:1:910)
+    at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+    at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854)
+    at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:122:103 {
+  description: "Route /api/dashboard/data couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+Debug error: n [Error]: Dynamic server usage: Route /api/debug/dashboard-data couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+    at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1791)
+    at c (/opt/render/project/src/.next/server/app/api/debug/dashboard-data/route.js:1:893)
+    at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+    at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854)
+    at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:122:103 {
+  description: "Route /api/debug/dashboard-data couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (36/74) 
+   Generating static pages (55/74) 
+⚠️ Environment validation failed, using defaults
+[AutoVitals Extension] Download error: n [Error]: Dynamic server usage: Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+    at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1791)
+    at s (/opt/render/project/src/.next/server/chunks/9396.js:1:208)
+    at c (/opt/render/project/src/.next/server/chunks/9396.js:1:770)
+    at p (/opt/render/project/src/.next/server/app/api/autovitals/extension/download/route.js:1:1885)
+    at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+    at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093) {
+  description: "Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+ ✓ Generating static pages (74/74)
+   Finalizing page optimization ...
+   Collecting build traces ...
+==> Uploading build...
+Route (app)                                     Size     First Load JS
+┌ ƒ /                                           3.81 kB        90.9 kB
+├ ○ /_not-found                                 876 B          87.9 kB
+├ ƒ /admin                                      163 B          87.2 kB
+├ ƒ /admin/analytics                            163 B          87.2 kB
+├ ƒ /admin/enterprise                           4.59 kB        98.4 kB
+├ ƒ /admin/enterprise/mappings                  3.56 kB        97.4 kB
+├ ƒ /admin/enterprise/shops                     3.2 kB           97 kB
+├ ƒ /admin/integrations                         192 B            94 kB
+├ ƒ /admin/integrations/carfax                  1.89 kB          89 kB
+├ ƒ /admin/shops                                192 B            94 kB
+├ ƒ /admin/system                               163 B          87.2 kB
+├ ƒ /admin/usage                                3.56 kB        97.4 kB
+├ ƒ /admin/users                                192 B            94 kB
+├ ƒ /api/admin/data-quality                     0 B                0 B
+├ ƒ /api/admin/db-indexes                       0 B                0 B
+├ ƒ /api/admin/promote-user                     0 B                0 B
+├ ƒ /api/admin/shops                            0 B                0 B
+├ ƒ /api/admin/shops/[shopId]/autoflow          0 B                0 B
+├ ƒ /api/admin/shops/[shopId]/autoflow/test     0 B                0 B
+├ ƒ /api/admin/shops/[shopId]/invite            0 B                0 B
+├ ƒ /api/admin/usage                            0 B                0 B
+├ ƒ /api/analyze                                0 B                0 B
+├ ƒ /api/auth/complete-setup                    0 B                0 B
+├ ƒ /api/auth/forgot                            0 B                0 B
+├ ƒ /api/auth/invite                            0 B                0 B
+├ ƒ /api/auth/login                             0 B                0 B
+├ ƒ /api/auth/logout                            0 B                0 B
+├ ƒ /api/auth/me                                0 B                0 B
+├ ƒ /api/auth/reset                             0 B                0 B
+├ ƒ /api/auth/setup                             0 B                0 B
+├ ƒ /api/autovitals/bulk-sync                   0 B                0 B
+├ ƒ /api/autovitals/extension/connect           0 B                0 B
+├ ƒ /api/autovitals/extension/download          0 B                0 B
+├ ƒ /api/autovitals/extension/generate-key      0 B                0 B
+├ ƒ /api/autovitals/extension/sync              0 B                0 B
+├ ƒ /api/autovitals/extension/sync-vehicles     0 B                0 B
+├ ƒ /api/autovitals/extension/vehicle-data      0 B                0 B
+├ ƒ /api/autovitals/inspection/[appointmentId]  0 B                0 B
+├ ƒ /api/autovitals/settings                    0 B                0 B
+├ ƒ /api/autovitals/sync                        0 B                0 B
+├ ƒ /api/autovitals/test                        0 B                0 B
+├ ƒ /api/autovitals/vehicles                    0 B                0 B
+├ ƒ /api/carfax/debug/[vin]                     0 B                0 B
+├ ƒ /api/cron/dashboard-refresh                 0 B                0 B
+├ ƒ /api/cron/data-quality                      0 B                0 B
+├ ƒ /api/customers                              0 B                0 B
+├ ƒ /api/customers/[customerId]                 0 B                0 B
+├ ƒ /api/customers/[customerId]/close           0 B                0 B
+├ ƒ /api/customers/[customerId]/inspect         0 B                0 B
+├ ƒ /api/dashboard/data                         0 B                0 B
+├ ƒ /api/dashboard/recent                       0 B                0 B
+├ ○ /api/debug-env                              0 B                0 B
+├ ƒ /api/debug/dashboard                        0 B                0 B
+├ ƒ /api/debug/dashboard-data                   0 B                0 B
+├ ○ /api/debug/events                           0 B                0 B
+├ ƒ /api/debug/session                          0 B                0 B
+├ ƒ /api/dev/clear-vehicles                     0 B                0 B
+├ ƒ /api/enrichment/process                     0 B                0 B
+├ ƒ /api/enterprise                             0 B                0 B
+├ ƒ /api/enterprise/analytics                   0 B                0 B
+├ ƒ /api/enterprise/mappings                    0 B                0 B
+├ ƒ /api/events/autoflow/recent                 0 B                0 B
+├ ƒ /api/events/list                            0 B                0 B
+├ ƒ /api/ping                                   0 B                0 B
+├ ƒ /api/plan-prefetch                          0 B                0 B
+├ ƒ /api/platform-admin/shops                   0 B                0 B
+├ ƒ /api/platform-admin/stats                   0 B                0 B
+├ ƒ /api/platform-admin/usage                   0 B                0 B
+├ ƒ /api/platform-admin/users                   0 B                0 B
+├ ƒ /api/protractor/apply-canned-job            0 B                0 B
+├ ƒ /api/protractor/canned-jobs                 0 B                0 B
+├ ƒ /api/protractor/debug                       0 B                0 B
+├ ƒ /api/protractor/sync                        0 B                0 B
+├ ƒ /api/recommended/analyze                    0 B                0 B
+├ ƒ /api/recommended/analyze-stream             0 B                0 B
+├ ƒ /api/recommended/cache                      0 B                0 B
+├ ƒ /api/settings/autoflow                      0 B                0 B
+├ ƒ /api/settings/billing                       0 B                0 B
+├ ƒ /api/settings/canned-job-mappings           0 B                0 B
+├ ƒ /api/settings/carfax                        0 B                0 B
+├ ƒ /api/settings/extensions                    0 B                0 B
+├ ƒ /api/settings/extensions/generate-key       0 B                0 B
+├ ƒ /api/settings/extensions/revoke-key         0 B                0 B
+├ ƒ /api/settings/inspection                    0 B                0 B
+├ ƒ /api/settings/invites/[inviteId]            0 B                0 B
+├ ƒ /api/settings/protractor                    0 B                0 B
+├ ƒ /api/settings/protractor/test               0 B                0 B
+├ ƒ /api/settings/tekmetric                     0 B                0 B
+├ ƒ /api/settings/users                         0 B                0 B
+├ ƒ /api/settings/users/[userId]                0 B                0 B
+├ ƒ /api/settings/workflows                     0 B                0 B
+├ ƒ /api/shops                                  0 B                0 B
+├ ƒ /api/shops/[shopId]/credentials             0 B                0 B
+├ ƒ /api/tekmetric/sync                         0 B                0 B
+├ ƒ /api/vehicle-analyzer                       0 B                0 B
+├ ƒ /api/vehicle/close/[vin]                    0 B                0 B
+├ ƒ /api/vehicles/[vin]/components              0 B                0 B
+├ ƒ /api/vehicles/[vin]/declined                0 B                0 B
+├ ƒ /api/vehicles/[vin]/refresh                 0 B                0 B
+├ ƒ /api/vehicles/check-closed-orders           0 B                0 B
+├ ƒ /api/vehicles/close-work-order              0 B                0 B
+├ ƒ /api/webhooks/autoflow/[token]              0 B                0 B
+├ ƒ /api/webhooks/protractor/[token]            0 B                0 B
+├ ƒ /api/workflows/runs                         0 B                0 B
+├ ƒ /auth/me                                    0 B                0 B
+├ ƒ /dashboard                                  5.02 kB        98.9 kB
+├ ƒ /dashboard/analyzer/[vin]                   447 B          87.5 kB
+├ ○ /dashboard/data-quality                     1.75 kB        88.8 kB
+├ ƒ /dashboard/events                           163 B          87.2 kB
+├ ○ /dashboard/invite                           1.27 kB        88.3 kB
+├ ○ /dashboard/onboarding                       3.76 kB        97.6 kB
+├ ƒ /dashboard/recommended                      3.07 kB        96.9 kB
+├ ƒ /dashboard/settings/autoflow                936 B            88 kB
+├ ○ /dashboard/settings/autovitals              5.18 kB        92.2 kB
+├ ○ /dashboard/settings/billing                 3.27 kB        90.3 kB
+├ ○ /dashboard/settings/canned-jobs             5.22 kB        92.3 kB
+├ ƒ /dashboard/settings/carfax                  1.69 kB        88.7 kB
+├ ○ /dashboard/settings/extensions              3.54 kB        90.6 kB
+├ ○ /dashboard/settings/inspection              3.42 kB        90.5 kB
+├ ○ /dashboard/settings/integrations            8.08 kB        95.1 kB
+├ ƒ /dashboard/settings/intervals               2.73 kB        89.8 kB
+├ ƒ /dashboard/settings/maintenance             2.38 kB        89.4 kB
+├ ○ /dashboard/settings/protractor              4.79 kB        91.9 kB
+├ ○ /dashboard/settings/users                   2.92 kB        96.8 kB
+├ ○ /dashboard/settings/workflows               3.65 kB        90.7 kB
+├ ƒ /dashboard/vehicles/[vin]                   5.26 kB        99.1 kB
+├ ƒ /dashboard/vehicles/[vin]/plan              3.36 kB        97.2 kB
+├ ƒ /dashboard/vehicles/[vin]/recommend         192 B            94 kB
+├ ○ /dashboard/workflows                        3.16 kB          97 kB
+├ ƒ /forgot                                     935 B            88 kB
+├ ƒ /login                                      3.11 kB        96.9 kB
+├ ƒ /platform-admin                             2.49 kB        96.3 kB
+├ ƒ /platform-admin/shops                       2.5 kB         89.6 kB
+├ ƒ /platform-admin/usage                       3.35 kB        90.4 kB
+├ ƒ /platform-admin/users                       2.56 kB        89.6 kB
+├ ƒ /reset                                      1.09 kB        88.1 kB
+├ ƒ /setup                                      3.17 kB        90.2 kB
+└ ○ /ui-demo                                    163 B          87.2 kB
++ First Load JS shared by all                   87.1 kB
+  ├ chunks/7023-91272aad972295c3.js             31.5 kB
+  ├ chunks/fd9d1056-0f9a0f6dfd30f205.js         53.6 kB
+  └ other shared chunks (total)                 1.89 kB
+Route (pages)                                   Size     First Load JS
+─ ƒ /api/maintenance/[vin]                      0 B            79.8 kB
++ First Load JS shared by all                   79.8 kB
+  ├ chunks/framework-a63c59c368572696.js        45.2 kB
+  ├ chunks/main-20cc8a62f7eba3c9.js             32.8 kB
+  └ other shared chunks (total)                 1.87 kB
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+==> Deploying...
+==> Uploaded in 9.4s. Compression took 7.3s
+==> Build successful 🎉
+==> Running 'npm run start'
+> mos-maintenance-mvp@0.1.0 start
+> next start -p 5000 -H 0.0.0.0
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:5000
+  - Network:      http://0.0.0.0:5000
+ ✓ Starting...
+ ✓ Ready in 713ms
+==> Continuing to scan for open port 10000 (from PORT environment variable)...
+==> Continuing to scan for open port 10000 (from PORT environment variable)...
+==> Continuing to scan for open port 10000 (from PORT environment variable)...
+==> Continuing to scan for open port 10000 (from PORT environment variable)...
+==> Continuing to scan for open port 10000 (from PORT environment variable)...
+==> Port scan timeout reached, failed to detect open port 10000 from PORT environment variable. Bind your service to port 10000 or update the PORT environment variable to the correct port.
+==> Timed out: Port scan timeout reached, failed to detect open port 10000 from PORT environment variable. Bind your service to port 10000 or update the PORT environment variable to the correct port.
+==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
