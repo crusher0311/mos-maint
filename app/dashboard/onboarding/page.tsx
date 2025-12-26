@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ClipboardCheck, CheckCircle, Circle, ArrowRight, Loader2, ExternalLink, Settings, Users, Puzzle, Car } from "lucide-react";
+import { CheckCircle, ArrowRight, Loader2, ExternalLink, Settings, Users, Puzzle, Car } from "lucide-react";
 import Link from "next/link";
 
 interface OnboardingStep {
@@ -24,17 +24,18 @@ export default function OnboardingPage() {
   async function fetchOnboardingStatus() {
     try {
       const [integrationsRes, usersRes, vehiclesRes] = await Promise.all([
-        fetch("/api/settings/carfax").catch(() => null),
+        fetch("/api/onboarding/integrations-status").catch(() => null),
         fetch("/api/settings/users").catch(() => null),
         fetch("/api/dashboard/data").catch(() => null),
       ]);
 
-      const carfaxConfigured = integrationsRes?.ok ? (await integrationsRes.json()).locationId : false;
+      const integrationsData = integrationsRes?.ok ? await integrationsRes.json() : { hasIntegration: false };
       const usersData = usersRes?.ok ? await usersRes.json() : { users: [] };
-      const vehiclesData = vehiclesRes?.ok ? await vehiclesRes.json() : { vehicles: [] };
+      const vehiclesData = vehiclesRes?.ok ? await vehiclesRes.json() : { rows: [] };
 
+      const hasIntegration = integrationsData.hasIntegration;
       const hasTeamMembers = (usersData.users?.length || 0) > 1;
-      const hasVehicles = (vehiclesData.vehicles?.length || 0) > 0;
+      const hasVehicles = (vehiclesData.rows?.length || 0) > 0;
 
       setSteps([
         {
@@ -49,7 +50,7 @@ export default function OnboardingPage() {
           id: "integration",
           title: "Connect an Integration",
           description: "Link your shop management system like Tekmetric, Protractor, or AutoFlow",
-          completed: Boolean(carfaxConfigured),
+          completed: hasIntegration,
           href: "/dashboard/settings/integrations",
           icon: <Puzzle className="w-5 h-5" />,
         },
@@ -68,14 +69,6 @@ export default function OnboardingPage() {
           completed: hasTeamMembers,
           href: "/dashboard/settings/users",
           icon: <Users className="w-5 h-5" />,
-        },
-        {
-          id: "workflows",
-          title: "Set Up Customer Workflows",
-          description: "Configure automated reminders and follow-ups",
-          completed: false,
-          href: "/dashboard/settings/workflows",
-          icon: <ClipboardCheck className="w-5 h-5" />,
         },
       ]);
     } catch (err) {
@@ -103,7 +96,7 @@ export default function OnboardingPage() {
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-2xl mb-4">
-            <ClipboardCheck className="w-8 h-8 text-blue-600" />
+            <CheckCircle className="w-8 h-8 text-blue-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Welcome to MOS Maintenance</h1>
           <p className="text-gray-500 mt-2">Complete these steps to get your shop up and running</p>
