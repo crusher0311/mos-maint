@@ -15,7 +15,6 @@ import {
   Wrench,
   ClipboardCheck,
   Puzzle,
-  Workflow,
   Search,
   HelpCircle,
   Shield,
@@ -65,11 +64,6 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       icon: <Car className="w-5 h-5" />
     },
     {
-      name: "Customer Workflows",
-      href: "/dashboard/workflows",
-      icon: <Workflow className="w-5 h-5" />
-    },
-    {
       name: "Shop Onboarding",
       href: "/dashboard/onboarding",
       icon: <ClipboardCheck className="w-5 h-5" />
@@ -86,7 +80,6 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Extension Abilities", href: "/dashboard/settings/extensions" },
-        { name: "Customer Workflows", href: "/dashboard/settings/workflows" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
