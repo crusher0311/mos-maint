@@ -182,7 +182,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   const refreshData = () => loadData(currentPage, searchQuery, showArchived);
 
-  const VEHICLE_HREF = (vin: string) => `/dashboard/vehicles/${encodeURIComponent(vin)}`;
+  const VEHICLE_HREF = (vin: string) => `/dashboard/vehicles/${encodeURIComponent(vin)}/plan`;
 
   const pagination = data.pagination || {
     page: 1,

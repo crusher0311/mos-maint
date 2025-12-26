@@ -249,8 +249,94 @@ export default async function DashboardPage() {
     { $limit: 100 }
   ]).toArray();
 
+  // Also fetch Protractor vehicles for shops using Protractor
+  const protractorRows = await db.collection("protractor_work_orders").aggregate([
+    {
+      $match: {
+        shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+        vin: { $ne: null, $type: "string" }
+      }
+    },
+    { $sort: { fetchedAt: -1 } },
+    {
+      $group: {
+        _id: "$vin",
+        latest: { $first: "$$ROOT" }
+      }
+    },
+    { $replaceRoot: { newRoot: "$latest" } },
+    {
+      $lookup: {
+        from: "protractor_vehicles",
+        let: { vin: "$vin", shopIdNum: Number(user.shopId), shopIdStr: String(user.shopId) },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $or: [
+                    { $eq: ["$shopId", "$$shopIdNum"] },
+                    { $eq: ["$shopId", "$$shopIdStr"] }
+                  ]},
+                  { $eq: ["$vin", "$$vin"] }
+                ]
+              }
+            }
+          },
+          { $limit: 1 }
+        ],
+        as: "vehicle"
+      }
+    },
+    { $unwind: { path: "$vehicle", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        updatedAt: { $ifNull: ["$fetchedAt", new Date()] },
+        displayName: {
+          $ifNull: [
+            "$companyName",
+            { $ifNull: ["$contactName", "Unknown Customer"] }
+          ]
+        },
+        displayVehicle: {
+          $concat: [
+            { $toString: { $ifNull: ["$vehicle.year", ""] } },
+            { $cond: [{ $ifNull: ["$vehicle.year", false] }, " ", ""] },
+            { $ifNull: ["$vehicle.make", ""] },
+            { $cond: [{ $ifNull: ["$vehicle.make", false] }, " ", ""] },
+            { $ifNull: ["$vehicle.model", ""] }
+          ]
+        },
+        displayVin: "$vin",
+        displayMiles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] },
+        displayRo: "$workOrderNumber",
+        dviDone: { $literal: false },
+        source: { $literal: "protractor" },
+        af: {
+          status: { $ifNull: ["$status", "Open"] },
+          createdAt: "$fetchedAt",
+          miles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }
+        }
+      }
+    },
+    { $limit: 100 }
+  ]).toArray();
+
+  // Merge AutoFlow and Protractor rows, deduplicating by VIN
+  const autoflowVins = new Set(rows.map((r: any) => r.displayVin?.toUpperCase()));
+  const uniqueProtractorRows = protractorRows.filter(
+    (r: any) => r.displayVin && !autoflowVins.has(r.displayVin.toUpperCase())
+  );
+  
+  const allRows = [...rows, ...uniqueProtractorRows].sort((a: any, b: any) => {
+    const nameA = a.displayName || "";
+    const nameB = b.displayName || "";
+    return nameA.localeCompare(nameB);
+  });
+
   const initialData = {
-    rows,
+    rows: allRows,
     user: {
       email: user.email,
       role: user.role,
