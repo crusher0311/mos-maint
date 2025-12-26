@@ -324,7 +324,7 @@ export async function GET(request: NextRequest) {
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
-          shopId: Number(user.shopId),
+          shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           vin: { $ne: null, $type: "string" }
         }
       },
@@ -339,13 +339,16 @@ export async function GET(request: NextRequest) {
       {
         $lookup: {
           from: "protractor_vehicles",
-          let: { vin: "$vin" },
+          let: { vin: "$vin", shopIdNum: Number(user.shopId), shopIdStr: String(user.shopId) },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ["$shopId", Number(user.shopId)] },
+                    { $or: [
+                      { $eq: ["$shopId", "$$shopIdNum"] },
+                      { $eq: ["$shopId", "$$shopIdStr"] }
+                    ]},
                     { $eq: ["$vin", "$$vin"] }
                   ]
                 }
