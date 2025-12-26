@@ -1,31 +1,25 @@
 // app/dashboard/page.tsx
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 import DashboardClient from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Session
-  const store = await cookies();
-  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-  if (!sid) redirect("/login");
+  // Session (supports dev auto-login)
+  const session = await getSession();
+  if (!session) redirect("/login");
 
   const db = await getDb();
-  const sessions = db.collection("sessions");
-  const users = db.collection("users");
-  const now = new Date();
-
-  const sess = await sessions.findOne({ token: sid, expiresAt: { $gt: now } });
-  if (!sess) redirect("/login");
-
-  const user = await users.findOne(
-    { _id: sess.userId },
-    { projection: { email: 1, role: 1, shopId: 1 } }
-  );
-  if (!user) redirect("/login");
+  
+  // Use session data directly - supports both real sessions and dev auto-login
+  const user = {
+    email: session.email,
+    role: session.role,
+    shopId: session.shopId,
+  };
 
   // Build rows from latest AutoFlow events per VIN (hide closed/appointments)
   const rows = await db.collection("events").aggregate([
