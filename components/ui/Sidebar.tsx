@@ -175,7 +175,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   ];
 
   return (
-    <aside className="w-64 min-h-screen flex flex-col" style={{ backgroundColor: '#3C81C3' }}>
+    <aside className="w-64 min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
       <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}

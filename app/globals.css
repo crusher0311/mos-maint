@@ -1,1 +1,64 @@
 @import "tailwindcss";
+
+/* Print styles for maintenance plan PDF export */
+@media print {
+  /* Hide navigation and interactive elements */
+  nav, .print\:hidden, button, [data-hide-print] {
+    display: none !important;
+  }
+  
+  /* Auto-expand details sections */
+  details {
+    display: block !important;
+  }
+  
+  details > summary {
+    display: none !important;
+  }
+  
+  details > div, details > * {
+    display: block !important;
+  }
+  
+  /* Show print-only elements */
+  .print\:block {
+    display: block !important;
+  }
+  
+  /* Page breaks */
+  section {
+    page-break-inside: avoid;
+  }
+  
+  li {
+    page-break-inside: avoid;
+  }
+  
+  /* Remove backgrounds for better printing */
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Ensure colors print */
+  .bg-red-100, .bg-red-600, .bg-amber-600, .bg-emerald-600, .bg-neutral-100 {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Better text contrast for printing */
+  .text-neutral-600 {
+    color: #374151 !important;
+  }
+  
+  /* Remove sticky positioning */
+  .sticky {
+    position: relative !important;
+  }
+  
+  /* Hide backdrop blur effects */
+  .backdrop-blur {
+    backdrop-filter: none !important;
+  }
+}
