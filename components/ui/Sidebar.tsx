@@ -154,7 +154,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        { name: "Extension Abilities", href: "/dashboard/settings/extensions" },
+        // { name: "Extension Abilities", href: "/dashboard/settings/extensions" }, // Hidden until extension integrations are ready
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
