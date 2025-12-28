@@ -1022,34 +1022,41 @@ export default async function VehiclePlanPage({ params }: PageProps) {
       <main className="mx-auto max-w-5xl p-0 sm:p-6 space-y-8">
       {/* Sticky summary header */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm text-neutral-600">
-              <Link href={`/dashboard/vehicles/${vin}`} className="underline">
-                ← Back
-              </Link>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold truncate">
-              {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Plan
-            </h1>
-            <div className="text-sm text-neutral-600">
-              VIN <code>{vin}</code>
-              {currentMiles != null && currentMiles > 0 && <> • Current: {fmtMiles(currentMiles)} mi</>}
-              {mpdBlended != null && <> • ~{mpdBlended.toFixed(1)} mi/day</>}
-            </div>
-          </div>
-
-          <nav className="flex items-center gap-2 text-xs sm:text-sm">
-            <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
-              Overdue {counts.overdue}
-            </a>
-            <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
-              Due Soon {counts.soon}
-            </a>
-            <a href="#upcoming" className="rounded-full px-3 py-1 bg-emerald-600 text-white">
-              Upcoming {counts.upcoming}
-            </a>
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3">
+          {/* Top navigation menu */}
+          <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
+            <Link href="/dashboard" className="hover:underline">← Back</Link>
+            <Link href={`/dashboard/vehicles/${vin}`} className="hover:underline">OE</Link>
+            <Link href={`/dashboard/vehicles/${vin}?tab=dvi`} className="hover:underline">DVI</Link>
+            <Link href={`/dashboard/vehicles/${vin}?tab=history`} className="hover:opacity-80">
+              <img src="/badges/carfax.png" alt="CARFAX" className="h-4" />
+            </Link>
           </nav>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold truncate">
+                {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Plan
+              </h1>
+              <div className="text-sm text-neutral-600">
+                VIN <code>{vin}</code>
+                {currentMiles != null && currentMiles > 0 && <> • Current: {fmtMiles(currentMiles)} mi</>}
+                {mpdBlended != null && <> • ~{mpdBlended.toFixed(1)} mi/day</>}
+              </div>
+            </div>
+
+            <nav className="flex items-center gap-2 text-xs sm:text-sm">
+              <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
+                Overdue {counts.overdue}
+              </a>
+              <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
+                Due Soon {counts.soon}
+              </a>
+              <a href="#upcoming" className="rounded-full px-3 py-1 bg-emerald-600 text-white">
+                Upcoming {counts.upcoming}
+              </a>
+            </nav>
+          </div>
         </div>
       </div>
 
