@@ -161,12 +161,12 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   ];
 
   return (
-    <aside className="w-64 bg-mos-navy min-h-screen flex flex-col">
-      <div className="p-4 border-b border-mos-navy-light relative" ref={dropdownRef}>
+    <aside className="w-64 bg-mos-gray-dark min-h-screen flex flex-col">
+      <div className="p-4 border-b border-mos-gray relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
           className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
-            hasMultipleShops ? "hover:bg-mos-navy-light cursor-pointer" : "cursor-default"
+            hasMultipleShops ? "hover:bg-mos-gray cursor-pointer" : "cursor-default"
           }`}
         >
           <span className="font-medium truncate">{shopName}</span>
@@ -176,9 +176,9 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </button>
         
         {shopDropdownOpen && hasMultipleShops && (
-          <div className="absolute left-4 right-4 top-full mt-1 bg-mos-navy-light rounded-lg shadow-lg border border-mos-silver-dark/30 z-50 overflow-hidden">
+          <div className="absolute left-4 right-4 top-full mt-1 bg-mos-gray rounded-lg shadow-lg border border-mos-gray-light z-50 overflow-hidden">
             {shops.length > 5 && (
-              <div className="p-2 border-b border-mos-silver-dark/30">
+              <div className="p-2 border-b border-mos-gray-light">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-mos-silver" />
                   <input
@@ -187,7 +187,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     placeholder="Search locations..."
                     value={shopSearch}
                     onChange={(e) => setShopSearch(e.target.value)}
-                    className="w-full bg-mos-navy text-white placeholder-mos-silver rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-mos-blue border border-mos-silver-dark/30"
+                    className="w-full bg-mos-gray-dark text-white placeholder-mos-silver rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-mos-blue border border-mos-gray-light"
                   />
                 </div>
               </div>
@@ -206,8 +206,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     disabled={switching}
                     className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
                       shop.shopId === currentShopId
-                        ? "text-mos-blue-light bg-mos-blue/10"
-                        : "text-mos-silver hover:bg-mos-navy hover:text-white"
+                        ? "text-mos-blue-light bg-mos-blue/20"
+                        : "text-mos-silver hover:bg-mos-gray-dark hover:text-white"
                     }`}
                   >
                     <span className="truncate">{shop.name}</span>
@@ -234,7 +234,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
             placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-mos-navy-light text-white placeholder-mos-silver rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue border border-mos-silver-dark/30"
+            className="w-full bg-mos-gray text-white placeholder-mos-silver rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue border border-mos-gray-light"
           />
         </div>
       </div>
@@ -250,7 +250,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive(item.href)
                         ? "bg-mos-blue text-white"
-                        : "text-mos-silver hover:bg-mos-navy-light hover:text-white"
+                        : "text-mos-silver hover:bg-mos-gray hover:text-white"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -264,7 +264,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     )}
                   </button>
                   {expandedSections.has(item.name) && (
-                    <ul className="mt-1 ml-4 space-y-1 border-l border-mos-silver-dark/30 pl-4">
+                    <ul className="mt-1 ml-4 space-y-1 border-l border-mos-gray-light pl-4">
                       {item.children.map((child) => (
                         <li key={child.name}>
                           <Link
@@ -272,7 +272,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                             className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                               isActive(child.href)
                                 ? "bg-mos-blue/20 text-mos-blue-light font-medium"
-                                : "text-mos-silver hover:bg-mos-navy-light hover:text-white"
+                                : "text-mos-silver hover:bg-mos-gray hover:text-white"
                             }`}
                           >
                             {child.name}
@@ -288,7 +288,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
                       ? "bg-mos-blue text-white"
-                      : "text-mos-silver hover:bg-mos-navy-light hover:text-white"
+                      : "text-mos-silver hover:bg-mos-gray hover:text-white"
                   }`}
                 >
                   {item.icon}
@@ -312,8 +312,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </div>
       )}
 
-      <div className="p-4 border-t border-mos-silver-dark/30">
-        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-mos-navy-light rounded-lg p-2 -m-2 transition-colors">
+      <div className="p-4 border-t border-mos-gray">
+        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-mos-gray rounded-lg p-2 -m-2 transition-colors">
           <div className="w-8 h-8 rounded-full bg-mos-blue flex items-center justify-center text-white text-sm font-medium">
             {userInitials}
           </div>
@@ -323,7 +323,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
               <p className="text-xs text-mos-silver capitalize">{userRole}</p>
             )}
           </div>
-          <button className="p-1.5 text-mos-silver hover:text-white rounded-lg hover:bg-mos-navy-light transition-colors">
+          <button className="p-1.5 text-mos-silver hover:text-white rounded-lg hover:bg-mos-gray transition-colors">
             <HelpCircle className="w-5 h-5" />
           </button>
         </Link>

@@ -25,6 +25,9 @@ module.exports = {
           "silver-dark": "#78909C",
           navy: "#0D1B2A",
           "navy-light": "#1B2838",
+          gray: "#37474F",
+          "gray-light": "#455A64",
+          "gray-dark": "#263238",
         }
       },
       borderRadius: { xl: "14px" },
