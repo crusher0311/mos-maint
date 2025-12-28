@@ -162,6 +162,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       icon: <Settings className="w-5 h-5" />,
       children: [
         { name: "Configurations", href: "/dashboard/settings" },
+        { name: "Shop Branding", href: "/dashboard/settings/branding" },
         { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
