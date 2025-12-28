@@ -59,13 +59,8 @@ export async function POST(req: Request) {
     if (candidates.length === 0) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
-    if (!query.shopId && candidates.length > 1) {
-      return NextResponse.json(
-        { error: "Multiple shops found for this email. Please enter your Shop ID." },
-        { status: 400 }
-      );
-    }
 
+    // Pick first user if multiple shops (user can switch via sidebar dropdown)
     const user = candidates[0];
 
     // Password checks with graceful migration
