@@ -53,7 +53,9 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false);
   const [shops, setShops] = useState<ShopOption[]>([]);
   const [switching, setSwitching] = useState(false);
+  const [shopSearch, setShopSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const shopSearchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/user/shops")
@@ -68,11 +70,18 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShopDropdownOpen(false);
+        setShopSearch("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (shopDropdownOpen && shopSearchRef.current) {
+      setTimeout(() => shopSearchRef.current?.focus(), 50);
+    }
+  }, [shopDropdownOpen]);
 
   async function switchShop(shopId: number) {
     if (switching || shopId === currentShopId) {
@@ -161,22 +170,52 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </button>
         
         {shopDropdownOpen && hasMultipleShops && (
-          <div className="absolute left-4 right-4 top-full mt-1 bg-slate-800 rounded-lg shadow-lg border border-slate-700 py-1 z-50">
-            {shops.map((shop) => (
-              <button
-                key={shop.shopId}
-                onClick={() => switchShop(shop.shopId)}
-                disabled={switching}
-                className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
-                  shop.shopId === currentShopId
-                    ? "text-blue-400 bg-blue-600/10"
-                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                }`}
-              >
-                <span className="truncate">{shop.name}</span>
-                {shop.shopId === currentShopId && <Check className="w-4 h-4 flex-shrink-0" />}
-              </button>
-            ))}
+          <div className="absolute left-4 right-4 top-full mt-1 bg-slate-800 rounded-lg shadow-lg border border-slate-700 z-50 overflow-hidden">
+            {shops.length > 5 && (
+              <div className="p-2 border-b border-slate-700">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    ref={shopSearchRef}
+                    type="text"
+                    placeholder="Search locations..."
+                    value={shopSearch}
+                    onChange={(e) => setShopSearch(e.target.value)}
+                    className="w-full bg-slate-700 text-white placeholder-slate-400 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                  />
+                </div>
+              </div>
+            )}
+            <div className="max-h-64 overflow-y-auto py-1">
+              {shops
+                .filter((shop) => 
+                  !shopSearch || 
+                  shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
+                  String(shop.shopId).includes(shopSearch)
+                )
+                .map((shop) => (
+                  <button
+                    key={shop.shopId}
+                    onClick={() => switchShop(shop.shopId)}
+                    disabled={switching}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
+                      shop.shopId === currentShopId
+                        ? "text-blue-400 bg-blue-600/10"
+                        : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    }`}
+                  >
+                    <span className="truncate">{shop.name}</span>
+                    {shop.shopId === currentShopId && <Check className="w-4 h-4 flex-shrink-0" />}
+                  </button>
+                ))}
+              {shops.filter((shop) => 
+                !shopSearch || 
+                shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
+                String(shop.shopId).includes(shopSearch)
+              ).length === 0 && (
+                <div className="px-3 py-2 text-sm text-slate-400 text-center">No locations found</div>
+              )}
+            </div>
           </div>
         )}
       </div>
