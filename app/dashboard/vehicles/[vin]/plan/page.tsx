@@ -23,6 +23,7 @@ import {
 } from "@/lib/integrations/autovitals";
 import { AddToROButton } from "@/components/ui/AddToROButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
+import { PrintButton } from "@/components/ui/PrintButton";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -832,8 +833,9 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     resolveAutoVitalsConfig(shopId)
   ]);
 
-  // PARALLEL DATA FETCHING - fetch external data simultaneously
-  const [dvi, carfax, protractorVehicleResult, avInspectionResult] = await Promise.all([
+  // PARALLEL DATA FETCHING - fetch external data and local queries simultaneously
+  const vinUpper = vin.toUpperCase();
+  const [dvi, carfax, protractorVehicleResult, avInspectionResult, protractorCompletedWOs, shopBranding] = await Promise.all([
     latestRoNumber && autoCfg.configured
       ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
       : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
@@ -845,7 +847,16 @@ export default async function VehiclePlanPage({ params }: PageProps) {
       : Promise.resolve({ ok: false } as { ok: false }),
     autoVitalsCfg.configured
       ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL)
-      : Promise.resolve({ ok: false } as { ok: false })
+      : Promise.resolve({ ok: false } as { ok: false }),
+    db.collection("protractor_work_orders").find({
+      shopId,
+      $or: [
+        { vin: vinUpper },
+        { "data.VIN": vinUpper },
+        { "ServiceItem.VIN": vinUpper }
+      ]
+    }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
+    db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
   ]);
 
   // Protractor Deferred Work (depends on vehicle ID from previous call)
@@ -861,22 +872,6 @@ export default async function VehiclePlanPage({ params }: PageProps) {
       protractorDeferredWork = deferredResult.deferredWork;
     }
   }
-  // Fetch Protractor completed work orders for service history
-  const protractorCompletedWOs = await db.collection("protractor_work_orders").find({
-    shopId,
-    $and: [
-      { $or: [
-        { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
-        { "data.VIN": { $regex: new RegExp(`^${vin}$`, 'i') } },
-        { "ServiceItem.VIN": { $regex: new RegExp(`^${vin}$`, 'i') } }
-      ]},
-      { $or: [
-        { Completed: true },
-        { "data.Completed": true },
-        { completed: true }
-      ]}
-    ]
-  }).sort({ "Header.LastModifiedTime": -1 }).limit(50).toArray();
 
   // Extract service history from Protractor completed work orders
   const protractorHistory: ProtractorServiceHistory[] = [];
@@ -901,11 +896,6 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   }
   console.log(`[Plan Debug] Protractor service history entries: ${protractorHistory.length}`);
 
-  // Fetch shop branding (logo)
-  const shopBranding = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { "branding.logo": 1 } }
-  );
   const shopLogo: string | null = shopBranding?.branding?.logo || null;
 
   // Miles/day (same “today miles” guard as detail page)
@@ -1067,15 +1057,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
             </div>
 
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => window.print()} 
-                className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                Export PDF
-              </button>
+              <PrintButton />
               <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
                 <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
                   Overdue {counts.overdue}
