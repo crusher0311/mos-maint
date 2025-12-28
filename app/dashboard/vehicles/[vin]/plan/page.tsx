@@ -59,6 +59,27 @@ function toSquish(vin: string) {
   return v.slice(0, 8) + v.slice(9, 11);
 }
 
+function formatOverdueDate(date: Date | null | undefined): { text: string; isVeryOverdue: boolean; yearsOverdue: number } {
+  if (!date) return { text: "", isVeryOverdue: false, yearsOverdue: 0 };
+  const now = new Date();
+  const daysPast = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  const yearsOverdue = Math.floor(daysPast / 365);
+  const monthsOverdue = Math.floor(daysPast / 30);
+  
+  let text = date.toLocaleDateString();
+  if (yearsOverdue >= 1) {
+    text = `${date.toLocaleDateString()} (${yearsOverdue}+ years overdue!)`;
+  } else if (monthsOverdue >= 6) {
+    text = `${date.toLocaleDateString()} (${monthsOverdue} months overdue)`;
+  }
+  
+  return { 
+    text, 
+    isVeryOverdue: yearsOverdue >= 1 || monthsOverdue >= 6,
+    yearsOverdue 
+  };
+}
+
 /* ---------------- Smart mileage interpolation for CARFAX gaps ---------------- */
 type CarfaxRecordWithParsed = {
   date: Date | null;
@@ -1045,17 +1066,51 @@ export default async function VehiclePlanPage({ params }: PageProps) {
               </div>
             </div>
 
-            <nav className="flex items-center gap-2 text-xs sm:text-sm">
-              <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
-                Overdue {counts.overdue}
-              </a>
-              <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
-                Due Soon {counts.soon}
-              </a>
-              <a href="#upcoming" className="rounded-full px-3 py-1 bg-emerald-600 text-white">
-                Upcoming {counts.upcoming}
-              </a>
-            </nav>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => window.print()} 
+                className="print:hidden flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Export PDF
+              </button>
+              <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
+                <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
+                  Overdue {counts.overdue}
+                </a>
+                <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
+                  Due Soon {counts.soon}
+                </a>
+                <a href="#upcoming" className="rounded-full px-3 py-1 bg-emerald-600 text-white">
+                  Upcoming {counts.upcoming}
+                </a>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Print-only header with shop logo */}
+      <div className="hidden print:block mb-6 border-b pb-4">
+        <div className="flex items-center justify-between">
+          {shopLogo ? (
+            <img src={shopLogo} alt="Shop Logo" className="h-12" />
+          ) : (
+            <div className="text-lg font-bold text-neutral-800">Maintenance Report</div>
+          )}
+          <div className="text-right text-sm text-neutral-600">
+            <div>Report Date: {new Date().toLocaleDateString()}</div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <h1 className="text-2xl font-bold">
+            {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Maintenance Plan
+          </h1>
+          <div className="text-sm text-neutral-600 mt-1">
+            VIN: {vin}
+            {currentMiles != null && currentMiles > 0 && <> • Current Mileage: {fmtMiles(currentMiles)} mi</>}
           </div>
         </div>
       </div>
@@ -1121,11 +1176,21 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       </>
                     )}
                     {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
-                    {t.dueAtDate != null && (
-                      <>
-                        By <strong>{t.dueAtDate.toLocaleDateString()}</strong>
-                      </>
-                    )}
+                    {(() => {
+                      if (t.dueAtDate == null) return null;
+                      const { text, isVeryOverdue, yearsOverdue } = formatOverdueDate(t.dueAtDate);
+                      return (
+                        <span className={isVeryOverdue ? "inline-flex items-center gap-1" : ""}>
+                          By{" "}
+                          <strong className={isVeryOverdue ? "bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300" : ""}>
+                            {text}
+                          </strong>
+                          {yearsOverdue >= 2 && (
+                            <span className="text-red-600 font-bold">⚠️</span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {t.last?.miles != null && (
