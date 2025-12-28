@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut } from "lucide-react";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -56,6 +56,30 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [sortColumn, setSortColumn] = useState<SortColumn>('mileage');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      window.location.href = data?.redirect || "/login";
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -247,8 +271,29 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
                 <HelpCircle className="w-5 h-5" />
               </button>
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                {data.user?.email?.charAt(0).toUpperCase() || "U"}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="w-8 h-8 rounded-full bg-mos-blue flex items-center justify-center text-white text-sm font-medium hover:ring-2 hover:ring-mos-blue/50 transition-all"
+                >
+                  {data.user?.email?.charAt(0).toUpperCase() || "U"}
+                </button>
+                {showUserMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900 truncate">{data.user?.email}</p>
+                      <p className="text-xs text-gray-500 capitalize">{data.user?.role || "User"}</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      disabled={loggingOut}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      {loggingOut ? "Logging out..." : "Log out"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
