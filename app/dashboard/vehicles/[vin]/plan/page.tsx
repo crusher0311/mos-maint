@@ -22,6 +22,7 @@ import {
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
 import { AddToROButton } from "@/components/ui/AddToROButton";
+import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -902,7 +903,8 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   };
 
   return (
-    <main className="mx-auto max-w-5xl p-0 sm:p-6 space-y-8">
+    <PlanTrialGate vin={vin}>
+      <main className="mx-auto max-w-5xl p-0 sm:p-6 space-y-8">
       {/* Sticky summary header */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -1268,5 +1270,6 @@ export default async function VehiclePlanPage({ params }: PageProps) {
         </details>
       </div>
     </main>
+    </PlanTrialGate>
   );
 }

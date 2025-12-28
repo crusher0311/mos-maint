@@ -124,6 +124,21 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   useEffect(() => {
     setLastUpdated(new Date());
+    
+    if (data.rows?.length > 0) {
+      const vinsToPrefeetch = data.rows
+        .slice(0, 10)
+        .map((r: any) => r.displayVin || r.vin)
+        .filter((v: string) => v && v.length === 17);
+      
+      if (vinsToPrefeetch.length > 0) {
+        fetch("/api/plan-prefetch/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vins: vinsToPrefeetch }),
+        }).catch(() => {});
+      }
+    }
   }, []);
 
   useEffect(() => {
