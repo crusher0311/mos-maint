@@ -322,9 +322,32 @@ type Buckets = { overdue: TriagedItem[]; dueSoon: TriagedItem[]; upcoming: Triag
 const DEFAULT_SOON_MILES = 1000;
 const DEFAULT_SOON_DAYS = 30;
 
+type ProtractorServiceHistory = {
+  serviceName: string;
+  mileage: number | null;
+  date: Date | null;
+};
+
+const MILEAGE_TOLERANCE = 10;
+const DATE_TOLERANCE_DAYS = 3;
+
+function isMatchingHistory(
+  shopRecord: { miles?: number | null; date?: Date | null },
+  carfaxRecord: { miles?: number | null; date?: Date | null }
+): boolean {
+  if (shopRecord.miles == null || carfaxRecord.miles == null) return false;
+  if (shopRecord.date == null || carfaxRecord.date == null) return false;
+  
+  const milesDiff = Math.abs(shopRecord.miles - carfaxRecord.miles);
+  const daysDiff = Math.abs(shopRecord.date.getTime() - carfaxRecord.date.getTime()) / (1000 * 60 * 60 * 24);
+  
+  return milesDiff <= MILEAGE_TOLERANCE && daysDiff <= DATE_TOLERANCE_DAYS;
+}
+
 function triage({
   oemItems,
   carfaxRecords,
+  protractorHistory = [],
   currentMiles,
   today = new Date(),
   dviFindings,
@@ -337,6 +360,7 @@ function triage({
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
+  protractorHistory?: ProtractorServiceHistory[];
   currentMiles: number | null;
   today?: Date;
   dviFindings: Array<{ name?: string; status?: string | number; source?: string }>;
@@ -354,8 +378,32 @@ function triage({
     defaultRate: milesPerDay,
   });
 
-  // last-done map from CARFAX (now with interpolated mileage)
+  // Build Protractor service history map first (shop data is primary)
+  const shopHistoryByKey = new Map<string, { miles: number | null; date: Date | null }[]>();
+  for (const ph of protractorHistory || []) {
+    const keys = toKeyFromFreeText(ph.serviceName || "");
+    for (const k of keys) {
+      if (!shopHistoryByKey.has(k)) shopHistoryByKey.set(k, []);
+      shopHistoryByKey.get(k)!.push({ miles: ph.mileage, date: ph.date });
+    }
+  }
+
+  // last-done map: merge CARFAX with Protractor (shop wins if matching)
   const lastMap = new Map<string, LastDone>();
+  
+  // First, add all Protractor history as shop source
+  for (const ph of protractorHistory || []) {
+    const keys = toKeyFromFreeText(ph.serviceName || "");
+    for (const k of keys) {
+      const prev = lastMap.get(k);
+      const cand: LastDone = { miles: ph.mileage, date: ph.date, source: "shop" };
+      const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
+      const candScore = ph.date ? ph.date.getTime() : -Infinity;
+      if (!prev || candScore > prevScore) lastMap.set(k, cand);
+    }
+  }
+
+  // Then process CARFAX records
   for (const r of enrichedRecords) {
     const date = r.date;
     const miles = r.miles;
@@ -364,6 +412,17 @@ function triage({
     const keys = toKeyFromFreeText(desc);
     for (const k of keys) {
       const prev = lastMap.get(k);
+      
+      // Check if this CARFAX record matches any shop record (±10mi, ±3 days)
+      const shopRecords = shopHistoryByKey.get(k) || [];
+      const matchesShop = shopRecords.some(sr => isMatchingHistory(sr, { miles, date }));
+      
+      if (matchesShop) {
+        // CARFAX matches shop record - keep shop source (already in lastMap)
+        continue;
+      }
+      
+      // No matching shop record - use CARFAX source
       const cand: LastDone = { miles, date, source: "carfax" };
       const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
       const candScore = date ? date.getTime() : -Infinity;
@@ -781,6 +840,53 @@ export default async function VehiclePlanPage({ params }: PageProps) {
       protractorDeferredWork = deferredResult.deferredWork;
     }
   }
+  // Fetch Protractor completed work orders for service history
+  const protractorCompletedWOs = await db.collection("protractor_work_orders").find({
+    shopId,
+    $and: [
+      { $or: [
+        { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+        { "data.VIN": { $regex: new RegExp(`^${vin}$`, 'i') } },
+        { "ServiceItem.VIN": { $regex: new RegExp(`^${vin}$`, 'i') } }
+      ]},
+      { $or: [
+        { Completed: true },
+        { "data.Completed": true },
+        { completed: true }
+      ]}
+    ]
+  }).sort({ "Header.LastModifiedTime": -1 }).limit(50).toArray();
+
+  // Extract service history from Protractor completed work orders
+  const protractorHistory: ProtractorServiceHistory[] = [];
+  for (const wo of protractorCompletedWOs) {
+    const mileage = wo.Odometer ?? wo.OutUsage ?? wo.data?.Odometer ?? null;
+    const dateStr = wo.Header?.LastModifiedTime ?? wo.Header?.CreationTime ?? wo.data?.Header?.LastModifiedTime ?? null;
+    const date = dateStr ? new Date(dateStr) : null;
+    
+    const servicePackages = wo.ServicePackages ?? wo.data?.ServicePackages ?? [];
+    for (const pkg of servicePackages) {
+      const serviceName = pkg.Title ?? pkg.Description ?? "";
+      if (serviceName) {
+        protractorHistory.push({ serviceName, mileage, date });
+      }
+      for (const line of pkg.ServicePackageLines ?? []) {
+        const lineName = line.Description ?? "";
+        if (lineName && lineName !== serviceName) {
+          protractorHistory.push({ serviceName: lineName, mileage, date });
+        }
+      }
+    }
+  }
+  console.log(`[Plan Debug] Protractor service history entries: ${protractorHistory.length}`);
+
+  // Fetch shop branding (logo)
+  const shopBranding = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { "branding.logo": 1 } }
+  );
+  const shopLogo: string | null = shopBranding?.branding?.logo || null;
+
   // Miles/day (same “today miles” guard as detail page)
   let mpdBlended: number | null = null;
   if ((carfax as any).ok && Array.isArray((carfax as any).serviceRecords)) {
@@ -891,6 +997,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   const buckets = triage({
     oemItems,
     carfaxRecords,
+    protractorHistory,
     currentMiles,
     dviFindings,
     protractorDeferredWork,
@@ -1020,8 +1127,12 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       {t.last?.source === "carfax" && (
                         <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
                       )}
-                      {t.last?.source === "protractor" && (
-                        <img src="/badges/protractor.png" alt="Protractor" className="h-4" title="From Protractor" />
+                      {(t.last?.source === "protractor" || t.last?.source === "shop") && (
+                        shopLogo ? (
+                          <img src={shopLogo} alt="Shop" className="h-4" title="From Shop History" />
+                        ) : (
+                          <img src="/badges/protractor.png" alt="Protractor" className="h-4" title="From Protractor" />
+                        )
                       )}
                     </div>
                   )}
@@ -1047,7 +1158,13 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         <span className="font-medium inline-flex items-center gap-1">
                           Last done
                           {t.last?.source === "carfax" && <img src="/badges/carfax.png" alt="CARFAX" className="h-3 inline" />}
-                          {t.last?.source === "protractor" && <img src="/badges/protractor.png" alt="Protractor" className="h-3.5 inline" />}
+                          {(t.last?.source === "protractor" || t.last?.source === "shop") && (
+                            shopLogo ? (
+                              <img src={shopLogo} alt="Shop" className="h-3.5 inline" />
+                            ) : (
+                              <img src="/badges/protractor.png" alt="Protractor" className="h-3.5 inline" />
+                            )
+                          )}
                           :
                         </span>{" "}
                         {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
@@ -1147,8 +1264,12 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                       {t.last?.source === "carfax" && (
                         <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
                       )}
-                      {t.last?.source === "protractor" && (
-                        <img src="/badges/protractor.png" alt="Protractor" className="h-4" title="From Protractor" />
+                      {(t.last?.source === "protractor" || t.last?.source === "shop") && (
+                        shopLogo ? (
+                          <img src={shopLogo} alt="Shop" className="h-4" title="From Shop History" />
+                        ) : (
+                          <img src="/badges/protractor.png" alt="Protractor" className="h-4" title="From Protractor" />
+                        )
                       )}
                     </div>
                   )}
@@ -1174,7 +1295,13 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         <span className="font-medium inline-flex items-center gap-1">
                           Last done
                           {t.last?.source === "carfax" && <img src="/badges/carfax.png" alt="CARFAX" className="h-3 inline" />}
-                          {t.last?.source === "protractor" && <img src="/badges/protractor.png" alt="Protractor" className="h-3.5 inline" />}
+                          {(t.last?.source === "protractor" || t.last?.source === "shop") && (
+                            shopLogo ? (
+                              <img src={shopLogo} alt="Shop" className="h-3.5 inline" />
+                            ) : (
+                              <img src="/badges/protractor.png" alt="Protractor" className="h-3.5 inline" />
+                            )
+                          )}
                           :
                         </span>{" "}
                         {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
