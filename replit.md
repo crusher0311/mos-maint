@@ -1,6 +1,6 @@
 # MOS Maintenance MVP
 
-**Current Version:** 1.1.0  
+**Current Version:** 1.2.0  
 **Last Updated:** December 28, 2024
 
 ---
@@ -11,6 +11,7 @@
 |---------|------|-------------|
 | 1.0.0 | Dec 23, 2024 | Initial release with platform admin panel, enterprise features, dual OpenAI support |
 | 1.1.0 | Dec 28, 2024 | Trial VIN tracking (10 free views), background plan prefetching, shop dropdown search |
+| 1.2.0 | Dec 28, 2024 | Shop-level reporting dashboard, cost per VIN/view metrics on platform admin |
 
 ---
 
