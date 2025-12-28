@@ -161,33 +161,33 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 min-h-screen flex flex-col">
-      <div className="p-4 border-b border-slate-700 relative" ref={dropdownRef}>
+    <aside className="w-64 bg-mos-navy min-h-screen flex flex-col">
+      <div className="p-4 border-b border-mos-navy-light relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
           className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
-            hasMultipleShops ? "hover:bg-slate-800 cursor-pointer" : "cursor-default"
+            hasMultipleShops ? "hover:bg-mos-navy-light cursor-pointer" : "cursor-default"
           }`}
         >
           <span className="font-medium truncate">{shopName}</span>
           {hasMultipleShops && (
-            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${shopDropdownOpen ? "rotate-180" : ""}`} />
+            <ChevronDown className={`w-4 h-4 text-mos-silver transition-transform ${shopDropdownOpen ? "rotate-180" : ""}`} />
           )}
         </button>
         
         {shopDropdownOpen && hasMultipleShops && (
-          <div className="absolute left-4 right-4 top-full mt-1 bg-slate-800 rounded-lg shadow-lg border border-slate-700 z-50 overflow-hidden">
+          <div className="absolute left-4 right-4 top-full mt-1 bg-mos-navy-light rounded-lg shadow-lg border border-mos-silver-dark/30 z-50 overflow-hidden">
             {shops.length > 5 && (
-              <div className="p-2 border-b border-slate-700">
+              <div className="p-2 border-b border-mos-silver-dark/30">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-mos-silver" />
                   <input
                     ref={shopSearchRef}
                     type="text"
                     placeholder="Search locations..."
                     value={shopSearch}
                     onChange={(e) => setShopSearch(e.target.value)}
-                    className="w-full bg-slate-700 text-white placeholder-slate-400 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-600"
+                    className="w-full bg-mos-navy text-white placeholder-mos-silver rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-mos-blue border border-mos-silver-dark/30"
                   />
                 </div>
               </div>
@@ -206,8 +206,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     disabled={switching}
                     className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
                       shop.shopId === currentShopId
-                        ? "text-blue-400 bg-blue-600/10"
-                        : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                        ? "text-mos-blue-light bg-mos-blue/10"
+                        : "text-mos-silver hover:bg-mos-navy hover:text-white"
                     }`}
                   >
                     <span className="truncate">{shop.name}</span>
@@ -219,7 +219,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                 shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
                 String(shop.shopId).includes(shopSearch)
               ).length === 0 && (
-                <div className="px-3 py-2 text-sm text-slate-400 text-center">No locations found</div>
+                <div className="px-3 py-2 text-sm text-mos-silver text-center">No locations found</div>
               )}
             </div>
           </div>
@@ -228,13 +228,13 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
 
       <div className="p-4 space-y-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-mos-silver" />
           <input
             type="text"
             placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800 text-white placeholder-slate-400 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-slate-700"
+            className="w-full bg-mos-navy-light text-white placeholder-mos-silver rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue border border-mos-silver-dark/30"
           />
         </div>
       </div>
@@ -249,8 +249,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     onClick={() => toggleSection(item.name)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive(item.href)
-                        ? "bg-blue-600 text-white"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                        ? "bg-mos-blue text-white"
+                        : "text-mos-silver hover:bg-mos-navy-light hover:text-white"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -264,15 +264,15 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     )}
                   </button>
                   {expandedSections.has(item.name) && (
-                    <ul className="mt-1 ml-4 space-y-1 border-l border-slate-700 pl-4">
+                    <ul className="mt-1 ml-4 space-y-1 border-l border-mos-silver-dark/30 pl-4">
                       {item.children.map((child) => (
                         <li key={child.name}>
                           <Link
                             href={child.href}
                             className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                               isActive(child.href)
-                                ? "bg-blue-600/20 text-blue-400 font-medium"
-                                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                                ? "bg-mos-blue/20 text-mos-blue-light font-medium"
+                                : "text-mos-silver hover:bg-mos-navy-light hover:text-white"
                             }`}
                           >
                             {child.name}
@@ -287,8 +287,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                   href={item.href}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
-                      ? "bg-blue-600 text-white"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      ? "bg-mos-blue text-white"
+                      : "text-mos-silver hover:bg-mos-navy-light hover:text-white"
                   }`}
                 >
                   {item.icon}
@@ -312,18 +312,18 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </div>
       )}
 
-      <div className="p-4 border-t border-slate-700">
-        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-slate-800 rounded-lg p-2 -m-2 transition-colors">
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+      <div className="p-4 border-t border-mos-silver-dark/30">
+        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-mos-navy-light rounded-lg p-2 -m-2 transition-colors">
+          <div className="w-8 h-8 rounded-full bg-mos-blue flex items-center justify-center text-white text-sm font-medium">
             {userInitials}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{userEmail || "Account"}</p>
             {userRole && (
-              <p className="text-xs text-slate-400 capitalize">{userRole}</p>
+              <p className="text-xs text-mos-silver capitalize">{userRole}</p>
             )}
           </div>
-          <button className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors">
+          <button className="p-1.5 text-mos-silver hover:text-white rounded-lg hover:bg-mos-navy-light transition-colors">
             <HelpCircle className="w-5 h-5" />
           </button>
         </Link>
