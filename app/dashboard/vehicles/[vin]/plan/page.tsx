@@ -430,12 +430,14 @@ function triage({
     // Time-based next due
     if (intervalMonths && intervalMonths > 0) {
       if (last?.date) dueAtDate = addMonths(last.date, intervalMonths);
-      else dueAtDate = addMonths(today, 0 + intervalMonths);
+      else if (!neverDone) dueAtDate = addMonths(today, 0 + intervalMonths);
+      // If neverDone, don't set a future date - we'll estimate from mileage below
     }
 
     const milesToGo = currentMiles != null && dueAtMiles != null ? dueAtMiles - currentMiles : null;
 
     // If no time-based interval but we have miles and miles/day, estimate date
+    // Also applies when service was never done (neverDone=true) to avoid showing future dates for overdue items
     if (dueAtDate == null && milesToGo != null && milesPerDay != null && milesPerDay > 0) {
       const daysUntilDue = Math.round(milesToGo / milesPerDay);
       dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
