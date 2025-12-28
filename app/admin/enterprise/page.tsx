@@ -395,13 +395,13 @@ export default function EnterpriseDashboardPage() {
                   </Link>
                   
                   <Link
-                    href={`/admin/enterprise/integrations?id=${selectedEnterprise}`}
+                    href={`/admin/enterprise/users?id=${selectedEnterprise}`}
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <Users className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="font-medium text-gray-900">Integration Settings</p>
-                      <p className="text-sm text-gray-500">Configure shared Protractor/Tekmetric settings</p>
+                      <p className="font-medium text-gray-900">User Access</p>
+                      <p className="text-sm text-gray-500">Manage user access to multiple locations</p>
                     </div>
                   </Link>
                 </div>

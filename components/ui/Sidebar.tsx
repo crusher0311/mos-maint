@@ -110,6 +110,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
     return pathname === href || pathname?.startsWith(href + "/");
   };
 
+  const hasMultipleShops = shops.length > 1;
+
   const navItems: NavItem[] = [
     {
       name: "Vehicles",
@@ -121,6 +123,11 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       href: "/dashboard/onboarding",
       icon: <ClipboardCheck className="w-5 h-5" />
     },
+    ...(hasMultipleShops ? [{
+      name: "Enterprise",
+      href: "/dashboard/enterprise",
+      icon: <Building2 className="w-5 h-5" />
+    }] : []),
     {
       name: "Settings",
       href: "/dashboard/settings",
@@ -137,8 +144,6 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       ]
     }
   ];
-
-  const hasMultipleShops = shops.length > 1;
 
   return (
     <aside className="w-64 bg-slate-900 min-h-screen flex flex-col">
