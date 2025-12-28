@@ -20,7 +20,8 @@ import {
   Shield,
   DollarSign,
   Building2,
-  Check
+  Check,
+  BarChart3
 } from "lucide-react";
 import { PlanLauncher } from "./PlanLauncher";
 
@@ -126,6 +127,11 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       name: "Vehicles",
       href: "/dashboard",
       icon: <Car className="w-5 h-5" />
+    },
+    {
+      name: "Reporting",
+      href: "/dashboard/reporting",
+      icon: <BarChart3 className="w-5 h-5" />
     },
     {
       name: "Shop Onboarding",

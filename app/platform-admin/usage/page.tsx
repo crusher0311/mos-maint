@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DollarSign, Zap, Building2, Calendar, RefreshCw } from "lucide-react";
+import { DollarSign, Zap, Building2, Calendar, RefreshCw, Eye, Car } from "lucide-react";
 
 interface UsageAnalytics {
   totals: {
     requestCount: number;
     totalTokens: number;
     totalCost: number;
+    uniqueVinsProcessed: number;
+    totalViews: number;
+    costPerVin: number;
+    costPerView: number;
   };
   byShop: Array<{
     shopId: string;
@@ -163,6 +167,60 @@ export default function PlatformUsagePage() {
           <div className="text-2xl font-bold text-gray-900">
             {analytics?.byShop?.length || 0}
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-indigo-50 to-white rounded-xl p-6 border border-indigo-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Car className="w-5 h-5 text-indigo-600" />
+            </div>
+            <span className="text-sm text-indigo-700 font-medium">VINs Processed</span>
+          </div>
+          <div className="text-2xl font-bold text-indigo-900">
+            {analytics?.totals?.uniqueVinsProcessed?.toLocaleString() || 0}
+          </div>
+          <p className="text-xs text-indigo-600 mt-1">Unique vehicles analyzed</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-indigo-50 to-white rounded-xl p-6 border border-indigo-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Eye className="w-5 h-5 text-indigo-600" />
+            </div>
+            <span className="text-sm text-indigo-700 font-medium">Plans Viewed</span>
+          </div>
+          <div className="text-2xl font-bold text-indigo-900">
+            {analytics?.totals?.totalViews?.toLocaleString() || 0}
+          </div>
+          <p className="text-xs text-indigo-600 mt-1">Clicked "View" button</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <DollarSign className="w-5 h-5 text-green-600" />
+            </div>
+            <span className="text-sm text-green-700 font-medium">Cost per VIN</span>
+          </div>
+          <div className="text-2xl font-bold text-green-700">
+            {formatCost(analytics?.totals?.costPerVin || 0)}
+          </div>
+          <p className="text-xs text-green-600 mt-1">Total cost / VINs processed</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <DollarSign className="w-5 h-5 text-green-600" />
+            </div>
+            <span className="text-sm text-green-700 font-medium">Cost per View</span>
+          </div>
+          <div className="text-2xl font-bold text-green-700">
+            {formatCost(analytics?.totals?.costPerView || 0)}
+          </div>
+          <p className="text-xs text-green-600 mt-1">Total cost / plans viewed</p>
         </div>
       </div>
 

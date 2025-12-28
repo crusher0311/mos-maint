@@ -136,6 +136,7 @@ export async function getUsageAnalytics(startDate?: Date, endDate?: Date) {
         totalOutputTokens: { $sum: "$outputTokens" },
         totalTokens: { $sum: "$totalTokens" },
         totalCost: { $sum: "$estimatedCost" },
+        uniqueVins: { $addToSet: "$vin" },
       }
     }
   ]).toArray();
@@ -148,6 +149,21 @@ export async function getUsageAnalytics(startDate?: Date, endDate?: Date) {
     ]})
     .toArray();
   const shopMap = new Map(shops.map(s => [String(s.shopId), s.name]));
+
+  const viewDateMatch: any = {};
+  if (startDate || endDate) {
+    viewDateMatch.firstViewedAt = {};
+    if (startDate) viewDateMatch.firstViewedAt.$gte = startDate;
+    if (endDate) viewDateMatch.firstViewedAt.$lte = endDate;
+  }
+  const totalViews = await db.collection("viewed_vins").countDocuments(
+    Object.keys(viewDateMatch).length > 0 ? viewDateMatch : {}
+  );
+  
+  const totalCost = totals[0]?.totalCost || 0;
+  const uniqueVinsProcessed = (totals[0]?.uniqueVins || []).filter(Boolean).length;
+  const costPerVin = uniqueVinsProcessed > 0 ? totalCost / uniqueVinsProcessed : 0;
+  const costPerView = totalViews > 0 ? totalCost / totalViews : 0;
   
   const shopBreakdown = byShop.map(s => ({
     shopId: s._id,
@@ -159,7 +175,13 @@ export async function getUsageAnalytics(startDate?: Date, endDate?: Date) {
   }));
   
   return {
-    totals: totals[0] || { requestCount: 0, totalTokens: 0, totalCost: 0 },
+    totals: {
+      ...(totals[0] || { requestCount: 0, totalTokens: 0, totalCost: 0 }),
+      uniqueVinsProcessed,
+      totalViews,
+      costPerVin,
+      costPerView,
+    },
     byShop: shopBreakdown,
     byModel,
     byDay,
