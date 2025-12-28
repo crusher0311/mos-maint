@@ -161,12 +161,12 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   ];
 
   return (
-    <aside className="w-64 bg-mos-gray-dark min-h-screen flex flex-col">
-      <div className="p-4 border-b border-mos-gray relative" ref={dropdownRef}>
+    <aside className="w-64 bg-mos-gray min-h-screen flex flex-col">
+      <div className="p-4 border-b border-mos-gray-light relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
           className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
-            hasMultipleShops ? "hover:bg-mos-gray cursor-pointer" : "cursor-default"
+            hasMultipleShops ? "hover:bg-mos-gray-light cursor-pointer" : "cursor-default"
           }`}
         >
           <span className="font-medium truncate">{shopName}</span>
@@ -250,7 +250,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive(item.href)
                         ? "bg-mos-blue text-white"
-                        : "text-mos-silver hover:bg-mos-gray hover:text-white"
+                        : "text-mos-silver hover:bg-mos-gray-light hover:text-white"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -272,7 +272,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                             className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                               isActive(child.href)
                                 ? "bg-mos-blue/20 text-mos-blue-light font-medium"
-                                : "text-mos-silver hover:bg-mos-gray hover:text-white"
+                                : "text-mos-silver hover:bg-mos-gray-light hover:text-white"
                             }`}
                           >
                             {child.name}
@@ -288,7 +288,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
                       ? "bg-mos-blue text-white"
-                      : "text-mos-silver hover:bg-mos-gray hover:text-white"
+                      : "text-mos-silver hover:bg-mos-gray-light hover:text-white"
                   }`}
                 >
                   {item.icon}
@@ -312,8 +312,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </div>
       )}
 
-      <div className="p-4 border-t border-mos-gray">
-        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-mos-gray rounded-lg p-2 -m-2 transition-colors">
+      <div className="p-4 border-t border-mos-gray-light">
+        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-mos-gray-light rounded-lg p-2 -m-2 transition-colors">
           <div className="w-8 h-8 rounded-full bg-mos-blue flex items-center justify-center text-white text-sm font-medium">
             {userInitials}
           </div>
@@ -323,7 +323,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
               <p className="text-xs text-mos-silver capitalize">{userRole}</p>
             )}
           </div>
-          <button className="p-1.5 text-mos-silver hover:text-white rounded-lg hover:bg-mos-gray transition-colors">
+          <button className="p-1.5 text-mos-silver hover:text-white rounded-lg hover:bg-mos-gray-light transition-colors">
             <HelpCircle className="w-5 h-5" />
           </button>
         </Link>
