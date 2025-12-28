@@ -738,35 +738,45 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
 
-  const autoCfg = await resolveAutoflowConfig(shopId);
-  const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days - webhook updates cache on DVI completion
-  const dvi =
+  // PARALLEL CONFIG RESOLUTION - fetch all configs at once
+  const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
+  const CARFAX_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days  
+  const PROTRACTOR_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+  const [autoCfg, carfaxCfg, protractorCfg, autoVitalsCfg] = await Promise.all([
+    resolveAutoflowConfig(shopId),
+    resolveCarfaxConfig(shopId),
+    resolveProtractorConfig(shopId),
+    resolveAutoVitalsConfig(shopId)
+  ]);
+
+  // PARALLEL DATA FETCHING - fetch external data simultaneously
+  const [dvi, carfax, protractorVehicleResult, avInspectionResult] = await Promise.all([
     latestRoNumber && autoCfg.configured
-      ? await fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
-      : { ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." };
+      ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
+      : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
+    carfaxCfg.configured
+      ? fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL)
+      : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
+    protractorCfg.configured
+      ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL)
+      : Promise.resolve({ ok: false } as { ok: false }),
+    autoVitalsCfg.configured
+      ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL)
+      : Promise.resolve({ ok: false } as { ok: false })
+  ]);
 
-  // CARFAX
-  const carfaxCfg = await resolveCarfaxConfig(shopId);
-  const carfax = carfaxCfg.configured
-    ? await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000)
-    : { ok: false, error: "CARFAX not configured." as const };
-
-
-  // Protractor Deferred Work (shop recommendations)
-  const protractorCfg = await resolveProtractorConfig(shopId);
+  // Protractor Deferred Work (depends on vehicle ID from previous call)
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
-  if (protractorCfg.configured) {
-    const protractorVehicle = await fetchProtractorVehicle(shopId, vin, 6 * 60 * 60 * 1000);
-    if (protractorVehicle.ok && protractorVehicle.vehicle?.ID) {
-      const deferredResult = await fetchProtractorDeferredWork(
-        shopId,
-        vin,
-        protractorVehicle.vehicle.ID,
-        6 * 60 * 60 * 1000
-      );
-      if (deferredResult.ok && deferredResult.deferredWork) {
-        protractorDeferredWork = deferredResult.deferredWork;
-      }
+  if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
+    const deferredResult = await fetchProtractorDeferredWork(
+      shopId,
+      vin,
+      (protractorVehicleResult as any).vehicle.ID,
+      PROTRACTOR_CACHE_TTL
+    );
+    if (deferredResult.ok && deferredResult.deferredWork) {
+      protractorDeferredWork = deferredResult.deferredWork;
     }
   }
   // Miles/day (same “today miles” guard as detail page)
@@ -797,11 +807,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     mpdBlended = fromToday != null && fromTwo != null ? (fromToday + fromTwo) / 2 : fromTwo ?? fromToday ?? null;
   }
 
-  // Get current miles from all sources (same as detail page)
-  const currentMiles = await getLatestMilesForVin(db, vin);
-
-  // OEM schedule - use cached API (first call fetches from DataOne API, subsequent calls use cache)
-  const oemData = await getMaintenanceScheduleCached(vin);
+  // PARALLEL: Get current miles and OEM schedule at the same time
+  const [currentMiles, oemData] = await Promise.all([
+    getLatestMilesForVin(db, vin),
+    getMaintenanceScheduleCached(vin)
+  ]);
   console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
 
   // Build normalized inputs
@@ -823,21 +833,17 @@ export default async function VehiclePlanPage({ params }: PageProps) {
         )
       : [];
 
-  // AutoVitals DVI findings
-  const autoVitalsCfg = await resolveAutoVitalsConfig(shopId);
+  // AutoVitals DVI findings (already fetched in parallel above)
   let autoVitalsDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
-  if (autoVitalsCfg.configured) {
-    const avInspection = await fetchAutoVitalsInspectionByVin(shopId, vin, 6 * 60 * 60 * 1000);
-    if (avInspection.ok && avInspection.items) {
-      autoVitalsDviFindings = avInspection.items
-        .filter(item => item.status === "red" || item.status === "yellow")
-        .map(item => ({
-          name: item.name,
-          status: item.status === "red" ? "0" : "1",
-          source: "autovitals"
-        }));
-      console.log(`[Plan Debug] AutoVitals DVI items: ${autoVitalsDviFindings.length}`);
-    }
+  if ((avInspectionResult as any).ok && (avInspectionResult as any).items) {
+    autoVitalsDviFindings = (avInspectionResult as any).items
+      .filter((item: any) => item.status === "red" || item.status === "yellow")
+      .map((item: any) => ({
+        name: item.name,
+        status: item.status === "red" ? "0" : "1",
+        source: "autovitals"
+      }));
+    console.log(`[Plan Debug] AutoVitals DVI items: ${autoVitalsDviFindings.length}`);
   }
 
   // Merge DVI findings from both sources (AutoFlow and AutoVitals)
