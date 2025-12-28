@@ -21,7 +21,8 @@ import {
   DollarSign,
   Building2,
   Check,
-  BarChart3
+  BarChart3,
+  LogOut
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -55,8 +56,20 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   const [shops, setShops] = useState<ShopOption[]>([]);
   const [switching, setSwitching] = useState(false);
   const [shopSearch, setShopSearch] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      window.location.href = data?.redirect || "/login";
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/user/shops")
@@ -161,12 +174,12 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
   ];
 
   return (
-    <aside className="w-64 min-h-screen flex flex-col" style={{ backgroundColor: '#606364' }}>
-      <div className="p-4 border-b border-mos-gray-light relative" ref={dropdownRef}>
+    <aside className="w-64 min-h-screen flex flex-col" style={{ backgroundColor: '#3C81C3' }}>
+      <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
           className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
-            hasMultipleShops ? "hover:bg-mos-gray-light cursor-pointer" : "cursor-default"
+            hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
           }`}
         >
           <span className="font-medium truncate">{shopName}</span>
@@ -176,18 +189,18 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </button>
         
         {shopDropdownOpen && hasMultipleShops && (
-          <div className="absolute left-4 right-4 top-full mt-1 bg-mos-gray rounded-lg shadow-lg border border-mos-gray-light z-50 overflow-hidden">
+          <div className="absolute left-4 right-4 top-full mt-1 bg-mos-blue-dark rounded-lg shadow-lg border border-white/20 z-50 overflow-hidden">
             {shops.length > 5 && (
-              <div className="p-2 border-b border-mos-gray-light">
+              <div className="p-2 border-b border-white/20">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-mos-silver" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70" />
                   <input
                     ref={shopSearchRef}
                     type="text"
                     placeholder="Search locations..."
                     value={shopSearch}
                     onChange={(e) => setShopSearch(e.target.value)}
-                    className="w-full bg-mos-gray-dark text-white placeholder-mos-silver rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-mos-blue border border-mos-gray-light"
+                    className="w-full bg-white/10 text-white placeholder-white/50 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-white/30 border border-white/20"
                   />
                 </div>
               </div>
@@ -206,8 +219,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     disabled={switching}
                     className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
                       shop.shopId === currentShopId
-                        ? "text-mos-blue-light bg-mos-blue/20"
-                        : "text-mos-silver hover:bg-mos-gray-dark hover:text-white"
+                        ? "text-white bg-white/20"
+                        : "text-white/70 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     <span className="truncate">{shop.name}</span>
@@ -219,7 +232,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                 shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
                 String(shop.shopId).includes(shopSearch)
               ).length === 0 && (
-                <div className="px-3 py-2 text-sm text-mos-silver text-center">No locations found</div>
+                <div className="px-3 py-2 text-sm text-white/50 text-center">No locations found</div>
               )}
             </div>
           </div>
@@ -228,13 +241,13 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
 
       <div className="p-4 space-y-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-mos-silver" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/70" />
           <input
             type="text"
             placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-mos-gray text-white placeholder-mos-silver rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue border border-mos-gray-light"
+            className="w-full bg-white/10 text-white placeholder-white/50 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/20"
           />
         </div>
       </div>
@@ -249,8 +262,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     onClick={() => toggleSection(item.name)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive(item.href)
-                        ? "bg-mos-blue text-white"
-                        : "text-mos-silver hover:bg-mos-gray-light hover:text-white"
+                        ? "bg-white/20 text-white"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -264,15 +277,15 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                     )}
                   </button>
                   {expandedSections.has(item.name) && (
-                    <ul className="mt-1 ml-4 space-y-1 border-l border-mos-gray-light pl-4">
+                    <ul className="mt-1 ml-4 space-y-1 border-l border-white/20 pl-4">
                       {item.children.map((child) => (
                         <li key={child.name}>
                           <Link
                             href={child.href}
                             className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                               isActive(child.href)
-                                ? "bg-mos-blue/20 text-mos-blue-light font-medium"
-                                : "text-mos-silver hover:bg-mos-gray-light hover:text-white"
+                                ? "bg-white/20 text-white font-medium"
+                                : "text-white/70 hover:bg-white/10 hover:text-white"
                             }`}
                           >
                             {child.name}
@@ -287,8 +300,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
                   href={item.href}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
-                      ? "bg-mos-blue text-white"
-                      : "text-mos-silver hover:bg-mos-gray-light hover:text-white"
+                      ? "bg-white/20 text-white"
+                      : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   {item.icon}
@@ -312,21 +325,26 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         </div>
       )}
 
-      <div className="p-4 border-t border-mos-gray-light">
-        <Link href="/dashboard/settings/users" className="flex items-center gap-3 hover:bg-mos-gray-light rounded-lg p-2 -m-2 transition-colors">
-          <div className="w-8 h-8 rounded-full bg-mos-blue flex items-center justify-center text-white text-sm font-medium">
+      <div className="p-4 border-t border-white/20">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-medium">
             {userInitials}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{userEmail || "Account"}</p>
             {userRole && (
-              <p className="text-xs text-mos-silver capitalize">{userRole}</p>
+              <p className="text-xs text-white/60 capitalize">{userRole}</p>
             )}
           </div>
-          <button className="p-1.5 text-mos-silver hover:text-white rounded-lg hover:bg-mos-gray-light transition-colors">
-            <HelpCircle className="w-5 h-5" />
+          <button 
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="p-1.5 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50"
+            title="Log out"
+          >
+            <LogOut className="w-5 h-5" />
           </button>
-        </Link>
+        </div>
       </div>
     </aside>
   );
