@@ -124,9 +124,9 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
 
   const navItems: NavItem[] = [
     {
-      name: "Vehicles",
+      name: "Dashboard",
       href: "/dashboard",
-      icon: <Car className="w-5 h-5" />
+      icon: <LayoutDashboard className="w-5 h-5" />
     },
     {
       name: "Reporting",
