@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/ui/Sidebar";
 interface UserInfo {
   email: string;
   role: string;
+  shopId: number;
   shopName: string;
   authenticated: boolean;
   isPlatformAdmin?: boolean;
@@ -44,6 +45,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         userRole={userInfo?.role}
         userInitials={userInitials}
         isPlatformAdmin={userInfo?.isPlatformAdmin}
+        currentShopId={userInfo?.shopId}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {children}

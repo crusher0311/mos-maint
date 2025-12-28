@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { Eye, EyeOff, Mail, Lock, Building2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [shopId, setShopId] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
@@ -29,8 +28,6 @@ export default function LoginForm() {
         email: email.trim().toLowerCase(),
         password,
       };
-      const sid = shopId.trim();
-      if (sid) body.shopId = Number(sid);
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -107,28 +104,6 @@ export default function LoginForm() {
           >
             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="shopId" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Shop ID <span className="text-gray-400 font-normal">(optional)</span>
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Building2 className="h-5 w-5 text-gray-400" />
-          </div>
-          <input
-            id="shopId"
-            type="text"
-            className="block w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-colors"
-            placeholder="Enter if you have multiple shops"
-            value={shopId}
-            onChange={(e) => setShopId(e.target.value)}
-            inputMode="numeric"
-            pattern="\d*"
-            disabled={busy}
-          />
         </div>
       </div>
 

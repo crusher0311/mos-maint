@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import { 
   Car, 
   Users, 
@@ -19,7 +19,8 @@ import {
   HelpCircle,
   Shield,
   DollarSign,
-  Building2
+  Building2,
+  Check
 } from "lucide-react";
 import { PlanLauncher } from "./PlanLauncher";
 
@@ -30,18 +31,70 @@ interface NavItem {
   children?: { name: string; href: string }[];
 }
 
+interface ShopOption {
+  shopId: number;
+  name: string;
+}
+
 interface SidebarProps {
   shopName?: string;
   userEmail?: string;
   userRole?: string;
   userInitials?: string;
   isPlatformAdmin?: boolean;
+  currentShopId?: number;
 }
 
-export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
   const [searchQuery, setSearchQuery] = useState("");
+  const [shopDropdownOpen, setShopDropdownOpen] = useState(false);
+  const [shops, setShops] = useState<ShopOption[]>([]);
+  const [switching, setSwitching] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch("/api/user/shops")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.shops) setShops(data.shops);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShopDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function switchShop(shopId: number) {
+    if (switching || shopId === currentShopId) {
+      setShopDropdownOpen(false);
+      return;
+    }
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/user/switch-shop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId }),
+      });
+      if (res.ok) {
+        router.refresh();
+        window.location.href = "/dashboard";
+      }
+    } finally {
+      setSwitching(false);
+      setShopDropdownOpen(false);
+    }
+  }
 
   const toggleSection = (name: string) => {
     const newExpanded = new Set(expandedSections);
@@ -85,13 +138,42 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
     }
   ];
 
+  const hasMultipleShops = shops.length > 1;
+
   return (
     <aside className="w-64 bg-slate-900 min-h-screen flex flex-col">
-      <div className="p-4 border-b border-slate-700">
-        <button className="w-full flex items-center justify-between text-white hover:bg-slate-800 rounded-lg p-2 transition-colors">
+      <div className="p-4 border-b border-slate-700 relative" ref={dropdownRef}>
+        <button 
+          onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
+          className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
+            hasMultipleShops ? "hover:bg-slate-800 cursor-pointer" : "cursor-default"
+          }`}
+        >
           <span className="font-medium truncate">{shopName}</span>
-          <ChevronDown className="w-4 h-4 text-slate-400" />
+          {hasMultipleShops && (
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${shopDropdownOpen ? "rotate-180" : ""}`} />
+          )}
         </button>
+        
+        {shopDropdownOpen && hasMultipleShops && (
+          <div className="absolute left-4 right-4 top-full mt-1 bg-slate-800 rounded-lg shadow-lg border border-slate-700 py-1 z-50">
+            {shops.map((shop) => (
+              <button
+                key={shop.shopId}
+                onClick={() => switchShop(shop.shopId)}
+                disabled={switching}
+                className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
+                  shop.shopId === currentShopId
+                    ? "text-blue-400 bg-blue-600/10"
+                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                }`}
+              >
+                <span className="truncate">{shop.name}</span>
+                {shop.shopId === currentShopId && <Check className="w-4 h-4 flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="p-4 space-y-3">
