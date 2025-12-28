@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, ExternalLink } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2 } from "lucide-react";
 
 interface Shop {
   _id: string;
@@ -17,6 +17,30 @@ export default function PlatformShopsPage() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [impersonating, setImpersonating] = useState<number | null>(null);
+
+  const accessShop = async (shopId: number) => {
+    if (impersonating) return;
+    setImpersonating(shopId);
+    try {
+      const res = await fetch("/api/platform-admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = "/dashboard";
+      } else {
+        alert(data.error || "Failed to access shop");
+      }
+    } catch (err) {
+      console.error("Error accessing shop:", err);
+      alert("Failed to access shop");
+    } finally {
+      setImpersonating(null);
+    }
+  };
 
   useEffect(() => {
     loadShops();
@@ -89,12 +113,13 @@ export default function PlatformShopsPage() {
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Vehicles</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Integrations</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
+              <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredShops.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                   {search ? "No shops match your search" : "No shops yet"}
                 </td>
               </tr>
@@ -127,6 +152,20 @@ export default function PlatformShopsPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {new Date(shop.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => accessShop(shop.shopId)}
+                      disabled={impersonating !== null}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {impersonating === shop.shopId ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <LogIn className="w-4 h-4" />
+                      )}
+                      Access
+                    </button>
                   </td>
                 </tr>
               ))
