@@ -6,43 +6,33 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  Settings,
-  Key,
-  Link2,
-  RefreshCw,
-  ToggleLeft,
-  ToggleRight,
-  Info,
   AlertCircle,
-  ExternalLink,
-  Chrome,
-  Hash,
-  ChevronDown,
-  ChevronUp,
   Trash2,
-  Download,
+  Car,
+  Wrench,
+  ClipboardCheck,
 } from "lucide-react";
 
-type IntegrationTab = "carfax" | "autoflow" | "protractor" | "autovitals" | "tekmetric";
+type ShopManagementChoice = "protractor" | "tekmetric" | "standalone" | null;
+type DviChoice = "autoflow" | "tekmetric" | null;
 
 interface IntegrationStatus {
   carfax: { configured: boolean; locationId?: string };
   autoflow: { configured: boolean };
   protractor: { configured: boolean; connectionId?: string };
-  autovitals: { configured: boolean; shopName?: string };
   tekmetric: { configured: boolean; shopId?: number; shopName?: string; lastSync?: string };
 }
 
 export default function IntegrationsPage() {
-  const [activeTab, setActiveTab] = useState<IntegrationTab>("carfax");
   const [loading, setLoading] = useState(true);
   const [statuses, setStatuses] = useState<IntegrationStatus>({
     carfax: { configured: false },
     autoflow: { configured: false },
     protractor: { configured: false },
-    autovitals: { configured: false },
     tekmetric: { configured: false },
   });
+  const [shopManagement, setShopManagement] = useState<ShopManagementChoice>(null);
+  const [dviChoice, setDviChoice] = useState<DviChoice>(null);
 
   useEffect(() => {
     fetchAllStatuses();
@@ -50,21 +40,19 @@ export default function IntegrationsPage() {
 
   async function fetchAllStatuses() {
     try {
-      const [carfaxRes, autoflowRes, protractorRes, autovitalsRes, tekmetricRes] = await Promise.all([
+      const [carfaxRes, autoflowRes, protractorRes, tekmetricRes] = await Promise.all([
         fetch("/api/settings/carfax").catch(() => null),
         fetch("/api/settings/autoflow").catch(() => null),
         fetch("/api/settings/protractor").catch(() => null),
-        fetch("/api/autovitals/settings").catch(() => null),
         fetch("/api/settings/tekmetric").catch(() => null),
       ]);
 
       const carfaxData = carfaxRes?.ok ? await carfaxRes.json() : {};
       const autoflowData = autoflowRes?.ok ? await autoflowRes.json() : {};
       const protractorData = protractorRes?.ok ? await protractorRes.json() : {};
-      const autovitalsData = autovitalsRes?.ok ? await autovitalsRes.json() : {};
       const tekmetricData = tekmetricRes?.ok ? await tekmetricRes.json() : {};
 
-      setStatuses({
+      const newStatuses = {
         carfax: { 
           configured: Boolean(carfaxData.locationId), 
           locationId: carfaxData.locationId 
@@ -76,32 +64,34 @@ export default function IntegrationsPage() {
           configured: Boolean(protractorData.configured), 
           connectionId: protractorData.connectionId 
         },
-        autovitals: { 
-          configured: Boolean(autovitalsData.isConfigured), 
-          shopName: autovitalsData.shopName 
-        },
         tekmetric: {
           configured: Boolean(tekmetricData.configured),
           shopId: tekmetricData.shopId,
           shopName: tekmetricData.shopName,
           lastSync: tekmetricData.lastSync,
         },
-      });
+      };
+
+      setStatuses(newStatuses);
+
+      // Auto-select based on what's configured
+      if (newStatuses.protractor.configured) {
+        setShopManagement("protractor");
+      } else if (newStatuses.tekmetric.configured) {
+        setShopManagement("tekmetric");
+      }
+
+      if (newStatuses.autoflow.configured) {
+        setDviChoice("autoflow");
+      } else if (newStatuses.tekmetric.configured) {
+        setDviChoice("tekmetric");
+      }
     } catch (err) {
       console.error("Failed to fetch integration statuses:", err);
     } finally {
       setLoading(false);
     }
   }
-
-  const tabs: { id: IntegrationTab; label: string; status: boolean }[] = [
-    { id: "carfax", label: "CARFAX", status: statuses.carfax.configured },
-    { id: "autoflow", label: "AutoFlow", status: statuses.autoflow.configured },
-    { id: "protractor", label: "Protractor", status: statuses.protractor.configured },
-    { id: "tekmetric", label: "Tekmetric", status: statuses.tekmetric.configured },
-    // AutoVitals hidden until VIN data access is clarified
-    // { id: "autovitals", label: "AutoVitals", status: statuses.autovitals.configured },
-  ];
 
   if (loading) {
     return (
@@ -112,7 +102,7 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <main className="p-6 max-w-4xl">
+    <main className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2 bg-blue-100 rounded-lg">
           <Puzzle className="w-6 h-6 text-blue-600" />
@@ -123,35 +113,141 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              {tab.label}
-              {tab.status ? (
-                <CheckCircle className="w-4 h-4 text-green-500" />
-              ) : (
-                <XCircle className="w-4 h-4 text-gray-300" />
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Column 1: CARFAX */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Car className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900">Vehicle History</h2>
+                <p className="text-xs text-gray-500">Service history data</p>
+              </div>
+            </div>
+          </div>
+          <CarfaxSection status={statuses.carfax} onUpdate={fetchAllStatuses} />
+        </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {activeTab === "carfax" && <CarfaxSection onUpdate={fetchAllStatuses} />}
-        {activeTab === "autoflow" && <AutoflowSection onUpdate={fetchAllStatuses} />}
-        {activeTab === "protractor" && <ProtractorSection onUpdate={fetchAllStatuses} />}
-        {activeTab === "autovitals" && <AutovitalsSection onUpdate={fetchAllStatuses} />}
-        {activeTab === "tekmetric" && <TekmetricSection onUpdate={fetchAllStatuses} />}
+        {/* Column 2: Shop Management System */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Wrench className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900">Shop Management</h2>
+                <p className="text-xs text-gray-500">Vehicle & RO data source</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="space-y-2 mb-4">
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="shopManagement"
+                  checked={shopManagement === "protractor"}
+                  onChange={() => setShopManagement("protractor")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">Protractor</span>
+                {statuses.protractor.configured && <CheckCircle className="w-4 h-4 text-green-500" />}
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="shopManagement"
+                  checked={shopManagement === "tekmetric"}
+                  onChange={() => setShopManagement("tekmetric")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">Tekmetric</span>
+                {statuses.tekmetric.configured && <CheckCircle className="w-4 h-4 text-green-500" />}
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="shopManagement"
+                  checked={shopManagement === "standalone"}
+                  onChange={() => setShopManagement("standalone")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">Stand Alone</span>
+              </label>
+            </div>
+            
+            {shopManagement === "protractor" && (
+              <ProtractorSection status={statuses.protractor} onUpdate={fetchAllStatuses} />
+            )}
+            {shopManagement === "tekmetric" && (
+              <TekmetricSection status={statuses.tekmetric} onUpdate={fetchAllStatuses} />
+            )}
+            {shopManagement === "standalone" && (
+              <StandaloneSection />
+            )}
+            {!shopManagement && (
+              <div className="text-center text-gray-400 py-8">
+                Select an option above to configure
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Column 3: DVI */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <ClipboardCheck className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900">DVI Integration</h2>
+                <p className="text-xs text-gray-500">Digital Vehicle Inspections</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="space-y-2 mb-4">
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="dvi"
+                  checked={dviChoice === "autoflow"}
+                  onChange={() => setDviChoice("autoflow")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">AutoFlow</span>
+                {statuses.autoflow.configured && <CheckCircle className="w-4 h-4 text-green-500" />}
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="dvi"
+                  checked={dviChoice === "tekmetric"}
+                  onChange={() => setDviChoice("tekmetric")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">Tekmetric</span>
+                {statuses.tekmetric.configured && <CheckCircle className="w-4 h-4 text-green-500" />}
+              </label>
+            </div>
+            
+            {dviChoice === "autoflow" && (
+              <AutoflowSection status={statuses.autoflow} onUpdate={fetchAllStatuses} />
+            )}
+            {dviChoice === "tekmetric" && (
+              <TekmetricDviSection status={statuses.tekmetric} />
+            )}
+            {!dviChoice && (
+              <div className="text-center text-gray-400 py-8">
+                Select an option above to configure
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <DevToolsSection />
@@ -237,32 +333,15 @@ function DevToolsSection() {
   );
 }
 
-function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
-  const [locationId, setLocationId] = useState("");
-  const [loading, setLoading] = useState(true);
+function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; locationId?: string }; onUpdate: () => void }) {
+  const [locationId, setLocationId] = useState(status.locationId || "");
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [envConfigured, setEnvConfigured] = useState(false);
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
-    try {
-      const res = await fetch("/api/settings/carfax");
-      if (res.ok) {
-        const data = await res.json();
-        setLocationId(data.locationId || "");
-        setEnvConfigured(data.envConfigured !== false);
-      }
-    } catch (err) {
-      console.error("Failed to fetch CARFAX settings:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
+    setLocationId(status.locationId || "");
+  }, [status.locationId]);
 
   async function handleSave() {
     setSaving(true);
@@ -276,7 +355,7 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "CARFAX Location ID saved successfully" });
+        setMessage({ type: "success", text: "CARFAX connected" });
         onUpdate();
       } else {
         const data = await res.json();
@@ -290,18 +369,15 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
   }
 
   async function handleDisconnect() {
-    if (!confirm("Are you sure you want to disconnect CARFAX?")) return;
+    if (!confirm("Disconnect CARFAX?")) return;
     
     setDisconnecting(true);
     setMessage(null);
 
     try {
-      const res = await fetch("/api/settings/carfax", {
-        method: "DELETE",
-      });
-
+      const res = await fetch("/api/settings/carfax", { method: "DELETE" });
       if (res.ok) {
-        setMessage({ type: "success", text: "CARFAX disconnected successfully" });
+        setMessage({ type: "success", text: "Disconnected" });
         setLocationId("");
         onUpdate();
       } else {
@@ -314,79 +390,62 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">CARFAX Integration</h2>
-        <p className="text-gray-600">
-          Connect to CARFAX to display service history on vehicle pages. The API credentials are 
-          configured globally - you just need to enter your shop's Location ID.
-        </p>
-      </div>
-
-      <div className={`rounded-lg p-4 ${locationId ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
-        <div className="flex items-center gap-3">
-          {locationId ? (
-            <CheckCircle className="w-5 h-5 text-green-600" />
+    <div className="p-4 space-y-4">
+      <div className={`rounded-lg p-3 ${status.configured ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
+        <div className="flex items-center gap-2 text-sm">
+          {status.configured ? (
+            <>
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-green-800">Connected</span>
+            </>
           ) : (
-            <AlertCircle className="w-5 h-5 text-gray-400" />
+            <>
+              <AlertCircle className="w-4 h-4 text-gray-400" />
+              <span className="text-gray-600">Not configured</span>
+            </>
           )}
-          <span className={locationId ? 'text-green-800' : 'text-gray-600'}>
-            {locationId ? `Connected (Location ID: ${locationId})` : 'Not configured'}
-          </span>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Shop Location ID
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Location ID
         </label>
         <input
           type="text"
           value={locationId}
           onChange={(e) => setLocationId(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Enter your CARFAX Location ID"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Your CARFAX Location ID"
         />
-        <p className="text-xs text-gray-500 mt-1">
-          This ID is provided by CARFAX when you set up your account
-        </p>
       </div>
 
       {message && (
-        <div className={`flex items-center gap-2 p-3 rounded-lg ${
+        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
           message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
         }`}>
-          {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
           <span>{message.text}</span>
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-2">
         <button
           onClick={handleSave}
-          disabled={saving}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          disabled={saving || !locationId}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Save Location ID
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+          Connect
         </button>
-        {locationId && (
+        {status.configured && (
           <button
             onClick={handleDisconnect}
             disabled={disconnecting}
-            className="px-6 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 disabled:opacity-50"
           >
             {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Disconnect
           </button>
         )}
       </div>
@@ -394,312 +453,13 @@ function CarfaxSection({ onUpdate }: { onUpdate: () => void }) {
   );
 }
 
-function AutoflowSection({ onUpdate }: { onUpdate: () => void }) {
-  const [domain, setDomain] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [apiPassword, setApiPassword] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
-    try {
-      const res = await fetch("/api/settings/autoflow");
-      if (res.ok) {
-        const data = await res.json();
-        setDomain(data.autoflowDomain || "");
-        setApiKey(data.autoflowApiKey || "");
-        setApiPassword(data.autoflowApiPassword || "");
-      }
-    } catch (err) {
-      console.error("Failed to fetch AutoFlow settings:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/settings/autoflow", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain, apiKey, apiPassword }),
-      });
-
-      if (res.ok) {
-        setMessage({ type: "success", text: "AutoFlow settings saved successfully" });
-        onUpdate();
-      } else {
-        const data = await res.json();
-        setMessage({ type: "error", text: data.error || "Failed to save" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to save settings" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDisconnect() {
-    if (!confirm("Are you sure you want to disconnect AutoFlow?")) return;
-    
-    setDisconnecting(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/settings/autoflow", {
-        method: "DELETE",
-      });
-
-      if (res.ok) {
-        setMessage({ type: "success", text: "AutoFlow disconnected successfully" });
-        setDomain("");
-        setApiKey("");
-        setApiPassword("");
-        onUpdate();
-      } else {
-        setMessage({ type: "error", text: "Failed to disconnect" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to disconnect" });
-    } finally {
-      setDisconnecting(false);
-    }
-  }
-
-  async function handleTest() {
-    setTesting(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/settings/autoflow/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain, apiKey, apiPassword }),
-      });
-
-      const data = await res.json();
-      if (data.ok) {
-        setMessage({ type: "success", text: "Connection successful!" });
-      } else {
-        setMessage({ type: "error", text: data.error || "Connection failed" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Connection test failed" });
-    } finally {
-      setTesting(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  const isConfigured = domain && apiKey;
-
-  return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">AutoFlow Integration</h2>
-        <p className="text-gray-600">
-          Connect to AutoFlow to sync customer and vehicle data.
-        </p>
-      </div>
-
-      <div className={`rounded-lg p-4 ${isConfigured ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
-        <div className="flex items-center gap-3">
-          {isConfigured ? (
-            <CheckCircle className="w-5 h-5 text-green-600" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-gray-400" />
-          )}
-          <span className={isConfigured ? 'text-green-800' : 'text-gray-600'}>
-            {isConfigured ? 'Connected' : 'Not configured'}
-          </span>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            AutoFlow Domain
-          </label>
-          <input
-            type="text"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="e.g., yourshop.autoflow.com"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            API Key
-          </label>
-          <input
-            type="text"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Your AutoFlow API key"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            API Password
-          </label>
-          <input
-            type="password"
-            value={apiPassword}
-            onChange={(e) => setApiPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Your AutoFlow API password"
-          />
-        </div>
-      </div>
-
-      {message && (
-        <div className={`flex items-center gap-2 p-3 rounded-lg ${
-          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
-        }`}>
-          {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-          <span>{message.text}</span>
-        </div>
-      )}
-
-      <div className="flex gap-3 flex-wrap">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Save Settings
-        </button>
-        <button
-          onClick={handleTest}
-          disabled={testing || !domain || !apiKey}
-          className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Test Connection
-        </button>
-        {isConfigured && (
-          <button
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="px-6 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Disconnect
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [status, setStatus] = useState<{
-    configured: boolean;
-    connectionId?: string;
-    hasApiKey?: boolean;
-    updateWorkOrderPackage?: boolean;
-    updateWorkOrderLine?: boolean;
-  } | null>(null);
-  const [syncStats, setSyncStats] = useState<{
-    vehicles: number;
-    workOrders: number;
-    cannedJobs: number;
-    lastSync: string | null;
-  } | null>(null);
+function ProtractorSection({ status, onUpdate }: { status: { configured: boolean; connectionId?: string }; onUpdate: () => void }) {
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-
-  useEffect(() => {
-    fetchStatus();
-  }, []);
-
-  async function fetchStatus() {
-    try {
-      const res = await fetch("/api/settings/protractor");
-      if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-        if (data.configured) {
-          fetchSyncStats();
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch Protractor status:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchSyncStats() {
-    try {
-      const res = await fetch("/api/protractor/sync");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.stats) {
-          setSyncStats(data.stats);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch sync stats:", err);
-    }
-  }
-
-  async function handleTest() {
-    if (!connectionId || !apiKey) {
-      setMessage({ type: "error", text: "Please enter both Connection ID and API Key" });
-      return;
-    }
-
-    setTesting(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/settings/protractor/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId, apiKey }),
-      });
-
-      const data = await res.json();
-      if (data.ok) {
-        setMessage({ type: "success", text: `Connection successful! Found ${data.locations?.length || 0} locations.` });
-      } else {
-        setMessage({ type: "error", text: data.error || "Connection failed" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Connection test failed" });
-    } finally {
-      setTesting(false);
-    }
-  }
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   async function handleSave() {
     setSaving(true);
@@ -712,50 +472,17 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
         body: JSON.stringify({ connectionId, apiKey }),
       });
 
-      const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: "Protractor settings saved successfully" });
-        fetchStatus();
-        onUpdate();
-      } else {
-        setMessage({ type: "error", text: data.error || "Failed to save" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to save settings" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDisconnect() {
-    if (!confirm("Are you sure you want to disconnect Protractor? This will remove your credentials.")) {
-      return;
-    }
-    
-    setDisconnecting(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/settings/protractor", {
-        method: "DELETE",
-      });
-
-      if (res.ok) {
-        setMessage({ type: "success", text: "Protractor disconnected successfully" });
-        setStatus(null);
-        setSyncStats(null);
-        setConnectionId("");
-        setApiKey("");
-        fetchStatus();
+        setMessage({ type: "success", text: "Protractor connected" });
         onUpdate();
       } else {
         const data = await res.json();
-        setMessage({ type: "error", text: data.error || "Failed to disconnect" });
+        setMessage({ type: "error", text: data.error || "Failed to connect" });
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Failed to disconnect" });
+      setMessage({ type: "error", text: "Failed to save" });
     } finally {
-      setDisconnecting(false);
+      setSaving(false);
     }
   }
 
@@ -764,17 +491,10 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
     setMessage(null);
 
     try {
-      const res = await fetch("/api/protractor/sync", {
-        method: "POST",
-      });
-
+      const res = await fetch("/api/protractor/sync", { method: "POST" });
       const data = await res.json();
-      if (res.ok && data.ok) {
-        setMessage({ 
-          type: "success", 
-          text: `Synced ${data.vehiclesSynced || 0} vehicles from ${data.workOrdersFound || 0} work orders` 
-        });
-        fetchSyncStats();
+      if (res.ok) {
+        setMessage({ type: "success", text: `Synced ${data.vehicles || 0} vehicles` });
       } else {
         setMessage({ type: "error", text: data.error || "Sync failed" });
       }
@@ -785,428 +505,114 @@ function ProtractorSection({ onUpdate }: { onUpdate: () => void }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Protractor Integration</h2>
-        <p className="text-gray-600">
-          Connect to Protractor to sync vehicles, work orders, and add service packages.
-        </p>
-      </div>
-
-      <div className={`rounded-lg p-4 ${status?.configured ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
-        <div className="flex items-center gap-3">
-          {status?.configured ? (
-            <CheckCircle className="w-5 h-5 text-green-600" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-gray-400" />
-          )}
-          <span className={status?.configured ? 'text-green-800' : 'text-gray-600'}>
-            {status?.configured ? 'Connected' : 'Not configured'}
-          </span>
-        </div>
-      </div>
-
-      {!status?.configured && (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Link2 className="w-4 h-4 inline mr-1" />
-              Connection ID
-            </label>
-            <input
-              type="text"
-              value={connectionId}
-              onChange={(e) => setConnectionId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Your Protractor Connection ID"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Key className="w-4 h-4 inline mr-1" />
-              API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Your Protractor API Key"
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={handleTest}
-              disabled={testing || !connectionId || !apiKey}
-              className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Test Connection
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !connectionId || !apiKey}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Save & Connect
-            </button>
-          </div>
-        </div>
-      )}
-
-      {status?.configured && (
-        <div className="space-y-6">
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-3">Sync Data</h3>
-            {syncStats && (
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-semibold text-gray-900">{syncStats.vehicles}</p>
-                  <p className="text-xs text-gray-500">Vehicles</p>
-                </div>
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-semibold text-gray-900">{syncStats.workOrders}</p>
-                  <p className="text-xs text-gray-500">Work Orders</p>
-                </div>
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-semibold text-gray-900">{syncStats.cannedJobs}</p>
-                  <p className="text-xs text-gray-500">Canned Jobs</p>
-                </div>
-              </div>
-            )}
-            {syncStats?.lastSync && (
-              <p className="text-xs text-gray-500 mb-3">
-                Last synced: {new Date(syncStats.lastSync).toLocaleString()}
-              </p>
-            )}
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              {syncing ? "Syncing..." : "Sync Now"}
-            </button>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-2">Canned Job Mappings</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Map maintenance recommendations to Protractor canned jobs for one-click "Add to RO" functionality.
-            </p>
-            <a
-              href="/dashboard/settings/canned-jobs"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-            >
-              <Settings className="w-4 h-4" />
-              Manage Canned Job Mappings
-            </a>
-          </div>
-
-          <div className="bg-white border border-red-200 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-2">Disconnect Integration</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Remove Protractor connection. This will not delete any synced data.
-            </p>
-            <button
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
-            >
-              {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              Disconnect Protractor
-            </button>
-          </div>
-        </div>
-      )}
-
-      {message && (
-        <div className={`flex items-center gap-2 p-3 rounded-lg ${
-          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
-        }`}>
-          {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-          <span>{message.text}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AutovitalsSection({ onUpdate }: { onUpdate: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [shopName, setShopName] = useState("");
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
+  async function handleDisconnect() {
+    if (!confirm("Disconnect Protractor?")) return;
+    setDisconnecting(true);
     try {
-      const res = await fetch("/api/autovitals/settings");
+      const res = await fetch("/api/settings/protractor", { method: "DELETE" });
       if (res.ok) {
-        const data = await res.json();
-        setShopName(data.shopName || "");
-        if (data.hasApiKey) {
-          setApiKey("configured");
-          setIsConfigured(true);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch AutoVitals settings:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleGenerateKey() {
-    setGenerating(true);
-    setMessage(null);
-    
-    try {
-      const res = await fetch("/api/autovitals/extension/generate-key", {
-        method: "POST",
-      });
-      
-      const data = await res.json();
-      if (res.ok) {
-        setApiKey(data.apiKey);
-        setShowApiKey(true);
-        setMessage({ type: "success", text: "API key generated! Copy it now - it won't be shown again." });
-        onUpdate();
-      } else {
-        setMessage({ type: "error", text: data.error || "Failed to generate API key" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to generate API key" });
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function handleRevokeKey() {
-    if (!confirm("Are you sure you want to revoke this API key? The Chrome extension will stop working.")) {
-      return;
-    }
-    
-    try {
-      const res = await fetch("/api/autovitals/extension/generate-key", {
-        method: "DELETE",
-      });
-      
-      if (res.ok) {
-        setApiKey(null);
-        setIsConfigured(false);
-        setMessage({ type: "success", text: "API key revoked" });
+        setMessage({ type: "success", text: "Disconnected" });
         onUpdate();
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Failed to revoke API key" });
+      setMessage({ type: "error", text: "Failed" });
+    } finally {
+      setDisconnecting(false);
     }
   }
 
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
-    setMessage({ type: "success", text: "Copied to clipboard!" });
-  }
-
-  if (loading) {
+  if (status.configured) {
     return (
-      <div className="p-6 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">AutoVitals Integration</h2>
-        <p className="text-gray-600">
-          Import digital vehicle inspection (DVI) data from AutoVitals using the Chrome extension.
-        </p>
-      </div>
-
-      <div className={`rounded-lg p-4 ${isConfigured ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
-        <div className="flex items-center gap-3">
-          {isConfigured ? (
-            <CheckCircle className="w-5 h-5 text-green-600" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-gray-400" />
-          )}
-          <span className={isConfigured ? 'text-green-800' : 'text-gray-600'}>
-            {isConfigured ? 'Extension configured - ready to sync vehicles' : 'Extension not configured'}
-          </span>
+      <div className="space-y-3 border-t pt-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <CheckCircle className="w-4 h-4" />
+            <span>Connected to Protractor</span>
+          </div>
         </div>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="font-medium text-gray-900 mb-3">Step 1: Generate API Key</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Generate an API key that the Chrome extension will use to connect to your MOS account.
-        </p>
         
-        {apiKey && showApiKey ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={apiKey}
-                readOnly
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm"
-              />
-              <button
-                onClick={() => copyToClipboard(apiKey)}
-                className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm"
-              >
-                Copy
-              </button>
-            </div>
-            <p className="text-xs text-amber-600">
-              Save this key now! It won't be shown again after you leave this page.
-            </p>
+        {message && (
+          <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+            message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+          }`}>
+            {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{message.text}</span>
           </div>
-        ) : apiKey ? (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-green-600">API key is configured</span>
-            <button
-              onClick={handleRevokeKey}
-              className="text-sm text-red-600 hover:text-red-700"
-            >
-              Revoke Key
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={handleGenerateKey}
-            disabled={generating}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 text-sm"
-          >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
-            Generate API Key
-          </button>
         )}
-      </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex gap-3">
-          <Chrome className="w-6 h-6 text-blue-600 flex-shrink-0" />
-          <div>
-            <h3 className="font-medium text-blue-900 mb-2">Step 2: Install Chrome Extension</h3>
-            <p className="text-sm text-blue-800 mb-3">
-              Download and install the extension in Chrome to sync inspection data from AutoVitals.
-            </p>
-            <a
-              href="/api/autovitals/extension/download"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium mb-3"
-            >
-              <Download className="w-4 h-4" />
-              Download Extension
-            </a>
-            <div className="bg-blue-100 rounded-lg p-3 mt-3">
-              <p className="text-xs text-blue-800 font-medium mb-2">Installation steps:</p>
-              <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                <li>Extract the downloaded ZIP file to a permanent location</li>
-                <li>Open Chrome and go to chrome://extensions</li>
-                <li>Enable "Developer mode" (toggle in top right)</li>
-                <li>Click "Load unpacked" and select the extracted folder</li>
-              </ol>
-            </div>
-          </div>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {syncing && <Loader2 className="w-4 h-4 animate-spin" />}
+            Sync Now
+          </button>
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
+    );
+  }
 
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h3 className="font-medium text-gray-900 mb-3">Step 3: Connect the Extension</h3>
-        <ol className="space-y-2 text-sm text-gray-600">
-          <li className="flex items-start gap-2">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">1</span>
-            Click the MOS AutoVitals extension icon in Chrome
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">2</span>
-            Enter your MOS server URL (this site's URL)
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">3</span>
-            Paste the API key you generated above
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">4</span>
-            Navigate to AutoVitals - DVI data will sync automatically
-          </li>
-        </ol>
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Connection ID</label>
+        <input
+          type="text"
+          value={connectionId}
+          onChange={(e) => setConnectionId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Your Protractor Connection ID"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Your Protractor API Key"
+        />
       </div>
 
       {message && (
-        <div className={`flex items-center gap-2 p-3 rounded-lg ${
+        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
           message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
         }`}>
-          {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
           <span>{message.text}</span>
         </div>
       )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !connectionId || !apiKey}
+        className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+        Connect
+      </button>
     </div>
   );
 }
 
-function TekmetricSection({ onUpdate }: { onUpdate: () => void }) {
+function TekmetricSection({ status, onUpdate }: { status: { configured: boolean; shopId?: number; shopName?: string }; onUpdate: () => void }) {
   const [shopId, setShopId] = useState("");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [config, setConfig] = useState<{
-    configured: boolean;
-    shopId?: number;
-    shopName?: string;
-    lastSync?: string;
-  }>({ configured: false });
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
-    try {
-      const res = await fetch("/api/settings/tekmetric");
-      if (res.ok) {
-        const data = await res.json();
-        setConfig(data);
-        if (data.shopId) {
-          setShopId(data.shopId.toString());
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch Tekmetric settings:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleConnect() {
-    if (!shopId.trim()) {
-      setMessage({ type: "error", text: "Please enter your Tekmetric Shop ID" });
-      return;
-    }
-
+  async function handleSave() {
     setSaving(true);
     setMessage(null);
 
@@ -1214,23 +620,18 @@ function TekmetricSection({ onUpdate }: { onUpdate: () => void }) {
       const res = await fetch("/api/settings/tekmetric", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shopId: shopId.trim() }),
+        body: JSON.stringify({ shopId: parseInt(shopId) }),
       });
 
-      const data = await res.json();
       if (res.ok) {
-        setConfig({
-          configured: true,
-          shopId: data.shopId,
-          shopName: data.shopName,
-        });
-        setMessage({ type: "success", text: `Connected to ${data.shopName || 'shop'}` });
+        setMessage({ type: "success", text: "Tekmetric connected" });
         onUpdate();
       } else {
+        const data = await res.json();
         setMessage({ type: "error", text: data.error || "Failed to connect" });
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Failed to connect to Tekmetric" });
+      setMessage({ type: "error", text: "Failed to save" });
     } finally {
       setSaving(false);
     }
@@ -1243,14 +644,8 @@ function TekmetricSection({ onUpdate }: { onUpdate: () => void }) {
     try {
       const res = await fetch("/api/tekmetric/sync", { method: "POST" });
       const data = await res.json();
-
       if (res.ok) {
-        const { stats } = data;
-        setMessage({
-          type: "success",
-          text: `Synced ${stats.vehiclesImported} new vehicles, updated ${stats.vehiclesUpdated}`,
-        });
-        fetchSettings();
+        setMessage({ type: "success", text: `Synced ${data.imported || 0} vehicles` });
       } else {
         setMessage({ type: "error", text: data.error || "Sync failed" });
       }
@@ -1262,164 +657,287 @@ function TekmetricSection({ onUpdate }: { onUpdate: () => void }) {
   }
 
   async function handleDisconnect() {
-    if (!confirm("Are you sure you want to disconnect Tekmetric?")) return;
-
+    if (!confirm("Disconnect Tekmetric?")) return;
     setDisconnecting(true);
-    setMessage(null);
-
     try {
       const res = await fetch("/api/settings/tekmetric", { method: "DELETE" });
       if (res.ok) {
-        setConfig({ configured: false });
-        setShopId("");
-        setMessage({ type: "success", text: "Disconnected from Tekmetric" });
+        setMessage({ type: "success", text: "Disconnected" });
         onUpdate();
-      } else {
-        setMessage({ type: "error", text: "Failed to disconnect" });
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Failed to disconnect" });
+      setMessage({ type: "error", text: "Failed" });
     } finally {
       setDisconnecting(false);
     }
   }
 
-  if (loading) {
+  if (status.configured) {
     return (
-      <div className="p-6 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      <div className="space-y-3 border-t pt-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <CheckCircle className="w-4 h-4" />
+            <span>Connected: {status.shopName || `Shop ${status.shopId}`}</span>
+          </div>
+        </div>
+        
+        {message && (
+          <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+            message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+          }`}>
+            {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{message.text}</span>
+          </div>
+        )}
+        
+        <div className="flex gap-2">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {syncing && <Loader2 className="w-4 h-4 animate-spin" />}
+            Sync Now
+          </button>
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-          <Settings className="w-6 h-6 text-purple-600" />
-        </div>
-        <div className="flex-1">
-          <h2 className="text-lg font-semibold text-gray-900">Tekmetric</h2>
-          <p className="text-sm text-gray-500">
-            Sync vehicles, customers, and repair orders from Tekmetric
-          </p>
-        </div>
-        {config.configured && (
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-green-500" />
-            <span className="text-sm text-green-600">Connected</span>
-          </div>
-        )}
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Shop ID</label>
+        <input
+          type="text"
+          value={shopId}
+          onChange={(e) => setShopId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Your Tekmetric Shop ID"
+        />
+        <p className="text-xs text-gray-500 mt-1">Find this in your Tekmetric account settings</p>
       </div>
 
-      {config.configured ? (
-        <div className="space-y-4">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">Shop ID:</span>
-                <span className="ml-2 font-medium">{config.shopId}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Shop Name:</span>
-                <span className="ml-2 font-medium">{config.shopName || "N/A"}</span>
-              </div>
-              {config.lastSync && (
-                <div className="col-span-2">
-                  <span className="text-gray-500">Last Sync:</span>
-                  <span className="ml-2 font-medium">
-                    {new Date(config.lastSync).toLocaleString()}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {syncing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Sync Now
-            </button>
-            <button
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
-            >
-              Disconnect
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tekmetric Shop ID
-            </label>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={shopId}
-                onChange={(e) => setShopId(e.target.value)}
-                placeholder="Enter your shop ID (e.g., 12345)"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-              />
-              <button
-                onClick={handleConnect}
-                disabled={saving || !shopId.trim()}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {saving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Link2 className="w-4 h-4" />
-                )}
-                Connect
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              You can find your Shop ID in your Tekmetric account settings
-            </p>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex gap-3">
-              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium mb-1">About Tekmetric Integration</p>
-                <p>
-                  MOS will import your vehicles, customers, and repair order history
-                  from Tekmetric to provide maintenance recommendations.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {message && (
-        <div
-          className={`flex items-center gap-2 p-3 rounded-lg ${
-            message.type === "success"
-              ? "bg-green-50 text-green-700"
-              : "bg-red-50 text-red-700"
-          }`}
-        >
-          {message.type === "success" ? (
-            <CheckCircle className="w-5 h-5" />
-          ) : (
-            <XCircle className="w-5 h-5" />
-          )}
+        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+        }`}>
+          {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
           <span>{message.text}</span>
         </div>
       )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !shopId}
+        className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+        Connect
+      </button>
+    </div>
+  );
+}
+
+function StandaloneSection() {
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-800 mb-2">Stand Alone Mode</h3>
+        <p className="text-sm text-blue-700">
+          Use MOS without a shop management system. You can manually enter VINs and mileage to get maintenance recommendations.
+        </p>
+      </div>
+      <div className="bg-gray-50 rounded-lg p-4 text-center">
+        <p className="text-sm text-gray-600 mb-3">
+          Go to the Vehicles page and use "Add Vehicle" to manually enter vehicle information.
+        </p>
+        <a
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+        >
+          <Car className="w-4 h-4" />
+          Go to Vehicles
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function AutoflowSection({ status, onUpdate }: { status: { configured: boolean }; onUpdate: () => void }) {
+  const [domain, setDomain] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiPassword, setApiPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/settings/autoflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain, apiKey, apiPassword }),
+      });
+
+      if (res.ok) {
+        setMessage({ type: "success", text: "AutoFlow connected" });
+        onUpdate();
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to connect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Disconnect AutoFlow?")) return;
+    setDisconnecting(true);
+    try {
+      const res = await fetch("/api/settings/autoflow", { method: "DELETE" });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Disconnected" });
+        setDomain("");
+        setApiKey("");
+        setApiPassword("");
+        onUpdate();
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed" });
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  if (status.configured) {
+    return (
+      <div className="space-y-3 border-t pt-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <CheckCircle className="w-4 h-4" />
+            <span>Connected to AutoFlow</span>
+          </div>
+        </div>
+        
+        {message && (
+          <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+            message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+          }`}>
+            {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{message.text}</span>
+          </div>
+        )}
+        
+        <button
+          onClick={handleDisconnect}
+          disabled={disconnecting}
+          className="w-full px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 flex items-center justify-center gap-2"
+        >
+          {disconnecting && <Loader2 className="w-4 h-4 animate-spin" />}
+          <Trash2 className="w-4 h-4" />
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
+        <input
+          type="text"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="yourshop.autoflow.com"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+        <input
+          type="text"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="API Key"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">API Password</label>
+        <input
+          type="password"
+          value={apiPassword}
+          onChange={(e) => setApiPassword(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="API Password"
+        />
+      </div>
+
+      {message && (
+        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+        }`}>
+          {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+          <span>{message.text}</span>
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !domain || !apiKey}
+        className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+        Connect
+      </button>
+    </div>
+  );
+}
+
+function TekmetricDviSection({ status }: { status: { configured: boolean; shopId?: number; shopName?: string } }) {
+  if (status.configured) {
+    return (
+      <div className="space-y-3 border-t pt-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <CheckCircle className="w-4 h-4" />
+            <span>Using Tekmetric inspections</span>
+          </div>
+        </div>
+        <p className="text-sm text-gray-600">
+          DVI data will be pulled from your Tekmetric integration automatically.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm text-yellow-800">
+          <AlertCircle className="w-4 h-4" />
+          <span>Tekmetric not connected</span>
+        </div>
+      </div>
+      <p className="text-sm text-gray-600">
+        Connect Tekmetric in the Shop Management section first to use Tekmetric for DVI data.
+      </p>
     </div>
   );
 }
