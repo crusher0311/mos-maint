@@ -23,7 +23,7 @@ import {
   Check,
   BarChart3
 } from "lucide-react";
-import { PlanLauncher } from "./PlanLauncher";
+// import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
 interface NavItem {
   name: string;
@@ -227,7 +227,6 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       </div>
 
       <div className="p-4 space-y-3">
-        <PlanLauncher />
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
