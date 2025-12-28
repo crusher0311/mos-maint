@@ -242,7 +242,7 @@ type OEMItem = {
   miles?: number | null;
   months?: number | null;
 };
-type LastDone = { miles?: number | null; date?: Date | null };
+type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
 const SERVICE_KEYS: Record<string, string[]> = {
   oil: ["oil and filter", "engine oil", "oil change", "replace engine oil and filter"],
@@ -364,7 +364,7 @@ function triage({
     const keys = toKeyFromFreeText(desc);
     for (const k of keys) {
       const prev = lastMap.get(k);
-      const cand: LastDone = { miles, date };
+      const cand: LastDone = { miles, date, source: "carfax" };
       const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
       const candScore = date ? date.getTime() : -Infinity;
       if (!prev || candScore > prevScore) lastMap.set(k, cand);
@@ -1015,9 +1015,18 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   </div>
 
                   {t.last?.miles != null && (
-                    <div className="text-xs text-neutral-600 mt-1">
-                      Last done at {fmtMiles(t.last.miles)} mi
-                      {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                    <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
+                      <span>Last done at {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
+                      {t.last?.source && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          t.last.source === "carfax" ? "bg-green-100 text-green-700" :
+                          t.last.source === "protractor" ? "bg-blue-100 text-blue-700" :
+                          "bg-gray-100 text-gray-700"
+                        }`}>
+                          {t.last.source === "carfax" ? "CARFAX" : 
+                           t.last.source === "protractor" ? "Shop" : "Shop"}
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -1039,7 +1048,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
                       <div>
-                        <span className="font-medium">Last done (CARFAX):</span>{" "}
+                        <span className="font-medium">Last done{t.last?.source ? ` (${t.last.source === "carfax" ? "CARFAX" : "Shop"})` : ""}:</span>{" "}
                         {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
                         {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                       </div>
@@ -1132,9 +1141,18 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   </div>
 
                   {t.last?.miles != null && (
-                    <div className="text-xs text-neutral-600 mt-1">
-                      Last done at {fmtMiles(t.last.miles)} mi
-                      {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                    <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
+                      <span>Last done at {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
+                      {t.last?.source && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          t.last.source === "carfax" ? "bg-green-100 text-green-700" :
+                          t.last.source === "protractor" ? "bg-blue-100 text-blue-700" :
+                          "bg-gray-100 text-gray-700"
+                        }`}>
+                          {t.last.source === "carfax" ? "CARFAX" : 
+                           t.last.source === "protractor" ? "Shop" : "Shop"}
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -1156,7 +1174,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
                       <div>
-                        <span className="font-medium">Last done (CARFAX):</span>{" "}
+                        <span className="font-medium">Last done{t.last?.source ? ` (${t.last.source === "carfax" ? "CARFAX" : "Shop"})` : ""}:</span>{" "}
                         {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
                         {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                       </div>
