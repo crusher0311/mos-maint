@@ -17,6 +17,15 @@ module.exports = {
         soon: "#f1c40f",
         bad:  "#ff5c5c",
         accent:"#66b2ff",
+        mos: {
+          blue: "#1976D2",
+          "blue-light": "#42A5F5",
+          "blue-dark": "#0D47A1",
+          silver: "#B0BEC5",
+          "silver-dark": "#78909C",
+          navy: "#0D1B2A",
+          "navy-light": "#1B2838",
+        }
       },
       borderRadius: { xl: "14px" },
     },
