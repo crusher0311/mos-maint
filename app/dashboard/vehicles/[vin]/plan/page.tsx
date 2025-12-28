@@ -1017,15 +1017,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
                       <span>Last done at {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
-                      {t.last?.source && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          t.last.source === "carfax" ? "bg-green-100 text-green-700" :
-                          t.last.source === "protractor" ? "bg-blue-100 text-blue-700" :
-                          "bg-gray-100 text-gray-700"
-                        }`}>
-                          {t.last.source === "carfax" ? "CARFAX" : 
-                           t.last.source === "protractor" ? "Shop" : "Shop"}
-                        </span>
+                      {t.last?.source === "carfax" && (
+                        <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
+                      )}
+                      {t.last?.source === "protractor" && (
+                        <img src="/badges/protractor.png" alt="Protractor" className="h-4" title="From Protractor" />
                       )}
                     </div>
                   )}
@@ -1048,7 +1044,12 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
                       <div>
-                        <span className="font-medium">Last done{t.last?.source ? ` (${t.last.source === "carfax" ? "CARFAX" : "Shop"})` : ""}:</span>{" "}
+                        <span className="font-medium inline-flex items-center gap-1">
+                          Last done
+                          {t.last?.source === "carfax" && <img src="/badges/carfax.png" alt="CARFAX" className="h-3 inline" />}
+                          {t.last?.source === "protractor" && <img src="/badges/protractor.png" alt="Protractor" className="h-3.5 inline" />}
+                          :
+                        </span>{" "}
                         {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
                         {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                       </div>
@@ -1143,15 +1144,11 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
                       <span>Last done at {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
-                      {t.last?.source && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          t.last.source === "carfax" ? "bg-green-100 text-green-700" :
-                          t.last.source === "protractor" ? "bg-blue-100 text-blue-700" :
-                          "bg-gray-100 text-gray-700"
-                        }`}>
-                          {t.last.source === "carfax" ? "CARFAX" : 
-                           t.last.source === "protractor" ? "Shop" : "Shop"}
-                        </span>
+                      {t.last?.source === "carfax" && (
+                        <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
+                      )}
+                      {t.last?.source === "protractor" && (
+                        <img src="/badges/protractor.png" alt="Protractor" className="h-4" title="From Protractor" />
                       )}
                     </div>
                   )}
@@ -1174,7 +1171,12 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
                       <div>
-                        <span className="font-medium">Last done{t.last?.source ? ` (${t.last.source === "carfax" ? "CARFAX" : "Shop"})` : ""}:</span>{" "}
+                        <span className="font-medium inline-flex items-center gap-1">
+                          Last done
+                          {t.last?.source === "carfax" && <img src="/badges/carfax.png" alt="CARFAX" className="h-3 inline" />}
+                          {t.last?.source === "protractor" && <img src="/badges/protractor.png" alt="Protractor" className="h-3.5 inline" />}
+                          :
+                        </span>{" "}
                         {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
                         {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                       </div>
