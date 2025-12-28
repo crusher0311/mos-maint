@@ -164,7 +164,10 @@ The `chrome-extension/` folder contains a Chrome extension that integrates with 
 -   **Close Endpoint**: `/api/vehicles/close-work-order` removes sources and sets `active=false` when no sources remain
 
 ### Billing & Pricing (Dec 2024)
--   **Free Trial**: 25 active vehicles (VIN-based, not time-based)
+-   **Free Trial**: 25 viewed VINs (plan page views, not active vehicles)
+-   **VIN Tracking**: `viewed_vins` collection tracks unique VINs viewed per shop
+-   **Billing Page**: Shows viewed VIN count from trial tracking (consistent with gate)
+-   **Trial Gate**: Non-blocking - shows content immediately while checking in background
 -   **Professional Plan**: $199/month for unlimited vehicles
 -   **Multi-Shop Plan**: $149/location/month for 3+ locations
 -   **Protractor Positioning**: "The Only Maintenance Tool for Protractor Shops"

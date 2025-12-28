@@ -19,7 +19,6 @@ interface PlanTrialGateProps {
 
 export function PlanTrialGate({ vin, children }: PlanTrialGateProps) {
   const [trialStatus, setTrialStatus] = useState<TrialStatus | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   useEffect(() => {
@@ -41,21 +40,11 @@ export function PlanTrialGate({ vin, children }: PlanTrialGateProps) {
         }
       } catch (err) {
         console.error("Error checking trial status:", err);
-      } finally {
-        setLoading(false);
       }
     };
 
     checkAndTrackView();
   }, [vin]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
 
   if (showUpgradePrompt && trialStatus && !trialStatus.isPaid && trialStatus.limit !== null) {
     return (

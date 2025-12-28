@@ -6,7 +6,7 @@ import { checkAndTrackVin, getViewedVinCount } from "@/lib/plan-cache";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TRIAL_VIN_LIMIT = 10;
+const TRIAL_VIN_LIMIT = 25;
 
 export async function POST(req: Request) {
   try {
