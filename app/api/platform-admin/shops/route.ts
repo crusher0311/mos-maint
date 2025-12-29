@@ -55,11 +55,11 @@ export async function GET() {
     
     const enrichedShops = shops.map(shop => {
       const integrations: string[] = [];
-      if (shop.protractor?.apiKey) integrations.push("Protractor");
+      if (shop.protractor?.configured || shop.protractor?.apiKey) integrations.push("Protractor");
       if (shop.tekmetric?.shopId) integrations.push("Tekmetric");
-      if (shop.autoflow?.apiKey) integrations.push("AutoFlow");
-      if (shop.carfax?.serviceId) integrations.push("CARFAX");
-      if (shop.autovitals?.apiKey) integrations.push("AutoVitals");
+      if (shop.autoflow?.apiKey || shop.autoflow?.configured) integrations.push("AutoFlow");
+      if (shop.carfax?.locationId || shop.carfax?.serviceId) integrations.push("CARFAX");
+      if (shop.autovitals?.apiKey || shop.autovitals?.configured) integrations.push("AutoVitals");
       
       const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise";
       const vinLimit = shop.trialVinLimit ?? defaultVinLimit;
