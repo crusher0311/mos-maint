@@ -1592,12 +1592,14 @@ export async function enrichCannedJobsWithDetails(
     // Filter and add to results
     for (const job of batchResults) {
       if (filterEmpty) {
-        // Only keep jobs that have BOTH a title AND description
-        // Real canned jobs have proper titles and descriptions, placeholders don't
-        const title = (job.Title || "").trim();
-        const description = (job.Description || "").trim();
+        // Only keep jobs where code contains BOTH a letter AND a number
+        // Real codes: O8, T15, BG1, SUB4, A200, etc.
+        const code = (job.Code || "").trim();
+        const hasLetter = /[a-zA-Z]/.test(code);
+        const hasNumber = /[0-9]/.test(code);
+        const hasContent = job._hasTitle || job._hasLines;
         
-        if (title.length > 0 && description.length > 0) {
+        if (hasLetter && hasNumber && hasContent) {
           enrichedJobs.push(job);
         }
       } else {
