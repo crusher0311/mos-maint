@@ -162,7 +162,7 @@ export default function BrandingPage() {
             />
             <label
               htmlFor="logo-upload"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-mos-blue/90 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
