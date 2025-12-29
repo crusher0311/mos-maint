@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle } from "lucide-react";
+import { ReactNode } from "react";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -25,30 +26,30 @@ type DashboardData = {
 
 const PAGE_SIZE = 50;
 
-// Map Protractor workflow stages to display names and colors
-const WORKFLOW_STAGE_MAP: Record<string, { label: string; color: string }> = {
-  "VehicleOnSite": { label: "Vehicle On Site", color: "bg-cyan-100 text-cyan-800" },
-  "InspectionInProgress": { label: "Inspection In Progress", color: "bg-blue-100 text-blue-800" },
-  "InspectionComplete": { label: "Inspection Complete", color: "bg-indigo-100 text-indigo-800" },
-  "EstimateCompleted": { label: "Estimate Completed", color: "bg-purple-100 text-purple-800" },
-  "WorkAuthorized": { label: "Work Authorized", color: "bg-amber-100 text-amber-800" },
-  "WorkCompleted": { label: "Work Completed", color: "bg-green-100 text-green-800" },
-  "WorkOnHold": { label: "Work On Hold", color: "bg-red-100 text-red-800" },
-  "Unassigned": { label: "Unassigned", color: "bg-gray-100 text-gray-800" },
+// Map Protractor workflow stages to display names, colors, and icons
+const WORKFLOW_STAGE_MAP: Record<string, { label: string; color: string; icon: ReactNode }> = {
+  "VehicleOnSite": { label: "Vehicle On Site", color: "bg-cyan-100 text-cyan-800", icon: <Car className="w-3 h-3" /> },
+  "Unassigned": { label: "Vehicle On Site", color: "bg-cyan-100 text-cyan-800", icon: <Car className="w-3 h-3" /> },
+  "InspectionInProgress": { label: "Inspection In Progress", color: "bg-blue-100 text-blue-800", icon: <Search className="w-3 h-3" /> },
+  "InspectionComplete": { label: "Inspection Complete", color: "bg-indigo-100 text-indigo-800", icon: <ClipboardCheck className="w-3 h-3" /> },
+  "EstimateCompleted": { label: "Estimate Completed", color: "bg-purple-100 text-purple-800", icon: <FileText className="w-3 h-3" /> },
+  "WorkAuthorized": { label: "Work Authorized", color: "bg-amber-100 text-amber-800", icon: <ThumbsUp className="w-3 h-3" /> },
+  "WorkCompleted": { label: "Work Completed", color: "bg-green-100 text-green-800", icon: <CheckCircle2 className="w-3 h-3" /> },
+  "WorkOnHold": { label: "Work On Hold", color: "bg-red-100 text-red-800", icon: <PauseCircle className="w-3 h-3" /> },
 };
 
-function formatWorkflowStage(status: string): { label: string; color: string } {
+function formatWorkflowStage(status: string): { label: string; color: string; icon: ReactNode | null } {
   const mapped = WORKFLOW_STAGE_MAP[status];
   if (mapped) return mapped;
   
   // Fallback for unknown stages or legacy status values
   if (status.toLowerCase().includes('close') || status.toLowerCase().includes('complete')) {
-    return { label: status, color: "bg-green-100 text-green-800" };
+    return { label: status, color: "bg-green-100 text-green-800", icon: <CheckCircle2 className="w-3 h-3" /> };
   }
   if (status.toLowerCase().includes('open') || status.toLowerCase().includes('progress')) {
-    return { label: status, color: "bg-blue-100 text-blue-800" };
+    return { label: status, color: "bg-blue-100 text-blue-800", icon: <Clock className="w-3 h-3" /> };
   }
-  return { label: status, color: "bg-gray-100 text-gray-800" };
+  return { label: status, color: "bg-gray-100 text-gray-800", icon: null };
 }
 
 async function fetchDashboardData(page: number, search: string, archived: boolean = false): Promise<DashboardData | null> {
@@ -431,9 +432,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                       </td>
                       <td className="px-6 py-4">
                         {(() => {
-                          const { label, color } = formatWorkflowStage(statusText);
+                          const { label, color, icon } = formatWorkflowStage(statusText);
                           return (
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
+                              {icon}
                               {label}
                             </span>
                           );
