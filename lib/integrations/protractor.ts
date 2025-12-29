@@ -742,7 +742,25 @@ export async function fetchCannedJobs(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  // Protractor uses POST requests with specific request bodies for service package templates
+  const errors: string[] = [];
+
+  // Try GET /ServicePackageTemplate first (this is what works for Protractor)
+  console.log(`[Protractor] Trying GET /ServicePackageTemplate...`);
+  const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+    "/ServicePackageTemplate",
+    config
+  );
+
+  if (getResult.ok && getResult.data?.ItemCollection?.length) {
+    console.log(`[Protractor] Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
+    return { ok: true, cannedJobs: getResult.data.ItemCollection };
+  }
+  
+  if (getResult.error) {
+    errors.push(`GET /ServicePackageTemplate: ${getResult.error}`);
+  }
+
+  // Fallback to POST endpoints if GET didn't work
   const postEndpoints = [
     {
       endpoint: "/ServicePackageTemplate/Read",
@@ -753,10 +771,7 @@ export async function fetchCannedJobs(
       body: { ServicePackageTemplateListReadRequest: {} }
     },
   ];
-
-  const errors: string[] = [];
   
-  // Try POST endpoints first (documented Protractor 2.0 API)
   for (const { endpoint, body } of postEndpoints) {
     console.log(`[Protractor] Trying POST ${endpoint}...`);
     const result = await protractorFetch<{ 
@@ -772,8 +787,6 @@ export async function fetchCannedJobs(
     const items = result.data?.ItemCollection || 
                   result.data?.ServicePackageTemplates || 
                   result.data?.ServicePackageTemplateReadResponse?.ItemCollection;
-
-    console.log(`[Protractor] POST ${endpoint} result: ok=${result.ok}, items=${items?.length || 0}, error=${result.error || 'none'}`);
     
     if (result.ok && items?.length) {
       console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
@@ -782,31 +795,6 @@ export async function fetchCannedJobs(
     
     if (result.error) {
       errors.push(`POST ${endpoint}: ${result.error}`);
-    }
-  }
-
-  // Fallback to GET endpoints
-  const getEndpoints = [
-    "/ServicePackage/Template",
-    "/ServicePackage/",
-  ];
-  
-  for (const endpoint of getEndpoints) {
-    console.log(`[Protractor] Trying GET ${endpoint}...`);
-    const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
-      endpoint,
-      config
-    );
-
-    console.log(`[Protractor] GET ${endpoint} result: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}, error=${result.error || 'none'}`);
-    
-    if (result.ok && result.data?.ItemCollection?.length) {
-      console.log(`[Protractor] Found ${result.data.ItemCollection.length} service packages via GET ${endpoint}`);
-      return { ok: true, cannedJobs: result.data.ItemCollection };
-    }
-    
-    if (result.error) {
-      errors.push(`GET ${endpoint}: ${result.error}`);
     }
   }
 
