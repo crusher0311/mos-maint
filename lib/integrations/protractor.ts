@@ -1548,14 +1548,21 @@ export async function getCannedJobsFromCache(
   };
 }
 
-// Fetch full details for a batch of canned jobs
+// Fetch full details for canned jobs, filtering out items without titles
+// Rate limited to ~10 per second (100 per 10 sec)
 export async function enrichCannedJobsWithDetails(
   shopId: number,
   jobs: ProtractorCannedJob[],
-  onProgress?: (completed: number, total: number) => void
+  options?: { 
+    onProgress?: (completed: number, total: number, kept: number) => void;
+    filterEmptyTitles?: boolean;
+  }
 ): Promise<ProtractorCannedJob[]> {
   const enrichedJobs: ProtractorCannedJob[] = [];
-  const batchSize = 5; // Process 5 at a time to avoid rate limiting
+  const batchSize = 10; // Process 10 at a time (~10/sec rate limit)
+  const filterEmpty = options?.filterEmptyTitles ?? true;
+  
+  console.log(`[Protractor] Enriching ${jobs.length} jobs with details (filter empty titles: ${filterEmpty})...`);
   
   for (let i = 0; i < jobs.length; i += batchSize) {
     const batch = jobs.slice(i, i + batchSize);
@@ -1565,29 +1572,51 @@ export async function enrichCannedJobsWithDetails(
         const detailResult = await fetchServicePackageTemplateDetail(shopId, job.ID);
         if (detailResult.ok && detailResult.template) {
           const template = detailResult.template;
+          const title = template.ServicePackageHeader?.Title || "";
+          const description = template.ServicePackageHeader?.Description || template.ServicePackageFooter?.Description || "";
+          const lines = template.ServicePackageLines?.ItemCollection || [];
+          
           return {
             ...job,
-            Title: template.ServicePackageHeader?.Title || template.Code || job.Code || "",
-            Description: template.ServicePackageHeader?.Description || template.ServicePackageFooter?.Description || "",
-            ServicePackageLines: template.ServicePackageLines?.ItemCollection || [],
+            Title: title,
+            Description: description,
+            ServicePackageLines: lines,
+            _hasTitle: title.trim().length > 0,
+            _hasLines: lines.length > 0,
           };
         }
-        return job; // Keep original if detail fetch failed
+        return { ...job, _hasTitle: false, _hasLines: false };
       })
     );
     
-    enrichedJobs.push(...batchResults);
-    
-    if (onProgress) {
-      onProgress(Math.min(i + batchSize, jobs.length), jobs.length);
+    // Filter and add to results
+    for (const job of batchResults) {
+      if (filterEmpty) {
+        // Only keep jobs that have a title OR have line items
+        if (job._hasTitle || job._hasLines) {
+          enrichedJobs.push(job);
+        }
+      } else {
+        enrichedJobs.push(job);
+      }
     }
     
-    // Small delay between batches to avoid rate limiting
+    if (options?.onProgress) {
+      options.onProgress(Math.min(i + batchSize, jobs.length), jobs.length, enrichedJobs.length);
+    }
+    
+    // Log progress every 100 items
+    if ((i + batchSize) % 100 === 0 || i + batchSize >= jobs.length) {
+      console.log(`[Protractor] Progress: ${Math.min(i + batchSize, jobs.length)}/${jobs.length} processed, ${enrichedJobs.length} kept`);
+    }
+    
+    // 1 second delay per batch of 10 = ~10/sec rate limit
     if (i + batchSize < jobs.length) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
   
+  console.log(`[Protractor] Enrichment complete: ${enrichedJobs.length} jobs with titles/lines out of ${jobs.length} total`);
   return enrichedJobs;
 }
 
