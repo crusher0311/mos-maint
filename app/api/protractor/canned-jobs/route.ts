@@ -34,8 +34,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
+    // Filter to only include jobs with alphanumeric codes (contain at least one letter)
+    // This excludes purely numeric placeholder codes like "0001", "0002", etc.
+    const filteredJobs = (result.cannedJobs || []).filter((job: any) => {
+      if (!job.code) return false;
+      const code = job.code.trim();
+      if (!code) return false;
+      // Must contain at least one letter (A-Z or a-z)
+      return /[a-zA-Z]/.test(code);
+    });
+
     return NextResponse.json({
-      cannedJobs: result.cannedJobs || [],
+      cannedJobs: filteredJobs,
       source: result.source,
     });
   } catch (err: any) {
