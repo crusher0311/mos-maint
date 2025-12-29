@@ -162,13 +162,13 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       icon: <Settings className="w-5 h-5" />,
       children: [
         { name: "Configurations", href: "/dashboard/settings" },
+        { name: "Preferences", href: "/dashboard/settings/preferences" },
         { name: "Shop Branding", href: "/dashboard/settings/branding" },
         { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        // { name: "Extension Abilities", href: "/dashboard/settings/extensions" }, // Hidden until extension integrations are ready
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }

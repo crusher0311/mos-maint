@@ -29,10 +29,24 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /* ---------------- small utils ---------------- */
+type DistanceUnit = "miles" | "kilometers";
+const MILES_TO_KM = 1.60934;
+
+function fmtDistance(m?: number | null, unit: DistanceUnit = "miles") {
+  if (m === 0) return "0";
+  if (m == null) return "";
+  const value = unit === "kilometers" ? Math.round(m * MILES_TO_KM) : m;
+  return value.toLocaleString();
+}
+
 function fmtMiles(m?: number | null) {
   if (m === 0) return "0";
   if (m == null) return "";
   return m.toLocaleString();
+}
+
+function getDistanceLabel(unit: DistanceUnit): string {
+  return unit === "kilometers" ? "km" : "mi";
 }
 function daysBetween(a: Date, b: Date) {
   const ms = Math.abs(a.getTime() - b.getTime());
@@ -659,8 +673,10 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
   const shop = await db.collection("shops").findOne(
     { shopId },
-    { projection: { maintenance: 1, protractor: 1 } }
+    { projection: { maintenance: 1, protractor: 1, preferences: 1 } }
   );
+  const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
+  const distLabel = getDistanceLabel(distanceUnit);
   const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
   const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
   const shopIntervals: Record<string, ShopIntervalOverride> = shop?.maintenance?.intervals ?? {};
@@ -1051,8 +1067,8 @@ export default async function VehiclePlanPage({ params }: PageProps) {
               </h1>
               <div className="text-sm text-neutral-600">
                 VIN <code>{vin}</code>
-                {currentMiles != null && currentMiles > 0 && <> • Current: {fmtMiles(currentMiles)} mi</>}
-                {mpdBlended != null && <> • ~{mpdBlended.toFixed(1)} mi/day</>}
+                {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
+                {mpdBlended != null && <> • ~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</>}
               </div>
             </div>
 
@@ -1092,7 +1108,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
             VIN: {vin}
-            {currentMiles != null && currentMiles > 0 && <> • Current Mileage: {fmtMiles(currentMiles)} mi</>}
+            {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
           </div>
         </div>
       </div>
@@ -1118,7 +1134,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         <span className="rounded-full bg-red-600 text-white px-2 py-0.5">OVERDUE</span>
                         {(t.intervalMiles || t.intervalMonths) && (
                           <span className="rounded-full border px-2 py-0.5">
-                            OEM: {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : ""}
+                            OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                             {t.intervalMiles && t.intervalMonths ? " / " : ""}
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
@@ -1153,8 +1169,8 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   <div className="text-sm mt-2">
                     {t.dueAtMiles != null && (
                       <>
-                        Due at <strong>{fmtMiles(t.dueAtMiles)}</strong> mi
-                        {t.milesToGo != null && ` • ${fmtMiles(Math.abs(t.milesToGo))} mi overdue`}
+                        Due at <strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
+                        {t.milesToGo != null && ` • ${fmtDistance(Math.abs(t.milesToGo), distanceUnit)} ${distLabel} overdue`}
                       </>
                     )}
                     {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
@@ -1177,7 +1193,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
-                      <span>Last done at {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
+                      <span>Last done at {fmtDistance(t.last.miles, distanceUnit)} {distLabel}{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
                       {t.last?.source === "carfax" && (
                         <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
                       )}
@@ -1194,7 +1210,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   {t.declined && (
                     <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
                       Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
-                      {t.declined.mileage && ` at ${fmtMiles(t.declined.mileage)} mi`}
+                      {t.declined.mileage && ` at ${fmtDistance(t.declined.mileage, distanceUnit)} ${distLabel}`}
                       {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
                   )}
@@ -1204,7 +1220,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
                         <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
-                        {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : "—"}
+                        {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
@@ -1221,12 +1237,12 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                           )}
                           :
                         </span>{" "}
-                        {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
+                        {t.last?.miles != null ? `${fmtDistance(t.last.miles, distanceUnit)} ${distLabel}` : "—"}
                         {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                       </div>
                       <div>
                         <span className="font-medium">Next due:</span>{" "}
-                        {t.dueAtMiles != null ? `${fmtMiles(t.dueAtMiles)} mi` : "—"}
+                        {t.dueAtMiles != null ? `${fmtDistance(t.dueAtMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.dueAtDate ? ` or ${t.dueAtDate.toLocaleDateString()}` : ""}
                       </div>
                       {t.bump && t.source !== "protractor" && (
@@ -1265,7 +1281,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DUE SOON</span>
                     {(t.intervalMiles || t.intervalMonths) && (
                       <span className="rounded-full border px-2 py-0.5">
-                        OEM: {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : ""}
+                        OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
@@ -1301,7 +1317,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     )}
                     {t.milesToGo != null && t.milesToGo > 0 && (
                       <>
-                        In ~<strong>{fmtMiles(t.milesToGo)}</strong> mi
+                        In ~<strong>{fmtDistance(t.milesToGo, distanceUnit)}</strong> {distLabel}
                       </>
                     )}
                     {t.milesToGo != null && t.daysToGo != null && <> • </>}
@@ -1314,7 +1330,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
 
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
-                      <span>Last done at {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
+                      <span>Last done at {fmtDistance(t.last.miles, distanceUnit)} {distLabel}{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
                       {t.last?.source === "carfax" && (
                         <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
                       )}
@@ -1331,7 +1347,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   {t.declined && (
                     <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
                       Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
-                      {t.declined.mileage && ` at ${fmtMiles(t.declined.mileage)} mi`}
+                      {t.declined.mileage && ` at ${fmtDistance(t.declined.mileage, distanceUnit)} ${distLabel}`}
                       {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
                   )}
@@ -1341,7 +1357,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
                         <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
-                        {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : "—"}
+                        {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
@@ -1358,12 +1374,12 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                           )}
                           :
                         </span>{" "}
-                        {t.last?.miles != null ? `${fmtMiles(t.last.miles)} mi` : "—"}
+                        {t.last?.miles != null ? `${fmtDistance(t.last.miles, distanceUnit)} ${distLabel}` : "—"}
                         {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                       </div>
                       <div>
                         <span className="font-medium">Next due:</span>{" "}
-                        {t.dueAtMiles != null ? `${fmtMiles(t.dueAtMiles)} mi` : "—"}
+                        {t.dueAtMiles != null ? `${fmtDistance(t.dueAtMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.dueAtDate ? ` or ${t.dueAtDate.toLocaleDateString()}` : ""}
                       </div>
                     </div>
@@ -1391,7 +1407,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5">UPCOMING</span>
                     {(t.intervalMiles || t.intervalMonths) && (
                       <span className="rounded-full border px-2 py-0.5">
-                        OEM: {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : ""}
+                        OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
@@ -1418,7 +1434,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   <div className="text-sm mt-2">
                     {t.dueAtMiles != null && (
                       <>
-                        Next at ~<strong>{fmtMiles(t.dueAtMiles)}</strong> mi
+                        Next at ~<strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
                       </>
                     )}
                     {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
@@ -1432,7 +1448,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                   {t.declined && (
                     <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
                       Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
-                      {t.declined.mileage && ` at ${fmtMiles(t.declined.mileage)} mi`}
+                      {t.declined.mileage && ` at ${fmtDistance(t.declined.mileage, distanceUnit)} ${distLabel}`}
                       {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
                   )}
@@ -1442,14 +1458,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
                         <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
-                        {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : "—"}
+                        {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </div>
                       {t.last?.miles != null && (
                         <div>
                           <span className="font-medium">Last done (CARFAX):</span>{" "}
-                          {fmtMiles(t.last.miles)} mi{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                          {fmtDistance(t.last.miles, distanceUnit)} {distLabel}{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
                         </div>
                       )}
                     </div>

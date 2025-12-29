@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CreditCard, Check, AlertCircle, Loader2, Zap } from "lucide-react";
+import { CreditCard, Check, AlertCircle, Loader2, Zap, ExternalLink } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 interface BillingInfo {
   plan: string;
@@ -9,14 +10,33 @@ interface BillingInfo {
   vehicleCount: number;
   vehicleLimit: number;
   nextBillingDate?: string;
+  stripeCustomerId?: string;
+}
+
+interface StripePrice {
+  id: string;
+  unitAmount: number;
+  currency: string;
+  interval: string;
+  intervalCount: number;
+  productName: string;
 }
 
 export default function BillingSettingsPage() {
   const [billing, setBilling] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [upgrading, setUpgrading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [prices, setPrices] = useState<StripePrice[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  const success = searchParams.get("success");
+  const canceled = searchParams.get("canceled");
 
   useEffect(() => {
     fetchBilling();
+    fetchPrices();
   }, []);
 
   async function fetchBilling() {
@@ -45,6 +65,62 @@ export default function BillingSettingsPage() {
     }
   }
 
+  async function fetchPrices() {
+    try {
+      const res = await fetch("/api/stripe/prices");
+      if (res.ok) {
+        const data = await res.json();
+        setPrices(data.prices || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch prices:", err);
+    }
+  }
+
+  async function handleUpgrade(priceId: string, plan: string) {
+    setUpgrading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId, plan }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error || "Failed to create checkout session");
+      }
+    } catch (err) {
+      setError("Failed to start checkout. Please try again.");
+    } finally {
+      setUpgrading(false);
+    }
+  }
+
+  async function handleManageBilling() {
+    setPortalLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/billing-portal", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error || "Failed to open billing portal");
+      }
+    } catch (err) {
+      setError("Failed to open billing portal. Please try again.");
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
+  const monthlyPrice = prices.find(p => p.interval === "month");
+
   const plans = [
     {
       name: "Free Trial",
@@ -63,7 +139,7 @@ export default function BillingSettingsPage() {
     },
     {
       name: "Professional",
-      price: "$199",
+      price: monthlyPrice ? `$${(monthlyPrice.unitAmount / 100).toFixed(0)}` : "$199",
       period: "/month",
       description: "For single-location shops",
       features: [
@@ -75,8 +151,10 @@ export default function BillingSettingsPage() {
         "Up to 5 users",
         "Priority support",
       ],
-      current: billing?.plan === "Professional",
+      current: billing?.plan === "Professional" || billing?.plan === "professional",
       popular: true,
+      priceId: monthlyPrice?.id,
+      planKey: "professional",
     },
     {
       name: "Multi-Shop",
@@ -91,9 +169,12 @@ export default function BillingSettingsPage() {
         "API access",
         "Volume discount",
       ],
-      current: billing?.plan === "Multi-Shop",
+      current: billing?.plan === "Multi-Shop" || billing?.plan === "enterprise",
+      contactSales: true,
     },
   ];
+
+  const isPaid = billing?.status === "active" && billing?.plan !== "Free Trial";
 
   if (loading) {
     return (
@@ -118,22 +199,58 @@ export default function BillingSettingsPage() {
           </div>
         </div>
 
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 text-green-800">
+              <Check className="w-5 h-5" />
+              <span className="font-medium">Payment successful! Your plan has been upgraded.</span>
+            </div>
+          </div>
+        )}
+
+        {canceled && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 text-amber-800">
+              <AlertCircle className="w-5 h-5" />
+              <span className="font-medium">Checkout canceled. No charges were made.</span>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertCircle className="w-5 h-5" />
+              <span className="font-medium">{error}</span>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Current Plan</h2>
           <div className="flex items-center justify-between">
             <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Current Plan</h2>
               <p className="text-2xl font-bold text-gray-900">{billing?.plan || "Free Trial"}</p>
-              <p className="text-sm text-gray-500">
-                {billing?.vehicleCount || 0} of {billing?.vehicleLimit || 25} vehicles used
-              </p>
-              <div className="mt-2 w-full bg-gray-200 rounded-full h-2 max-w-xs">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${Math.min(100, ((billing?.vehicleCount || 0) / (billing?.vehicleLimit || 25)) * 100)}%` }}
-                />
-              </div>
+              {!isPaid && (
+                <>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {billing?.vehicleCount || 0} of {billing?.vehicleLimit || 10} vehicles used
+                  </p>
+                  <div className="mt-2 w-full bg-gray-200 rounded-full h-2 max-w-xs">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((billing?.vehicleCount || 0) / (billing?.vehicleLimit || 10)) * 100)}%` }}
+                    />
+                  </div>
+                </>
+              )}
+              {isPaid && billing?.nextBillingDate && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Next billing date: {new Date(billing.nextBillingDate).toLocaleDateString()}
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                 billing?.status === "active" 
                   ? "bg-green-100 text-green-800" 
@@ -141,13 +258,22 @@ export default function BillingSettingsPage() {
               }`}>
                 {billing?.status === "active" ? "Active" : "Free Trial"}
               </span>
+              {isPaid && (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={portalLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  {portalLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ExternalLink className="w-4 h-4" />
+                  )}
+                  Manage Billing
+                </button>
+              )}
             </div>
           </div>
-          {billing?.nextBillingDate && (
-            <p className="mt-4 text-sm text-gray-500">
-              Next billing date: {new Date(billing.nextBillingDate).toLocaleDateString()}
-            </p>
-          )}
         </div>
 
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
@@ -170,12 +296,12 @@ export default function BillingSettingsPage() {
                 className={`relative bg-white rounded-xl shadow-sm border-2 p-6 ${
                   plan.current 
                     ? "border-blue-600" 
-                    : plan.popular 
+                    : (plan as any).popular 
                       ? "border-blue-200" 
                       : "border-gray-200"
                 }`}
               >
-                {plan.popular && (
+                {(plan as any).popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="bg-blue-600 text-white text-xs font-medium px-3 py-1 rounded-full">
                       Most Popular
@@ -205,18 +331,44 @@ export default function BillingSettingsPage() {
                     </li>
                   ))}
                 </ul>
-                <button
-                  disabled={plan.current || (plan as any).trial}
-                  className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
-                    plan.current
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : (plan as any).trial
-                        ? "bg-gray-100 text-gray-500 cursor-not-allowed"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                  }`}
-                >
-                  {plan.current ? "Current Plan" : (plan as any).trial ? "Active" : "Upgrade"}
-                </button>
+                {plan.current ? (
+                  <button
+                    disabled
+                    className="w-full py-2 px-4 rounded-lg font-medium bg-gray-100 text-gray-400 cursor-not-allowed"
+                  >
+                    Current Plan
+                  </button>
+                ) : (plan as any).trial ? (
+                  <button
+                    disabled
+                    className="w-full py-2 px-4 rounded-lg font-medium bg-gray-100 text-gray-500 cursor-not-allowed"
+                  >
+                    Active
+                  </button>
+                ) : (plan as any).contactSales ? (
+                  <a
+                    href="mailto:support@mosmaintenance.com?subject=Multi-Shop Plan Inquiry"
+                    className="block w-full py-2 px-4 rounded-lg font-medium bg-gray-800 text-white text-center hover:bg-gray-900 transition-colors"
+                  >
+                    Contact Sales
+                  </a>
+                ) : (plan as any).priceId ? (
+                  <button
+                    onClick={() => handleUpgrade((plan as any).priceId, (plan as any).planKey)}
+                    disabled={upgrading}
+                    className="w-full py-2 px-4 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {upgrading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Upgrade
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full py-2 px-4 rounded-lg font-medium bg-gray-100 text-gray-500 cursor-not-allowed"
+                  >
+                    Coming Soon
+                  </button>
+                )}
               </div>
             ))}
           </div>
