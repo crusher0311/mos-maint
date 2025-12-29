@@ -1592,8 +1592,14 @@ export async function enrichCannedJobsWithDetails(
     // Filter and add to results
     for (const job of batchResults) {
       if (filterEmpty) {
-        // Only keep jobs that have a title OR have line items
-        if (job._hasTitle || job._hasLines) {
+        // Only keep jobs that:
+        // 1. Have an alphanumeric code (contains at least one letter like O8, T15, BG1)
+        // 2. AND have a title or line items
+        const code = job.Code || "";
+        const hasAlphaCode = /[a-zA-Z]/.test(code);
+        const hasContent = job._hasTitle || job._hasLines;
+        
+        if (hasAlphaCode && hasContent) {
           enrichedJobs.push(job);
         }
       } else {
