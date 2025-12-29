@@ -1549,7 +1549,7 @@ export async function getCannedJobsFromCache(
 }
 
 // Fetch full details for canned jobs, filtering out items without titles
-// Rate limited to ~10 per second (100 per 10 sec)
+// Rate limited to ~50 per second (should complete 7500 items in ~2.5 min)
 export async function enrichCannedJobsWithDetails(
   shopId: number,
   jobs: ProtractorCannedJob[],
@@ -1559,7 +1559,7 @@ export async function enrichCannedJobsWithDetails(
   }
 ): Promise<ProtractorCannedJob[]> {
   const enrichedJobs: ProtractorCannedJob[] = [];
-  const batchSize = 10; // Process 10 at a time (~10/sec rate limit)
+  const batchSize = 50; // Process 50 at a time (~50/sec rate limit)
   const filterEmpty = options?.filterEmptyTitles ?? true;
   
   console.log(`[Protractor] Enriching ${jobs.length} jobs with details (filter empty titles: ${filterEmpty})...`);
@@ -1605,12 +1605,12 @@ export async function enrichCannedJobsWithDetails(
       options.onProgress(Math.min(i + batchSize, jobs.length), jobs.length, enrichedJobs.length);
     }
     
-    // Log progress every 100 items
-    if ((i + batchSize) % 100 === 0 || i + batchSize >= jobs.length) {
+    // Log progress every 500 items
+    if ((i + batchSize) % 500 === 0 || i + batchSize >= jobs.length) {
       console.log(`[Protractor] Progress: ${Math.min(i + batchSize, jobs.length)}/${jobs.length} processed, ${enrichedJobs.length} kept`);
     }
     
-    // 1 second delay per batch of 10 = ~10/sec rate limit
+    // 1 second delay per batch of 50 = ~50/sec rate limit
     if (i + batchSize < jobs.length) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
