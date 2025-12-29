@@ -5,6 +5,8 @@ import { getDb } from "@/lib/mongo";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const DEFAULT_TRIAL_VIN_LIMIT = 10;
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -17,11 +19,15 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const shops = await db.collection("shops").find().toArray();
+    const [shops, platformSettings] = await Promise.all([
+      db.collection("shops").find().toArray(),
+      db.collection("platform_settings").findOne({ key: "trial" })
+    ]);
     
+    const defaultVinLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
     const shopIds = shops.map(s => s.shopId);
     
-    const [userCounts, vehicleCounts] = await Promise.all([
+    const [userCounts, vehicleCounts, vinViewCounts] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -29,11 +35,16 @@ export async function GET() {
       db.collection("vehicles").aggregate([
         { $match: { shopId: { $in: shopIds.map(String) } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("viewed_vins").aggregate([
+        { $match: { shopId: { $in: shopIds } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray()
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
     const vehicleCountMap = new Map(vehicleCounts.map(v => [String(v._id), v.count]));
+    const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
     
     const enrichedShops = shops.map(shop => {
       const integrations: string[] = [];
@@ -43,6 +54,10 @@ export async function GET() {
       if (shop.carfax?.serviceId) integrations.push("CARFAX");
       if (shop.autovitals?.apiKey) integrations.push("AutoVitals");
       
+      const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise";
+      const vinLimit = shop.trialVinLimit ?? defaultVinLimit;
+      const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
+      
       return {
         _id: shop._id,
         shopId: shop.shopId,
@@ -51,6 +66,12 @@ export async function GET() {
         userCount: userCountMap.get(String(shop.shopId)) || 0,
         vehicleCount: vehicleCountMap.get(String(shop.shopId)) || 0,
         integrations,
+        billing: {
+          plan: shop.billing?.plan || "trial",
+          isPaid,
+          vinLimit,
+          vinViewCount,
+        },
       };
     });
     
@@ -59,6 +80,7 @@ export async function GET() {
       shops: enrichedShops.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ),
+      defaultVinLimit,
     });
   } catch (err: any) {
     console.error("Platform shops error:", err);

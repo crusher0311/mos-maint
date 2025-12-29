@@ -1,69 +1,7 @@
 # MOS Maintenance MVP
 
-**Current Version:** 1.2.1  
-**Last Updated:** December 28, 2024
-
----
-
-## Version History
-
-| Version | Date | Description |
-|---------|------|-------------|
-| 1.0.0 | Dec 23, 2024 | Initial release with platform admin panel, enterprise features, dual OpenAI support |
-| 1.1.0 | Dec 28, 2024 | Trial VIN tracking (10 free views), background plan prefetching, shop dropdown search |
-| 1.2.0 | Dec 28, 2024 | Shop-level reporting dashboard, cost per VIN/view metrics on platform admin |
-| 1.2.1 | Dec 28, 2024 | Redesigned integrations page with 3-column layout, removed Open Plan button |
-
----
-
-## Development & Deployment Workflow
-
-### Environments
-- **Development (Replit)**: Primary development environment. All coding and testing happens here.
-- **QA (GitHub `qa` branch)**: Testing/staging environment. Code is pushed here when ready for QA testing.
-- **Production (GitHub `main` branch)**: Live production environment. Code is pushed here after QA approval.
-
-### Git Repository
-- **URL**: https://github.com/crusher0311/mos-maint.git
-- **Branches**:
-  - `main` - Production-ready code
-  - `qa` - QA/staging code for testing
-
-### Release Process
-1. **Develop** - Work on features/fixes in Replit
-2. **Publish on Replit** - When ready for QA, publish the Replit deployment
-3. **Push to QA** - After QA testing passes in Replit:
-   ```bash
-   git add .
-   git commit -m "v1.x.x - Description of changes"
-   git push origin qa
-   ```
-4. **QA Testing** - Test in QA environment
-5. **Push to Main** - After QA is confirmed good:
-   ```bash
-   git checkout main
-   git merge qa
-   git push origin main
-   git checkout qa
-   ```
-
-### Versioning (Semantic Versioning)
-We follow [Semantic Versioning](https://semver.org/):
-- **MAJOR.MINOR.PATCH** (e.g., 1.2.3)
-- **MAJOR**: Breaking changes (API changes, database migrations)
-- **MINOR**: New features (backwards compatible)
-- **PATCH**: Bug fixes and small improvements
-
-### Agent Helper Commands
-When assisting with releases:
-- To push to QA: `git add . && git commit -m "v1.x.x - message" && git push origin qa`
-- To promote QA to Main: `git checkout main && git merge qa && git push origin main && git checkout qa`
-- Always update version in this file when releasing
-
----
-
 ## Overview
-This Next.js-based automotive maintenance management system aims to streamline operations for auto shops. It provides tools for managing vehicle maintenance recommendations, customer data, and integrates with various third-party services such as AutoFlow, CARFAX, DataOne, Protractor, and AutoVitals. The system offers AI-powered insights, multi-shop user management, and a comprehensive dashboard for tracking customers and vehicles, ultimately enhancing shop efficiency and customer satisfaction.
+This Next.js-based automotive maintenance management system aims to streamline operations for auto shops by providing tools for managing vehicle maintenance recommendations and customer data. It offers AI-powered insights, multi-shop user management, and a comprehensive dashboard for tracking customers and vehicles, ultimately enhancing shop efficiency and customer satisfaction. The project integrates with various third-party services like AutoFlow, CARFAX, DataOne, Protractor, and AutoVitals.
 
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
@@ -71,133 +9,38 @@ I prefer simple language and clear explanations. I want iterative development, w
 ## System Architecture
 The application is built using Next.js 14.2.5 with React 18 for the frontend, leveraging Next.js API Routes for backend functionality. MongoDB Atlas serves as the cloud-hosted database, and styling is managed with Tailwind CSS. The project uses TypeScript/JavaScript.
 
-**Key Features:**
--   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
--   **Customer Dashboard**: Comprehensive tracking of customers and their vehicles.
--   **Multi-Shop Management**: User authentication with role-based access for multiple shops.
--   **Maintenance Planning**: Intelligent queue-based prefetching for vehicle data, configurable "Due Soon" thresholds, and display of OEM, shop, DVI, CARFAX, and Protractor recommendations.
--   **Component Tracking & Declined Services**: Advisors can track vehicle components and log declined services, which are then flagged on future recommendations.
-
 **UI/UX Decisions:**
-The application features a modern SaaS-style design.
--   **Navigation**: Dark sidebar (slate-900) with expandable sections and a quick access "Open Plan" button.
--   **Content Areas**: Light backgrounds (gray-50/white) with card-based layouts.
--   **Accent Color**: Blue (#3B82F6 / blue-600) for primary actions and highlights.
--   **Components**: Key components include a `Sidebar`, `AppLayout`, `LoginForm`, and `DashboardClient`.
--   **Unified Integrations Page**: Settings > Integrations provides a single tabbed interface for CARFAX, AutoFlow, Protractor, and AutoVitals configuration. Canned Job Mappings are accessible from the Protractor tab.
--   **Vehicle Detail Page**: Tabbed interface for Attributes, Recommendations (Recs), and History.
--   **Data Source Badges**: Visual indicators (OEM, DVI, CARFAX, Shop, Protractor) on recommendations.
--   **Loading Indicators**: `loading.tsx` for Plan and Vehicle Detail pages to show progress during API calls.
+The application features a modern SaaS-style design with a dark sidebar (slate-900), light content areas (gray-50/white) with card-based layouts, and blue (#3B82F6 / blue-600) as the accent color. Key UI components include `Sidebar`, `AppLayout`, `LoginForm`, and `DashboardClient`. It provides a unified integrations page, a tabbed vehicle detail page, and visual data source badges for recommendations.
 
-**Settings Pages (Dec 2024):**
--   **Users** (`/dashboard/settings/users`): Manage team members and pending invites with role-based permissions
--   **Billing** (`/dashboard/settings/billing`): View current plan, usage, and upgrade options
--   **Inspection** (`/dashboard/settings/inspection`): Map DVI findings to service recommendations
--   **Extensions** (`/dashboard/settings/extensions`): Manage Chrome extension API keys (owner/admin only)
--   **Workflows** (`/dashboard/settings/workflows`): Configure automated customer communications
-
-**Dashboard Pages (Dec 2024):**
--   **Customer Workflows** (`/dashboard/workflows`): View workflow runs and delivery stats
--   **Shop Onboarding** (`/dashboard/onboarding`): Guided setup checklist for new shops
-
-**Enterprise Features (Dec 2024):**
--   **Enterprise Dashboard** (`/admin/enterprise`): Multi-location analytics with KPI cards for jobs added, jobs sold, and total revenue
--   **Shop Management** (`/admin/enterprise/shops`): Add/remove shops from enterprise accounts
--   **Shared Mappings** (`/admin/enterprise/mappings`): Configure canned job mappings across all locations
--   **Recommendation Events**: Tracks when MOS recommendations are added to repair orders via `recommendation_events` collection
--   **Revenue Attribution**: When work orders are completed, matches sold services to MOS `recommendation_added` events and logs `recommendation_sold` with pricing (labor/parts/total)
--   **Webhook Integration**: Protractor webhook triggers revenue attribution on completed work orders
--   **Data Model**: `enterprise_accounts` collection with `shopIds` array; shops have `enterpriseId` field; work orders store `packageSummaries` with pricing breakdown
-
-**Platform Admin Panel (Dec 2024):**
--   **Internal MOS staff panel** (`/platform-admin`): Separate from customer-facing features, for MOS company use
--   **Overview**: Platform-wide statistics (total shops, users, API costs, requests)
--   **Shops Management** (`/platform-admin/shops`): View all client shops with user counts, vehicle counts, and integration status
--   **Users Directory** (`/platform-admin/users`): View all users across all shops with role filtering
--   **Usage & Costs** (`/platform-admin/usage`): Track OpenAI API usage per shop with cost breakdowns by model and date
--   **Access Control**: Users with `isPlatformAdmin: true` flag can access; set via `scripts/set-platform-admin.ts`
--   **Usage Logging**: OpenAI API calls log to `usage_logs` collection with shopId, model, tokens, and estimated cost
+**Key Features:**
+*   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
+*   **Customer Dashboard**: Comprehensive tracking of customers and their vehicles.
+*   **Multi-Shop Management**: User authentication with role-based access for multiple shops.
+*   **Maintenance Planning**: Intelligent queue-based prefetching for vehicle data, configurable "Due Soon" thresholds, and display of OEM, shop, DVI, CARFAX, and Protractor recommendations.
+*   **Component Tracking & Declined Services**: Advisors can track vehicle components and log declined services.
+*   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, and revenue attribution tracking via webhooks.
+*   **Platform Admin Panel**: Internal MOS staff panel for platform-wide statistics, shop management, user directory, and OpenAI API usage tracking.
 
 **Technical Implementations:**
--   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses (DataOne, Protractor, AutoVitals, CARFAX) with defined TTLs to improve performance.
--   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations like Protractor.
--   **CARFAX Mileage Interpolation**: Smart algorithm for estimating mileage in CARFAX service records.
--   **Protractor Canned Jobs**: Syncs, allows manual entry, and provides mapping UI for canned jobs, enabling advisors to easily add them to repair orders. Service packages are inserted via TimeClock API using proper line type mapping (LaborLine, PartLine, SubletLine, OtherLine). The `UpdateWorkOrderPackage` and `UpdateWorkOrderLine` settings are automatically enabled when connecting Protractor.
--   **Protractor Sync**: The "Sync Now" button imports vehicles from recent work orders and syncs all service package templates (canned jobs) with full parts/labor line details.
--   **Shop Maintenance Intervals**: Allows shops to define custom maintenance schedules that override OEM recommendations.
--   **Environment Configuration**: Configured for Replit with specific port settings and allowed origins.
+*   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses with defined TTLs.
+*   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations.
+*   **CARFAX Mileage Interpolation**: Smart algorithm for estimating mileage.
+*   **Protractor Canned Jobs**: Syncs, allows manual entry, and provides mapping UI for canned jobs, integrating service packages via TimeClock API.
+*   **Shop Maintenance Intervals**: Allows shops to define custom maintenance schedules.
+*   **Data Model**: `enterprise_accounts` collection with `shopIds` array; shops have `enterpriseId` field; work orders store `packageSummaries`.
+*   **Authentication & Authorization**: Standardized role hierarchy (`owner`, `admin`, `manager`, `user`, `viewer`) with bcrypt password hashing and token-based setup flow.
+*   **VIN-Based Billing**: Tracks "active" vehicles for billing, with configurable trial limits and platform admin controls for managing VIN allowances per shop.
+
+**Development & Deployment Workflow:**
+-   **Environments**: Development (Replit), QA (GitHub `qa` branch), Production (GitHub `main` branch).
+-   **Git Repository**: https://github.com/crusher0311/mos-maint.git
+-   **Release Process**: Develop in Replit, publish to Replit, push to `qa` for testing, then merge `qa` to `main` for production.
+-   **Versioning**: Semantic Versioning (MAJOR.MINOR.PATCH) is followed.
 
 ## External Dependencies
--   **Database**: MongoDB Atlas
--   **AI**: OpenAI API (for AI-powered maintenance recommendations)
--   **VIN Decoding & OEM Schedules**: DataOne API
--   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
--   **Vehicle History Reports**: CARFAX
--   **Digital Vehicle Inspections (DVI)**: AutoVitals
-
-## Tekmetric Integration
-The Tekmetric integration syncs vehicles, customers, and repair orders from Tekmetric shop management system:
--   **Authentication**: MOS uses a vendor API Bearer Token (TEKMETRIC_API_TOKEN secret). Users only need to enter their Shop ID.
--   **Production Endpoint**: `https://shop.tekmetric.com/api/v1`
--   **Features**: Vehicle sync with VIN, mileage, and customer data; Repair order access
--   **Configuration**: Settings > Integrations > Tekmetric tab
--   **Files**: `lib/tekmetric.ts`, `app/api/settings/tekmetric/route.ts`, `app/api/tekmetric/sync/route.ts`
--   **Note**: AutoVitals tab is currently hidden pending VIN data access clarification from the vendor
-
-## Chrome Extension (AutoVitals Integration)
-The `chrome-extension/` folder contains a Chrome extension that integrates with AutoVitals:
--   **Side Panel**: Displays OEM maintenance schedule, CARFAX history, maintenance plan, and DVI results for the current vehicle being viewed in AutoVitals
--   **VIN Detection**: Automatically detects the vehicle VIN from the AutoVitals page using DOM heuristics
--   **Vehicle Sync**: Imports vehicles from AutoVitals dashboard pages into MOS
--   **API Keys**: Extension uses dedicated API keys (mos_av_*) stored in shop.autovitalsExtension.apiKeys
--   **Files**: manifest.json, sidepanel.html/js, content.js, background.js, popup.html/js
-
-## Recent Technical Changes (Dec 2024)
-
-### Active Vehicles Only (VIN-Based Billing)
--   **Active Status Tracking**: Vehicles now have a `status` field with `active`, `sources`, and `lastClosedAt`
--   **Sources Array**: Tracks which open work orders make a vehicle "active" (provider, workOrderId, workOrderNumber)
--   **Billing Counts Only Active**: VIN billing counts only vehicles where `status.active = true`
--   **Automatic Deactivation**: When all work orders for a vehicle are invoiced/closed, the vehicle becomes "archived"
--   **Dashboard Filter**: "Show Archived" toggle button to view previously active vehicles
--   **Sync Behavior**: Protractor and Tekmetric sync only import vehicles from open work orders (not historical)
--   **Close Endpoint**: `/api/vehicles/close-work-order` removes sources and sets `active=false` when no sources remain
-
-### Billing & Pricing (Dec 2024)
--   **Free Trial**: 25 viewed VINs (plan page views, not active vehicles)
--   **VIN Tracking**: `viewed_vins` collection tracks unique VINs viewed per shop
--   **Billing Page**: Shows viewed VIN count from trial tracking (consistent with gate)
--   **Trial Gate**: Non-blocking - shows content immediately while checking in background
--   **Professional Plan**: $199/month for unlimited vehicles
--   **Multi-Shop Plan**: $149/location/month for 3+ locations
--   **Protractor Positioning**: "The Only Maintenance Tool for Protractor Shops"
-
-### Performance Optimizations
--   **Tekmetric Caching**: 2-minute cache for dashboard data stored in `tekmetric_cache` collection
--   **MongoDB Indexes**: Added compound indexes on key collections:
-    - `vehicles`: (vin, updatedAt), (shopId, createdAt)
-    - `repair_orders`: (vin, updatedAt), (shopId, createdAt)
-    - `events`: (vin, updatedAt), (shopId, provider, createdAt)
-    - `tekmetric_cache`: TTL index (2 minutes)
-    - `dataone_cache`, `carfax_cache`: VIN indexes
--   **Index Script**: `scripts/add-indexes.ts` to recreate indexes if needed
-
-### Bug Fixes
--   **Mileage Resolution**: Now checks `mileage` field (Tekmetric format) in addition to `odometer` and `lastMileage`
--   **Duplicate React Keys**: Plan page uses `uniqueKey` combining `serviceKey` with `maintenance_id` to prevent duplicate key warnings
--   **ShopId Consistency**: All vehicle storage uses `String(shopId)` for consistent querying
-
-### Type Improvements
--   **VehicleDetailClient**: Proper TypeScript interfaces for DviResult, CarfaxResult, RepairOrderSummary, OemItem, TekmetricDvi
--   **Tekmetric DVI**: Now receives and displays Tekmetric inspection data when available
-
-### Authentication & Authorization (Dec 2024)
--   **Role Hierarchy**: Standardized roles - `owner` (shop superuser), `admin` (platform staff), `manager`, `user`, `viewer`
--   **Setup Flow**: New shops go through `/setup` wizard; invited users complete via token-based `/setup?token=...`
--   **Password Hashing**: All routes now use bcrypt (cost factor 12); login handles legacy scrypt/plaintext with auto-upgrade
--   **Session Consistency**: All auth routes use `session_token` cookie with consistent options
--   **Invite Permissions**: Both `owner` and `admin` roles can invite users
-
-## Known Limitations
--   **Tekmetric ROs without VIN**: Repair orders without VINs (e.g., #4084, #4100) cannot be displayed
--   **Tekmetric Inspections API**: Endpoint may return 404 if not enabled for the API token
+*   **Database**: MongoDB Atlas
+*   **AI**: OpenAI API
+*   **VIN Decoding & OEM Schedules**: DataOne API
+*   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
+*   **Vehicle History Reports**: CARFAX
+*   **Digital Vehicle Inspections (DVI)**: AutoVitals (via Chrome Extension)
