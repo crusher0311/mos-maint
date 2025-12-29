@@ -69,6 +69,7 @@ type Mapping = {
 export default function CannedJobsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [deepSyncing, setDeepSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cannedJobs, setCannedJobs] = useState<CannedJob[]>([]);
   const [manualJobs, setManualJobs] = useState<CannedJob[]>([]);
@@ -144,6 +145,34 @@ export default function CannedJobsSettingsPage() {
       }
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function deepSyncCannedJobs() {
+    setDeepSyncing(true);
+    setMessage({ type: "success", text: "Deep sync started - scanning all service packages. This may take 10-15 minutes..." });
+    try {
+      const res = await fetch("/api/protractor/canned-jobs/enrich", { 
+        method: "POST",
+        credentials: "include" 
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessage({ 
+          type: "success", 
+          text: `Deep sync complete: Scanned ${data.totalScanned} items, found ${data.usefulJobs} with titles/content` 
+        });
+        await fetchCannedJobs();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Deep sync failed:", errorData);
+        setMessage({ type: "error", text: errorData.error || "Deep sync failed" });
+      }
+    } catch (err) {
+      console.error("Deep sync failed:", err);
+      setMessage({ type: "error", text: "Deep sync failed - check console for details" });
+    } finally {
+      setDeepSyncing(false);
     }
   }
 
@@ -404,7 +433,7 @@ export default function CannedJobsSettingsPage() {
               </button>
               <button
                 onClick={() => fetchCannedJobs(true)}
-                disabled={syncing}
+                disabled={syncing || deepSyncing}
                 className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {syncing ? (
@@ -415,7 +444,25 @@ export default function CannedJobsSettingsPage() {
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4" />
-                    Sync Jobs
+                    Sync
+                  </>
+                )}
+              </button>
+              <button
+                onClick={deepSyncCannedJobs}
+                disabled={syncing || deepSyncing}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                title="Scan all service packages and fetch details - takes 10-15 min"
+              >
+                {deepSyncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deep Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Deep Sync
                   </>
                 )}
               </button>
