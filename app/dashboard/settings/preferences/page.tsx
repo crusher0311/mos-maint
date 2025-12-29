@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Loader2, Check, Globe, List } from "lucide-react";
+import { Settings, Loader2, Check, Globe, List, Eye } from "lucide-react";
 
 const WORKFLOW_STAGES = [
   { key: "Unassigned", label: "Unassigned", description: "New work orders not yet assigned" },
@@ -17,6 +17,7 @@ const DEFAULT_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", 
 export default function PreferencesPage() {
   const [distanceUnit, setDistanceUnit] = useState("miles");
   const [workflowStages, setWorkflowStages] = useState<string[]>(DEFAULT_STAGES);
+  const [showInspectItems, setShowInspectItems] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -32,6 +33,7 @@ export default function PreferencesPage() {
         const data = await res.json();
         setDistanceUnit(data.distanceUnit || "miles");
         setWorkflowStages(data.workflowStages || DEFAULT_STAGES);
+        setShowInspectItems(data.showInspectItems !== false);
       }
     } catch (err) {
       console.error("Failed to fetch preferences:", err);
@@ -55,7 +57,7 @@ export default function PreferencesPage() {
       const res = await fetch("/api/settings/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ distanceUnit, workflowStages }),
+        body: JSON.stringify({ distanceUnit, workflowStages, showInspectItems }),
       });
       if (res.ok) {
         setSaved(true);
@@ -182,6 +184,37 @@ export default function PreferencesPage() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Eye className="w-5 h-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Maintenance Plan Display</h2>
+          </div>
+
+          <div className="space-y-4">
+            <label
+              className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                showInspectItems
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={showInspectItems}
+                onChange={(e) => setShowInspectItems(e.target.checked)}
+                className="w-4 h-4 text-blue-600 mt-0.5"
+              />
+              <div>
+                <p className="font-medium text-gray-900">Show "Inspect" Items</p>
+                <p className="text-sm text-gray-500">
+                  Display maintenance items that only require inspection (e.g., "Inspect brakes", "Inspect belts"). 
+                  When off, these items are hidden from the maintenance plan to focus on actionable services.
+                </p>
+              </div>
+            </label>
           </div>
         </div>
 
