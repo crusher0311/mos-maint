@@ -608,9 +608,7 @@ export default function VehicleDetailClient({
                   <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-gray-900">Service History</h3>
-                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
-                        CARFAX
-                      </span>
+                      <img src="/badges/carfax.png" alt="CARFAX" className="h-4" />
                     </div>
                     <span className="text-xs text-gray-500">
                       {carfax.serviceRecords.length} records
