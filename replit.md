@@ -36,7 +36,7 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 **Development & Deployment Workflow:**
 -   **Environments**: Development (Replit), QA (GitHub `qa` branch), Production (GitHub `main` branch).
 -   **Git Repository**: https://github.com/crusher0311/mos-maint.git
--   **Release Process**: Develop in Replit, publish to Replit, push to `qa` for testing, then merge `qa` to `main` for production.
+-   **Release Process**: Develop in Replit, push to `qa` and `main` simultaneously, then tag the release (e.g., `git push origin qa main && git tag vX.X.X && git push origin vX.X.X`).
 -   **Versioning**: Semantic Versioning (MAJOR.MINOR.PATCH) is followed.
 
 ## Version History
