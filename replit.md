@@ -30,6 +30,8 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 *   **Data Model**: `enterprise_accounts` collection with `shopIds` array; shops have `enterpriseId` field; work orders store `packageSummaries`.
 *   **Authentication & Authorization**: Standardized role hierarchy (`owner`, `admin`, `manager`, `user`, `viewer`) with bcrypt password hashing and token-based setup flow.
 *   **VIN-Based Billing**: Tracks "active" vehicles for billing, with configurable trial limits and platform admin controls for managing VIN allowances per shop.
+*   **Stripe Billing Integration**: Checkout sessions for plan upgrades, webhook handling for subscription events, and billing portal for subscription management. Product ID: `prod_TgrceDug91whUy`.
+*   **Distance Unit Preferences**: Shops can choose between miles or kilometers for displaying mileage throughout the app. Setting stored in `shops.preferences.distanceUnit`.
 
 **Development & Deployment Workflow:**
 -   **Environments**: Development (Replit), QA (GitHub `qa` branch), Production (GitHub `main` branch).
@@ -40,7 +42,14 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
+*   **Payments**: Stripe (subscriptions, billing portal)
 *   **VIN Decoding & OEM Schedules**: DataOne API
 *   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals (via Chrome Extension)
+
+## Recent Changes (December 2025)
+*   Added Stripe billing integration for subscription management
+*   Added distance unit preference setting (miles/kilometers)
+*   Platform admin VIN limit management (default limits, per-shop overrides, reset functionality)
+*   Default trial limit changed from 25 to 10 VINs (configurable via platform admin)
