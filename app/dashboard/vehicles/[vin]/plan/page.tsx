@@ -640,18 +640,31 @@ function triage({
     else upcoming.push(t);
   }
 
-  // sort within buckets
+  // Helper to check if item name contains "Inspect" (lower priority)
+  const isInspectItem = (item: TriagedItem) => 
+    item.name?.toLowerCase().includes("inspect") || false;
+
+  // sort within buckets - put "Inspect" items after actionable items
   overdue.sort((a, b) => {
+    const aInspect = isInspectItem(a) ? 1 : 0;
+    const bInspect = isInspectItem(b) ? 1 : 0;
+    if (aInspect !== bInspect) return aInspect - bInspect; // Non-inspect first
     const aBehind = (a.milesToGo ?? 0) < 0 ? -(a.milesToGo ?? 0) : 0;
     const bBehind = (b.milesToGo ?? 0) < 0 ? -(b.milesToGo ?? 0) : 0;
     return bBehind - aBehind; // most overdue first
   });
   dueSoon.sort((a, b) => {
+    const aInspect = isInspectItem(a) ? 1 : 0;
+    const bInspect = isInspectItem(b) ? 1 : 0;
+    if (aInspect !== bInspect) return aInspect - bInspect; // Non-inspect first
     const aLeft = a.milesToGo ?? Infinity;
     const bLeft = b.milesToGo ?? Infinity;
     return aLeft - bLeft; // closest first
   });
   upcoming.sort((a, b) => {
+    const aInspect = isInspectItem(a) ? 1 : 0;
+    const bInspect = isInspectItem(b) ? 1 : 0;
+    if (aInspect !== bInspect) return aInspect - bInspect; // Non-inspect first
     const aNext = a.dueAtMiles ?? Number.POSITIVE_INFINITY;
     const bNext = b.dueAtMiles ?? Number.POSITIVE_INFINITY;
     return aNext - bNext;
