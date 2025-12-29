@@ -1166,11 +1166,18 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                     })()}
                   </div>
 
-                  <div className="text-sm mt-2">
+                  <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
                     {t.dueAtMiles != null && (
                       <>
                         Due at <strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
-                        {t.milesToGo != null && ` • ${fmtDistance(Math.abs(t.milesToGo), distanceUnit)} ${distLabel} overdue`}
+                        {t.milesToGo != null && (
+                          <>
+                            {" • "}
+                            <span className="inline-flex items-center px-2 py-0.5 bg-red-100 border border-red-300 rounded text-red-700 font-semibold">
+                              {fmtDistance(Math.abs(t.milesToGo), distanceUnit)} {distLabel} overdue
+                            </span>
+                          </>
+                        )}
                       </>
                     )}
                     {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
