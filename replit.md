@@ -39,6 +39,17 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 -   **Release Process**: Develop in Replit, publish to Replit, push to `qa` for testing, then merge `qa` to `main` for production.
 -   **Versioning**: Semantic Versioning (MAJOR.MINOR.PATCH) is followed.
 
+## Version History
+**Current Version: v1.4.0**
+
+| Version | Date | Summary |
+|---------|------|---------|
+| v1.4.0 | 2025-12-29 | Vehicle detail tab renames (OE/DVI/CARFAX), CARFAX logo replacement, query param navigation |
+| v1.3.0 | 2025-12-28 | Stripe billing integration, distance unit preferences, platform admin VIN limits |
+| v1.2.0 | 2025-12-27 | Enterprise management system, platform admin enhancements |
+| v1.1.0 | 2025-12-26 | Overdue maintenance display with red highlighting, time-based overdue calculation |
+| v1.0.0 | 2025-12-25 | Initial MVP release with core features |
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
