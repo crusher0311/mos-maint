@@ -395,7 +395,7 @@ export async function GET(request: NextRequest) {
           dviDone: { $literal: false },
           source: { $literal: "protractor" },
           af: {
-            status: { $ifNull: ["$status", "Open"] },
+            status: { $ifNull: ["$workflowStage", { $ifNull: ["$status", "Open"] }] },
             createdAt: "$fetchedAt",
             miles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }
           }
