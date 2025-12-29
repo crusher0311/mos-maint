@@ -40,10 +40,11 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 -   **Versioning**: Semantic Versioning (MAJOR.MINOR.PATCH) is followed.
 
 ## Version History
-**Current Version: v1.4.0**
+**Current Version: v1.5.0**
 
 | Version | Date | Summary |
 |---------|------|---------|
+| v1.5.0 | 2025-12-29 | Workflow stage preferences for Protractor, "Inspect" item sorting, removed 30-day work order limit |
 | v1.4.0 | 2025-12-29 | Vehicle detail tab renames (OE/DVI/CARFAX), CARFAX logo replacement, query param navigation |
 | v1.3.0 | 2025-12-28 | Stripe billing integration, distance unit preferences, platform admin VIN limits |
 | v1.2.0 | 2025-12-27 | Enterprise management system, platform admin enhancements |
@@ -60,7 +61,9 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals (via Chrome Extension)
 
 ## Recent Changes (December 2025)
+*   Added workflow stage preferences for Protractor dashboard filtering (Settings > Preferences)
+*   "Inspect" items now sort after actionable items in maintenance sections
+*   Removed 30-day limitation for Protractor work orders - shows all active work orders based on stage preferences
 *   Added Stripe billing integration for subscription management
 *   Added distance unit preference setting (miles/kilometers)
 *   Platform admin VIN limit management (default limits, per-shop overrides, reset functionality)
-*   Default trial limit changed from 25 to 10 VINs (configurable via platform admin)
