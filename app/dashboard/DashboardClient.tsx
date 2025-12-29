@@ -20,6 +20,7 @@ type DashboardData = {
   rows: any[];
   pagination?: PaginationInfo;
   user: any;
+  smsType?: string;
 };
 
 const PAGE_SIZE = 50;
@@ -368,7 +369,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   <SortHeader column="vehicle">Vehicle</SortHeader>
                   <SortHeader column="vin">VIN</SortHeader>
                   <SortHeader column="ro">RO #</SortHeader>
-                  <SortHeader column="status">Status</SortHeader>
+                  <SortHeader column="status">{data.smsType === 'protractor' ? 'Workflow Stage' : 'Status'}</SortHeader>
                   <SortHeader column="dvi">DVI</SortHeader>
                   <SortHeader column="mileage">Mileage</SortHeader>
                   <th className="px-6 py-3 font-medium"></th>
