@@ -18,6 +18,7 @@ export async function GET() {
     distanceUnit: shop?.preferences?.distanceUnit || "miles",
     timezone: shop?.preferences?.timezone || "America/New_York",
     workflowStages: shop?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES,
+    showInspectItems: shop?.preferences?.showInspectItems !== false, // default true
   });
 }
 
@@ -34,7 +35,7 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems } = await req.json();
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
@@ -50,6 +51,7 @@ export async function PUT(req: NextRequest) {
   if (distanceUnit) updates["preferences.distanceUnit"] = distanceUnit;
   if (timezone) updates["preferences.timezone"] = timezone;
   if (workflowStages !== undefined) updates["preferences.workflowStages"] = workflowStages;
+  if (showInspectItems !== undefined) updates["preferences.showInspectItems"] = showInspectItems;
 
   await db.collection("shops").updateOne(
     { shopId: Number(sess.shopId) },

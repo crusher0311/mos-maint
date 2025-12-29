@@ -640,9 +640,9 @@ function triage({
     else upcoming.push(t);
   }
 
-  // Helper to check if item name contains "Inspect" (lower priority)
+  // Helper to check if item title contains "Inspect" (lower priority)
   const isInspectItem = (item: TriagedItem) => 
-    item.name?.toLowerCase().includes("inspect") || false;
+    item.title?.toLowerCase().includes("inspect") || false;
 
   // sort within buckets - put "Inspect" items after actionable items
   overdue.sort((a, b) => {
@@ -690,6 +690,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
   );
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
+  const showInspectItems = shop?.preferences?.showInspectItems !== false; // default true
   const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
   const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
   const shopIntervals: Record<string, ShopIntervalOverride> = shop?.maintenance?.intervals ?? {};
@@ -1034,7 +1035,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     declinedAt: d.declinedAt,
   }));
 
-  const buckets = triage({
+  const rawBuckets = triage({
     oemItems,
     carfaxRecords,
     protractorHistory,
@@ -1048,8 +1049,18 @@ export default async function VehiclePlanPage({ params }: PageProps) {
     shopIntervals,
   });
 
+  // Filter out "Inspect" items if preference is off
+  const isInspectItemFilter = (item: TriagedItem) => 
+    item.title?.toLowerCase().includes("inspect") || false;
+  
+  const buckets = showInspectItems ? rawBuckets : {
+    overdue: rawBuckets.overdue.filter(i => !isInspectItemFilter(i)),
+    dueSoon: rawBuckets.dueSoon.filter(i => !isInspectItemFilter(i)),
+    upcoming: rawBuckets.upcoming.filter(i => !isInspectItemFilter(i)),
+  };
+
   console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
-  console.log(`[Plan Debug] Buckets: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length}`);
+  console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
 
   const counts = {
     overdue: buckets.overdue.length,
