@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { 
   ArrowLeft, 
   Car, 
@@ -121,7 +122,7 @@ interface VehicleDetailClientProps {
   tekmetricConnected?: boolean;
 }
 
-type TabId = "attributes" | "recs" | "history";
+type TabId = "oe" | "dvi" | "carfax";
 
 export default function VehicleDetailClient({
   vehicle,
@@ -138,7 +139,15 @@ export default function VehicleDetailClient({
   carfaxCfg,
   tekmetricConnected = false
 }: VehicleDetailClientProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("attributes");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as TabId | null;
+  const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax"].includes(tabParam) ? tabParam : "oe");
+
+  useEffect(() => {
+    if (tabParam && ["oe", "dvi", "carfax"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [hasComponents, setHasComponents] = useState<Record<string, boolean>>(
     vehicle.hasComponents || {}
@@ -185,9 +194,9 @@ export default function VehicleDetailClient({
   const vehicleTitle = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle";
 
   const tabs = [
-    { id: "attributes" as TabId, label: "Attributes" },
-    { id: "recs" as TabId, label: "Recs" },
-    { id: "history" as TabId, label: "History" }
+    { id: "oe" as TabId, label: "OE" },
+    { id: "dvi" as TabId, label: "DVI" },
+    { id: "carfax" as TabId, label: "CARFAX" }
   ];
 
   const oemByCategory = localOe?.items?.reduce((acc: any, item: any) => {
@@ -254,7 +263,7 @@ export default function VehicleDetailClient({
             </nav>
           </div>
 
-          {activeTab === "attributes" && (
+          {activeTab === "oe" && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -354,7 +363,7 @@ export default function VehicleDetailClient({
             </div>
           )}
 
-          {activeTab === "recs" && (
+          {activeTab === "dvi" && (
             <div className="space-y-6">
               {/* Tekmetric DVI Inspections */}
               {tekmetricDvi?.ok && tekmetricDvi.items && tekmetricDvi.items.length > 0 && (
@@ -515,7 +524,7 @@ export default function VehicleDetailClient({
             </div>
           )}
 
-          {activeTab === "history" && (
+          {activeTab === "carfax" && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
