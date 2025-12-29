@@ -563,6 +563,15 @@ export async function GET(request: NextRequest) {
     const endIndex = startIndex + pageSize;
     const paginatedRows = allRows.slice(startIndex, endIndex);
 
+    // Determine which SMS integration is active for this shop
+    const shop = await db.collection("shops").findOne({ shopId: String(user.shopId) });
+    let smsType = "autoflow"; // default
+    if (shop?.protractor?.configured) {
+      smsType = "protractor";
+    } else if (shop?.tekmetric?.configured) {
+      smsType = "tekmetric";
+    }
+
     return NextResponse.json({
       rows: paginatedRows,
       pagination: {
@@ -577,7 +586,8 @@ export async function GET(request: NextRequest) {
         email: user.email,
         role: user.role,
         shopId: user.shopId
-      }
+      },
+      smsType
     });
 
   } catch (error) {
