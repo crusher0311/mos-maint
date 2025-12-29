@@ -320,12 +320,22 @@ export async function GET(request: NextRequest) {
       },
     ]).toArray();
 
+    // Fetch shop preferences for workflow stage filtering
+    const shopPrefs = await db.collection("shops").findOne(
+      { shopId: Number(user.shopId) },
+      { projection: { preferences: 1, tekmetric: 1 } }
+    );
+    const DEFAULT_WORKFLOW_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted"];
+    const allowedStages = shopPrefs?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
+
     // Fetch Protractor work orders directly (they have the odometer)
+    // Filter by workflow stage preference - no date limit
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-          vin: { $ne: null, $type: "string" }
+          vin: { $ne: null, $type: "string" },
+          workflowStage: { $in: allowedStages }
         }
       },
       { $sort: { fetchedAt: -1 } },
@@ -394,14 +404,13 @@ export async function GET(request: NextRequest) {
     ]).toArray();
 
     // Check if Tekmetric is connected before fetching Tekmetric vehicles
-    const shop = await db.collection("shops").findOne({});
-    const tekmetricConnected = !!shop?.tekmetric?.shopId;
+    const tekmetricConnected = !!shopPrefs?.tekmetric?.shopId;
     
     // Fetch Tekmetric vehicles - use cache if available, refresh if stale
     let tekmetricRows: any[] = [];
     if (tekmetricConnected && process.env.TEKMETRIC_API_TOKEN) {
       const CACHE_TTL = 2 * 60 * 1000; // 2 minute cache
-      const cacheKey = `tekmetric_dashboard_${shop.tekmetric.shopId}`;
+      const cacheKey = `tekmetric_dashboard_${shopPrefs.tekmetric.shopId}`;
       
       // Check cache first
       const cached = await db.collection("tekmetric_cache").findOne({ 
@@ -415,7 +424,7 @@ export async function GET(request: NextRequest) {
       } else {
         // Fetch fresh data from API
         try {
-          const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
+          const roResponse = await getRepairOrders(shopPrefs.tekmetric.shopId, {
             repairOrderStatusId: [1, 2, 3],
             size: 100,
             sortDirection: 'DESC'
