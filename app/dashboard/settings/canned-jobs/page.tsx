@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Package,
   Loader2,
@@ -12,6 +12,11 @@ import {
   Plus,
   X,
   Edit3,
+  Search,
+  ChevronDown,
+  ChevronRight,
+  ArrowUpDown,
+  Link2,
 } from "lucide-react";
 
 const SERVICE_KEYS = [
@@ -74,6 +79,10 @@ export default function CannedJobsSettingsPage() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualId, setManualId] = useState("");
   const [manualTitle, setManualTitle] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"code" | "title">("code");
+  const [showDeferredSection, setShowDeferredSection] = useState(false);
+  const [assigningJobId, setAssigningJobId] = useState<string | null>(null);
 
   useEffect(() => {
     checkProtractorStatus();
@@ -244,6 +253,50 @@ export default function CannedJobsSettingsPage() {
     JSON.stringify(manualJobs) !== JSON.stringify(originalManualJobs);
   const mappedCount = Object.keys(mappings).filter((k) => mappings[k]?.length > 0).length;
   const totalMappedJobs = Object.values(mappings).reduce((sum, arr) => sum + (arr?.length || 0), 0);
+
+  function getJobMappedServices(jobId: string): string[] {
+    const services: string[] = [];
+    for (const [serviceKey, jobIds] of Object.entries(mappings)) {
+      if (jobIds?.includes(jobId)) {
+        const service = SERVICE_KEYS.find(s => s.key === serviceKey);
+        if (service) services.push(service.name);
+      }
+    }
+    return services;
+  }
+
+  const { serviceJobs, deferredJobs } = useMemo(() => {
+    const service = cannedJobs.filter(j => 
+      j.chapter !== 'DeferredService' && j.chapter !== 'DeferredInspection'
+    );
+    const deferred = cannedJobs.filter(j => 
+      j.chapter === 'DeferredService' || j.chapter === 'DeferredInspection'
+    );
+    return { serviceJobs: service, deferredJobs: deferred };
+  }, [cannedJobs]);
+
+  const filteredAndSortedJobs = useMemo(() => {
+    let jobs = [...serviceJobs];
+    
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      jobs = jobs.filter(j => 
+        (j.title || "").toLowerCase().includes(q) ||
+        (j.code || "").toLowerCase().includes(q) ||
+        (j.description || "").toLowerCase().includes(q)
+      );
+    }
+    
+    jobs.sort((a, b) => {
+      if (sortBy === "code") {
+        return (a.code || "").localeCompare(b.code || "");
+      } else {
+        return (a.title || "").localeCompare(b.title || "");
+      }
+    });
+    
+    return jobs;
+  }, [serviceJobs, searchQuery, sortBy]);
 
   if (loading) {
     return (
@@ -524,18 +577,141 @@ export default function CannedJobsSettingsPage() {
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Canned Job Library</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Browse all {cannedJobs.length} available service packages from Protractor
+          Browse and assign service packages. Click a card to map it to a service type.
+        </p>
+        
+        {/* Search and Sort Controls */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by code, title, or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            />
+          </div>
+          <button
+            onClick={() => setSortBy(sortBy === "code" ? "title" : "code")}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm text-gray-700"
+          >
+            <ArrowUpDown className="w-4 h-4" />
+            Sort by {sortBy === "code" ? "Code" : "Title"}
+          </button>
+        </div>
+        
+        <p className="text-xs text-gray-500 mb-3">
+          Showing {filteredAndSortedJobs.length} of {serviceJobs.length} service packages
         </p>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {cannedJobs.map((job) => (
-            <CannedJobCard key={job.id} job={job} />
-          ))}
+          {filteredAndSortedJobs.map((job) => {
+            const mappedServices = getJobMappedServices(job.id);
+            const isAssigning = assigningJobId === job.id;
+            
+            return (
+              <div key={job.id} className="relative">
+                <CannedJobCard 
+                  job={job} 
+                  mappedServices={mappedServices}
+                  onClick={() => setAssigningJobId(isAssigning ? null : job.id)}
+                  isSelected={isAssigning}
+                />
+                
+                {isAssigning && (
+                  <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                    <div className="text-xs font-medium text-gray-500 mb-2">Assign to service:</div>
+                    <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
+                      {SERVICE_KEYS.map(({ key, name }) => {
+                        const isLinked = mappings[key]?.includes(job.id);
+                        return (
+                          <button
+                            key={key}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isLinked) {
+                                removeCannedJobFromService(key, job.id);
+                              } else {
+                                addCannedJobToService(key, job.id);
+                              }
+                            }}
+                            className={`text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                              isLinked 
+                                ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                                : "hover:bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {isLinked && <span className="mr-1">✓</span>}
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setAssigningJobId(null)}
+                      className="mt-2 w-full text-xs text-gray-500 hover:text-gray-700 py-1"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
+        
+        {filteredAndSortedJobs.length === 0 && searchQuery && (
+          <div className="text-center py-8 text-gray-500">
+            No canned jobs match &quot;{searchQuery}&quot;
+          </div>
+        )}
         
         {cannedJobs.length === 0 && (
           <div className="text-center py-8 text-gray-500">
             No canned jobs available. Click &quot;Sync Jobs&quot; to fetch from Protractor.
+          </div>
+        )}
+        
+        {/* Deferred Services Section (Collapsed) */}
+        {deferredJobs.length > 0 && (
+          <div className="mt-6 border border-gray-200 rounded-lg">
+            <button
+              onClick={() => setShowDeferredSection(!showDeferredSection)}
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-2">
+                {showDeferredSection ? (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                )}
+                <span className="text-sm font-medium text-gray-700">
+                  Deferred Service References ({deferredJobs.length})
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                Auto-generated from declined work
+              </span>
+            </button>
+            
+            {showDeferredSection && (
+              <div className="p-4 pt-0 border-t border-gray-100">
+                <p className="text-xs text-gray-500 mb-3">
+                  These are reference codes from declined services. They don&apos;t have full template details.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {deferredJobs.map((job) => (
+                    <span
+                      key={job.id}
+                      className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded font-mono"
+                    >
+                      {job.code || job.id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -543,12 +719,28 @@ export default function CannedJobsSettingsPage() {
   );
 }
 
-function CannedJobCard({ job }: { job: CannedJob }) {
-  const hasPrice = job.fixedPrice != null || (job.laborHours != null && job.laborRate != null);
+function CannedJobCard({ 
+  job, 
+  mappedServices = [], 
+  onClick,
+  isSelected = false 
+}: { 
+  job: CannedJob; 
+  mappedServices?: string[];
+  onClick?: () => void;
+  isSelected?: boolean;
+}) {
   const estimatedTotal = job.fixedPrice ?? (job.laborHours && job.laborRate ? job.laborHours * job.laborRate : null);
   
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+    <div 
+      className={`bg-white rounded-lg border shadow-sm overflow-hidden transition-all cursor-pointer ${
+        isSelected 
+          ? "border-blue-500 ring-2 ring-blue-200 shadow-md" 
+          : "border-gray-200 hover:shadow-md hover:border-gray-300"
+      }`}
+      onClick={onClick}
+    >
       {/* Header */}
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
         <div className="flex items-start justify-between gap-2">
@@ -648,6 +840,24 @@ function CannedJobCard({ job }: { job: CannedJob }) {
             {job.lineCount} line items (details not loaded)
           </div>
         ) : null}
+        
+        {/* Mapped Services Indicator */}
+        {mappedServices.length > 0 && (
+          <div className="pt-2 border-t border-gray-100 mt-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Link2 className="w-3.5 h-3.5 text-green-600" />
+              <span className="text-xs text-green-700 font-medium">Mapped to:</span>
+              {mappedServices.slice(0, 2).map((service, idx) => (
+                <span key={idx} className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                  {service}
+                </span>
+              ))}
+              {mappedServices.length > 2 && (
+                <span className="text-xs text-green-600">+{mappedServices.length - 2} more</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
