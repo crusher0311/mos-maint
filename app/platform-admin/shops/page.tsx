@@ -1,13 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2 } from "lucide-react";
+import { useState, useEffect, Fragment } from "react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock } from "lucide-react";
 
 interface ShopBilling {
   plan: string;
   isPaid: boolean;
   vinLimit: number;
   vinViewCount: number;
+}
+
+interface IntegrationDetails {
+  protractor?: {
+    configuredAt: string;
+    locationName: string | null;
+    shortName: string | null;
+    address: string | null;
+    phone: string | null;
+    timeZone: string | null;
+  } | null;
+  carfax?: {
+    locationId: string;
+  } | null;
+  tekmetric?: {
+    shopId: string | number;
+  } | null;
 }
 
 interface Shop {
@@ -20,6 +37,7 @@ interface Shop {
   integrations: string[];
   billing: ShopBilling;
   isLocked?: boolean;
+  integrationDetails?: IntegrationDetails;
 }
 
 export default function PlatformShopsPage() {
@@ -32,6 +50,7 @@ export default function PlatformShopsPage() {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [vinInput, setVinInput] = useState("");
   const [modalAction, setModalAction] = useState<"setLimit" | "addViews" | "resetLimit" | null>(null);
+  const [expandedShop, setExpandedShop] = useState<string | null>(null);
 
   const accessShop = async (shopId: number | string) => {
     if (impersonating) return;
@@ -212,7 +231,8 @@ export default function PlatformShopsPage() {
               </tr>
             ) : (
               filteredShops.map((shop) => (
-                <tr key={shop._id} className="hover:bg-gray-50">
+                <Fragment key={shop._id}>
+                <tr className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : "bg-purple-100"}`}>
@@ -291,17 +311,27 @@ export default function PlatformShopsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {shop.integrations?.length > 0 ? (
-                        shop.integrations.map(int => (
-                          <span key={int} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                            {int}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-gray-400 text-sm">None</span>
-                      )}
-                    </div>
+                    {shop.integrations?.length > 0 ? (
+                      <button
+                        onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
+                        className="flex items-center gap-1 text-left hover:bg-gray-50 rounded px-1 -mx-1"
+                      >
+                        <div className="flex gap-1 flex-wrap">
+                          {shop.integrations.map(int => (
+                            <span key={int} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
+                              {int}
+                            </span>
+                          ))}
+                        </div>
+                        {expandedShop === shop._id ? (
+                          <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ) : (
+                      <span className="text-gray-400 text-sm">None</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {new Date(shop.createdAt).toLocaleDateString()}
@@ -354,6 +384,71 @@ export default function PlatformShopsPage() {
                     </div>
                   </td>
                 </tr>
+                {expandedShop === shop._id && shop.integrationDetails && (
+                  <tr className="bg-blue-50">
+                    <td colSpan={8} className="px-4 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {shop.integrationDetails.protractor && (
+                          <div className="bg-white rounded-lg p-4 border border-blue-200">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">Protractor</span>
+                              <span className="text-xs text-gray-500">
+                                Connected {new Date(shop.integrationDetails.protractor.configuredAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {shop.integrationDetails.protractor.locationName && (
+                              <div className="font-medium text-gray-900 mb-2">
+                                {shop.integrationDetails.protractor.locationName}
+                                {shop.integrationDetails.protractor.shortName && (
+                                  <span className="text-gray-500 font-normal"> ({shop.integrationDetails.protractor.shortName})</span>
+                                )}
+                              </div>
+                            )}
+                            {shop.integrationDetails.protractor.address && (
+                              <div className="flex items-start gap-2 text-sm text-gray-600 mb-1">
+                                <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                <span>{shop.integrationDetails.protractor.address}</span>
+                              </div>
+                            )}
+                            {shop.integrationDetails.protractor.phone && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                                <Phone className="w-4 h-4 flex-shrink-0" />
+                                <span>{shop.integrationDetails.protractor.phone}</span>
+                              </div>
+                            )}
+                            {shop.integrationDetails.protractor.timeZone && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Clock className="w-4 h-4 flex-shrink-0" />
+                                <span>{shop.integrationDetails.protractor.timeZone}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {shop.integrationDetails.carfax && (
+                          <div className="bg-white rounded-lg p-4 border border-blue-200">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded font-medium">CARFAX</span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <span className="font-medium">Location ID:</span> {shop.integrationDetails.carfax.locationId}
+                            </div>
+                          </div>
+                        )}
+                        {shop.integrationDetails.tekmetric && (
+                          <div className="bg-white rounded-lg p-4 border border-blue-200">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded font-medium">Tekmetric</span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <span className="font-medium">Shop ID:</span> {shop.integrationDetails.tekmetric.shopId}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
               ))
             )}
           </tbody>

@@ -65,6 +65,8 @@ export async function GET() {
       const vinLimit = shop.trialVinLimit ?? defaultVinLimit;
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
       
+      const protractorLocation = shop.protractor?.locations?.[0];
+      
       return {
         _id: shop._id,
         shopId: shop.shopId,
@@ -79,6 +81,23 @@ export async function GET() {
           isPaid,
           vinLimit,
           vinViewCount,
+        },
+        integrationDetails: {
+          protractor: shop.protractor?.configured ? {
+            configuredAt: shop.protractor.configuredAt,
+            locationName: protractorLocation?.Name || null,
+            shortName: protractorLocation?.ShortName || null,
+            address: protractorLocation?.Address ? 
+              `${protractorLocation.Address.Street}, ${protractorLocation.Address.City}, ${protractorLocation.Address.Province} ${protractorLocation.Address.PostalCode}` : null,
+            phone: protractorLocation?.PhoneNumber || null,
+            timeZone: protractorLocation?.TimeZone || null,
+          } : null,
+          carfax: shop.carfax?.locationId ? {
+            locationId: shop.carfax.locationId,
+          } : null,
+          tekmetric: shop.tekmetric?.shopId ? {
+            shopId: shop.tekmetric.shopId,
+          } : null,
         },
       };
     });
