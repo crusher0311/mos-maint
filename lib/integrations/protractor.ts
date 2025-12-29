@@ -1548,6 +1548,49 @@ export async function getCannedJobsFromCache(
   };
 }
 
+// Fetch full details for a batch of canned jobs
+export async function enrichCannedJobsWithDetails(
+  shopId: number,
+  jobs: ProtractorCannedJob[],
+  onProgress?: (completed: number, total: number) => void
+): Promise<ProtractorCannedJob[]> {
+  const enrichedJobs: ProtractorCannedJob[] = [];
+  const batchSize = 5; // Process 5 at a time to avoid rate limiting
+  
+  for (let i = 0; i < jobs.length; i += batchSize) {
+    const batch = jobs.slice(i, i + batchSize);
+    
+    const batchResults = await Promise.all(
+      batch.map(async (job) => {
+        const detailResult = await fetchServicePackageTemplateDetail(shopId, job.ID);
+        if (detailResult.ok && detailResult.template) {
+          const template = detailResult.template;
+          return {
+            ...job,
+            Title: template.ServicePackageHeader?.Title || template.Code || job.Code || "",
+            Description: template.ServicePackageHeader?.Description || template.ServicePackageFooter?.Description || "",
+            ServicePackageLines: template.ServicePackageLines?.ItemCollection || [],
+          };
+        }
+        return job; // Keep original if detail fetch failed
+      })
+    );
+    
+    enrichedJobs.push(...batchResults);
+    
+    if (onProgress) {
+      onProgress(Math.min(i + batchSize, jobs.length), jobs.length);
+    }
+    
+    // Small delay between batches to avoid rate limiting
+    if (i + batchSize < jobs.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  return enrichedJobs;
+}
+
 export async function fetchCannedJobsWithCache(
   shopId: number,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
