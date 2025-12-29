@@ -125,12 +125,36 @@ function ServiceCard({ t, severity }: { t: TriagedItem; severity: "overdue" | "s
       <CardContent className="pt-0 text-sm">
         <div className="text-neutral-800">
           {t.milesToGo != null && t.milesToGo <= 0 && (
-            <>Due at <strong>{fmtMiles(t.dueAtMiles!)}</strong> mi • <strong>{fmtMiles(Math.abs(t.milesToGo))}</strong> mi overdue</>
+            <span className="flex flex-wrap items-center gap-2">
+              <span>Due at <strong>{fmtMiles(t.dueAtMiles!)}</strong> mi</span>
+              <span className="inline-flex items-center px-2 py-0.5 bg-red-100 border border-red-300 rounded text-red-700 font-semibold">
+                {fmtMiles(Math.abs(t.milesToGo))} mi overdue
+              </span>
+              {t.dueAtDate && (
+                <>
+                  <span>By</span>
+                  <span className="inline-flex items-center px-2 py-0.5 bg-red-100 border border-red-300 rounded text-red-700 font-semibold">
+                    {t.dueAtDate.toLocaleDateString()}
+                    {(() => {
+                      const now = new Date();
+                      const monthsOverdue = Math.floor((now.getTime() - t.dueAtDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+                      if (monthsOverdue >= 12) {
+                        const years = Math.floor(monthsOverdue / 12);
+                        return ` (${years}+ year${years > 1 ? 's' : ''} overdue!)`;
+                      } else if (monthsOverdue > 0) {
+                        return ` (${monthsOverdue}+ month${monthsOverdue > 1 ? 's' : ''} overdue!)`;
+                      }
+                      return '';
+                    })()}
+                  </span>
+                </>
+              )}
+            </span>
           )}
           {t.milesToGo != null && t.milesToGo > 0 && (
             <>In ~<strong>{fmtMiles(t.milesToGo)}</strong> mi</>
           )}
-          {t.dueAtDate && <> • by <strong>{t.dueAtDate.toLocaleDateString()}</strong></>}
+          {t.milesToGo != null && t.milesToGo > 0 && t.dueAtDate && <> • by <strong>{t.dueAtDate.toLocaleDateString()}</strong></>}
         </div>
         <Evidence t={t} />
       </CardContent>
