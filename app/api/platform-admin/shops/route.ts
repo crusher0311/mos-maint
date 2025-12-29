@@ -27,13 +27,15 @@ export async function GET() {
     const defaultVinLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
     const shopIds = shops.map(s => s.shopId);
     
+    const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
+    
     const [userCounts, vehicleCounts, vinViewCounts] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray(),
       db.collection("vehicles").aggregate([
-        { $match: { shopId: { $in: shopIds.map(String) } } },
+        { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray(),
       db.collection("viewed_vins").aggregate([
@@ -43,8 +45,13 @@ export async function GET() {
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
-    const vehicleCountMap = new Map(vehicleCounts.map(v => [String(v._id), v.count]));
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
+    
+    const vehicleCountMap = new Map<string, number>();
+    for (const v of vehicleCounts) {
+      const key = String(v._id);
+      vehicleCountMap.set(key, (vehicleCountMap.get(key) || 0) + v.count);
+    }
     
     const enrichedShops = shops.map(shop => {
       const integrations: string[] = [];
