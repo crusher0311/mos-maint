@@ -119,9 +119,16 @@ export default function CannedJobsSettingsPage() {
       const res = await fetch(url, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setCannedJobs(data.cannedJobs || []);
+        const jobs = data.cannedJobs || [];
+        setCannedJobs(jobs);
         if (refresh) {
-          setMessage({ type: "success", text: `Synced ${data.cannedJobs?.length || 0} canned jobs from Protractor` });
+          const codes = jobs.map((j: CannedJob) => j.code).filter(Boolean).slice(0, 20);
+          const moreCount = jobs.length > 20 ? ` (+${jobs.length - 20} more)` : "";
+          console.log("[CannedJobs] Synced codes:", jobs.map((j: CannedJob) => j.code).filter(Boolean).join(", "));
+          setMessage({ 
+            type: "success", 
+            text: `Synced ${jobs.length} canned jobs: ${codes.join(", ")}${moreCount}` 
+          });
         }
       } else {
         const errorData = await res.json().catch(() => ({}));
