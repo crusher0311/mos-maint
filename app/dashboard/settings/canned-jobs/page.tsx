@@ -31,12 +31,28 @@ const SERVICE_KEYS = [
   { key: "suspension", name: "Suspension" },
 ];
 
+type CannedJobLine = {
+  id?: string;
+  lineType?: string;
+  description?: string;
+  quantity?: number;
+  unitPrice?: number;
+  extendedPrice?: number;
+  partNumber?: string;
+  manufacturer?: string;
+};
+
 type CannedJob = {
   id: string;
   title: string;
   description: string;
   chapter?: string;
   code?: string;
+  laborHours?: number;
+  laborRate?: number;
+  fixedPrice?: number;
+  lineCount?: number;
+  lines?: CannedJobLine[];
 };
 
 type Mapping = {
@@ -502,6 +518,136 @@ export default function CannedJobsSettingsPage() {
           <li>If only one canned job is mapped, it will be used automatically</li>
           <li>Clicking &quot;Add to RO&quot; on the Plan page adds the selected canned job to the vehicle&apos;s open work order</li>
         </ul>
+      </div>
+
+      {/* Canned Job Library Cards */}
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Canned Job Library</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Browse all {cannedJobs.length} available service packages from Protractor
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {cannedJobs.map((job) => (
+            <CannedJobCard key={job.id} job={job} />
+          ))}
+        </div>
+        
+        {cannedJobs.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No canned jobs available. Click &quot;Sync Jobs&quot; to fetch from Protractor.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CannedJobCard({ job }: { job: CannedJob }) {
+  const hasPrice = job.fixedPrice != null || (job.laborHours != null && job.laborRate != null);
+  const estimatedTotal = job.fixedPrice ?? (job.laborHours && job.laborRate ? job.laborHours * job.laborRate : null);
+  
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+      {/* Header */}
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              {job.code && (
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-mono font-medium rounded">
+                  {job.code}
+                </span>
+              )}
+              {job.chapter && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                  {job.chapter}
+                </span>
+              )}
+            </div>
+            <h3 className="mt-1 font-medium text-gray-900 text-sm leading-tight">
+              {job.title}
+            </h3>
+          </div>
+          {estimatedTotal != null && (
+            <div className="text-right flex-shrink-0">
+              <div className="text-lg font-semibold text-green-600">
+                ${estimatedTotal.toFixed(2)}
+              </div>
+              {job.fixedPrice != null && (
+                <div className="text-xs text-gray-500">fixed price</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Body */}
+      <div className="px-4 py-3 space-y-3">
+        {/* Description */}
+        {job.description && (
+          <p className="text-sm text-gray-600 line-clamp-2">
+            {job.description}
+          </p>
+        )}
+        
+        {/* Labor info */}
+        {(job.laborHours != null || job.laborRate != null) && (
+          <div className="flex items-center gap-4 text-sm">
+            {job.laborHours != null && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Labor:</span>
+                <span className="font-medium text-gray-900">{job.laborHours} hrs</span>
+              </div>
+            )}
+            {job.laborRate != null && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Rate:</span>
+                <span className="font-medium text-gray-900">${job.laborRate}/hr</span>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Line items preview */}
+        {job.lines && job.lines.length > 0 ? (
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Included Items
+            </div>
+            <div className="space-y-1">
+              {job.lines.slice(0, 4).map((line, idx) => (
+                <div key={line.id || idx} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      line.lineType?.toLowerCase() === 'labor' ? 'bg-blue-400' : 'bg-amber-400'
+                    }`} />
+                    <span className="text-gray-700 truncate">
+                      {line.description || line.partNumber || 'Item'}
+                    </span>
+                    {line.partNumber && line.description && (
+                      <span className="text-xs text-gray-400">({line.partNumber})</span>
+                    )}
+                  </div>
+                  {line.extendedPrice != null && (
+                    <span className="text-gray-600 font-medium flex-shrink-0 ml-2">
+                      ${line.extendedPrice.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              ))}
+              {job.lines.length > 4 && (
+                <div className="text-xs text-gray-500 italic">
+                  +{job.lines.length - 4} more items...
+                </div>
+              )}
+            </div>
+          </div>
+        ) : job.lineCount && job.lineCount > 0 ? (
+          <div className="text-sm text-gray-500 italic">
+            {job.lineCount} line items (details not loaded)
+          </div>
+        ) : null}
       </div>
     </div>
   );
