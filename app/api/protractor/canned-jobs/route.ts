@@ -34,13 +34,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    // Filter to only include jobs with a non-empty code
-    const filteredJobs = (result.cannedJobs || []).filter(
-      (job: any) => job.code && job.code.trim() !== ""
-    );
-
     return NextResponse.json({
-      cannedJobs: filteredJobs,
+      cannedJobs: result.cannedJobs || [],
       source: result.source,
     });
   } catch (err: any) {
