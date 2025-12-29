@@ -35,6 +35,11 @@ export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
       icon: <Building2 className="w-5 h-5" />
     },
     {
+      name: "Enterprises",
+      href: "/platform-admin/enterprises",
+      icon: <Shield className="w-5 h-5" />
+    },
+    {
       name: "Users",
       href: "/platform-admin/users",
       icon: <Users className="w-5 h-5" />
