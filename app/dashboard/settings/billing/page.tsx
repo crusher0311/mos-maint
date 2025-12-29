@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Suspense } from "react";
 import { CreditCard, Check, AlertCircle, Loader2, Zap, ExternalLink } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
@@ -22,7 +23,7 @@ interface StripePrice {
   productName: string;
 }
 
-export default function BillingSettingsPage() {
+function BillingContent() {
   const [billing, setBilling] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState(false);
@@ -388,5 +389,23 @@ export default function BillingSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function BillingFallback() {
+  return (
+    <div className="p-8">
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    </div>
+  );
+}
+
+export default function BillingSettingsPage() {
+  return (
+    <Suspense fallback={<BillingFallback />}>
+      <BillingContent />
+    </Suspense>
   );
 }
