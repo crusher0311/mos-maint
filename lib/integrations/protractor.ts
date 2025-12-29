@@ -742,6 +742,23 @@ export async function fetchCannedJobs(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const allJobs: ProtractorCannedJob[] = [];
+  const seenIds = new Set<string>();
+  const errors: string[] = [];
+  
+  const addJobs = (jobs: ProtractorCannedJob[], source: string) => {
+    let added = 0;
+    for (const job of jobs) {
+      const id = job.ID || job.Code || "";
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        allJobs.push(job);
+        added++;
+      }
+    }
+    console.log(`[Protractor] Added ${added} unique jobs from ${source} (total: ${allJobs.length})`);
+  };
+
   // Protractor uses POST requests with specific request bodies for service package templates
   const postEndpoints = [
     {
@@ -752,11 +769,13 @@ export async function fetchCannedJobs(
       endpoint: "/ServicePackageTemplateList/Read",
       body: { ServicePackageTemplateListReadRequest: {} }
     },
+    {
+      endpoint: "/ServicePackageTemplate/Read",
+      body: { ServicePackageTemplateReadRequest: { IncludeInactive: true } }
+    },
   ];
 
-  const errors: string[] = [];
-  
-  // Try POST endpoints first (documented Protractor 2.0 API)
+  // Try all POST endpoints and combine results
   for (const { endpoint, body } of postEndpoints) {
     console.log(`[Protractor] Trying POST ${endpoint}...`);
     const result = await protractorFetch<{ 
@@ -776,8 +795,7 @@ export async function fetchCannedJobs(
     console.log(`[Protractor] POST ${endpoint} result: ok=${result.ok}, items=${items?.length || 0}, error=${result.error || 'none'}`);
     
     if (result.ok && items?.length) {
-      console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
-      return { ok: true, cannedJobs: items };
+      addJobs(items, `POST ${endpoint}`);
     }
     
     if (result.error) {
@@ -785,10 +803,13 @@ export async function fetchCannedJobs(
     }
   }
 
-  // Fallback to GET endpoints
+  // Also try GET endpoints and combine
   const getEndpoints = [
+    "/ServicePackageTemplate",
     "/ServicePackage/Template",
     "/ServicePackage/",
+    "/CannedJob",
+    "/CannedJob/",
   ];
   
   for (const endpoint of getEndpoints) {
@@ -801,8 +822,7 @@ export async function fetchCannedJobs(
     console.log(`[Protractor] GET ${endpoint} result: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}, error=${result.error || 'none'}`);
     
     if (result.ok && result.data?.ItemCollection?.length) {
-      console.log(`[Protractor] Found ${result.data.ItemCollection.length} service packages via GET ${endpoint}`);
-      return { ok: true, cannedJobs: result.data.ItemCollection };
+      addJobs(result.data.ItemCollection, `GET ${endpoint}`);
     }
     
     if (result.error) {
@@ -810,9 +830,16 @@ export async function fetchCannedJobs(
     }
   }
 
+  if (allJobs.length > 0) {
+    // Log all codes found
+    const codes = allJobs.map(j => j.Code).filter(Boolean);
+    console.log(`[Protractor] Total ${allJobs.length} canned jobs fetched. Codes: ${codes.slice(0, 30).join(', ')}${codes.length > 30 ? '...' : ''}`);
+    return { ok: true, cannedJobs: allJobs };
+  }
+
   return { 
     ok: false, 
-    error: `Could not fetch service packages. API responses: ${errors.slice(0, 2).join('; ')}` 
+    error: `Could not fetch service packages. API responses: ${errors.slice(0, 3).join('; ')}` 
   };
 }
 
