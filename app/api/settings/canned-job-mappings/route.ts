@@ -20,12 +20,13 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { "protractor.cannedJobMappings": 1, "protractor.manualCannedJobs": 1 } }
+      { projection: { "protractor.cannedJobMappings": 1, "protractor.manualCannedJobs": 1, "protractor.hiddenJobIds": 1 } }
     );
 
     return NextResponse.json({
       mappings: shop?.protractor?.cannedJobMappings || {},
       manualJobs: shop?.protractor?.manualCannedJobs || [],
+      hiddenJobIds: shop?.protractor?.hiddenJobIds || [],
     });
   } catch (err: any) {
     console.error("[Canned Job Mappings] GET Error:", err);
@@ -51,14 +52,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No shop associated" }, { status: 400 });
     }
 
-    let body: { mappings?: Record<string, string[]>; manualJobs?: ManualJob[] };
+    let body: { mappings?: Record<string, string[]>; manualJobs?: ManualJob[]; hiddenJobIds?: string[] };
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { mappings, manualJobs } = body;
+    const { mappings, manualJobs, hiddenJobIds } = body;
     if (!mappings || typeof mappings !== "object") {
       return NextResponse.json({ error: "Invalid mappings format" }, { status: 400 });
     }
@@ -71,6 +72,10 @@ export async function POST(req: NextRequest) {
 
     if (Array.isArray(manualJobs)) {
       updateFields["protractor.manualCannedJobs"] = manualJobs;
+    }
+
+    if (Array.isArray(hiddenJobIds)) {
+      updateFields["protractor.hiddenJobIds"] = hiddenJobIds;
     }
 
     await db.collection("shops").updateOne(

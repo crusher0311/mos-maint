@@ -17,6 +17,8 @@ import {
   ChevronRight,
   ArrowUpDown,
   Link2,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 
 const SERVICE_KEYS = [
@@ -83,6 +85,9 @@ export default function CannedJobsSettingsPage() {
   const [sortBy, setSortBy] = useState<"code" | "title">("code");
   const [showDeferredSection, setShowDeferredSection] = useState(false);
   const [assigningJobId, setAssigningJobId] = useState<string | null>(null);
+  const [hiddenJobIds, setHiddenJobIds] = useState<string[]>([]);
+  const [originalHiddenJobIds, setOriginalHiddenJobIds] = useState<string[]>([]);
+  const [showHiddenJobs, setShowHiddenJobs] = useState(false);
 
   useEffect(() => {
     checkProtractorStatus();
@@ -156,6 +161,10 @@ export default function CannedJobsSettingsPage() {
           const newJobs = savedManualJobs.filter((j: CannedJob) => !existingIds.has(j.id));
           return [...prev, ...newJobs];
         });
+        
+        const hidden = data.hiddenJobIds || [];
+        setHiddenJobIds(hidden);
+        setOriginalHiddenJobIds(hidden);
       }
     } catch (err) {
       console.error("Failed to fetch mappings:", err);
@@ -183,12 +192,13 @@ export default function CannedJobsSettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ mappings, manualJobs }),
+        body: JSON.stringify({ mappings, manualJobs, hiddenJobIds }),
       });
 
       if (res.ok) {
         setOriginalMappings({ ...mappings });
         setOriginalManualJobs([...manualJobs]);
+        setOriginalHiddenJobIds([...hiddenJobIds]);
         setMessage({ type: "success", text: "Service package mappings saved successfully!" });
       } else {
         const data = await res.json();
@@ -250,9 +260,18 @@ export default function CannedJobsSettingsPage() {
 
   const hasChanges = 
     JSON.stringify(mappings) !== JSON.stringify(originalMappings) ||
-    JSON.stringify(manualJobs) !== JSON.stringify(originalManualJobs);
+    JSON.stringify(manualJobs) !== JSON.stringify(originalManualJobs) ||
+    JSON.stringify(hiddenJobIds.sort()) !== JSON.stringify(originalHiddenJobIds.sort());
   const mappedCount = Object.keys(mappings).filter((k) => mappings[k]?.length > 0).length;
   const totalMappedJobs = Object.values(mappings).reduce((sum, arr) => sum + (arr?.length || 0), 0);
+
+  function toggleHideJob(jobId: string) {
+    setHiddenJobIds(prev => 
+      prev.includes(jobId) 
+        ? prev.filter(id => id !== jobId) 
+        : [...prev, jobId]
+    );
+  }
 
   function getJobMappedServices(jobId: string): string[] {
     const services: string[] = [];
@@ -278,6 +297,11 @@ export default function CannedJobsSettingsPage() {
   const filteredAndSortedJobs = useMemo(() => {
     let jobs = [...serviceJobs];
     
+    // Filter hidden jobs unless showing them
+    if (!showHiddenJobs) {
+      jobs = jobs.filter(j => !hiddenJobIds.includes(j.id));
+    }
+    
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       jobs = jobs.filter(j => 
@@ -296,7 +320,9 @@ export default function CannedJobsSettingsPage() {
     });
     
     return jobs;
-  }, [serviceJobs, searchQuery, sortBy]);
+  }, [serviceJobs, searchQuery, sortBy, hiddenJobIds, showHiddenJobs]);
+  
+  const hiddenCount = serviceJobs.filter(j => hiddenJobIds.includes(j.id)).length;
 
   if (loading) {
     return (
@@ -599,10 +625,24 @@ export default function CannedJobsSettingsPage() {
             <ArrowUpDown className="w-4 h-4" />
             Sort by {sortBy === "code" ? "Code" : "Title"}
           </button>
+          {hiddenCount > 0 && (
+            <button
+              onClick={() => setShowHiddenJobs(!showHiddenJobs)}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm transition-colors ${
+                showHiddenJobs 
+                  ? "border-amber-300 bg-amber-50 text-amber-700" 
+                  : "border-gray-300 hover:bg-gray-50 text-gray-700"
+              }`}
+            >
+              {showHiddenJobs ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              {showHiddenJobs ? "Showing Hidden" : `${hiddenCount} Hidden`}
+            </button>
+          )}
         </div>
         
         <p className="text-xs text-gray-500 mb-3">
-          Showing {filteredAndSortedJobs.length} of {serviceJobs.length} service packages
+          Showing {filteredAndSortedJobs.length} of {serviceJobs.length - hiddenCount} visible service packages
+          {hiddenCount > 0 && !showHiddenJobs && ` (${hiddenCount} hidden)`}
         </p>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -617,6 +657,7 @@ export default function CannedJobsSettingsPage() {
                   mappedServices={mappedServices}
                   onClick={() => setAssigningJobId(isAssigning ? null : job.id)}
                   isSelected={isAssigning}
+                  isHidden={hiddenJobIds.includes(job.id)}
                 />
                 
                 {isAssigning && (
@@ -648,12 +689,38 @@ export default function CannedJobsSettingsPage() {
                         );
                       })}
                     </div>
-                    <button
-                      onClick={() => setAssigningJobId(null)}
-                      className="mt-2 w-full text-xs text-gray-500 hover:text-gray-700 py-1"
-                    >
-                      Close
-                    </button>
+                    <div className="mt-2 pt-2 border-t border-gray-100 flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleHideJob(job.id);
+                          setAssigningJobId(null);
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-xs transition-colors ${
+                          hiddenJobIds.includes(job.id)
+                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                            : "hover:bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {hiddenJobIds.includes(job.id) ? (
+                          <>
+                            <Eye className="w-3 h-3" />
+                            Unhide
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="w-3 h-3" />
+                            Hide from list
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setAssigningJobId(null)}
+                        className="flex-1 text-xs text-gray-500 hover:text-gray-700 py-1.5"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -723,18 +790,24 @@ function CannedJobCard({
   job, 
   mappedServices = [], 
   onClick,
-  isSelected = false 
+  isSelected = false,
+  isHidden = false
 }: { 
   job: CannedJob; 
   mappedServices?: string[];
   onClick?: () => void;
   isSelected?: boolean;
+  isHidden?: boolean;
 }) {
   const estimatedTotal = job.fixedPrice ?? (job.laborHours && job.laborRate ? job.laborHours * job.laborRate : null);
   
   return (
     <div 
-      className={`bg-white rounded-lg border shadow-sm overflow-hidden transition-all cursor-pointer ${
+      className={`rounded-lg border shadow-sm overflow-hidden transition-all cursor-pointer ${
+        isHidden
+          ? "bg-gray-50 opacity-60"
+          : "bg-white"
+      } ${
         isSelected 
           ? "border-blue-500 ring-2 ring-blue-200 shadow-md" 
           : "border-gray-200 hover:shadow-md hover:border-gray-300"
@@ -742,10 +815,16 @@ function CannedJobCard({
       onClick={onClick}
     >
       {/* Header */}
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+      <div className={`px-4 py-3 border-b border-gray-200 ${isHidden ? "bg-gray-100" : "bg-gray-50"}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
+              {isHidden && (
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded flex items-center gap-1">
+                  <EyeOff className="w-3 h-3" />
+                  Hidden
+                </span>
+              )}
               {job.code && (
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-mono font-medium rounded">
                   {job.code}
