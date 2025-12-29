@@ -34,10 +34,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    // Filter to only include jobs with a non-empty code
-    const filteredJobs = (result.cannedJobs || []).filter(
-      (job: any) => job.code && job.code.trim() !== ""
-    );
+    // Filter to only include jobs with a non-empty code AND (has title OR has line items)
+    const filteredJobs = (result.cannedJobs || []).filter((job: any) => {
+      // Must have a code
+      if (!job.code || job.code.trim() === "") return false;
+      // Must have either a title or line items (not empty placeholders)
+      const hasTitle = job.title && job.title.trim() !== "";
+      const hasLines = (job.lineCount || 0) > 0;
+      return hasTitle || hasLines;
+    });
 
     return NextResponse.json({
       cannedJobs: filteredJobs,
