@@ -742,146 +742,77 @@ export async function fetchCannedJobs(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const allJobs: ProtractorCannedJob[] = [];
-  const seenIds = new Set<string>();
+  // Protractor uses POST requests with specific request bodies for service package templates
+  const postEndpoints = [
+    {
+      endpoint: "/ServicePackageTemplate/Read",
+      body: { ServicePackageTemplateReadRequest: {} }
+    },
+    {
+      endpoint: "/ServicePackageTemplateList/Read",
+      body: { ServicePackageTemplateListReadRequest: {} }
+    },
+  ];
+
   const errors: string[] = [];
   
-  const addJobs = (jobs: ProtractorCannedJob[], source: string) => {
-    let added = 0;
-    for (const job of jobs) {
-      const id = job.ID || job.Code || "";
-      if (id && !seenIds.has(id)) {
-        seenIds.add(id);
-        allJobs.push(job);
-        added++;
-      }
-    }
-    if (added > 0) {
-      console.log(`[Protractor] Added ${added} unique jobs from ${source} (total: ${allJobs.length})`);
-    }
-  };
-
-  // Common Protractor chapters/categories
-  const chapters = ["Service", "Tires", "Sublet", "Parts", "Labor", "Inspection", ""];
-  
-  // Try fetching by each chapter
-  for (const chapter of chapters) {
-    const chapterLabel = chapter || "All";
-    console.log(`[Protractor] Fetching chapter: ${chapterLabel}...`);
-    
-    // POST with chapter filter
-    const body = chapter 
-      ? { ServicePackageTemplateReadRequest: { Chapter: chapter } }
-      : { ServicePackageTemplateReadRequest: {} };
-    
+  // Try POST endpoints first (documented Protractor 2.0 API)
+  for (const { endpoint, body } of postEndpoints) {
+    console.log(`[Protractor] Trying POST ${endpoint}...`);
     const result = await protractorFetch<{ 
       ItemCollection?: ProtractorCannedJob[];
       ServicePackageTemplates?: ProtractorCannedJob[];
       ServicePackageTemplateReadResponse?: { ItemCollection?: ProtractorCannedJob[] };
-      TotalCount?: number;
-      PageCount?: number;
-      CurrentPage?: number;
     }>(
-      "/ServicePackageTemplate/Read",
+      endpoint,
       config,
       { method: "POST", body: JSON.stringify(body) }
     );
-
-    // Log pagination info if present
-    if (result.data?.TotalCount || result.data?.PageCount) {
-      console.log(`[Protractor] Pagination info: TotalCount=${result.data.TotalCount}, PageCount=${result.data.PageCount}, CurrentPage=${result.data.CurrentPage}`);
-    }
 
     const items = result.data?.ItemCollection || 
                   result.data?.ServicePackageTemplates || 
                   result.data?.ServicePackageTemplateReadResponse?.ItemCollection;
 
+    console.log(`[Protractor] POST ${endpoint} result: ok=${result.ok}, items=${items?.length || 0}, error=${result.error || 'none'}`);
+    
     if (result.ok && items?.length) {
-      addJobs(items, `Chapter ${chapterLabel}`);
+      console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
+      return { ok: true, cannedJobs: items };
     }
     
-    if (result.error && chapter === "") {
-      errors.push(`POST ServicePackageTemplate/Read: ${result.error}`);
+    if (result.error) {
+      errors.push(`POST ${endpoint}: ${result.error}`);
     }
   }
 
-  // Also try the list endpoint with pagination
-  let page = 1;
-  const maxPages = 10;
-  while (page <= maxPages) {
-    const result = await protractorFetch<{ 
-      ItemCollection?: ProtractorCannedJob[];
-      TotalCount?: number;
-      PageCount?: number;
-      CurrentPage?: number;
-      HasMore?: boolean;
-    }>(
-      "/ServicePackageTemplateList/Read",
-      config,
-      { 
-        method: "POST", 
-        body: JSON.stringify({ 
-          ServicePackageTemplateListReadRequest: { 
-            Page: page,
-            PageSize: 100
-          } 
-        }) 
-      }
-    );
-
-    const items = result.data?.ItemCollection;
-    
-    if (result.ok && items?.length) {
-      console.log(`[Protractor] Page ${page}: ${items.length} items (Total: ${result.data?.TotalCount || 'unknown'})`);
-      addJobs(items, `List Page ${page}`);
-      
-      // Check if there are more pages
-      const totalPages = result.data?.PageCount || 1;
-      if (page >= totalPages || !result.data?.HasMore) {
-        break;
-      }
-      page++;
-    } else {
-      break;
-    }
-  }
-
-  // GET endpoints as fallback
+  // Fallback to GET endpoints
   const getEndpoints = [
-    "/ServicePackageTemplate",
     "/ServicePackage/Template",
+    "/ServicePackage/",
   ];
   
   for (const endpoint of getEndpoints) {
-    const result = await protractorFetch<{ 
-      ItemCollection?: ProtractorCannedJob[];
-      TotalCount?: number;
-    }>(endpoint, config);
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
+    const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+      endpoint,
+      config
+    );
 
+    console.log(`[Protractor] GET ${endpoint} result: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}, error=${result.error || 'none'}`);
+    
     if (result.ok && result.data?.ItemCollection?.length) {
-      console.log(`[Protractor] GET ${endpoint}: ${result.data.ItemCollection.length} items`);
-      addJobs(result.data.ItemCollection, `GET ${endpoint}`);
+      console.log(`[Protractor] Found ${result.data.ItemCollection.length} service packages via GET ${endpoint}`);
+      return { ok: true, cannedJobs: result.data.ItemCollection };
     }
-  }
-
-  if (allJobs.length > 0) {
-    // Log all codes found grouped by chapter
-    const byChapter: Record<string, string[]> = {};
-    for (const job of allJobs) {
-      const ch = job.Chapter || "Unknown";
-      if (!byChapter[ch]) byChapter[ch] = [];
-      if (job.Code) byChapter[ch].push(job.Code);
+    
+    if (result.error) {
+      errors.push(`GET ${endpoint}: ${result.error}`);
     }
-    console.log(`[Protractor] Total ${allJobs.length} canned jobs fetched by chapter:`);
-    for (const [ch, codes] of Object.entries(byChapter)) {
-      console.log(`  ${ch}: ${codes.length} jobs (${codes.slice(0, 10).join(', ')}${codes.length > 10 ? '...' : ''})`);
-    }
-    return { ok: true, cannedJobs: allJobs };
   }
 
   return { 
     ok: false, 
-    error: `Could not fetch service packages. API responses: ${errors.slice(0, 3).join('; ')}` 
+    error: `Could not fetch service packages. API responses: ${errors.slice(0, 2).join('; ')}` 
   };
 }
 
