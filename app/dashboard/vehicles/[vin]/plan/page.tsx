@@ -1053,9 +1053,9 @@ export default async function VehiclePlanPage({ params }: PageProps) {
           {/* Top navigation menu */}
           <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
             <Link href="/dashboard" className="hover:underline">← Back</Link>
-            <Link href={`/dashboard/vehicles/${vin}`} className="hover:underline">OE</Link>
+            <Link href={`/dashboard/vehicles/${vin}?tab=oe`} className="hover:underline">OE</Link>
             <Link href={`/dashboard/vehicles/${vin}?tab=dvi`} className="hover:underline">DVI</Link>
-            <Link href={`/dashboard/vehicles/${vin}?tab=history`} className="hover:opacity-80">
+            <Link href={`/dashboard/vehicles/${vin}?tab=carfax`} className="hover:opacity-80">
               <img src="/badges/carfax.png" alt="CARFAX" className="h-4" />
             </Link>
           </nav>
