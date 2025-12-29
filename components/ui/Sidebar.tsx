@@ -168,6 +168,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
+        { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
