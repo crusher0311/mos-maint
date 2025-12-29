@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { getDb } from "@/lib/mongo";
 
 export async function GET() {
   try {

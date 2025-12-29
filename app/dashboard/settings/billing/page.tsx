@@ -30,7 +30,7 @@ export default function BillingSettingsPage() {
           plan: "Free Trial",
           status: "trial",
           vehicleCount: 0,
-          vehicleLimit: 25,
+          vehicleLimit: 10,
         });
       }
     } catch (err) {
@@ -38,7 +38,7 @@ export default function BillingSettingsPage() {
         plan: "Free Trial",
         status: "trial",
         vehicleCount: 0,
-        vehicleLimit: 25,
+        vehicleLimit: 10,
       });
     } finally {
       setLoading(false);
@@ -50,9 +50,9 @@ export default function BillingSettingsPage() {
       name: "Free Trial",
       price: "Free",
       period: "",
-      description: "Try with your first 25 vehicles",
+      description: `Try with your first ${billing?.vehicleLimit || 10} vehicles`,
       features: [
-        "25 vehicles included",
+        `${billing?.vehicleLimit || 10} vehicles included`,
         "OEM maintenance schedules",
         "CARFAX integration",
         "Protractor sync",

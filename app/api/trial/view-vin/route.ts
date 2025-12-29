@@ -6,7 +6,7 @@ import { checkAndTrackVin, getViewedVinCount } from "@/lib/plan-cache";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TRIAL_VIN_LIMIT = 25;
+const DEFAULT_TRIAL_VIN_LIMIT = 10;
 
 export async function POST(req: Request) {
   try {
@@ -40,16 +40,20 @@ export async function POST(req: Request) {
       });
     }
 
-    const { count, isNew, allowed } = await checkAndTrackVin(db, shopId, vin.toUpperCase(), TRIAL_VIN_LIMIT);
+    const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
+    const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
+    const shopLimit = shop?.trialVinLimit ?? defaultLimit;
 
-    const remaining = Math.max(0, TRIAL_VIN_LIMIT - count);
+    const { count, isNew, allowed } = await checkAndTrackVin(db, shopId, vin.toUpperCase(), shopLimit);
+
+    const remaining = Math.max(0, shopLimit - count);
 
     return NextResponse.json({
       ok: true,
       allowed,
       isPaid: false,
       viewedCount: count,
-      limit: TRIAL_VIN_LIMIT,
+      limit: shopLimit,
       remaining,
       isNewView: isNew,
       requiresUpgrade: !allowed,
@@ -84,16 +88,20 @@ export async function GET() {
       });
     }
 
+    const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
+    const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
+    const shopLimit = shop?.trialVinLimit ?? defaultLimit;
+
     const count = await getViewedVinCount(db, shopId);
-    const remaining = Math.max(0, TRIAL_VIN_LIMIT - count);
+    const remaining = Math.max(0, shopLimit - count);
 
     return NextResponse.json({
       ok: true,
       isPaid: false,
       viewedCount: count,
-      limit: TRIAL_VIN_LIMIT,
+      limit: shopLimit,
       remaining,
-      requiresUpgrade: count >= TRIAL_VIN_LIMIT,
+      requiresUpgrade: count >= shopLimit,
     });
 
   } catch (err) {

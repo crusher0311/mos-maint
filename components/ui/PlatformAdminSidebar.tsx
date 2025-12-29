@@ -8,7 +8,8 @@ import {
   DollarSign, 
   LayoutDashboard,
   LogOut,
-  Shield
+  Shield,
+  Settings
 } from "lucide-react";
 
 interface PlatformAdminSidebarProps {
@@ -42,6 +43,11 @@ export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
       name: "Usage & Costs",
       href: "/platform-admin/usage",
       icon: <DollarSign className="w-5 h-5" />
+    },
+    {
+      name: "Settings",
+      href: "/platform-admin/settings",
+      icon: <Settings className="w-5 h-5" />
     }
   ];
 

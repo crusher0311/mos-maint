@@ -6,7 +6,7 @@ import { getViewedVinCount } from "@/lib/plan-cache";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TRIAL_VIN_LIMIT = 25;
+const DEFAULT_TRIAL_VIN_LIMIT = 10;
 
 export async function GET() {
   const sess = await getSession();
@@ -34,13 +34,17 @@ export async function GET() {
     });
   }
 
+  const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
+  const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
+  const shopLimit = shop?.trialVinLimit ?? defaultLimit;
+
   const viewedVinCount = await getViewedVinCount(db, shopId);
 
   return NextResponse.json({
     plan: "Free Trial",
     status: "trial",
     vehicleCount: viewedVinCount,
-    vehicleLimit: TRIAL_VIN_LIMIT,
+    vehicleLimit: shopLimit,
     nextBillingDate: null,
   });
 }
