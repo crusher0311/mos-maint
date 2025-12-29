@@ -1592,14 +1592,12 @@ export async function enrichCannedJobsWithDetails(
     // Filter and add to results
     for (const job of batchResults) {
       if (filterEmpty) {
-        // Only keep jobs that:
-        // 1. Have an alphanumeric code (contains at least one letter like O8, T15, BG1)
-        // 2. AND have a title or line items
-        const code = job.Code || "";
-        const hasAlphaCode = /[a-zA-Z]/.test(code);
-        const hasContent = job._hasTitle || job._hasLines;
+        // Only keep jobs that have BOTH a title AND description
+        // Real canned jobs have proper titles and descriptions, placeholders don't
+        const title = (job.Title || "").trim();
+        const description = (job.Description || "").trim();
         
-        if (hasAlphaCode && hasContent) {
+        if (title.length > 0 && description.length > 0) {
           enrichedJobs.push(job);
         }
       } else {
