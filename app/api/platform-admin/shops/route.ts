@@ -66,6 +66,7 @@ export async function GET() {
         userCount: userCountMap.get(String(shop.shopId)) || 0,
         vehicleCount: vehicleCountMap.get(String(shop.shopId)) || 0,
         integrations,
+        isLocked: shop.isLocked || false,
         billing: {
           plan: shop.billing?.plan || "trial",
           isPaid,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2 } from "lucide-react";
 
 interface ShopBilling {
   plan: string;
@@ -12,13 +12,14 @@ interface ShopBilling {
 
 interface Shop {
   _id: string;
-  shopId: number;
+  shopId: number | string;
   name: string;
   createdAt: string;
   userCount: number;
   vehicleCount: number;
   integrations: string[];
   billing: ShopBilling;
+  isLocked?: boolean;
 }
 
 export default function PlatformShopsPage() {
@@ -32,9 +33,9 @@ export default function PlatformShopsPage() {
   const [vinInput, setVinInput] = useState("");
   const [modalAction, setModalAction] = useState<"setLimit" | "addViews" | "resetLimit" | null>(null);
 
-  const accessShop = async (shopId: number) => {
+  const accessShop = async (shopId: number | string) => {
     if (impersonating) return;
-    setImpersonating(shopId);
+    setImpersonating(typeof shopId === 'number' ? shopId : -1);
     try {
       const res = await fetch("/api/platform-admin/impersonate", {
         method: "POST",
@@ -55,7 +56,7 @@ export default function PlatformShopsPage() {
     }
   };
 
-  const vinAction = async (shopId: number, action: string, value?: number) => {
+  const vinAction = async (shopId: number | string, action: string, value?: number) => {
     setActionLoading(`${shopId}-${action}`);
     try {
       const res = await fetch(`/api/platform-admin/shops/${shopId}/vins`, {
@@ -75,6 +76,52 @@ export default function PlatformShopsPage() {
     } catch (err) {
       console.error("VIN action error:", err);
       alert("Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleLock = async (shopId: number | string, isLocked: boolean) => {
+    const action = isLocked ? "unlock" : "lock";
+    setActionLoading(`${shopId}-${action}`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        loadShops();
+      } else {
+        alert(data.error || "Action failed");
+      }
+    } catch (err) {
+      console.error("Lock/unlock error:", err);
+      alert("Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const deleteShop = async (shop: Shop) => {
+    if (!confirm(`Are you sure you want to PERMANENTLY DELETE "${shop.name}"?\n\nThis will remove:\n- The shop\n- All users\n- All sessions\n\nThis action cannot be undone!`)) {
+      return;
+    }
+    setActionLoading(`${shop.shopId}-delete`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${shop.shopId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.ok) {
+        loadShops();
+      } else {
+        alert(data.error || "Delete failed");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Delete failed");
     } finally {
       setActionLoading(null);
     }
@@ -168,11 +215,18 @@ export default function PlatformShopsPage() {
                 <tr key={shop._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-4 h-4 text-purple-600" />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : "bg-purple-100"}`}>
+                        {shop.isLocked ? (
+                          <Lock className="w-4 h-4 text-red-600" />
+                        ) : (
+                          <Building2 className="w-4 h-4 text-purple-600" />
+                        )}
                       </div>
                       <div>
-                        <span className="font-medium text-gray-900">{shop.name}</span>
+                        <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
+                        {shop.isLocked && (
+                          <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
+                        )}
                         {shop.billing.isPaid && (
                           <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
                         )}
@@ -253,18 +307,51 @@ export default function PlatformShopsPage() {
                     {new Date(shop.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => accessShop(shop.shopId)}
-                      disabled={impersonating !== null}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {impersonating === shop.shopId ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <LogIn className="w-4 h-4" />
-                      )}
-                      Access
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
+                        disabled={actionLoading !== null}
+                        title={shop.isLocked ? "Unlock shop" : "Lock shop"}
+                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                          shop.isLocked 
+                            ? "text-green-600 hover:bg-green-50" 
+                            : "text-orange-600 hover:bg-orange-50"
+                        }`}
+                      >
+                        {actionLoading === `${shop.shopId}-lock` || actionLoading === `${shop.shopId}-unlock` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : shop.isLocked ? (
+                          <Unlock className="w-4 h-4" />
+                        ) : (
+                          <Lock className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deleteShop(shop)}
+                        disabled={actionLoading !== null}
+                        title="Delete shop permanently"
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading === `${shop.shopId}-delete` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => accessShop(shop.shopId)}
+                        disabled={impersonating !== null || shop.isLocked}
+                        title={shop.isLocked ? "Shop is locked" : "Access this shop"}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {impersonating === shop.shopId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <LogIn className="w-4 h-4" />
+                        )}
+                        Access
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

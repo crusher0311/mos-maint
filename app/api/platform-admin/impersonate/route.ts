@@ -13,9 +13,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { shopId } = await req.json();
+    const { shopId: rawShopId } = await req.json();
 
-    if (typeof shopId !== "number") {
+    const shopId = typeof rawShopId === "string" && !isNaN(Number(rawShopId)) 
+      ? Number(rawShopId) 
+      : rawShopId;
+
+    if (shopId === undefined || shopId === null) {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }
 
@@ -24,6 +28,10 @@ export async function POST(req: Request) {
     const shop = await db.collection("shops").findOne({ shopId });
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    if (shop.isLocked) {
+      return NextResponse.json({ error: "Shop is locked. Unlock it first to access." }, { status: 403 });
     }
 
     let targetUser = await db.collection("users").findOne({
