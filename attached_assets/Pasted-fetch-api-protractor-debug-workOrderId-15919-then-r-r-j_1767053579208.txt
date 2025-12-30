@@ -1,0 +1,150 @@
+fetch('/api/protractor/debug?workOrderId=15919').then(r => r.json()).then(d => console.log(JSON.stringify(d, null, 2)))
+Promise {<pending>}
+VM1508:1 {
+  "workOrder": {
+    "Header": {
+      "ID": "1bc3c243-22be-4dd1-a297-e0ceeb48e719",
+      "CreationTime": "2025-12-29T10:27:49.147-05:00",
+      "DeletionTime": "0001-01-01T00:00:00",
+      "DeletionTimeSpecified": true,
+      "LastModifiedTime": "2025-12-29T17:34:59.71-05:00",
+      "LastModifiedBy": "Pro_AB1316.SouthernPines\\Jakob Dougherty"
+    },
+    "ID": "1bc3c243-22be-4dd1-a297-e0ceeb48e719",
+    "Type": "WorkOrder",
+    "ScheduledTime": "2025-12-29T10:19:37.5-05:00",
+    "PromisedTime": "2025-12-29T10:19:37.5-05:00",
+    "InvoiceTime": "0001-01-01T00:00:00",
+    "WorkOrderNumber": 15919,
+    "InvoiceNumber": 0,
+    "PurchaseOrderNumber": "",
+    "Contact": {
+      "Header": {
+        "ID": "af547db4-48a2-4552-9383-6917c1acb874",
+        "CreationTime": "2025-12-29T10:19:45.95-05:00",
+        "DeletionTime": "0001-01-01T00:00:00",
+        "DeletionTimeSpecified": true,
+        "LastModifiedTime": "2025-12-29T10:19:45.95-05:00",
+        "LastModifiedBy": "Pro_AB1316.SouthernPines\\Jakob Dougherty"
+      },
+      "ID": "af547db4-48a2-4552-9383-6917c1acb874",
+      "FileAs": "leavitt, kevin",
+      "Name": {
+        "Title": "Name",
+        "Prefix": "",
+        "FirstName": "kevin",
+        "MiddleName": "",
+        "LastName": "leavitt",
+        "Suffix": ""
+      },
+      "Address": {
+        "Title": "Home",
+        "ID": "80ba9711-489e-4fc1-9632-754c18dc33d7",
+        "Street": "",
+        "City": "",
+        "Province": "North Carolina",
+        "PostalCode": "",
+        "Country": ""
+      },
+      "Company": "",
+      "Phone1Title": "Home",
+      "Phone1": "(402) 541-5857",
+      "Phone2Title": "",
+      "Phone2": "",
+      "EmailTitle": "Email",
+      "Email": "",
+      "AdditionalNames": {
+        "ItemCollection": [
+          {
+            "Header": {
+              "ID": "e970a0c2-7f0a-4ad6-8894-344bce3288d7",
+              "CreationTime": "2025-12-29T10:19:46.613-05:00",
+              "DeletionTime": "0001-01-01T00:00:00",
+              "DeletionTimeSpecified": true,
+              "LastModifiedTime": "2025-12-29T10:19:46.613-05:00",
+              "LastModifiedBy": "Pro_AB1316.SouthernPines\\Jakob Dougherty"
+            },
+            "ID": "e970a0c2-7f0a-4ad6-8894-344bce3288d7",
+            "OwnerID": "af547db4-48a2-4552-9383-6917c1acb874",
+            "Title": "Name",
+            "BaseFullName": {
+              "Prefix": "",
+              "FirstName": "kevin",
+              "MiddleName": "",
+              "LastName": "leavitt",
+              "Suffix": ""
+            }
+          }
+        ]
+      },
+      "AdditionalPhones": {
+        "ItemCollection": [
+          {
+            "Header": {
+              "ID": "3927b81f-c7b9-4945-a1b7-9c255ab6298c",
+              "CreationTime": "2025-12-29T10:19:46.707-05:00",
+              "DeletionTime": "0001-01-01T00:00:00",
+              "DeletionTimeSpecified": true,
+              "LastModifiedTime": "2025-12-29T10:19:46.707-05:00",
+              "LastModifiedBy": "Pro_AB1316.SouthernPines\\Jakob Dougherty"
+            },
+            "ID": "3927b81f-c7b9-4945-a1b7-9c255ab6298c",
+            "OwnerID": "af547db4-48a2-4552-9383-6917c1acb874",
+            "Title": "Home",
+            "BasePhoneNumber": {
+              "IsEmpty": false,
+              "Region": "",
+              "AreaCode": "402",
+              "PhoneNumber": "541-5857",
+              "Extension": ""
+            }
+          }
+        ]
+      },
+      "AdditionalURIs": {
+        "ItemCollection": [
+          {
+            "Header": {
+              "ID": "2232fa2e-5d87-4870-b6c4-b64489593fd8",
+              "CreationTime": "2025-12-29T10:19:46.803-05:00",
+              "DeletionTime": "0001-01-01T00:00:00",
+              "DeletionTimeSpecified": true,
+              "LastModifiedTime": "2025-12-29T10:19:46.803-05:00",
+              "LastModifiedBy": "Pro_AB1316.SouthernPines\\Jakob Dougherty"
+            },
+            "ID": "2232fa2e-5d87-4870-b6c4-b64489593fd8",
+            "OwnerID": "af547db4-48a2-4552-9383-6917c1acb874",
+            "Title": "Email",
+            "Type": "Email",
+            "Address": ""
+          }
+        ]
+      },
+      "PreferredContactMethod": "Email",
+      "MarketingSource": "",
+      "Note": "",
+      "NoMessaging": false,
+      "NoEmail": false,
+      "NoPostCard": false
+    },
+    "ServiceItem": {
+      "IsComplete": true,
+      "PlateRegistration": "NC",
+      "VIN": "JTHBN30F030099535",
+      "Unit": "",
+      "Color": "",
+      "Year": 2003,
+      "Make": "Lexus",
+      "Model": "LS430",
+      "Submodel": "Base",
+      "Engine": "V8 4.3L 4293CC",
+      "Header": {
+        "ID": "57c9acb4-7a75-403e-bf02-597bfc64bcb2",
+        "CreationTime": "2025-12-29T10:20:13.59-05:00",
+        "DeletionTime": "0001-01-01T00:00:00",
+        "DeletionTimeSpecified": true,
+        "LastModifiedTime": "2025-12-29T10:22:05.173-05:00",
+        "LastModifiedBy": "Pro_AB1316.SouthernPines\\Jakob Dougherty"
+      },
+      "ID": "57c9acb4-7a75-403e-bf02-597bfc64bcb2",
+      "Ty
