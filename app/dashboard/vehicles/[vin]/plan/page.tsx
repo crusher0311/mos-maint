@@ -1192,8 +1192,8 @@ async function PlanContent({ params }: PageProps) {
 
   return (
     <PlanTrialGate vin={vin}>
-      <div className="flex flex-col h-full">
-      {/* Sticky summary header */}
+      <>
+      {/* Sticky summary header - no nested overflow wrapper, uses dashboard layout's scroll */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b shadow-sm">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3">
           {/* Top navigation menu */}
@@ -1238,8 +1238,6 @@ async function PlanContent({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto">
       {/* Print-only header with shop logo */}
       <div className="hidden print:block mb-6 border-b pb-4 mx-auto max-w-5xl px-4 sm:px-6">
         <div className="flex items-center justify-between">
@@ -1690,8 +1688,7 @@ async function PlanContent({ params }: PageProps) {
           </pre>
         </details>
       </div>
-      </div>
-      </div>
+      </>
     </PlanTrialGate>
   );
 }
