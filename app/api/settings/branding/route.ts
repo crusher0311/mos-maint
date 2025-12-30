@@ -10,12 +10,13 @@ export async function GET() {
 
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { branding: 1 } }
+      { projection: { branding: 1, locationIdentifier: 1 } }
     );
 
     return NextResponse.json({
       logo: shop?.branding?.logo || null,
       shopName: shop?.branding?.displayName || null,
+      locationIdentifier: shop?.locationIdentifier || null,
     });
   } catch (err: any) {
     console.error("Error fetching branding:", err);
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     const shopId = Number(session.shopId);
 
     const body = await req.json();
-    const { logo, displayName } = body;
+    const { logo, displayName, locationIdentifier } = body;
 
     if (logo && typeof logo === "string") {
       if (!logo.startsWith("data:image/")) {
@@ -49,6 +50,9 @@ export async function POST(req: NextRequest) {
     }
     if (displayName !== undefined) {
       updateFields["branding.displayName"] = displayName;
+    }
+    if (locationIdentifier !== undefined) {
+      updateFields["locationIdentifier"] = locationIdentifier;
     }
 
     await db.collection("shops").updateOne(

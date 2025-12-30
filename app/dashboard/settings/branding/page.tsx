@@ -6,8 +6,10 @@ import { Upload, Trash2, Loader2, Check, Image as ImageIcon } from "lucide-react
 export default function BrandingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
   const [logo, setLogo] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [locationIdentifier, setLocationIdentifier] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -22,6 +24,7 @@ export default function BrandingPage() {
         const data = await res.json();
         setLogo(data.logo || null);
         setDisplayName(data.shopName || "");
+        setLocationIdentifier(data.locationIdentifier || "");
       }
     } catch (err) {
       console.error("Failed to fetch branding:", err);
@@ -73,6 +76,29 @@ export default function BrandingPage() {
       setMessage({ type: "error", text: "Failed to save logo" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveLocationIdentifier() {
+    setSavingLocation(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings/branding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationIdentifier }),
+      });
+      
+      if (res.ok) {
+        setMessage({ type: "success", text: "Location identifier saved!" });
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to save location identifier" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to save location identifier" });
+    } finally {
+      setSavingLocation(false);
     }
   }
 
@@ -193,6 +219,40 @@ export default function BrandingPage() {
               : "Upload a logo to replace the default Protractor badge."}
           </p>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <h2 className="font-semibold text-gray-900 mb-2">Location Identifier</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Add a location identifier to help distinguish this shop location in the sidebar.
+          Examples: &quot;Main Street&quot;, &quot;Downtown&quot;, &quot;Store #123&quot;
+        </p>
+
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={locationIdentifier}
+            onChange={(e) => setLocationIdentifier(e.target.value)}
+            placeholder="e.g., Main Street Location"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            maxLength={50}
+          />
+          <button
+            onClick={saveLocationIdentifier}
+            disabled={savingLocation}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {savingLocation ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            Save
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          This will appear below your shop name in the sidebar menu.
+        </p>
       </div>
     </main>
   );

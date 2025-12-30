@@ -10,6 +10,7 @@ interface UserInfo {
   shopId: number;
   shopName: string;
   shopLogo?: string | null;
+  locationIdentifier?: string | null;
   authenticated: boolean;
   isPlatformAdmin?: boolean;
   enterpriseId?: string | null;
@@ -58,6 +59,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <Sidebar 
         shopName={userInfo?.shopName || "Loading..."} 
         shopLogo={userInfo?.shopLogo}
+        locationIdentifier={userInfo?.locationIdentifier}
         userEmail={userInfo?.email}
         userRole={userInfo?.role}
         userInitials={userInitials}
