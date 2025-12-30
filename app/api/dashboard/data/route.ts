@@ -438,13 +438,23 @@ export async function GET(request: NextRequest) {
     // Fetch Tekmetric work orders from synced collection (like Protractor)
     // Terminal statuses that indicate vehicle has left the shop
     const TEKMETRIC_ALLOWED_STATUSES = ["Estimate", "Estimates", "Work-In-Progress", "Complete", "Completed"];
+    
+    // Build Tekmetric match criteria with optional label filtering
+    const tekmetricMatch: any = {
+      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+      vin: { $ne: null, $type: "string" },
+      status: { $in: TEKMETRIC_ALLOWED_STATUSES }
+    };
+    
+    // Apply label filter if preferences are set (empty array = show all)
+    const tekmetricLabelFilter = shopPrefs?.preferences?.tekmetricLabels || [];
+    if (tekmetricLabelFilter.length > 0) {
+      tekmetricMatch.label = { $in: tekmetricLabelFilter };
+    }
+    
     const tekmetricRows = await db.collection("tekmetric_work_orders").aggregate([
       {
-        $match: {
-          shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-          vin: { $ne: null, $type: "string" },
-          status: { $in: TEKMETRIC_ALLOWED_STATUSES }
-        }
+        $match: tekmetricMatch
       },
       { $sort: { fetchedAt: -1 } },
       {
