@@ -1,0 +1,233 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
+import { 
+  getRepairOrders, 
+  getVehicle, 
+  getCustomer,
+  getRepairOrderInspections,
+  TekmetricRepairOrderFull,
+  TekmetricVehicle,
+  TekmetricCustomer
+} from "@/lib/tekmetric";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const CRON_SECRET = process.env.CRON_SECRET;
+
+const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
+const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
+
+interface TekmetricWorkOrderSnapshot {
+  shopId: number | string;
+  workOrderId: string;
+  workOrderNumber: number;
+  vin: string;
+  status: string;
+  statusCode?: string;
+  label?: string;
+  labelColor?: string;
+  customerId: number;
+  vehicleId: number;
+  customerName?: string;
+  vehicleYear?: number;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleEngine?: string;
+  odometer?: number;
+  createdDate?: string;
+  updatedDate?: string;
+  completedDate?: string;
+  fetchedAt: Date;
+  data?: TekmetricRepairOrderFull;
+}
+
+async function upsertTekmetricWorkOrderSnapshot(
+  db: any,
+  shopId: number,
+  ro: TekmetricRepairOrderFull,
+  vehicle: TekmetricVehicle,
+  customer?: TekmetricCustomer
+) {
+  const vin = vehicle.vin?.toUpperCase();
+  if (!vin) return;
+
+  const statusName = ro.repairOrderStatus?.name || ro.repairOrderStatus?.code || "Open";
+  const statusCode = ro.repairOrderStatus?.code || "";
+  const label = ro.repairOrderLabel?.name || ro.repairOrderCustomLabel?.name || "";
+  
+  const snapshot: TekmetricWorkOrderSnapshot = {
+    shopId,
+    workOrderId: String(ro.id),
+    workOrderNumber: ro.repairOrderNumber,
+    vin,
+    status: statusName,
+    statusCode,
+    label,
+    labelColor: ro.color || "",
+    customerId: ro.customerId,
+    vehicleId: ro.vehicleId,
+    customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
+    vehicleYear: vehicle.year,
+    vehicleMake: vehicle.make,
+    vehicleModel: vehicle.model,
+    vehicleEngine: vehicle.engine,
+    odometer: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
+    createdDate: ro.createdDate,
+    updatedDate: ro.updatedDate,
+    completedDate: ro.completedDate,
+    fetchedAt: new Date(),
+    data: ro
+  };
+
+  await db.collection("tekmetric_work_orders").updateOne(
+    { 
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      workOrderId: String(ro.id)
+    },
+    { $set: snapshot },
+    { upsert: true }
+  );
+}
+
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
+  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const db = await getDb();
+  const startTime = Date.now();
+
+  try {
+    const shops = await db.collection("shops").find({
+      "tekmetric.shopId": { $exists: true, $ne: null }
+    }).toArray();
+
+    const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; error?: string }[] = [];
+
+    for (const shop of shops) {
+      const shopId = Number(shop.shopId);
+      const tekmetricShopId = shop.tekmetric?.shopId;
+      
+      if (!tekmetricShopId) continue;
+
+      try {
+        const activeWOs: TekmetricRepairOrderFull[] = [];
+        const vehicleCache = new Map<number, TekmetricVehicle>();
+        const customerCache = new Map<number, TekmetricCustomer>();
+        
+        let page = 0;
+        let hasMore = true;
+        
+        while (hasMore) {
+          const response = await getRepairOrders(tekmetricShopId, {
+            repairOrderStatusId: ACTIVE_STATUS_IDS,
+            page,
+            size: 100,
+            sortDirection: 'DESC'
+          });
+          
+          console.log(`[Tekmetric] Shop ${shopId}: Fetched page ${page}, got ${response.content.length} ROs`);
+          activeWOs.push(...response.content);
+          
+          hasMore = !response.last;
+          page++;
+          
+          if (page > 10) break;
+        }
+
+        const statusCounts: Record<string, number> = {};
+        for (const ro of activeWOs) {
+          const status = ro.repairOrderStatus?.name || ro.repairOrderStatus?.code || "Unknown";
+          statusCounts[status] = (statusCounts[status] || 0) + 1;
+        }
+        console.log(`[Tekmetric] Shop ${shopId} - Status counts:`, statusCounts);
+
+        for (const ro of activeWOs) {
+          if (!vehicleCache.has(ro.vehicleId)) {
+            try {
+              const vehicle = await getVehicle(ro.vehicleId);
+              vehicleCache.set(ro.vehicleId, vehicle);
+            } catch (err) {
+              console.log(`[Tekmetric] Failed to fetch vehicle ${ro.vehicleId}`);
+              continue;
+            }
+          }
+          
+          if (!customerCache.has(ro.customerId)) {
+            try {
+              const customer = await getCustomer(ro.customerId);
+              customerCache.set(ro.customerId, customer);
+            } catch (err) {
+            }
+          }
+          
+          const vehicle = vehicleCache.get(ro.vehicleId);
+          const customer = customerCache.get(ro.customerId);
+          
+          if (vehicle?.vin) {
+            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer);
+          }
+        }
+
+        const activeWoIds = new Set(activeWOs.map(wo => String(wo.id)));
+        
+        const cachedWOs = await db.collection("tekmetric_work_orders").find({
+          shopId: { $in: [String(shopId), Number(shopId)] },
+          status: { $nin: TERMINAL_STATUSES }
+        }).toArray();
+
+        let removedCount = 0;
+        for (const cached of cachedWOs) {
+          if (!activeWoIds.has(cached.workOrderId)) {
+            await db.collection("tekmetric_work_orders").updateOne(
+              { _id: cached._id },
+              {
+                $set: {
+                  status: "Invoiced",
+                  closedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            );
+            removedCount++;
+          }
+        }
+
+        await db.collection("shops").updateOne(
+          { shopId: String(shopId) },
+          { $set: { "tekmetric.lastSync": new Date() } }
+        );
+
+        results.push({ 
+          shopId, 
+          tekmetricShopId, 
+          synced: activeWOs.length, 
+          removed: removedCount 
+        });
+      } catch (err: any) {
+        console.error(`[Tekmetric] Shop ${shopId} sync error:`, err.message);
+        results.push({ 
+          shopId, 
+          tekmetricShopId, 
+          synced: 0, 
+          removed: 0, 
+          error: err.message 
+        });
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`[Cron] Tekmetric sync completed in ${duration}ms:`, results);
+
+    return NextResponse.json({
+      ok: true,
+      duration: `${duration}ms`,
+      shops: results
+    });
+  } catch (err: any) {
+    console.error("[Cron] Tekmetric sync error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
