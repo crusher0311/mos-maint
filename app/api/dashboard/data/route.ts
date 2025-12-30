@@ -342,6 +342,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch Protractor work orders directly (they have the odometer)
     // Filter by workflow stage preference - no date limit
+    // Fetch Protractor work orders - each work order is a separate row (no VIN grouping)
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
@@ -351,13 +352,6 @@ export async function GET(request: NextRequest) {
         }
       },
       { $sort: { fetchedAt: -1 } },
-      {
-        $group: {
-          _id: "$vin",
-          latest: { $first: "$$ROOT" }
-        }
-      },
-      { $replaceRoot: { newRoot: "$latest" } },
       {
         $lookup: {
           from: "protractor_vehicles",
@@ -552,22 +546,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Merge and deduplicate by VIN (AutoFlow takes priority, then Protractor, then Tekmetric)
-    const autoflowVins = new Set(autoflowRows.map((r: any) => r.displayVin?.toUpperCase()));
-    const uniqueProtractorRows = protractorRows.filter(
-      (r: any) => r.displayVin && !autoflowVins.has(r.displayVin.toUpperCase())
-    );
+    // Combine all rows - each work order shows as its own row (no VIN deduplication)
+    // Deduplicate by work order number to avoid duplicates from different sources
+    const seenWorkOrders = new Set<string>();
+    let allRows: any[] = [];
     
-    const existingVins = new Set([
-      ...autoflowRows.map((r: any) => r.displayVin?.toUpperCase()),
-      ...uniqueProtractorRows.map((r: any) => r.displayVin?.toUpperCase())
-    ]);
-    const uniqueTekmetricRows = tekmetricRows.filter(
-      (r: any) => r.displayVin && !existingVins.has(r.displayVin.toUpperCase())
-    );
-
-    // Combine all rows
-    let allRows = [...autoflowRows, ...uniqueProtractorRows, ...uniqueTekmetricRows];
+    for (const row of [...autoflowRows, ...protractorRows, ...tekmetricRows]) {
+      const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
+      if (!seenWorkOrders.has(woKey)) {
+        seenWorkOrders.add(woKey);
+        allRows.push(row);
+      }
+    }
 
     // Filter to only show vehicles with mileage data (if preference is enabled)
     // This ensures advisors know to enter mileage before the vehicle appears
