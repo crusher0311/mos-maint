@@ -15,7 +15,7 @@ import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
   fetchDeferredWorkWithCache as fetchProtractorDeferredWork,
-  getCannedJobsFromCache,
+  getEnrichedCannedJobsFromCache,
   type ProtractorDeferredWork,
 } from "@/lib/integrations/protractor";
 import {
@@ -794,7 +794,7 @@ async function PlanContent({ params }: PageProps) {
     }
   }
   
-  const cannedJobsCache = await getCannedJobsFromCache(shopId);
+  const cannedJobsCache = await getEnrichedCannedJobsFromCache(shopId);
   const cannedJobsById: Record<string, { id: string; title: string }> = {};
   if (cannedJobsCache.ok && cannedJobsCache.cannedJobs) {
     for (const job of cannedJobsCache.cannedJobs) {
