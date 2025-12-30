@@ -172,20 +172,10 @@ export async function GET(req: NextRequest) {
           const vehicle = vehicleCache.get(ro.vehicleId);
           const customer = customerCache.get(ro.customerId);
           
-          // Fetch inspections/DVIs for this work order
-          let inspections: any[] = [];
-          try {
-            inspections = await getRepairOrderInspections(ro.id);
-            if (inspections.length > 0) dviCount++;
-          } catch (err) {
-            // Inspections API may not be available for all accounts
-          }
-          
           if (vehicle?.vin) {
-            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, inspections);
+            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, []);
           }
         }
-        console.log(`[Tekmetric] Shop ${shopId} - DVIs found: ${dviCount}`);
 
         const activeWoIds = new Set(activeWOs.map(wo => String(wo.id)));
         

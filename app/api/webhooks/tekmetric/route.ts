@@ -11,12 +11,20 @@ export async function POST(req: NextRequest) {
     
     console.log("[Tekmetric Webhook] Received event:", JSON.stringify(body, null, 2));
     
-    const eventType = body.event || body.eventType || body.type;
+    const eventType = body.event || body.eventType || body.type || "";
     const data = body.data || body.payload || body;
     
-    if (eventType === "inspection.complete" || eventType === "InspectionComplete") {
+    const isInspectionComplete = 
+      eventType.toLowerCase().includes("inspection") && 
+      (eventType.toLowerCase().includes("complete") || eventType.toLowerCase().includes("marked complete"));
+    
+    const isCustomerViewed = 
+      eventType.toLowerCase().includes("customer") && 
+      eventType.toLowerCase().includes("viewed");
+    
+    if (isInspectionComplete) {
       const repairOrderId = data.repairOrderId || data.repair_order_id || data.roId;
-      const inspectionData = data.inspection || data;
+      const inspectionData = data;
       
       if (repairOrderId) {
         await db.collection("tekmetric_work_orders").updateOne(
@@ -39,7 +47,7 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    if (eventType === "customer.viewed.inspection" || eventType === "CustomerViewedInspection") {
+    if (isCustomerViewed) {
       const repairOrderId = data.repairOrderId || data.repair_order_id || data.roId;
       
       if (repairOrderId) {
