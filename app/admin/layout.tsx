@@ -87,6 +87,14 @@ export default async function AdminLayout({
                   </li>
                   <li>
                     <Link
+                      href="/admin/billing"
+                      className="block px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                    >
+                      Billing
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
                       href="/admin/integrations"
                       className="block px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                     >
