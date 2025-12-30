@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   const endDate = new Date();
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 30);
+  startDate.setDate(startDate.getDate() - 365); // Full year of work history
 
   const workOrdersResult = await fetchActiveWorkOrders(shopId, {
     startDate: startDate.toISOString().split("T")[0],
