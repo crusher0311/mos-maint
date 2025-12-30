@@ -40,6 +40,8 @@ interface TekmetricWorkOrderSnapshot {
   completedDate?: string;
   fetchedAt: Date;
   data?: TekmetricRepairOrderFull;
+  dviDone?: boolean;
+  inspections?: any[];
 }
 
 async function upsertTekmetricWorkOrderSnapshot(
@@ -47,7 +49,8 @@ async function upsertTekmetricWorkOrderSnapshot(
   shopId: number,
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
-  customer?: TekmetricCustomer
+  customer?: TekmetricCustomer,
+  inspections?: any[]
 ) {
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
@@ -77,7 +80,9 @@ async function upsertTekmetricWorkOrderSnapshot(
     updatedDate: ro.updatedDate,
     completedDate: ro.completedDate,
     fetchedAt: new Date(),
-    data: ro
+    data: ro,
+    dviDone: inspections && inspections.length > 0,
+    inspections: inspections || []
   };
 
   await db.collection("tekmetric_work_orders").updateOne(
@@ -144,6 +149,7 @@ export async function GET(req: NextRequest) {
         }
         console.log(`[Tekmetric] Shop ${shopId} - Status counts:`, statusCounts);
 
+        let dviCount = 0;
         for (const ro of activeWOs) {
           if (!vehicleCache.has(ro.vehicleId)) {
             try {
@@ -166,10 +172,20 @@ export async function GET(req: NextRequest) {
           const vehicle = vehicleCache.get(ro.vehicleId);
           const customer = customerCache.get(ro.customerId);
           
+          // Fetch inspections/DVIs for this work order
+          let inspections: any[] = [];
+          try {
+            inspections = await getRepairOrderInspections(ro.id);
+            if (inspections.length > 0) dviCount++;
+          } catch (err) {
+            // Inspections API may not be available for all accounts
+          }
+          
           if (vehicle?.vin) {
-            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer);
+            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, inspections);
           }
         }
+        console.log(`[Tekmetric] Shop ${shopId} - DVIs found: ${dviCount}`);
 
         const activeWoIds = new Set(activeWOs.map(wo => String(wo.id)));
         
