@@ -224,30 +224,32 @@ export function AddToROWithHistory({
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => {
-          if (status === "idle" || status === "error") {
-            fetchHistoricalJobs();
-          } else {
-            setShowDropdown(!showDropdown);
-          }
-        }}
-        disabled={status === "loading" || status === "adding"}
-        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-      >
-        {status === "loading" || status === "adding" ? (
-          <>
-            <Loader2 className="w-3 h-3 animate-spin" />
-            {status === "adding" ? "Adding..." : "Finding..."}
-          </>
-        ) : (
-          <>
-            <Plus className="w-3 h-3" />
-            Add to RO
-          </>
-        )}
-      </button>
+    <div className="flex items-center gap-2">
+      {/* Add History button */}
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => {
+            if (status === "idle" || status === "error") {
+              fetchHistoricalJobs();
+            } else {
+              setShowDropdown(!showDropdown);
+            }
+          }}
+          disabled={status === "loading" || status === "adding"}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          {status === "loading" || status === "adding" ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {status === "adding" ? "Adding..." : "Finding..."}
+            </>
+          ) : (
+            <>
+              <Plus className="w-3 h-3" />
+              + History
+            </>
+          )}
+        </button>
 
       {showDropdown && status === "loaded" && (
         <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[400px] overflow-hidden">
@@ -358,6 +360,18 @@ export function AddToROWithHistory({
             {errorMsg}
           </p>
         </div>
+      )}
+      </div>
+      
+      {/* Add Canned Job button - uses the fallback canned jobs */}
+      {(cannedJobOptions.length > 0 || allCannedJobs.length > 0) && (
+        <AddToROButton
+          vin={vin}
+          serviceKey={serviceKey || serviceTitle}
+          cannedJobOptions={cannedJobOptions.length > 0 ? cannedJobOptions : allCannedJobs}
+          workOrderId={workOrderId}
+          buttonLabel="+ Canned"
+        />
       )}
     </div>
   );
