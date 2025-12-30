@@ -38,7 +38,16 @@ type JobResult = {
     totalAmount: number;
   };
   matchScore: number;
+  matchBand?: "exact" | "likely" | "possible" | "poor";
+  matchBandLabel?: string;
   matchReason: string;
+  scoreBreakdown?: {
+    powertrain: number;
+    makeModel: number;
+    year: number;
+    constraints: number;
+    evidence: number;
+  };
 };
 
 type Props = {
@@ -145,10 +154,17 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
     });
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600 bg-green-50";
-    if (score >= 60) return "text-yellow-600 bg-yellow-50";
-    return "text-gray-600 bg-gray-50";
+  const getBandStyle = (band?: string) => {
+    switch (band) {
+      case "exact":
+        return "text-green-700 bg-green-100 border-green-200";
+      case "likely":
+        return "text-blue-700 bg-blue-100 border-blue-200";
+      case "possible":
+        return "text-amber-700 bg-amber-100 border-amber-200";
+      default:
+        return "text-gray-600 bg-gray-100 border-gray-200";
+    }
   };
 
   return (
@@ -214,9 +230,10 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                     <div className="flex items-center gap-2">
                       <Wrench className="w-4 h-4 text-gray-400" />
                       <span className="font-medium text-gray-900">{job.job.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${getScoreColor(job.matchScore)}`}>
-                        {job.matchScore}% match
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${getBandStyle(job.matchBand)}`}>
+                        {job.matchBandLabel || `${job.matchScore}%`}
                       </span>
+                      <span className="text-xs text-gray-400">{job.matchScore}%</span>
                     </div>
                     <div className="mt-1 text-sm text-gray-500">
                       {job.vehicle.year} {job.vehicle.make} {job.vehicle.model}
