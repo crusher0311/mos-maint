@@ -85,12 +85,25 @@ async function upsertTekmetricWorkOrderSnapshot(
     inspections: inspections || []
   };
 
+  const existing = await db.collection("tekmetric_work_orders").findOne({
+    shopId: { $in: [String(shopId), Number(shopId)] },
+    workOrderId: String(ro.id)
+  });
+  
+  if (existing?.dviDone) {
+    snapshot.dviDone = true;
+    snapshot.inspections = existing.inspections || [];
+  }
+  
   await db.collection("tekmetric_work_orders").updateOne(
     { 
       shopId: { $in: [String(shopId), Number(shopId)] },
       workOrderId: String(ro.id)
     },
-    { $set: snapshot },
+    { 
+      $set: snapshot,
+      $setOnInsert: { dviCompletedAt: null, lastInspection: null }
+    },
     { upsert: true }
   );
 }
