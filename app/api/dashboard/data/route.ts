@@ -37,6 +37,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Check if Protractor is the primary SMS for this shop (check early to skip unnecessary queries)
+    const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
+    const isProtractorPrimary = !!shopConfig?.protractor?.configured;
+
     // If showing archived vehicles, fetch from vehicles collection directly
     if (showArchived) {
       const archivedQuery: any = {
@@ -105,10 +109,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Build rows from latest AutoFlow events per VIN (same logic as dashboard page)
-    // Limit to last 30 days for performance
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const autoflowRows = await db.collection("events").aggregate([
+    // Build rows from latest AutoFlow events per VIN (only if Protractor is NOT primary)
+    // Skip this expensive query entirely when Protractor is configured
+    let autoflowRows: any[] = [];
+    if (!isProtractorPrimary) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      autoflowRows = await db.collection("events").aggregate([
       {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
@@ -331,6 +337,7 @@ export async function GET(request: NextRequest) {
         } 
       },
     ]).toArray();
+    } // End of if (!isProtractorPrimary)
 
     // Fetch shop preferences for workflow stage filtering
     const shopPrefs = await db.collection("shops").findOne(
@@ -552,10 +559,6 @@ export async function GET(request: NextRequest) {
         }
       }
     }
-
-    // Check if Protractor is the primary SMS for this shop
-    const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
-    const isProtractorPrimary = !!shopConfig?.protractor?.configured;
 
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     // Deduplicate by work order number to avoid duplicates from different sources
