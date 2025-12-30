@@ -162,8 +162,7 @@ The platform now supports à la carte feature toggles, allowing shops to enable/
 
 **Available Features:**
 - `maintenance` - OEM schedules, recommendations, DVI insights (default enabled)
-- `job_lookup` - Historical job search, parts intelligence
-- `history_writer` - CARFAX History Writer integration (planned)
+- `job_lookup` - Job Lookup / History Writer - historical job search, parts intelligence
 - `oil_sticker` - Oil change sticker platform (planned)
 - `part_xref` - Part cross-reference tool (planned)
 
