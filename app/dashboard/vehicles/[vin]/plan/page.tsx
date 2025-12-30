@@ -696,9 +696,11 @@ function triage({
     else upcoming.push(t);
   }
 
-  // Helper to check if item title contains "Inspect" (lower priority)
-  const isInspectItem = (item: TriagedItem) => 
-    item.title?.toLowerCase().includes("inspect") || false;
+  // Helper to check if item title contains "Inspect" or starts with "Check" (lower priority)
+  const isInspectItem = (item: TriagedItem) => {
+    const title = item.title?.toLowerCase() || "";
+    return title.includes("inspect") || title.startsWith("check ");
+  };
 
   // sort within buckets - put "Inspect" items after actionable items
   overdue.sort((a, b) => {
@@ -1123,9 +1125,11 @@ async function PlanContent({ params }: PageProps) {
     vehicleYear: vehicle?.year ?? null,
   });
 
-  // Filter out "Inspect" items if preference is off
-  const isInspectItemFilter = (item: TriagedItem) => 
-    item.title?.toLowerCase().includes("inspect") || false;
+  // Filter out "Inspect" or "Check" items if preference is off
+  const isInspectItemFilter = (item: TriagedItem) => {
+    const title = item.title?.toLowerCase() || "";
+    return title.includes("inspect") || title.startsWith("check ");
+  };
   
   const buckets = showInspectItems ? rawBuckets : {
     overdue: rawBuckets.overdue.filter(i => !isInspectItemFilter(i)),
