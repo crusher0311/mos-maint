@@ -79,6 +79,12 @@ export async function GET(request: NextRequest) {
           createdAt: v.status?.lastClosedAt || v.updatedAt,
           miles: v.mileage || v.lastMileage || null,
         },
+        vehicle: {
+          year: v.year || null,
+          make: v.make || null,
+          model: v.model || null,
+          engine: v.engine || null,
+        },
       }));
 
       return NextResponse.json({
@@ -309,7 +315,13 @@ export async function GET(request: NextRequest) {
           displayVin: 1,
           displayMiles: "$af.miles",
           displayRo: 1,
-          dviDone: 1
+          dviDone: 1,
+          vehicle: {
+            year: { $ifNull: ["$payload.vehicle.year", null] },
+            make: { $ifNull: ["$payload.vehicle.make", null] },
+            model: { $ifNull: ["$payload.vehicle.model", null] },
+            engine: { $ifNull: ["$payload.vehicle.engine", null] }
+          }
         }
       },
       // Sort alphabetically by name for stable order
@@ -392,12 +404,19 @@ export async function GET(request: NextRequest) {
           displayVin: "$vin",
           displayMiles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] },
           displayRo: "$workOrderNumber",
+          workOrderGuid: "$workOrderGuid",
           dviDone: { $literal: false },
           source: { $literal: "protractor" },
           af: {
             status: { $ifNull: ["$workflowStage", { $ifNull: ["$status", "Open"] }] },
             createdAt: "$fetchedAt",
             miles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }
+          },
+          vehicle: {
+            year: { $ifNull: ["$vehicle.year", null] },
+            make: { $ifNull: ["$vehicle.make", null] },
+            model: { $ifNull: ["$vehicle.model", null] },
+            engine: { $ifNull: ["$vehicle.engine", null] }
           }
         }
       }
@@ -420,7 +439,16 @@ export async function GET(request: NextRequest) {
       
       if (cached?.rows) {
         console.log(`[Tekmetric] Using cached data (${cached.rows.length} rows)`);
-        tekmetricRows = cached.rows;
+        // Normalize cached rows to ensure vehicle object exists
+        tekmetricRows = cached.rows.map((row: any) => ({
+          ...row,
+          vehicle: row.vehicle || {
+            year: null,
+            make: null,
+            model: null,
+            engine: null
+          }
+        }));
       } else {
         // Fetch fresh data from API
         try {
@@ -463,6 +491,12 @@ export async function GET(request: NextRequest) {
                   status: statusLabel,
                   createdAt: ro.createdDate ? new Date(ro.createdDate) : new Date(),
                   miles: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut || null
+                },
+                vehicle: {
+                  year: vehicle.year || null,
+                  make: vehicle.make || null,
+                  model: vehicle.model || null,
+                  engine: vehicle.engineSize || null
                 }
               });
               
