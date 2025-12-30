@@ -37,8 +37,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Check if Protractor is the primary SMS for this shop (check early to skip unnecessary queries)
+    // Check shop SMS configuration to skip unnecessary queries
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
+    const isAutoFlowConfigured = !!(shopConfig?.autoflow?.apiKey || shopConfig?.autoflowApiKey);
     const isProtractorPrimary = !!shopConfig?.protractor?.configured;
 
     // If showing archived vehicles, fetch from vehicles collection directly
@@ -109,10 +110,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Build rows from latest AutoFlow events per VIN (only if Protractor is NOT primary)
-    // Skip this expensive query entirely when Protractor is configured
+    // Build rows from latest AutoFlow events per VIN (only if AutoFlow is configured)
+    // Skip this expensive query entirely when AutoFlow is not set up
     let autoflowRows: any[] = [];
-    if (!isProtractorPrimary) {
+    if (isAutoFlowConfigured && !isProtractorPrimary) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       autoflowRows = await db.collection("events").aggregate([
       {
