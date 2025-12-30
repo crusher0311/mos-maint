@@ -482,20 +482,29 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           )}
                           <button
                             onClick={() => {
-                              const vehicleStr = r.displayVehicle || "";
-                              const yearMatch = vehicleStr.match(/^(\d{4})/);
-                              const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                              const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                              const [make, ...modelParts] = afterYear.split(" ").filter(Boolean);
-                              const model = modelParts.join(" ") || undefined;
+                              // Use structured vehicle fields with fallback parsing for legacy data
+                              let year = r.vehicle?.year;
+                              let make = r.vehicle?.make;
+                              let model = r.vehicle?.model;
+                              
+                              // Fallback: parse displayVehicle if structured data is missing
+                              if (!year && !make && !model && r.displayVehicle) {
+                                const vehicleStr = r.displayVehicle || "";
+                                const yearMatch = vehicleStr.match(/^(\d{4})/);
+                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                                const parts = afterYear.split(" ").filter(Boolean);
+                                make = parts[0] || undefined;
+                                model = parts.slice(1).join(" ") || undefined;
+                              }
                               
                               setJobLookupVehicle({
                                 vin,
                                 year,
-                                make: make || undefined,
+                                make,
                                 model,
-                                engine: r.engine || r.vehicle?.engine,
-                                workOrderId: r.workOrderGuid || r.workOrderId || r.displayRo,
+                                engine: r.vehicle?.engine || r.engine || undefined,
+                                workOrderId: r.workOrderGuid || r.displayRo,
                                 displayName: r.displayName,
                               });
                             }}
