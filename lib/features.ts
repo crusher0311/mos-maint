@@ -1,7 +1,7 @@
 // lib/features.ts
 // Modular feature toggle system for à la carte feature management
 
-import { getDb } from "@/app/lib/mongo";
+import { getDb } from "@/lib/mongo";
 import "@/lib/sms-adapters/protractor-adapter";
 
 export type FeatureId = 
