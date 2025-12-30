@@ -180,7 +180,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   useEffect(() => {
-    setLastUpdated(new Date());
+    // Always fetch fresh data on mount to ensure SSR and client are in sync
+    // This prevents stale data from showing after browser refresh
+    loadData(1, "", false);
     
     if (data.rows?.length > 0) {
       const vinsToPrefeetch = data.rows
