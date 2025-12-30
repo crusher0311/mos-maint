@@ -154,8 +154,8 @@ export async function GET(request: NextRequest) {
         }
       },
       { $replaceRoot: { newRoot: "$latest" } },
-      // Hide Closed and Appointment statuses
-      { $match: { statusRaw: { $not: /close|appoint/i } } },
+      // Hide Closed, Invoiced, and Appointment statuses (vehicle has left the shop)
+      { $match: { statusRaw: { $not: /close|appoint|invoiced/i } } },
       // Compute display fields
       {
         $addFields: {
@@ -356,14 +356,19 @@ export async function GET(request: NextRequest) {
     // Filter by workflow stage preference - no date limit
     // Fetch Protractor work orders - each work order is a separate row (no VIN grouping)
     // Exclude invoiced/closed work orders - those vehicles have left the shop
+    // Terminal stages that indicate vehicle has left the shop (always excluded regardless of preferences)
+    const TERMINAL_WORKFLOW_STAGES = ["Invoiced", "Closed", "Void", "ClosedInvoiced", "ClosedVoid"];
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           vin: { $ne: null, $type: "string" },
           completed: { $ne: true }, // Exclude completed work orders
-          status: { $nin: ["Invoiced", "Closed", "Void"] }, // Exclude invoiced/closed/void
-          workflowStage: { $in: allowedStages } // Only show allowed workflow stages
+          status: { $nin: ["Invoiced", "Closed", "Void"] }, // Exclude by status field
+          workflowStage: { 
+            $in: allowedStages, // Only show allowed workflow stages
+            $nin: TERMINAL_WORKFLOW_STAGES // Always exclude terminal stages (vehicle left shop)
+          }
         }
       },
       { $sort: { fetchedAt: -1 } },
@@ -562,22 +567,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
-    // When both AutoFlow and Protractor are configured, use AutoFlow status with Protractor data
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
     
-    // Build a lookup map of AutoFlow status by VIN (if AutoFlow is configured)
-    const autoflowStatusByVin = new Map<string, string>();
-    if (isAutoFlowConfigured && autoflowRows.length > 0) {
-      for (const row of autoflowRows) {
-        if (row.displayVin && row.af?.status) {
-          autoflowStatusByVin.set(row.displayVin.toUpperCase(), row.af.status);
-        }
-      }
-    }
-    
-    // When Protractor is primary, use Protractor rows but merge AutoFlow status if available
+    // When Protractor is primary, use Protractor rows (which have workflowStage as status)
     // When only AutoFlow is configured, use AutoFlow rows directly
+    // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
     const rowSources = isProtractorPrimary 
       ? [...protractorRows, ...tekmetricRows]
       : [...autoflowRows, ...protractorRows, ...tekmetricRows];
@@ -586,15 +581,6 @@ export async function GET(request: NextRequest) {
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
       if (!seenWorkOrders.has(woKey)) {
         seenWorkOrders.add(woKey);
-        
-        // If this is a Protractor row and AutoFlow is also configured, use AutoFlow status
-        if (row.source === 'protractor' && isAutoFlowConfigured && row.displayVin) {
-          const afStatus = autoflowStatusByVin.get(row.displayVin.toUpperCase());
-          if (afStatus) {
-            row.af.status = afStatus;
-          }
-        }
-        
         allRows.push(row);
       }
     }
