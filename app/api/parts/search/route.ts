@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/app/lib/mongo";
-import { getSession } from "@/app/lib/session";
+import { getSession } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
