@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Loader2, Check, AlertCircle, ChevronDown, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
+import { Plus, Loader2, Check, AlertCircle, ChevronDown, ChevronUp, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
 import { AddToROButton } from "./AddToROButton";
 
 type HistoricalJob = {
@@ -72,6 +72,7 @@ export function AddToROWithHistory({
   const [selectedJob, setSelectedJob] = useState<HistoricalJob | null>(null);
   const [customQuery, setCustomQuery] = useState("");
   const [lastSearchQuery, setLastSearchQuery] = useState("");
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -286,54 +287,121 @@ export function AddToROWithHistory({
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {historicalJobs.map((job) => (
-                  <button
-                    key={job._id}
-                    onClick={() => addJobToRO(job)}
-                    className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${getBandColor(
-                              job.matchBand
-                            )}`}
-                          >
-                            {job.matchBandLabel || job.matchBand}
-                          </span>
-                          {job.matchScore && (
-                            <span className="text-[10px] text-gray-400">
-                              {job.matchScore}%
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {job.job.title}
-                        </p>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Wrench className="w-3 h-3" />
-                            {job.vehicle.year} {job.vehicle.make} {job.vehicle.model}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Package className="w-3 h-3" />
-                            {formatPartsCount(job.lines)}
-                          </span>
-                          {formatPrice(job.lines) && (
-                            <span className="flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" />
-                              {formatPrice(job.lines)}
-                            </span>
-                          )}
+                {historicalJobs.map((job) => {
+                  const isExpanded = expandedJobId === job._id;
+                  return (
+                    <div key={job._id} className="hover:bg-blue-50/50 transition-colors">
+                      <div className="px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span
+                                className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${getBandColor(
+                                  job.matchBand
+                                )}`}
+                              >
+                                {job.matchBandLabel || job.matchBand}
+                              </span>
+                              {job.matchScore && (
+                                <span className="text-[10px] text-gray-400">
+                                  {job.matchScore}%
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {job.job.title}
+                            </p>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <Wrench className="w-3 h-3" />
+                                {job.vehicle.year} {job.vehicle.make} {job.vehicle.model}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <Package className="w-3 h-3" />
+                                {formatPartsCount(job.lines)}
+                              </span>
+                              {formatPrice(job.lines) && (
+                                <span className="flex items-center gap-1">
+                                  <DollarSign className="w-3 h-3" />
+                                  {formatPrice(job.lines)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setExpandedJobId(isExpanded ? null : job._id)}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                              title={isExpanded ? "Collapse details" : "View details"}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => addJobToRO(job)}
+                              className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
+                              title="Add to work order"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <Plus className="w-4 h-4 text-blue-600 flex-shrink-0 mt-1" />
+                      
+                      {isExpanded && job.lines && job.lines.length > 0 && (
+                        <div className="px-4 pb-3 pt-0">
+                          <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+                            <div className="px-3 py-2 bg-gray-100 border-b border-gray-200">
+                              <p className="text-xs font-medium text-gray-600">Line Items ({job.lines.length})</p>
+                            </div>
+                            <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                              {job.lines.map((line, idx) => (
+                                <div key={idx} className="px-3 py-2 text-xs">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                          line.lineType === 'labor' ? 'bg-purple-100 text-purple-700' :
+                                          line.lineType === 'part' ? 'bg-blue-100 text-blue-700' :
+                                          line.lineType === 'sublet' ? 'bg-orange-100 text-orange-700' :
+                                          'bg-gray-100 text-gray-600'
+                                        }`}>
+                                          {line.lineType}
+                                        </span>
+                                        <span className="text-gray-900 truncate">{line.description}</span>
+                                      </div>
+                                      {line.partNumber && (
+                                        <p className="text-gray-500 mt-0.5 truncate">
+                                          Part #: {line.partNumber}
+                                          {line.manufacturer && ` (${line.manufacturer})`}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                      <p className="text-gray-900 font-medium">
+                                        ${line.extendedPrice?.toFixed(2) || '0.00'}
+                                      </p>
+                                      {line.quantity > 1 && (
+                                        <p className="text-gray-400 text-[10px]">
+                                          {line.quantity} × ${line.unitPrice?.toFixed(2)}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
