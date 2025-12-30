@@ -351,7 +351,7 @@ export type ProtractorInspectionItem = {
   Pictures?: Array<{ URL?: string; Description?: string }>;
 };
 
-// Fetch active inspections for a work order (DVI data pushed from AutoVitals)
+// Fetch inspections for a specific work order (DVI data pushed from AutoVitals)
 export async function fetchActiveInspections(
   shopId: number | string,
   workOrderId: string
@@ -361,17 +361,18 @@ export async function fetchActiveInspections(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  // Try /WorkOrder/Inspections with workOrderId filter
   const result = await protractorFetch<{ ItemCollection?: ProtractorActiveInspection[] }>(
-    `/WorkOrder/${workOrderId}/ActiveInspections`,
+    `/WorkOrder/Inspections?workOrderId=${workOrderId}`,
     config
   );
 
   if (!result.ok) {
-    console.log(`[Protractor] ActiveInspections for ${workOrderId}: ${result.error}`);
+    console.log(`[Protractor] Inspections for WO ${workOrderId}: ${result.error}`);
     return { ok: false, error: result.error };
   }
 
-  console.log(`[Protractor] ActiveInspections for ${workOrderId}: ${result.data?.ItemCollection?.length || 0} inspections`);
+  console.log(`[Protractor] Inspections for WO ${workOrderId}: ${result.data?.ItemCollection?.length || 0} inspections`);
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
