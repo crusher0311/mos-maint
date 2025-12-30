@@ -396,6 +396,7 @@ function triage({
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
   shopIntervals = {},
+  vehicleYear = null,
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -409,7 +410,12 @@ function triage({
   soonDays?: number;
   milesPerDay?: number | null;
   shopIntervals?: Record<string, ShopIntervalOverride>;
+  vehicleYear?: number | null;
 }): Buckets {
+  // Earliest possible date: January 1st of the vehicle's model year (or 20 years ago as fallback)
+  const earliestDate = vehicleYear 
+    ? new Date(vehicleYear, 0, 1) // Jan 1 of model year
+    : new Date(today.getTime() - 20 * 365 * 24 * 60 * 60 * 1000); // 20 years ago fallback
   // Enrich CARFAX records with interpolated mileage for gaps
   const enrichedRecords = fillCarfaxMileageGaps(carfaxRecords || [], {
     today,
@@ -539,6 +545,12 @@ function triage({
     if (dueAtDate == null && milesToGo != null && milesPerDay != null && milesPerDay > 0) {
       const daysUntilDue = Math.round(milesToGo / milesPerDay);
       dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+    }
+    
+    // Clamp dueAtDate to not be earlier than the vehicle's model year
+    // This prevents showing dates like "12/4/1999" for a 2004 vehicle
+    if (dueAtDate && dueAtDate < earliestDate) {
+      dueAtDate = earliestDate;
     }
 
     const daysToGo =
@@ -1058,6 +1070,7 @@ async function PlanContent({ params }: PageProps) {
     soonDays,
     milesPerDay: mpdBlended,
     shopIntervals,
+    vehicleYear: vehicle?.year ?? null,
   });
 
   // Filter out "Inspect" items if preference is off
