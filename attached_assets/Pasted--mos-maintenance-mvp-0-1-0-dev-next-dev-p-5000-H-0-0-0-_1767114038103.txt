@@ -1,0 +1,260 @@
+
+> mos-maintenance-mvp@0.1.0 dev
+> next dev -p 5000 -H 0.0.0.0
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:5000
+  - Network:      http://0.0.0.0:5000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.9s
+ ○ Compiling / ...
+ ✓ Compiled / in 3.9s (503 modules)
+ GET / 307 in 4802ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 1455ms (637 modules)
+ GET /dashboard 200 in 2061ms
+ ✓ Compiled /api/plan-prefetch/batch in 316ms (367 modules)
+ ✓ Compiled (375 modules)
+ GET /api/shop/features 200 in 841ms
+ GET /api/auth/me 200 in 921ms
+[DataOne Cache] HIT for squish 5YJ3E1ECF, cached at 2025-12-30T00:51:27.271Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1HGCV1F3A, cached at 2025-12-30T00:51:27.601Z
+[DataOne Cache] HIT for squish 1C4RDJEGC, cached at 2025-12-30T00:51:27.601Z
+[DataOne Cache] HIT for squish 1C4RJEBGC, cached at 2025-12-30T00:51:27.271Z
+[DataOne Cache] HIT for squish 3N1AB8CVY, cached at 2025-12-30T00:51:27.601Z
+[DataOne Cache] HIT for squish 3N1CE2CPL, cached at 2025-12-30T02:27:43.694Z
+ GET /api/user/shops 200 in 1135ms
+[DataOne Cache] HIT for squish 5YJ3E1ECF, cached at 2025-12-30T00:51:27.271Z
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1HGCV1F3A, cached at 2025-12-30T00:51:27.601Z
+[DataOne Cache] HIT for squish YV4SZ5921, cached at 2025-12-30T00:51:27.271Z
+[DataOne Cache] HIT for squish 1C4RDJEGC, cached at 2025-12-30T00:51:27.601Z
+[DataOne Cache] HIT for squish 1C4RJEBGC, cached at 2025-12-30T00:51:27.271Z
+[DataOne Cache] HIT for squish YV4SZ5921, cached at 2025-12-30T00:51:27.271Z
+[BatchPrefetch] 10 VINs completed in 590ms
+ POST /api/plan-prefetch/batch 202 in 1238ms
+[DataOne Cache] HIT for squish 3N1AB8CVY, cached at 2025-12-30T00:51:27.601Z
+[DataOne Cache] HIT for squish 3N1CE2CPL, cached at 2025-12-30T02:27:43.694Z
+ GET /api/shop/features 200 in 282ms
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+ GET /api/auth/me 200 in 311ms
+[BatchPrefetch] 10 VINs completed in 761ms
+ POST /api/plan-prefetch/batch 202 in 1406ms
+ GET /api/user/shops 200 in 157ms
+ ✓ Compiled in 433ms (301 modules)
+ ✓ Compiled in 473ms (301 modules)
+ ✓ Compiled /api/vehicles/check-closed-orders in 137ms (378 modules)
+ ✓ Compiled in 456ms (301 modules)
+ ✓ Compiled in 365ms (301 modules)
+ ✓ Compiled in 504ms (301 modules)
+ ✓ Compiled in 293ms (301 modules)
+ ✓ Compiled /api/cron/protractor-sync in 297ms (380 modules)
+[Protractor] Fetched work orders page: skip=0, got 75, total so far: 75
+[Cron] Shop 25 - WorkflowStage counts: {
+  WorkCompleted: 7,
+  WorkAuthorized: 1,
+  InspectionInProgress: 45,
+  EstimateCompleted: 1,
+  Unassigned: 17,
+  ScheduledWork: 4
+}
+[Cron] Protractor sync completed in 2910ms: [ { shopId: 25, synced: 75, removed: 0, staleDeleted: 0 } ]
+ GET /api/cron/protractor-sync 200 in 3448ms
+ ✓ Compiled in 568ms (301 modules)
+ ✓ Compiled in 368ms (301 modules)
+ ✓ Compiled in 419ms (301 modules)
+ ✓ Compiled in 295ms (301 modules)
+ GET /dashboard 200 in 356ms
+ ✓ Compiled /api/dashboard/data in 464ms (382 modules)
+[Dashboard] Shop 25: isProtractorPrimary=true, isAutoFlowConfigured=false
+[Dashboard] Row counts: autoflow=0, protractor=61, tekmetric=0
+[Dashboard] Sample Protractor statuses: Unassigned, InspectionInProgress, Unassigned, InspectionInProgress, Unassigned
+ GET /api/dashboard/data?page=1&pageSize=50 200 in 926ms
+ ○ Compiling /icon.png ...
+ ✓ Compiled /icon.png in 656ms (409 modules)
+ GET /icon.png?5a397c304f6201ba 200 in 1026ms
+ GET /api/shop/features 200 in 455ms
+ GET /api/auth/me 200 in 472ms
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 5UXWX9C50, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1FTYR14VT, cached at 2025-12-29T21:10:49.662Z
+[DataOne Cache] HIT for squish JF2SKAJCH, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 3VV3B7AXM, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 3GNAXKEVS, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+ GET /api/shop/features 200 in 72ms
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 1FTYR14VT, cached at 2025-12-29T21:10:49.662Z
+[DataOne Cache] HIT for squish 5UXWX9C50, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish JF2SKAJCH, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 3VV3B7AXM, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 3GNAXKEVS, cached at 2025-12-30T15:37:47.582Z
+[BatchPrefetch] 10 VINs completed in 160ms
+ POST /api/plan-prefetch/batch 202 in 582ms
+ GET /api/user/shops 200 in 585ms
+ GET /api/auth/me 200 in 126ms
+ GET /api/user/shops 200 in 79ms
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[BatchPrefetch] 10 VINs completed in 268ms
+ POST /api/plan-prefetch/batch 202 in 683ms
+ ✓ Compiled in 690ms (301 modules)
+ ✓ Compiled in 349ms (301 modules)
+ POST /api/vehicles/check-closed-orders 200 in 29488ms
+ POST /api/vehicles/check-closed-orders 200 in 28192ms
+ ✓ Compiled in 368ms (301 modules)
+ ✓ Compiled in 344ms (301 modules)
+ POST /api/vehicles/check-closed-orders 200 in 28279ms
+ POST /api/vehicles/check-closed-orders 200 in 28597ms
+ POST /api/vehicles/check-closed-orders 200 in 27952ms
+ GET /dashboard 200 in 375ms
+ GET /icon.png?5a397c304f6201ba 200 in 71ms
+ GET /api/shop/features 200 in 110ms
+ GET /api/auth/me 200 in 134ms
+ GET /api/user/shops 200 in 277ms
+[DataOne Cache] HIT for squish 1FTYR14VT, cached at 2025-12-29T21:10:49.662Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish JF2SKAJCH, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 5UXWX9C50, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 5UXWX9C50, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1FTYR14VT, cached at 2025-12-29T21:10:49.662Z
+[DataOne Cache] HIT for squish JF2SKAJCH, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 3VV3B7AXM, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 3GNAXKEVS, cached at 2025-12-30T15:37:47.582Z
+[BatchPrefetch] 10 VINs completed in 118ms
+ POST /api/plan-prefetch/batch 202 in 338ms
+ GET /api/shop/features 200 in 117ms
+ GET /api/auth/me 200 in 144ms
+ GET /api/user/shops 200 in 140ms
+[DataOne Cache] HIT for squish 3GNAXKEVS, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 3VV3B7AXM, cached at 2025-12-29T20:36:55.161Z
+[BatchPrefetch] 10 VINs completed in 292ms
+ POST /api/plan-prefetch/batch 202 in 396ms
+ ✓ Compiled in 429ms (301 modules)
+ ✓ Compiled in 412ms (301 modules)
+ POST /api/vehicles/check-closed-orders 200 in 28675ms
+[Dashboard] Shop 25: isProtractorPrimary=true, isAutoFlowConfigured=false
+[Dashboard] Row counts: autoflow=0, protractor=61, tekmetric=0
+[Dashboard] Sample Protractor statuses: Unassigned, InspectionInProgress, Unassigned, InspectionInProgress, Unassigned
+ GET /api/dashboard/data?page=1&pageSize=50 200 in 298ms
+ POST /api/vehicles/check-closed-orders 200 in 27538ms
+ POST /api/vehicles/check-closed-orders 200 in 27641ms
+ POST /api/vehicles/check-closed-orders 200 in 27352ms
+ POST /api/vehicles/check-closed-orders 200 in 27214ms
+[Protractor] Fetched work orders page: skip=0, got 76, total so far: 76
+[Cron] Shop 25 - WorkflowStage counts: {
+  WorkCompleted: 7,
+  WorkAuthorized: 1,
+  InspectionInProgress: 45,
+  EstimateCompleted: 1,
+  Unassigned: 18,
+  ScheduledWork: 4
+}
+[Cron] Protractor sync completed in 2935ms: [ { shopId: 25, synced: 76, removed: 0, staleDeleted: 0 } ]
+ GET /api/cron/protractor-sync 200 in 2964ms
+ POST /api/vehicles/check-closed-orders 200 in 26695ms
+ POST /api/vehicles/check-closed-orders 200 in 25608ms
+ POST /api/vehicles/check-closed-orders 200 in 12012ms
+ POST /api/vehicles/check-closed-orders 200 in 7017ms
+ POST /api/vehicles/check-closed-orders 200 in 22021ms
+ POST /api/vehicles/check-closed-orders 200 in 2005ms
+ POST /api/vehicles/check-closed-orders 200 in 16999ms
+ GET /dashboard 200 in 310ms
+ GET /api/shop/features 200 in 133ms
+ GET /api/user/shops 200 in 204ms
+[DataOne Cache] HIT for squish 5TFCZ5ANX, cached at 2025-12-30T02:19:04.251Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 1N4AL3APC, cached at 2025-12-30T02:19:04.257Z
+[DataOne Cache] HIT for squish 5J6RW2H8L, cached at 2025-12-30T02:19:04.252Z
+ GET /api/auth/me 200 in 218ms
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish JF2SKAECH, cached at 2025-12-30T02:19:04.257Z
+[DataOne Cache] HIT for squish 3GNEK12TG, cached at 2025-12-30T00:53:14.878Z
+[DataOne Cache] HIT for squish 3C6RR7LTG, cached at 2025-12-30T02:31:41.823Z
+[DataOne Cache] HIT for squish 1D7RV1CTS, cached at 2025-12-30T02:31:41.823Z
+[DataOne Cache] HIT for squish 5TFCZ5ANX, cached at 2025-12-30T02:19:04.251Z
+[DataOne Cache] HIT for squish 1N4AL3APC, cached at 2025-12-30T02:19:04.257Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 5TDJZRFHS, cached at 2025-12-30T02:17:49.092Z
+[DataOne Cache] HIT for squish 5J6RW2H8L, cached at 2025-12-30T02:19:04.252Z
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish JF2SKAECH, cached at 2025-12-30T02:19:04.257Z
+[DataOne Cache] HIT for squish 3GNEK12TG, cached at 2025-12-30T00:53:14.878Z
+[DataOne Cache] HIT for squish 1D7RV1CTS, cached at 2025-12-30T02:31:41.823Z
+[DataOne Cache] HIT for squish 3C6RR7LTG, cached at 2025-12-30T02:31:41.823Z
+[BatchPrefetch] 10 VINs completed in 236ms
+ POST /api/plan-prefetch/batch 202 in 298ms
+[DataOne Cache] HIT for squish 5TDJZRFHS, cached at 2025-12-30T02:17:49.092Z
+[BatchPrefetch] 10 VINs completed in 311ms
+ POST /api/plan-prefetch/batch 202 in 377ms
+ GET /api/shop/features 200 in 111ms
+ GET /api/user/shops 200 in 145ms
+ GET /api/auth/me 200 in 146ms
+ ✓ Compiled in 378ms (301 modules)
+ ✓ Compiled in 407ms (301 modules)
+ ✓ Compiled in 484ms (301 modules)
+ ✓ Compiled in 410ms (301 modules)
+ ✓ Compiled in 361ms (301 modules)
+ GET /dashboard 200 in 218ms
+ GET /icon.png?5a397c304f6201ba 200 in 74ms
+ GET /api/shop/features 200 in 109ms
+ GET /api/shop/features 200 in 19ms
+ GET /api/auth/me 200 in 144ms
+ GET /api/user/shops 200 in 172ms
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 5UXWX9C50, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 3VV3B7AXM, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 1FTYR14VT, cached at 2025-12-29T21:10:49.662Z
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish JF2SKAJCH, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 3GNAXKEVS, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[BatchPrefetch] 10 VINs completed in 74ms
+ POST /api/plan-prefetch/batch 202 in 182ms
+[DataOne Cache] HIT for squish 4T1BF12BU, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 1C4BJWDGL, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 2GNALCEK1, cached at 2025-12-30T15:37:47.582Z
+[DataOne Cache] HIT for squish 5UXWX9C50, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 1FTYR14VT, cached at 2025-12-29T21:10:49.662Z
+[DataOne Cache] HIT for squish JF2SKAJCH, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish 3VV3B7AXM, cached at 2025-12-29T20:36:55.161Z
+[DataOne Cache] HIT for squish 3GNAXKEVS, cached at 2025-12-30T15:37:47.582Z
+ GET /api/auth/me 200 in 89ms
+ GET /api/user/shops 200 in 119ms
+[DataOne Cache] HIT for squish 4T1BK36BU, cached at 2025-12-30T15:37:47.589Z
+[DataOne Cache] HIT for squish JTMAB3FVD, cached at 2025-12-30T15:37:47.582Z
+[BatchPrefetch] 10 VINs completed in 263ms
+ POST /api/plan-prefetch/batch 202 in 360ms
+ ✓ Compiled in 558ms (301 modules)
+ ✓ Compiled in 375ms (301 modules)
+[Dashboard] Shop 25: isProtractorPrimary=true, isAutoFlowConfigured=false
+[Dashboard] Row counts: autoflow=0, protractor=62, tekmetric=0
+[Dashboard] Sample Protractor statuses: Unassigned, Unassigned, InspectionInProgress, Unassigned, InspectionInProgress
+ GET /api/dashboard/data?page=1&pageSize=50 200 in 276ms
+ POST /api/vehicles/check-closed-orders 200 in 33497ms
+ POST /api/vehicles/check-closed-orders 200 in 31923ms
+ POST /api/vehicles/check-closed-orders 200 in 30667ms
+ ✓ Compiled in 1178ms (705 modules)
+ POST /api/vehicles/check-closed-orders 200 in 29230ms
