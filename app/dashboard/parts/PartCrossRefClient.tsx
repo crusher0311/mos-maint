@@ -252,18 +252,18 @@ export default function PartCrossRefClient() {
               setRebuilding(true);
               setRebuildMessage(null);
               try {
-                const res = await fetch("/api/parts/rebuild", { method: "POST" });
+                const res = await fetch("/api/parts/build-database", { method: "POST" });
                 const data = await res.json();
                 if (data.ok) {
-                  setRebuildMessage(`${data.message}. ${data.partsUpdated} parts indexed.`);
-                  if (data.partsUpdated > 0) {
+                  setRebuildMessage(`${data.message}. ${data.totalParts || data.partsCreated} parts in database.`);
+                  if ((data.totalParts || data.partsCreated) > 0) {
                     searchParts();
                   }
                 } else {
-                  setRebuildMessage(data.error || "Failed to rebuild index");
+                  setRebuildMessage(data.error || data.message || "No parts found in history");
                 }
               } catch {
-                setRebuildMessage("Failed to rebuild parts index");
+                setRebuildMessage("Failed to build parts database");
               } finally {
                 setRebuilding(false);
               }
@@ -276,7 +276,7 @@ export default function PartCrossRefClient() {
             ) : (
               <Database className="w-4 h-4" />
             )}
-            Rebuild Parts Index
+            Build Parts Database
           </button>
         </div>
       )}
