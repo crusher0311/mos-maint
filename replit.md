@@ -25,7 +25,7 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 *   **Data Caching**: Extensive use of MongoDB Atlas for caching third-party API responses with defined TTLs.
 *   **Webhook Integration**: Utilizes webhooks for real-time updates from integrations.
 *   **CARFAX Mileage Interpolation**: Smart algorithm for estimating mileage.
-*   **Protractor Canned Jobs**: Syncs, allows manual entry, and provides mapping UI for canned jobs, integrating service packages via TimeClock API.
+*   **Canned Jobs (Multi-SMS)**: Syncs canned jobs from Protractor (via TimeClock API) and Tekmetric (via /canned-jobs endpoint). The settings page auto-detects which SMS is configured and shows appropriate UI. AddToROButton component supports both integrations.
 *   **Shop Maintenance Intervals**: Allows shops to define custom maintenance schedules.
 *   **Data Model**: `enterprise_accounts` collection with `shopIds` array; shops have `enterpriseId` field; work orders store `packageSummaries`.
 *   **Authentication & Authorization**: Standardized role hierarchy (`owner`, `admin`, `manager`, `user`, `viewer`) with bcrypt password hashing and token-based setup flow.
@@ -191,6 +191,8 @@ Currently implemented: Protractor. Future: Tekmetric, AutoFlow.
 - **Dev Mode:** All features are auto-enabled when running in Replit dev environment (NODE_ENV=development or REPLIT_DEV_DOMAIN is set)
 
 ## Recent Changes (December 2025)
+*   **v1.7.0**: Tekmetric canned jobs support - fetch, sync, and apply canned jobs to repair orders for Tekmetric shops
+*   **v1.7.0**: Multi-SMS canned jobs UI - settings page auto-detects Protractor or Tekmetric and shows appropriate interface
 *   **v1.7.0**: Shop branding settings - upload shop logo for service records, add location identifier for multi-location shops
 *   **v1.7.0**: Modular feature system - shops can enable/disable specific features via admin panel
 *   **v1.7.0**: Job Lookup feature - search historical jobs, match scoring, add to work orders

@@ -70,6 +70,8 @@ type Mapping = {
   [serviceKey: string]: string[];
 };
 
+type IntegrationType = "protractor" | "tekmetric" | null;
+
 export default function CannedJobsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -80,7 +82,8 @@ export default function CannedJobsSettingsPage() {
   const [mappings, setMappings] = useState<Mapping>({});
   const [originalMappings, setOriginalMappings] = useState<Mapping>({});
   const [originalManualJobs, setOriginalManualJobs] = useState<CannedJob[]>([]);
-  const [protractorConfigured, setProtractorConfigured] = useState(false);
+  const [activeIntegration, setActiveIntegration] = useState<IntegrationType>(null);
+  const [integrationName, setIntegrationName] = useState<string>("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [expandedService, setExpandedService] = useState<string | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
@@ -95,41 +98,56 @@ export default function CannedJobsSettingsPage() {
   const [showHiddenJobs, setShowHiddenJobs] = useState(false);
 
   useEffect(() => {
-    checkProtractorStatus();
+    checkIntegrationStatus();
   }, []);
 
-  async function checkProtractorStatus() {
+  async function checkIntegrationStatus() {
     try {
-      const res = await fetch("/api/settings/protractor", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setProtractorConfigured(data.configured);
-        if (data.configured) {
-          await Promise.all([fetchCannedJobs(), fetchMappings()]);
-        }
+      const [protractorRes, tekmetricRes] = await Promise.all([
+        fetch("/api/settings/protractor", { credentials: "include" }),
+        fetch("/api/settings/tekmetric", { credentials: "include" })
+      ]);
+      
+      const protractorData = protractorRes.ok ? await protractorRes.json() : { configured: false };
+      const tekmetricData = tekmetricRes.ok ? await tekmetricRes.json() : { configured: false };
+      
+      if (protractorData.configured) {
+        setActiveIntegration("protractor");
+        setIntegrationName("Protractor");
+        await Promise.all([fetchCannedJobs("protractor"), fetchMappings()]);
+      } else if (tekmetricData.configured) {
+        setActiveIntegration("tekmetric");
+        setIntegrationName("Tekmetric");
+        await Promise.all([fetchCannedJobs("tekmetric"), fetchMappings()]);
       }
     } catch (err) {
-      console.error("Failed to check Protractor status:", err);
+      console.error("Failed to check integration status:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchCannedJobs(refresh = false) {
+  async function fetchCannedJobs(integrationOrRefresh: IntegrationType | boolean = false) {
+    const isRefresh = typeof integrationOrRefresh === "boolean" ? integrationOrRefresh : false;
+    const integration = typeof integrationOrRefresh === "string" ? integrationOrRefresh : activeIntegration;
+    
+    if (!integration) return;
+    
     setSyncing(true);
     try {
-      const url = refresh
-        ? "/api/protractor/canned-jobs?refresh=true"
+      const baseUrl = integration === "tekmetric" 
+        ? "/api/tekmetric/canned-jobs" 
         : "/api/protractor/canned-jobs";
+      const url = isRefresh ? `${baseUrl}?refresh=true` : baseUrl;
       const res = await fetch(url, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         const jobs = data.cannedJobs || [];
         setCannedJobs(jobs);
-        if (refresh) {
-          const codes = jobs.map((j: CannedJob) => j.code).filter(Boolean).slice(0, 20);
+        if (isRefresh) {
+          const codes = jobs.map((j: CannedJob) => j.code || j.id).filter(Boolean).slice(0, 20);
           const moreCount = jobs.length > 20 ? ` (+${jobs.length - 20} more)` : "";
-          console.log("[CannedJobs] Synced codes:", jobs.map((j: CannedJob) => j.code).filter(Boolean).join(", "));
+          console.log("[CannedJobs] Synced codes:", jobs.map((j: CannedJob) => j.code || j.id).filter(Boolean).join(", "));
           setMessage({ 
             type: "success", 
             text: `Synced ${jobs.length} canned jobs: ${codes.join(", ")}${moreCount}` 
@@ -138,13 +156,13 @@ export default function CannedJobsSettingsPage() {
       } else {
         const errorData = await res.json().catch(() => ({}));
         console.error("Failed to fetch canned jobs:", errorData);
-        if (refresh) {
+        if (isRefresh) {
           setMessage({ type: "error", text: errorData.error || "Failed to sync canned jobs" });
         }
       }
     } catch (err) {
       console.error("Failed to fetch canned jobs:", err);
-      if (refresh) {
+      if (isRefresh) {
         setMessage({ type: "error", text: "Failed to sync canned jobs" });
       }
     } finally {
@@ -372,7 +390,7 @@ export default function CannedJobsSettingsPage() {
     );
   }
 
-  if (!protractorConfigured) {
+  if (!activeIntegration) {
     return (
       <div className="max-w-2xl mx-auto p-6">
         <div className="mb-8">
@@ -381,7 +399,7 @@ export default function CannedJobsSettingsPage() {
             Canned Job Mappings
           </h1>
           <p className="mt-2 text-gray-600">
-            Map your maintenance recommendations to Protractor canned jobs for one-click RO additions.
+            Map your maintenance recommendations to canned jobs for one-click RO additions.
           </p>
         </div>
 
@@ -389,10 +407,10 @@ export default function CannedJobsSettingsPage() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-900">Protractor Not Connected</h3>
+              <h3 className="font-medium text-yellow-900">No Shop Management System Connected</h3>
               <p className="text-sm text-yellow-800 mt-1">
-                You need to connect to Protractor first before you can configure canned job mappings.
-                Go to Settings &gt; Protractor to set up your connection.
+                You need to connect to Protractor or Tekmetric first before you can configure canned job mappings.
+                Go to Settings &gt; Integrations to set up your connection.
               </p>
             </div>
           </div>
@@ -407,9 +425,12 @@ export default function CannedJobsSettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Package className="w-6 h-6" />
           Canned Job Mappings
+          <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+            {integrationName}
+          </span>
         </h1>
         <p className="mt-2 text-gray-600">
-          Map maintenance recommendations to Protractor canned jobs. You can assign multiple canned jobs
+          Map maintenance recommendations to {integrationName} canned jobs. You can assign multiple canned jobs
           to each service - advisors will choose which one to apply when adding to the RO.
         </p>
       </div>
@@ -452,33 +473,37 @@ export default function CannedJobsSettingsPage() {
                   </>
                 )}
               </button>
-              <button
-                onClick={deepSyncCannedJobs}
-                disabled={syncing || deepSyncing}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                title="Scan all service packages and fetch details - takes 10-15 min"
-              >
-                {deepSyncing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Deep Syncing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Deep Sync
-                  </>
-                )}
-              </button>
+              {activeIntegration === "protractor" && (
+                <button
+                  onClick={deepSyncCannedJobs}
+                  disabled={syncing || deepSyncing}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  title="Scan all service packages and fetch details - takes 10-15 min"
+                >
+                  {deepSyncing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Deep Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Deep Sync
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
           {showManualEntry && (
             <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h4 className="text-sm font-medium text-gray-900 mb-3">Add Service Package Manually</h4>
+              <h4 className="text-sm font-medium text-gray-900 mb-3">Add Canned Job Manually</h4>
               <p className="text-xs text-gray-600 mb-3">
-                Enter the Service Package <strong>Code</strong> from Protractor (Setup &gt; Work Order Setup &gt; Services).
-                The Code is a text identifier used to search and add packages to work orders.
+                {activeIntegration === "protractor" 
+                  ? "Enter the Service Package Code from Protractor (Setup > Work Order Setup > Services)."
+                  : "Enter the Canned Job ID from Tekmetric."}
+                {" "}The ID is used to add jobs to work orders.
               </p>
               <div className="flex gap-3">
                 <input
