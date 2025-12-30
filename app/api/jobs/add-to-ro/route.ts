@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
     Rank: existingPackages.length + 1,
+    Status: "Pending",
     ServicePackageHeader: {
       Title: job.title,
       Description: job.description || `Added from Job Lookup`,
@@ -136,8 +137,8 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const minimalPayload = {
-    ID: workOrderGuid,
+  const updatedWorkOrder = {
+    ...existingWorkOrder,
     ServicePackages: {
       ItemCollection: [...existingPackages, newServicePackage],
     },
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
     config,
     {
       method: "POST",
-      body: JSON.stringify(minimalPayload),
+      body: JSON.stringify(updatedWorkOrder),
     }
   );
 
