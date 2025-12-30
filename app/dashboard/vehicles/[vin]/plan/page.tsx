@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
@@ -25,6 +26,7 @@ import { AddToROButton } from "@/components/ui/AddToROButton";
 import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
+import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -677,7 +679,15 @@ function triage({
 /* ---------------- Page ---------------- */
 type PageProps = { params: Promise<{ vin: string }> };
 
-export default async function VehiclePlanPage({ params }: PageProps) {
+export default function VehiclePlanPage({ params }: PageProps) {
+  return (
+    <Suspense fallback={<PlanLoading />}>
+      <PlanContent params={params} />
+    </Suspense>
+  );
+}
+
+async function PlanContent({ params }: PageProps) {
   const session = await requireSession();
   const db = await getDb();
   const shopId = Number(session.shopId);
