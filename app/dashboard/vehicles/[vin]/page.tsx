@@ -6,6 +6,7 @@ import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/aut
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
+import { resolveProtractorConfig, fetchAllActiveInspections } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -462,6 +463,34 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const shop = await db.collection("shops").findOne({});
   const tekmetricConnected = !!shop?.tekmetric?.shopId;
 
+  // Protractor inspections (DVI data from AutoVitals pushed to Protractor)
+  let protractorDvi: any = null;
+  const protractorCfg = await resolveProtractorConfig(shopId);
+  if (protractorCfg.configured) {
+    try {
+      const inspectionsResult = await fetchAllActiveInspections(shopId);
+      if (inspectionsResult.ok && inspectionsResult.inspections && inspectionsResult.inspections.length > 0) {
+        console.log(`[Protractor] Found ${inspectionsResult.inspections.length} inspections`);
+        protractorDvi = {
+          ok: true,
+          source: 'protractor',
+          inspections: inspectionsResult.inspections,
+          items: inspectionsResult.inspections.flatMap((insp: any) =>
+            (insp.Items || []).map((item: any) => ({
+              name: item.Name || item.Description || 'Unknown',
+              status: item.Result || item.Status || 'Unknown',
+              notes: item.Notes,
+              severity: item.Severity,
+              source: 'protractor'
+            }))
+          )
+        };
+      }
+    } catch (error) {
+      console.log(`[Protractor] Inspection fetch error:`, error);
+    }
+  }
+
   return (
     <VehicleDetailClient
       vehicle={{
@@ -487,6 +516,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       resolvedMiles={resolvedMiles}
       dvi={dvi}
       tekmetricDvi={tekmetricDvi}
+      protractorDvi={protractorDvi}
       carfax={carfax}
       localOe={localOe}
       mpd={mpd}
@@ -494,6 +524,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       cfg={{ configured: cfg.configured }}
       carfaxCfg={{ configured: carfaxCfg.configured }}
       tekmetricConnected={tekmetricConnected}
+      protractorConnected={protractorCfg.configured}
     />
   );
 }

@@ -43,6 +43,21 @@ interface TekmetricDvi {
   items: TekmetricInspectionItem[];
 }
 
+interface ProtractorInspectionItem {
+  name: string;
+  status: string;
+  notes?: string;
+  severity?: string;
+  source: 'protractor';
+}
+
+interface ProtractorDvi {
+  ok: boolean;
+  source: 'protractor';
+  inspections: any[];
+  items: ProtractorInspectionItem[];
+}
+
 interface RepairOrderSummary {
   roNumber: string;
   status?: string;
@@ -113,6 +128,7 @@ interface VehicleDetailClientProps {
   resolvedMiles: number | null;
   dvi: DviResult;
   tekmetricDvi?: TekmetricDvi | null;
+  protractorDvi?: ProtractorDvi | null;
   carfax: CarfaxResult;
   localOe: LocalOeData;
   mpd: MpdData;
@@ -120,6 +136,7 @@ interface VehicleDetailClientProps {
   cfg: { configured: boolean };
   carfaxCfg: { configured: boolean };
   tekmetricConnected?: boolean;
+  protractorConnected?: boolean;
 }
 
 type TabId = "oe" | "dvi" | "carfax";
@@ -131,13 +148,15 @@ export default function VehicleDetailClient({
   resolvedMiles,
   dvi,
   tekmetricDvi,
+  protractorDvi,
   carfax,
   localOe,
   mpd,
   latestRoNumber,
   cfg,
   carfaxCfg,
-  tekmetricConnected = false
+  tekmetricConnected = false,
+  protractorConnected = false
 }: VehicleDetailClientProps) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as TabId | null;
@@ -412,6 +431,73 @@ export default function VehicleDetailClient({
                 </div>
               )}
 
+              {/* Protractor DVI (AutoVitals data) */}
+              {protractorDvi?.ok && protractorDvi.items && protractorDvi.items.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900">Protractor Inspection</h3>
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                          Protractor
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">{protractorDvi.items.length} items</span>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {protractorDvi.items.map((item, j: number) => {
+                      const isRed = item.status?.toLowerCase() === "immediate" || item.status?.toLowerCase() === "fail" || item.severity?.toLowerCase() === "high";
+                      const isYellow = item.status?.toLowerCase() === "needs attention" || item.status?.toLowerCase() === "caution" || item.severity?.toLowerCase() === "medium";
+                      const isGreen = item.status?.toLowerCase() === "good" || item.status?.toLowerCase() === "pass";
+                      
+                      return (
+                        <div 
+                          key={j} 
+                          className={`px-6 py-3 flex items-center justify-between ${
+                            isRed ? "bg-red-50 border-l-4 border-red-500" :
+                            isYellow ? "bg-yellow-50 border-l-4 border-yellow-400" :
+                            ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {isGreen ? (
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                            ) : isYellow ? (
+                              <AlertCircle className="w-5 h-5 text-yellow-500" />
+                            ) : isRed ? (
+                              <XCircle className="w-5 h-5 text-red-600" />
+                            ) : (
+                              <Clock className="w-5 h-5 text-gray-400" />
+                            )}
+                            <div>
+                              <span className={`text-sm ${isRed ? "font-medium text-red-800" : "text-gray-700"}`}>
+                                {item.name}
+                              </span>
+                              {isRed && (
+                                <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-medium">
+                                  IMMEDIATE
+                                </span>
+                              )}
+                              {isYellow && (
+                                <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded-full font-medium">
+                                  NEEDS ATTENTION
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {item.notes && (
+                            <span className="text-xs text-gray-500 max-w-xs truncate">
+                              {item.notes}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* AutoFlow DVI */}
               {dvi?.ok && Array.isArray(dvi.categories) && dvi.categories.length > 0 ? (
                 <div className="space-y-4">
@@ -494,24 +580,26 @@ export default function VehicleDetailClient({
                     </div>
                   )})}
                 </div>
-              ) : (
+              ) : !tekmetricDvi?.ok && !protractorDvi?.ok ? (
                 <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                   <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <FileText className="w-6 h-6 text-gray-400" />
                   </div>
                   <h3 className="font-medium text-gray-900 mb-2">No DVI Inspection</h3>
                   <p className="text-sm text-gray-500 mb-4">
-                    {!cfg.configured && !tekmetricConnected
-                      ? "No inspection system is connected. Connect AutoFlow or Tekmetric to view DVI results."
+                    {!cfg.configured && !tekmetricConnected && !protractorConnected
+                      ? "No inspection system is connected. Connect AutoFlow, Tekmetric, or Protractor to view DVI results."
                       : !latestRoNumber
                       ? "No repair orders found for this vehicle."
+                      : protractorConnected && !protractorDvi?.ok
+                      ? "No Protractor inspection data available for this vehicle."
                       : tekmetricConnected && !tekmetricDvi?.ok
                       ? "No Tekmetric inspection data available for this vehicle."
                       : dvi?.ok
                       ? "No inspection was performed for the latest repair order."
                       : dvi?.error || "Unable to load DVI results."}
                   </p>
-                  {!cfg.configured && !tekmetricConnected && (
+                  {!cfg.configured && !tekmetricConnected && !protractorConnected && (
                     <Link
                       href="/dashboard/settings/autoflow"
                       className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -520,7 +608,7 @@ export default function VehicleDetailClient({
                     </Link>
                   )}
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
