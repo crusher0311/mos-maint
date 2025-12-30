@@ -283,21 +283,25 @@ type OEMItem = {
 };
 type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
+// Service key mappings aligned with CARFAX categories
 const SERVICE_KEYS: Record<string, string[]> = {
-  oil: ["oil and filter", "engine oil", "oil change", "replace engine oil and filter"],
+  oil: ["oil and filter", "engine oil", "oil change", "replace engine oil and filter", "oil filter"],
   tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated"],
-  brake_fluid: ["brake fluid", "brake flush"],
-  coolant: ["engine coolant", "coolant flush", "replace coolant", "cooling system"],
-  trans_fluid: ["automatic transmission fluid", "transmission fluid", "transmission flush", "transfer case fluid"],
-  engine_air: ["engine air filter", "air filter"],
   cabin_air: ["cabin air filter", "pollen filter"],
-  spark_plugs: ["spark plugs", "spark plug(s)", "spark plug "],
-  inspect_brakes: ["inspect brake pads", "inspect brake", "inspect brake hoses", "parking brake", "brake pads replaced", "brake rotor"],
-  multi_point: ["multi-point inspection", "multi point inspection"],
-  battery: ["battery replaced", "battery/charging"],
-  alignment: ["wheel alignment", "four wheel alignment"],
-  steering: ["rack and pinion", "tie rod", "steering"],
-  suspension: ["strut(s) replaced", "struts replaced", "suspension"],
+  engine_air: ["engine air filter", "air filter"],
+  coolant: ["engine coolant", "coolant flush", "replace coolant", "cooling system", "antifreeze", "radiator flush"],
+  trans_auto: ["automatic transmission fluid", "atf fluid", "atf flush"],
+  trans_manual: ["manual transmission fluid", "manual trans fluid"],
+  transfer_case: ["transfer case fluid", "transfer case flush"],
+  differential: ["differential fluid", "differential flush", "rear differential", "front differential"],
+  serpentine_belt: ["serpentine belt", "drive belt", "accessory belt"],
+  fuel_system: ["fuel system cleaning", "fuel injector cleaning", "fuel system service"],
+  fuel_filter: ["fuel filter"],
+  brake_pads: ["brake pads", "brake linings", "brake rotor", "brake pads replaced", "brake lining"],
+  emissions: ["emissions test", "emissions inspection", "smog test", "smog check"],
+  power_steering: ["power steering fluid", "power steering flush"],
+  battery: ["battery replaced", "battery replacement", "battery/charging"],
+  ac_refrigerant: ["a/c refrigerant", "ac refrigerant", "air conditioning refill", "a/c recharge"],
 };
 
 function toKeyFromName(name: string): string | null {
@@ -306,8 +310,8 @@ function toKeyFromName(name: string): string | null {
     if (vals.some((v) => n.includes(v))) return key;
   }
   if (n.includes("exhaust system")) return "exhaust";
-  if (n.includes("steering") || n.includes("suspension")) return "steer_susp";
-  if (n.includes("automatic transmission fluid")) return "trans_fluid";
+  // Legacy mappings for backward compatibility
+  if (n.includes("transmission fluid") || n.includes("transmission flush")) return "trans_auto";
   return null;
 }
 
