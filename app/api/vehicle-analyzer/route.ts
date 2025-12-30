@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { getOpenAI, DEFAULT_MODEL, MODELS } from "@/lib/ai";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { logUsage, estimateCost } from "@/lib/usage";
 
 // small utils
 function parseCarfaxDate(d?: string | null): Date | null {
@@ -295,6 +296,26 @@ export async function POST(req: NextRequest) {
     const raw = resp.choices?.[0]?.message?.content || "{}";
     let parsed: any = {};
     try { parsed = JSON.parse(raw); } catch { parsed = { parseError: true, raw }; }
+
+    // Log usage for analytics
+    const inputTokens = resp.usage?.prompt_tokens || 0;
+    const outputTokens = resp.usage?.completion_tokens || 0;
+    const cost = estimateCost(chosenModel, inputTokens, outputTokens);
+    
+    try {
+      await logUsage({
+        shopId: String(shopId),
+        action: "analyze",
+        model: chosenModel,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        estimatedCost: cost,
+        vin: String(vin).toUpperCase(),
+      });
+    } catch (logErr) {
+      console.error("Failed to log usage:", logErr);
+    }
 
     return NextResponse.json({
       ok: true,
