@@ -986,6 +986,12 @@ async function PlanContent({ params }: PageProps) {
   ]);
   console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
 
+  // Vehicle info fallback: prefer vehicles collection, fall back to VIN decode from OEM
+  const vehicleYear = vehicle?.year ?? oemData.vehicle?.year;
+  const vehicleMake = vehicle?.make ?? oemData.vehicle?.make;
+  const vehicleModel = vehicle?.model ?? oemData.vehicle?.model;
+  const vehicleEngine = oemData.vehicle?.engine; // Only from VIN decode
+
   // Build normalized inputs
 
   const carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }> =
@@ -1217,9 +1223,10 @@ async function PlanContent({ params }: PageProps) {
                           vin={vin}
                           serviceTitle={t.title}
                           serviceKey={t.serviceKey}
-                          vehicleYear={vehicle?.year}
-                          vehicleMake={vehicle?.make}
-                          vehicleModel={vehicle?.model}
+                          vehicleYear={vehicleYear}
+                          vehicleMake={vehicleMake}
+                          vehicleModel={vehicleModel}
+                          vehicleEngine={vehicleEngine}
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
                           cannedJobOptions={opts}
@@ -1383,9 +1390,10 @@ async function PlanContent({ params }: PageProps) {
                           vin={vin}
                           serviceTitle={t.title}
                           serviceKey={t.serviceKey}
-                          vehicleYear={vehicle?.year}
-                          vehicleMake={vehicle?.make}
-                          vehicleModel={vehicle?.model}
+                          vehicleYear={vehicleYear}
+                          vehicleMake={vehicleMake}
+                          vehicleModel={vehicleModel}
+                          vehicleEngine={vehicleEngine}
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
                           cannedJobOptions={opts}
@@ -1508,9 +1516,10 @@ async function PlanContent({ params }: PageProps) {
                           vin={vin}
                           serviceTitle={t.title}
                           serviceKey={t.serviceKey}
-                          vehicleYear={vehicle?.year}
-                          vehicleMake={vehicle?.make}
-                          vehicleModel={vehicle?.model}
+                          vehicleYear={vehicleYear}
+                          vehicleMake={vehicleMake}
+                          vehicleModel={vehicleModel}
+                          vehicleEngine={vehicleEngine}
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
                           cannedJobOptions={opts}
