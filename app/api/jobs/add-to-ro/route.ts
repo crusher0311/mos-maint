@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
   };
 
   console.log(`[Jobs Add to RO] Adding "${job.title}" with ${job.lines.length} lines to WO ${workOrderGuid}...`);
+  console.log(`[Jobs Add to RO] Lines payload:`, JSON.stringify(servicePackageLines, null, 2));
 
   const updateResult = await protractorFetch<any>(
     `/WorkOrder/${workOrderGuid}`,
