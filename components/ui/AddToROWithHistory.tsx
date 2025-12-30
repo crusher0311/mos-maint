@@ -70,7 +70,10 @@ export function AddToROWithHistory({
   const [showDropdown, setShowDropdown] = useState(false);
   const [historicalJobs, setHistoricalJobs] = useState<HistoricalJob[]>([]);
   const [selectedJob, setSelectedJob] = useState<HistoricalJob | null>(null);
+  const [customQuery, setCustomQuery] = useState("");
+  const [lastSearchQuery, setLastSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -82,14 +85,16 @@ export function AddToROWithHistory({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function fetchHistoricalJobs() {
+  async function fetchHistoricalJobs(searchQuery?: string) {
+    const query = searchQuery ?? serviceTitle;
     setStatus("loading");
     setErrorMsg(null);
     setShowDropdown(true);
+    setLastSearchQuery(query);
 
     try {
       const params = new URLSearchParams();
-      params.set("q", serviceTitle);
+      params.set("q", query);
       if (vehicleYear) params.set("year", String(vehicleYear));
       if (vehicleMake) params.set("make", vehicleMake);
       if (vehicleModel) params.set("model", vehicleModel);
@@ -114,9 +119,19 @@ export function AddToROWithHistory({
       // Always show the dropdown with results (or empty state)
       setHistoricalJobs(filteredJobs);
       setStatus("loaded");
+      
+      // Focus the search input after loading
+      setTimeout(() => searchInputRef.current?.focus(), 100);
     } catch (err: unknown) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Failed to search");
+    }
+  }
+  
+  function handleCustomSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (customQuery.trim()) {
+      fetchHistoricalJobs(customQuery.trim());
     }
   }
 
@@ -225,13 +240,13 @@ export function AddToROWithHistory({
         </button>
 
       {showDropdown && status === "loaded" && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[400px] overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[480px] overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 rounded-t-xl">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Historical Jobs</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Matched for "{serviceTitle.substring(0, 30)}..."
+                  Searched: "{lastSearchQuery.substring(0, 25)}{lastSearchQuery.length > 25 ? '...' : ''}"
                 </p>
               </div>
               <button
@@ -241,15 +256,32 @@ export function AddToROWithHistory({
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
+            <form onSubmit={handleCustomSearch} className="flex gap-2">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={customQuery}
+                onChange={(e) => setCustomQuery(e.target.value)}
+                placeholder="Search different term..."
+                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                type="submit"
+                disabled={!customQuery.trim()}
+                className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Search
+              </button>
+            </form>
           </div>
 
-          <div className="overflow-y-auto max-h-[320px]">
+          <div className="overflow-y-auto max-h-[340px]">
             {historicalJobs.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Package className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No matching jobs found in history</p>
+                <p className="text-sm text-gray-500">No matching jobs found</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  Try adding this service manually
+                  Try a different search term above
                 </p>
               </div>
             ) : (
