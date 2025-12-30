@@ -71,12 +71,25 @@ export type ShopFeatures = {
   updatedAt: Date;
 };
 
+export function isDevEnvironment(): boolean {
+  const nodeEnv = process.env.NODE_ENV;
+  const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
+  return nodeEnv === "development" || !!replitDevDomain;
+}
+
+export function getAllFeatureIds(): FeatureId[] {
+  return FEATURES.map(f => f.id);
+}
+
 export async function getShopFeatures(shopId: number): Promise<ShopFeatures | null> {
   const db = await getDb();
   return db.collection<ShopFeatures>("shop_features").findOne({ shopId });
 }
 
 export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Promise<boolean> {
+  if (isDevEnvironment()) {
+    return true;
+  }
   const features = await getShopFeatures(shopId);
   if (!features) {
     return featureId === "maintenance";
@@ -85,6 +98,9 @@ export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Pr
 }
 
 export async function getEnabledFeatures(shopId: number): Promise<FeatureId[]> {
+  if (isDevEnvironment()) {
+    return getAllFeatureIds();
+  }
   const features = await getShopFeatures(shopId);
   if (!features) {
     return ["maintenance"];

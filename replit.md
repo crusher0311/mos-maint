@@ -188,6 +188,7 @@ Currently implemented: Protractor. Future: Tekmetric, AutoFlow.
 - Dashboard layout fetches enabled features and passes to Sidebar
 - Sidebar filters nav items based on enabled features
 - API routes can check `isFeatureEnabled(shopId, featureId)`
+- **Dev Mode:** All features are auto-enabled when running in Replit dev environment (NODE_ENV=development or REPLIT_DEV_DOMAIN is set)
 
 ## Recent Changes (December 2025)
 *   **v1.7.0**: Modular feature system - shops can enable/disable specific features via admin panel
