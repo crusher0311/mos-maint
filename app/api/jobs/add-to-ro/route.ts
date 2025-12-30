@@ -65,9 +65,21 @@ export async function POST(req: NextRequest) {
 
   const existingWorkOrder = existingWOResult.workOrder;
   
+  const workOrderType = existingWorkOrder.Type || existingWorkOrder.type;
   const workOrderStage = existingWorkOrder.WorkflowStage || existingWorkOrder.workflowStage;
-  const blockedStages = ["WorkCompleted", "Invoiced", "Void", "Closed"];
   
+  console.log(`[Jobs Add to RO] WO ${workOrderGuid}: Type="${workOrderType}", Stage="${workOrderStage}"`);
+  
+  const allowedTypes = ["WorkOrder", "Estimate", "Appointment"];
+  if (workOrderType && !allowedTypes.includes(workOrderType)) {
+    console.log(`[Jobs Add to RO] Blocked: WO type "${workOrderType}" not allowed`);
+    return NextResponse.json(
+      { error: `Cannot add to this work order - it's an ${workOrderType.toLowerCase()}, not an active work order` },
+      { status: 400 }
+    );
+  }
+  
+  const blockedStages = ["WorkCompleted", "Invoiced", "Void", "Closed"];
   if (blockedStages.includes(workOrderStage)) {
     console.log(`[Jobs Add to RO] Blocked: WO ${workOrderGuid} is in stage "${workOrderStage}"`);
     return NextResponse.json(
