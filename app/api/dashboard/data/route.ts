@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
     // Build rows from latest AutoFlow events per VIN (only if AutoFlow is configured)
     // Skip this expensive query entirely when AutoFlow is not set up
     let autoflowRows: any[] = [];
-    if (isAutoFlowConfigured && !isProtractorPrimary) {
+    if (isAutoFlowConfigured) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       autoflowRows = await db.collection("events").aggregate([
       {
