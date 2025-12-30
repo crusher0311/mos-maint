@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrder, TekmetricVehicle, TekmetricCustomer } from "@/lib/tekmetric";
+
+async function getUserShopId(): Promise<string | null> {
+  const store = await cookies();
+  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
+  if (!sid) return null;
+
+  const db = await getDb();
+  const now = new Date();
+  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
+  if (!sess) return null;
+
+  const user = await db.collection("users").findOne({ _id: sess.userId });
+  return user?.shopId ? String(user.shopId) : null;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const db = await getDb();
 
-    const shop = await db.collection("shops").findOne({});
+    const userShopId = await getUserShopId();
+    if (!userShopId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const shop = await db.collection("shops").findOne({
+      shopId: { $in: [userShopId, Number(userShopId)] }
+    });
     if (!shop?.tekmetric?.shopId) {
       return NextResponse.json(
-        { error: "Tekmetric not configured" },
+        { error: "Tekmetric not configured for your shop" },
         { status: 400 }
       );
     }
@@ -158,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     await db.collection("shops").updateOne(
-      {},
+      { shopId: { $in: [userShopId, Number(userShopId)] } },
       { $set: { "tekmetric.lastSync": new Date() } }
     );
 
