@@ -177,44 +177,47 @@ export async function POST(req: NextRequest) {
   const servicePackageId = newPackage?.ID;
   
   if (servicePackageId && servicePackageId !== ZERO_GUID && job.lines.length > 0) {
-    console.log(`[Jobs Add to RO] Adding ${job.lines.length} lines to service package ${servicePackageId}...`);
+    console.log(`[Jobs Add to RO] Attempting to add ${job.lines.length} lines via TimeClock API...`);
     
     let linesAdded = 0;
     const lineErrors: string[] = [];
     
-    for (const line of servicePackageLines) {
-      const linePayload = {
-        ID: ZERO_GUID,
+    for (let i = 0; i < servicePackageLines.length; i++) {
+      const line = servicePackageLines[i];
+      
+      const timeClockPayload = {
+        Type: line.Type,
+        EmployeeID: ZERO_GUID,
+        ClockedIn: false,
         WorkOrderID: workOrderGuid,
         ServicePackageID: servicePackageId,
-        Type: line.Type,
         Description: line.Description,
         Quantity: line.Quantity,
         Unit: line.Unit,
         Price: line.Price,
-        PriceUnit: line.PriceUnit,
         Total: line.Total,
         ExtendedTotal: line.ExtendedTotal,
-        PartNumber: line.PartNumber,
-        Manufacturer: line.Manufacturer,
-        Completed: false,
+        PartNumber: line.PartNumber || "",
+        Manufacturer: line.Manufacturer || "",
       };
       
+      console.log(`[Jobs Add to RO] TimeClock payload for line ${i + 1}:`, JSON.stringify(timeClockPayload).substring(0, 200));
+      
       const lineResult = await protractorFetch<any>(
-        `/WorkOrder/ServicePackageLine`,
+        `/TimeClock/List/WorkOrder/${workOrderGuid}`,
         config,
         {
           method: "POST",
-          body: JSON.stringify(linePayload),
+          body: JSON.stringify(timeClockPayload),
         }
       );
       
       if (lineResult.ok) {
         linesAdded++;
-        console.log(`[Jobs Add to RO] Line added: ${line.Description}`);
+        console.log(`[Jobs Add to RO] Line added via TimeClock: ${line.Description}`);
       } else {
         lineErrors.push(`${line.Description}: ${lineResult.error}`);
-        console.log(`[Jobs Add to RO] Line failed: ${line.Description} - ${lineResult.error}`);
+        console.log(`[Jobs Add to RO] TimeClock line failed: ${line.Description} - ${lineResult.error}`);
       }
     }
     
