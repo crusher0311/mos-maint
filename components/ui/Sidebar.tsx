@@ -43,6 +43,7 @@ interface ShopOption {
 interface SidebarProps {
   shopName?: string;
   shopLogo?: string | null;
+  locationIdentifier?: string | null;
   userEmail?: string;
   userRole?: string;
   userInitials?: string;
@@ -52,7 +53,7 @@ interface SidebarProps {
   enabledFeatures?: string[];
 }
 
-export function Sidebar({ shopName = "My Shop", shopLogo, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"] }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"] }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
@@ -213,7 +214,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, userEmail, userRole, u
                 className="h-6 w-auto max-w-[32px] object-contain flex-shrink-0"
               />
             )}
-            <span className="font-medium truncate">{shopName}</span>
+            <div className="min-w-0">
+              <span className="font-medium truncate block">{shopName}</span>
+              {locationIdentifier && (
+                <span className="text-xs text-white/70 truncate block">{locationIdentifier}</span>
+              )}
+            </div>
           </div>
           {hasMultipleShops && (
             <ChevronDown className={`w-4 h-4 text-mos-silver transition-transform flex-shrink-0 ${shopDropdownOpen ? "rotate-180" : ""}`} />
