@@ -9,6 +9,9 @@ import {
   upsertProtractorWorkOrderSnapshot,
   fetchDeferredWork,
   upsertProtractorDeferredWorkSnapshot,
+  fetchInvoicesForVehicle,
+  upsertProtractorInvoiceSnapshot,
+  fetchInvoiceById,
   fetchCannedJobs,
   fetchServicePackageTemplateDetail,
   upsertCannedJobsCache,
@@ -63,6 +66,7 @@ export async function POST(req: NextRequest) {
     workOrdersFound: workOrdersFromList.length,
     vehiclesSynced: 0,
     deferredWorkSynced: 0,
+    invoicesSynced: 0,
     cannedJobsSynced: 0,
     jobsIndexed: 0,
     partsIndexed: 0,
@@ -323,6 +327,62 @@ export async function POST(req: NextRequest) {
             } catch (err: any) {
               results.errors.push(`Deferred work for ${vin}: ${err.message}`);
             }
+            
+            // Fetch 5 years of historical invoices for parts intelligence
+            try {
+              const fiveYearsAgo = new Date();
+              fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+              
+              const invoicesResult = await fetchInvoicesForVehicle(shopId, vehicle.ID, {
+                startDate: fiveYearsAgo.toISOString().split("T")[0],
+                endDate: endDate.toISOString().split("T")[0],
+              });
+              
+              if (invoicesResult.ok && invoicesResult.invoices?.length) {
+                console.log(`[Protractor Sync] Found ${invoicesResult.invoices.length} invoices for ${vin}`);
+                
+                // Fetch full details for each invoice (with line items) - rate limited
+                const invoiceDetailLimit = pLimit(2);
+                const detailedInvoices = await Promise.all(
+                  invoicesResult.invoices.map((inv) =>
+                    invoiceDetailLimit(async () => {
+                      const detailResult = await fetchInvoiceById(shopId, inv.ID);
+                      if (detailResult.ok && detailResult.invoice) {
+                        return detailResult.invoice;
+                      }
+                      return inv;
+                    })
+                  )
+                );
+                
+                for (const invoice of detailedInvoices) {
+                  await upsertProtractorInvoiceSnapshot(shopId, invoice);
+                  results.invoicesSynced++;
+                  
+                  // Extract job index entries from invoice for parts intelligence
+                  try {
+                    const invoiceAsWorkOrder = {
+                      ...invoice,
+                      ServiceItem: { 
+                        ...invoice.ServiceItem,
+                        VIN: vin,
+                        Year: vehicle.Year,
+                        Make: vehicle.Make,
+                        Model: vehicle.Model,
+                      },
+                    };
+                    const jobEntries = extractJobIndexFromWorkOrder(shopId, invoiceAsWorkOrder, "protractor");
+                    if (jobEntries.length > 0) {
+                      allJobIndexEntries.push(...jobEntries);
+                    }
+                  } catch (indexErr: any) {
+                    console.log(`[Protractor Sync] Invoice job index error for ${invoice.ID}: ${indexErr.message}`);
+                  }
+                }
+              }
+            } catch (err: any) {
+              console.log(`[Protractor Sync] Invoices for ${vin}: ${err.message}`);
+            }
           }
         }
       }
@@ -377,7 +437,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    message: `Synced ${results.vehiclesSynced} vehicles from ${results.workOrdersFound} work orders`,
+    message: `Synced ${results.vehiclesSynced} vehicles from ${results.workOrdersFound} work orders, ${results.invoicesSynced} invoices for parts history`,
     ...results,
   });
 }
