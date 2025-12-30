@@ -98,23 +98,39 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  const servicePackageLines = job.lines.map((line, idx) => ({
-    ID: ZERO_GUID,
-    Rank: idx + 1,
-    Type: mapLineType(line.lineType),
-    Description: line.description,
-    Quantity: String(line.quantity),
-    RateCode: "1",
-    MinimumCharge: 0,
-    Total: String(line.extendedPrice.toFixed(2)),
-    Discount: 0,
-    ExtendedTotal: String(line.extendedPrice.toFixed(2)),
-    TotalCost: String(line.extendedPrice.toFixed(2)),
-    PartNumber: line.partNumber || "",
-    Manufacturer: line.manufacturer || "",
-    Completed: false,
-    TechnicianHour: line.lineType === "labor" ? String(line.quantity) : "0",
-  }));
+  const servicePackageLines = job.lines.map((line, idx) => {
+    const baseLine = {
+      ID: ZERO_GUID,
+      Rank: idx + 1,
+      Type: mapLineType(line.lineType),
+      Description: line.description,
+      Quantity: String(line.quantity),
+      MinimumCharge: 0,
+      Discount: 0,
+      Total: String(line.extendedPrice.toFixed(2)),
+      ExtendedTotal: String(line.extendedPrice.toFixed(2)),
+      Completed: false,
+    };
+
+    if (line.lineType === "labor") {
+      return {
+        ...baseLine,
+        RateCode: "1",
+        TechnicianHour: String(line.quantity),
+        TotalCost: String(line.extendedPrice.toFixed(2)),
+      };
+    } else {
+      return {
+        ...baseLine,
+        Unit: "Each",
+        Price: String(line.unitPrice.toFixed(2)),
+        Cost: String((line.unitPrice * 0.6).toFixed(2)),
+        TotalCost: String((line.extendedPrice * 0.6).toFixed(2)),
+        PartNumber: line.partNumber || "",
+        Manufacturer: line.manufacturer || "",
+      };
+    }
+  });
 
   const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
   const existingPackages = Array.isArray(existingPackagesRaw)
