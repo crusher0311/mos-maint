@@ -375,7 +375,7 @@ export async function fetchActiveInspections(
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
-// Fetch all active inspections across all work orders (shop-wide)
+// Fetch all inspections across all work orders (shop-wide)
 export async function fetchAllActiveInspections(
   shopId: number | string
 ): Promise<{ ok: boolean; inspections?: ProtractorActiveInspection[]; error?: string }> {
@@ -384,17 +384,18 @@ export async function fetchAllActiveInspections(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  // Try /WorkOrder/Inspections endpoint
   const result = await protractorFetch<{ ItemCollection?: ProtractorActiveInspection[] }>(
-    `/WorkOrder/ActiveInspections`,
+    `/WorkOrder/Inspections`,
     config
   );
 
   if (!result.ok) {
-    console.log(`[Protractor] All ActiveInspections: ${result.error}`);
+    console.log(`[Protractor] WorkOrder/Inspections: ${result.error}`);
     return { ok: false, error: result.error };
   }
 
-  console.log(`[Protractor] All ActiveInspections: ${result.data?.ItemCollection?.length || 0} inspections`);
+  console.log(`[Protractor] WorkOrder/Inspections: ${result.data?.ItemCollection?.length || 0} inspections`);
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
@@ -1698,15 +1699,11 @@ export async function enrichCannedJobsWithDetails(
 
 export async function fetchCannedJobsWithCache(
   shopId: number,
-  maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
-): Promise<{ ok: boolean; cannedJobs?: any[]; error?: string; source?: "cache" | "api" | "discovered" }> {
+  maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000,
+  options?: { forceRefresh?: boolean }
+): Promise<{ ok: boolean; cannedJobs?: any[]; error?: string; source?: "cache" | "api" | "enriched" }> {
   const db = await getDb();
   const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
-
-  const now = Date.now();
-  const fresh = cached?.fetchedAt
-    ? now - new Date(cached.fetchedAt).getTime() <= maxAgeMs
-    : false;
 
   // Normalize cached items to consistent format
   const normalizeCachedItems = (items: any[]) => items.map(job => ({
@@ -1721,42 +1718,113 @@ export async function fetchCannedJobsWithCache(
     lineCount: job.lineCount ?? job.ServicePackageLines?.length ?? 0,
   }));
 
-  if (fresh && cached) {
-    return {
-      ok: true,
-      cannedJobs: normalizeCachedItems(cached.items || []),
-      source: cached.source === "discovered" ? "discovered" : "cache",
-    };
-  }
-
-  const result = await fetchCannedJobs(shopId);
-  if (result.ok && result.cannedJobs) {
-    await upsertCannedJobsCache(shopId, result.cannedJobs);
-    return {
-      ok: true,
-      cannedJobs: result.cannedJobs.map(job => ({
-        id: job.ID || job.Code || "",
-        title: job.Title ?? "",
-        description: job.Description ?? "",
-        chapter: job.Chapter ?? "",
-        code: job.Code ?? "",
-        laborHours: job.LaborHours ?? null,
-        laborRate: job.LaborRate ?? null,
-        fixedPrice: job.FixedPrice ?? null,
-        lineCount: job.ServicePackageLines?.length ?? 0,
-      })),
-      source: "api",
-    };
-  }
-
-  // API failed - fall back to cache if available (even if stale)
-  if (cached?.items?.length) {
+  // Check if we have a valid enriched cache (not forcing refresh)
+  const isEnriched = cached?.source === "enriched";
+  const hasItems = cached?.items?.length > 0;
+  
+  if (!options?.forceRefresh && isEnriched && hasItems) {
+    console.log(`[Protractor] Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
     return {
       ok: true,
       cannedJobs: normalizeCachedItems(cached.items),
-      source: cached.source === "discovered" ? "discovered" : "cache",
+      source: "enriched",
     };
   }
 
-  return { ok: false, error: result.error };
+  // If no enriched cache exists, auto-run deep sync
+  if (!isEnriched || !hasItems) {
+    console.log(`[Protractor] No enriched cache found for shop ${shopId}, running auto deep sync...`);
+    
+    const listResult = await fetchCannedJobs(shopId);
+    if (!listResult.ok || !listResult.cannedJobs) {
+      // Fall back to whatever cache exists
+      if (cached?.items?.length) {
+        return {
+          ok: true,
+          cannedJobs: normalizeCachedItems(cached.items),
+          source: "cache",
+        };
+      }
+      return { ok: false, error: listResult.error };
+    }
+
+    // Run enrichment
+    const enrichedJobs = await enrichCannedJobsWithDetails(
+      shopId,
+      listResult.cannedJobs,
+      { filterEmptyTitles: true }
+    );
+
+    // Save enriched cache with "enriched" source marker
+    const now = new Date();
+    await db.collection("protractor_canned_jobs").updateOne(
+      { shopId },
+      {
+        $set: {
+          items: enrichedJobs,
+          fetchedAt: now,
+          source: "enriched",
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
+
+    console.log(`[Protractor] Auto deep sync complete: ${enrichedJobs.length} enriched jobs saved`);
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(enrichedJobs),
+      source: "enriched",
+    };
+  }
+
+  // Force refresh requested - re-run deep sync
+  if (options?.forceRefresh) {
+    console.log(`[Protractor] Force refresh requested for shop ${shopId}, re-running deep sync...`);
+    
+    const listResult = await fetchCannedJobs(shopId);
+    if (!listResult.ok || !listResult.cannedJobs) {
+      if (cached?.items?.length) {
+        return {
+          ok: true,
+          cannedJobs: normalizeCachedItems(cached.items),
+          source: "enriched",
+        };
+      }
+      return { ok: false, error: listResult.error };
+    }
+
+    const enrichedJobs = await enrichCannedJobsWithDetails(
+      shopId,
+      listResult.cannedJobs,
+      { filterEmptyTitles: true }
+    );
+
+    const now = new Date();
+    await db.collection("protractor_canned_jobs").updateOne(
+      { shopId },
+      {
+        $set: {
+          items: enrichedJobs,
+          fetchedAt: now,
+          source: "enriched",
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
+
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(enrichedJobs),
+      source: "enriched",
+    };
+  }
+
+  // Return cached items
+  return {
+    ok: true,
+    cannedJobs: normalizeCachedItems(cached?.items || []),
+    source: "enriched",
+  };
 }
