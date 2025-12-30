@@ -15,8 +15,6 @@ export async function GET() {
 
     const shop = await db.collection("shops").findOne({ shopId: session.shopId });
     
-    console.log("[Enterprise Debug] shopId:", session.shopId, "shopName:", shop?.name, "enterpriseId:", shop?.enterpriseId);
-    
     if (!shop?.enterpriseId) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 404 });
     }
