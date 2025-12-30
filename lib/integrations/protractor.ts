@@ -1213,7 +1213,7 @@ export async function applyCannedJobToWorkOrder(
         Code: cannedJobCode,
         ServicePackageHeader: {
           Title: cannedJobTitle || cannedJobCode,
-          Description: "",
+          Description: "[Added by MOS]",
         },
         ServicePackageLines: { ItemCollection: [] },
         Status: "Pending",
@@ -1397,7 +1397,7 @@ export async function applyCannedJobToWorkOrder(
         WorkOrderID: workOrderGuid,
         ServicePackageHeader: {
           Title: template.ServicePackageHeader?.Title || cannedJobCode,
-          Description: template.ServicePackageHeader?.Description || "",
+          Description: template.ServicePackageHeader?.Description ? `${template.ServicePackageHeader.Description} [Added by MOS]` : "[Added by MOS]",
         },
         ServicePackageTemplateID: template.ID,
         ServicePackageLines: {
@@ -1441,7 +1441,7 @@ export async function applyCannedJobToWorkOrder(
           Rank: existingPackages.length + 1,
           ServicePackageHeader: {
             Title: template.ServicePackageHeader?.Title || cannedJobCode,
-            Description: template.ServicePackageHeader?.Description || "",
+            Description: template.ServicePackageHeader?.Description ? `${template.ServicePackageHeader.Description} [Added by MOS]` : "[Added by MOS]",
           },
           ServicePackageTemplateID: template.ID,
           ServicePackageLines: {
