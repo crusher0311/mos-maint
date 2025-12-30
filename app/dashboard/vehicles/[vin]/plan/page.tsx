@@ -960,6 +960,28 @@ async function PlanContent({ params }: PageProps) {
     }
   }
   
+  // Check Tekmetric work orders if still no RO
+  if (!latestRoNumber) {
+    const tekmetricWO = await db.collection("tekmetric_work_orders").findOne(
+      { 
+        shopId,
+        vin: { $regex: new RegExp(`^${vin}$`, 'i') }
+      },
+      { sort: { updatedAt: -1, createdAt: -1 } }
+    );
+    
+    if (tekmetricWO) {
+      const woNumber = tekmetricWO.repairOrderNumber || tekmetricWO.roNumber;
+      const woId = tekmetricWO.workOrderId || tekmetricWO.repairOrderId;
+      if (woNumber) {
+        latestRoNumber = String(woNumber);
+        latestWorkOrderId = woId ? String(woId) : null;
+        customerName = tekmetricWO.customerName || tekmetricWO.contactName || null;
+        console.log(`[Plan Debug] Found Tekmetric RO: ${latestRoNumber}, Customer: ${customerName}`);
+      }
+    }
+  }
+  
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
 
   // PARALLEL CONFIG RESOLUTION - fetch all configs at once
