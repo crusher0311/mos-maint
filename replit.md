@@ -61,6 +61,35 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals (via Chrome Extension)
 
+## Scalability Roadmap (Future Phase)
+The current MVP architecture supports early-stage usage (dozens of shops, hundreds of users). To scale to thousands of concurrent users, the following improvements are needed:
+
+**Priority 1 - Background Job System:**
+- Move sync operations (Protractor, CARFAX) to a queue system (e.g., BullMQ)
+- Dedicated workers for heavy processing (maintenance analysis, large aggregations)
+- Job progress tracking and retry logic
+
+**Priority 2 - Caching Layer:**
+- Add Redis for session lookups (currently every request hits MongoDB)
+- Cache frequently-accessed dashboard data with TTL
+- Reduce database load on high-traffic routes
+
+**Priority 3 - Database Optimization:**
+- Add compound indexes on high-traffic queries
+- TTL indexes for automatic session cleanup
+- Consider read replicas for heavy aggregation workloads
+
+**Priority 4 - API Rate Limiting:**
+- Centralized rate limiting for Protractor/CARFAX/DataOne
+- Vendor-aware throttling to prevent hitting external limits
+- Batch requests where possible
+
+**Current Limitations:**
+- Sync operations run inside web requests (risk of timeouts)
+- All requests hit MongoDB directly (no caching)
+- Sessions stored in DB without in-memory cache
+- Third-party API rate limiting is per-request, not coordinated
+
 ## Recent Changes (December 2025)
 *   **v1.6.0**: Protractor DVI integration - inspections from AutoVitals now display in vehicle detail DVI tab
 *   **v1.6.0**: Auto deep sync for canned jobs - enriched library auto-populates on first load, uses cache until manually refreshed
