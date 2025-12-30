@@ -283,6 +283,27 @@ type OEMItem = {
 };
 type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
+// Display names for normalized service keys
+const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
+  oil: "Oil Change",
+  tire_rotation: "Tire Rotation",
+  cabin_air: "Cabin Air Filter",
+  engine_air: "Engine Air Filter",
+  coolant: "Coolant Flush",
+  trans_auto: "Automatic Transmission Fluid",
+  trans_manual: "Manual Transmission Fluid",
+  transfer_case: "Transfer Case Fluid",
+  differential: "Differential Fluid",
+  serpentine_belt: "Serpentine Belt",
+  fuel_system: "Fuel System Cleaning",
+  fuel_filter: "Fuel Filter",
+  brake_pads: "Brake Pads",
+  emissions: "Emissions Inspection",
+  power_steering: "Power Steering Fluid",
+  battery: "Battery",
+  ac_refrigerant: "A/C Refrigerant",
+};
+
 // Service key mappings aligned with CARFAX categories
 // Note: Order matters - more specific patterns should come first to avoid false matches
 const SERVICE_KEYS: Record<string, string[]> = {
@@ -599,10 +620,12 @@ function triage({
 
     const dviInfo = dviMap.get(serviceKey);
     const declinedInfo = declinedMap.get(serviceKey) || null;
+    // Use normalized display name if available, otherwise keep original OEM name
+    const displayTitle = SERVICE_KEY_DISPLAY_NAMES[serviceKey] || o.name;
     triaged.push({
       key: uniqueKey,
       serviceKey,
-      title: o.name,
+      title: displayTitle,
       category: o.category,
       intervalMiles,
       intervalMonths,
