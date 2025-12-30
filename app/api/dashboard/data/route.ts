@@ -334,21 +334,27 @@ export async function GET(request: NextRequest) {
 
     // Fetch shop preferences for workflow stage filtering
     const shopPrefs = await db.collection("shops").findOne(
-      { shopId: Number(user.shopId) },
+      { shopId: { $in: [String(user.shopId), Number(user.shopId)] } },
       { projection: { preferences: 1, tekmetric: 1 } }
     );
-    const DEFAULT_WORKFLOW_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted"];
+    const DEFAULT_WORKFLOW_STAGES = [
+      "InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted",
+      "EstimatePresented", "EstimateRejected", "WaitingForParts", "VehicleInBay",
+      "VehicleReadyForPickup", "Deferred", "WorkCompleted"
+    ];
     const allowedStages = shopPrefs?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
 
     // Fetch Protractor work orders directly (they have the odometer)
     // Filter by workflow stage preference - no date limit
     // Fetch Protractor work orders - each work order is a separate row (no VIN grouping)
+    // Show all non-completed work orders with any workflowStage (shop preferences can filter further)
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           vin: { $ne: null, $type: "string" },
-          workflowStage: { $in: allowedStages }
+          completed: { $ne: true }, // Only show non-completed work orders
+          workflowStage: { $exists: true, $ne: null } // Must have a workflow stage
         }
       },
       { $sort: { fetchedAt: -1 } },
@@ -402,7 +408,7 @@ export async function GET(request: NextRequest) {
           dviDone: { $literal: false },
           source: { $literal: "protractor" },
           af: {
-            status: { $ifNull: ["$workflowStage", { $ifNull: ["$status", "Open"] }] },
+            status: { $ifNull: ["$workflowStage", "In Progress"] },
             createdAt: "$fetchedAt",
             miles: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }
           },
@@ -547,7 +553,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if Protractor is the primary SMS for this shop
-    const shopConfig = await db.collection("shops").findOne({ shopId: Number(user.shopId) });
+    const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
     const isProtractorPrimary = !!shopConfig?.protractor?.configured;
 
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
