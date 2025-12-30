@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import { ReactNode } from "react";
 
@@ -467,18 +467,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           {r.displayMiles != null && r.displayMiles > 0 ? (
                             <Link
                               href={VEHICLE_HREF(vin)}
-                              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="View Recommendations"
                             >
-                              View
-                              <ChevronRight className="w-4 h-4" />
+                              <ClipboardList className="w-4 h-4" />
                             </Link>
                           ) : (
                             <span 
-                              className="flex items-center gap-1 text-sm text-gray-400 cursor-not-allowed"
+                              className="p-1.5 text-gray-300 cursor-not-allowed"
                               title="Mileage required for recommendations"
                             >
-                              View
-                              <ChevronRight className="w-4 h-4" />
+                              <ClipboardList className="w-4 h-4" />
                             </span>
                           )}
                           <button
