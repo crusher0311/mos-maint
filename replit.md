@@ -191,6 +191,7 @@ Currently implemented: Protractor. Future: Tekmetric, AutoFlow.
 - **Dev Mode:** All features are auto-enabled when running in Replit dev environment (NODE_ENV=development or REPLIT_DEV_DOMAIN is set)
 
 ## Recent Changes (December 2025)
+*   **v1.7.0**: Shop branding settings - upload shop logo for service records, add location identifier for multi-location shops
 *   **v1.7.0**: Modular feature system - shops can enable/disable specific features via admin panel
 *   **v1.7.0**: Job Lookup feature - search historical jobs, match scoring, add to work orders
 *   **v1.7.0**: SMS adapter architecture - abstraction layer for multi-SMS support
