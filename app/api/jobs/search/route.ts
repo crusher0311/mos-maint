@@ -54,9 +54,9 @@ function parseEngineString(engine: string): EngineInfo {
 }
 
 function getScoreBand(score: number): ScoreBand {
-  if (score >= 90) return "exact";
-  if (score >= 80) return "likely";
-  if (score >= 70) return "possible";
+  if (score >= 85) return "exact";
+  if (score >= 70) return "likely";
+  if (score >= 50) return "possible";
   return "poor";
 }
 
@@ -98,7 +98,14 @@ export async function GET(req: NextRequest) {
   if (query) {
     const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     if (keywords.length > 0) {
-      matchStage["job.keywords"] = { $all: keywords };
+      // Use $in for broader matching - any keyword match counts
+      // Also search in job title and description for better coverage
+      matchStage.$or = [
+        { "job.keywords": { $in: keywords } },
+        { "job.title": { $regex: keywords.join("|"), $options: "i" } },
+        { "job.description": { $regex: keywords.join("|"), $options: "i" } },
+        { "lines.description": { $regex: keywords.join("|"), $options: "i" } },
+      ];
     }
   }
   
@@ -262,7 +269,8 @@ export async function GET(req: NextRequest) {
     };
   });
   
-  const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 70);
+  // Lower threshold to 40 to include more results - let user decide relevance
+  const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
   
   eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
 

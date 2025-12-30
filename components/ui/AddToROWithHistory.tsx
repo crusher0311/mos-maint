@@ -104,8 +104,9 @@ export function AddToROWithHistory({
         throw new Error(data.error || "Failed to search job history");
       }
 
+      // Show all non-poor results - API already filters at score >= 40
       const filteredJobs = (data.results || []).filter(
-        (job: HistoricalJob) => job.matchBand !== "poor" && job.matchScore && job.matchScore >= 70
+        (job: HistoricalJob) => job.matchBand !== "poor"
       );
 
       if (filteredJobs.length === 0 && cannedJobOptions.length > 0) {
