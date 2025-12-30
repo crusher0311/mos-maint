@@ -22,6 +22,7 @@ import {
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
 import { AddToROButton } from "@/components/ui/AddToROButton";
+import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
 
@@ -1177,17 +1178,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         )}
                       </div>
                     </div>
-                    {(() => {
-                      const opts = getCannedJobOptionsForService(t.serviceKey);
-                      return opts.length > 0 ? (
-                        <AddToROButton
-                          vin={vin}
-                          serviceKey={t.serviceKey}
-                          cannedJobOptions={opts}
-                          workOrderId={latestRoNumber ?? undefined}
-                        />
-                      ) : null;
-                    })()}
+                    <AddToROWithHistory
+                      vin={vin}
+                      serviceTitle={t.title}
+                      vehicleYear={vehicle?.year}
+                      vehicleMake={vehicle?.make}
+                      vehicleModel={vehicle?.model}
+                      workOrderGuid={latestWorkOrderId ?? undefined}
+                    />
                   </div>
 
                   <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
@@ -1329,17 +1327,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
-                    {(() => {
-                      const opts = getCannedJobOptionsForService(t.serviceKey);
-                      return opts.length > 0 ? (
-                        <AddToROButton
-                          vin={vin}
-                          serviceKey={t.serviceKey}
-                          cannedJobOptions={opts}
-                          workOrderId={latestRoNumber ?? undefined}
-                        />
-                      ) : null;
-                    })()}
+                    <AddToROWithHistory
+                      vin={vin}
+                      serviceTitle={t.title}
+                      vehicleYear={vehicle?.year}
+                      vehicleMake={vehicle?.make}
+                      vehicleModel={vehicle?.model}
+                      workOrderGuid={latestWorkOrderId ?? undefined}
+                    />
                   </div>
 
                   <div className="text-sm mt-2">
@@ -1449,17 +1444,14 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
-                    {(() => {
-                      const opts = getCannedJobOptionsForService(t.serviceKey);
-                      return opts.length > 0 ? (
-                        <AddToROButton
-                          vin={vin}
-                          serviceKey={t.serviceKey}
-                          cannedJobOptions={opts}
-                          workOrderId={latestRoNumber ?? undefined}
-                        />
-                      ) : null;
-                    })()}
+                    <AddToROWithHistory
+                      vin={vin}
+                      serviceTitle={t.title}
+                      vehicleYear={vehicle?.year}
+                      vehicleMake={vehicle?.make}
+                      vehicleModel={vehicle?.model}
+                      workOrderGuid={latestWorkOrderId ?? undefined}
+                    />
                   </div>
 
                   <div className="text-sm mt-2">
