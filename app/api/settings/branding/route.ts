@@ -21,8 +21,14 @@ export async function GET() {
       smsType = "protractor";
     }
 
+    // Use Tekmetric logo as fallback only if: Tekmetric integration + no custom logo
+    const hasCustomLogo = Boolean(shop?.branding?.logo);
+    const isTekmetric = smsType === "tekmetric";
+    const fallbackLogo = (!hasCustomLogo && isTekmetric) ? "/tekmetric-logo.png" : null;
+
     return NextResponse.json({
       logo: shop?.branding?.logo || null,
+      fallbackLogo,
       shopName: shop?.branding?.displayName || null,
       locationIdentifier: shop?.locationIdentifier || null,
       smsType,
