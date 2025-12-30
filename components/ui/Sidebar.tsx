@@ -148,6 +148,11 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       icon: <BarChart3 className="w-5 h-5" />
     },
     {
+      name: "Job Lookup",
+      href: "/dashboard/jobs",
+      icon: <Search className="w-5 h-5" />
+    },
+    {
       name: "Shop Onboarding",
       href: "/dashboard/onboarding",
       icon: <ClipboardCheck className="w-5 h-5" />
