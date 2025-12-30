@@ -30,30 +30,22 @@ export default function JobLookupClient() {
 
   const fetchOpenWorkOrders = async () => {
     try {
-      const res = await fetch("/api/dashboard/data");
+      const res = await fetch("/api/jobs/open-work-orders");
       const data = await res.json();
       
-      if (data.ok && data.vehicles) {
-        const wos: OpenWorkOrder[] = [];
-        for (const vehicle of data.vehicles) {
-          const sources = vehicle.status?.sources || [];
-          for (const source of sources) {
-            if (source.provider === "protractor" && source.workOrderId) {
-              wos.push({
-                workOrderId: source.workOrderId,
-                workOrderNumber: source.workOrderNumber || 0,
-                vehicle: {
-                  vin: vehicle.vin,
-                  year: vehicle.year,
-                  make: vehicle.make,
-                  model: vehicle.model,
-                  engine: vehicle.engine,
-                },
-                status: source.status || "Open",
-              });
-            }
-          }
-        }
+      if (data.ok && data.workOrders) {
+        const wos: OpenWorkOrder[] = data.workOrders.map((wo: any) => ({
+          workOrderId: wo.workOrderId,
+          workOrderNumber: wo.workOrderNumber || 0,
+          vehicle: {
+            vin: wo.vehicle?.vin,
+            year: wo.vehicle?.year,
+            make: wo.vehicle?.make,
+            model: wo.vehicle?.model,
+            engine: wo.vehicle?.engine,
+          },
+          status: wo.status || "Open",
+        }));
         setOpenWorkOrders(wos);
       }
     } catch (err) {
