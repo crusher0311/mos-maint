@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
+  fetchWorkOrderById,
   upsertProtractorWorkOrderSnapshot,
 } from "@/lib/integrations/protractor";
 
@@ -22,7 +23,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const shops = await db.collection("shops").find({
-      "protractor.apiKey": { $exists: true, $ne: null }
+      $or: [
+        { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
+        { "protractorApiKey": { $exists: true, $nin: [null, ""] } },
+        { "protractor.connectionId": { $exists: true, $nin: [null, ""] } },
+        { "protractorConnectionId": { $exists: true, $nin: [null, ""] } }
+      ]
     }).toArray();
 
     const results: { shopId: number; synced: number; removed: number; error?: string }[] = [];
@@ -43,16 +49,45 @@ export async function GET(req: NextRequest) {
 
         const activeWOs = activeResult.workOrders;
         const activeGuids = new Set(activeWOs.map(wo => wo.ID));
+        const activeWoNumbers = new Set(activeWOs.map(wo => wo.WorkOrderNumber));
+        const INVOICED_STAGES = ["Invoiced", "Invoice", "Void", "Closed", "Complete", "Completed"];
+        
+        const stageCounts: Record<string, number> = {};
+        for (const wo of activeWOs) {
+          const stage = wo.WorkflowStage || (wo as any).Status || "Unknown";
+          stageCounts[stage] = (stageCounts[stage] || 0) + 1;
+        }
+        console.log(`[Cron] Shop ${shopId} - WorkflowStage counts:`, stageCounts);
 
         for (const wo of activeWOs) {
-          if (wo.VIN) {
+          const vin = (wo as any).VIN || (wo as any).ServiceItem?.VIN;
+          const stage = wo.WorkflowStage || (wo as any).Status || "";
+          
+          if (vin) {
             await upsertProtractorWorkOrderSnapshot(shopId, wo);
+            
+            if (INVOICED_STAGES.some(s => stage.toLowerCase().includes(s.toLowerCase()))) {
+              await db.collection("protractor_work_orders").updateMany(
+                {
+                  shopId: { $in: [String(shopId), Number(shopId)] },
+                  $or: [{ workOrderGuid: wo.ID }, { "data.ID": wo.ID }]
+                },
+                {
+                  $set: {
+                    workflowStage: "Invoiced",
+                    status: "Invoiced",
+                    closedAt: new Date(),
+                    updatedAt: new Date()
+                  }
+                }
+              );
+            }
           }
         }
 
         const cachedWOs = await db.collection("protractor_work_orders").find({
           shopId: { $in: [String(shopId), Number(shopId)] },
-          workflowStage: { $nin: ["Invoiced", "Void", "Closed"] }
+          workflowStage: { $nin: INVOICED_STAGES }
         }).toArray();
 
         let removedCount = 0;
