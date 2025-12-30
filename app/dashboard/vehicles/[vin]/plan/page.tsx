@@ -872,12 +872,14 @@ async function PlanContent({ params }: PageProps) {
   let latestWorkOrderId: string | null = null;
   let customerName: string | null = null;
   
-  // Helper to extract customer name from work order
+  // Helper to extract customer name from work order (works for all integrations)
   const extractCustomerName = (wo: any): string | null => {
-    // Check flat contactName field first (stored by sync)
+    // Tekmetric format
+    if (wo?.customerName) return wo.customerName;
     if (wo?.contactName) return wo.contactName;
+    // Protractor format - flat fields
     if (wo?.data?.contactName) return wo.data.contactName;
-    // Fall back to nested Contact structure
+    // Protractor format - nested Contact structure
     const contact = wo?.Contact || wo?.data?.Contact;
     if (contact?.Name) {
       const firstName = contact.Name.FirstName || '';
@@ -885,104 +887,97 @@ async function PlanContent({ params }: PageProps) {
       const name = [firstName, lastName].filter(Boolean).join(' ').trim();
       if (name) return name;
     }
-    return wo?.customerName || wo?.data?.customerName || null;
+    return wo?.data?.customerName || null;
   };
   
-  // Also check Protractor for active work orders
-  // First get the vehicle's Protractor ServiceItemID
-  const protractorVehicleCache = await db.collection("protractor_vehicles").findOne({
-    shopId,
-    vin: { $regex: new RegExp(`^${vin}$`, 'i') }
-  });
+  // Query all connected work order sources in parallel
+  const vinRegex = new RegExp(`^${vin}$`, 'i');
   
-  // protractor_vehicles stores the Protractor ID in 'protractorId' field
-  const serviceItemId = protractorVehicleCache?.protractorId;
-  console.log(`[Plan Debug] Protractor ServiceItemID for VIN ${vin}: ${serviceItemId || 'not found'}`);
-  
-  if (serviceItemId) {
-    // Look up work orders by ServiceItemID - check all possible field variations
-    const protractorWO = await db.collection("protractor_work_orders").findOne(
-      { 
-        shopId, 
-        $and: [
-          { $or: [
-            { serviceItemId: serviceItemId },
-            { "data.ServiceItemID": serviceItemId },
-            { ServiceItemID: serviceItemId }
-          ]},
-          { $or: [
-            { completed: { $ne: true } },
-            { "data.Completed": { $ne: true } },
-            { Completed: { $ne: true } }
-          ]}
-        ]
-      },
-      { sort: { fetchedAt: -1, createdAt: -1 } }
-    );
-    
-    console.log(`[Plan Debug] Protractor WO query result:`, protractorWO ? 
-      `found WO#${protractorWO.workOrderNumber || protractorWO.WorkOrderNumber || protractorWO.data?.WorkOrderNumber}` : 
-      'not found');
-    
-    const woNumber = protractorWO?.workOrderNumber || protractorWO?.WorkOrderNumber || protractorWO?.data?.WorkOrderNumber;
-    const woId = protractorWO?.workOrderId || protractorWO?.ID || protractorWO?.data?.ID;
-    
-    if (woNumber) {
-      latestRoNumber = String(woNumber);
-      latestWorkOrderId = woId ? String(woId) : null;
-      customerName = extractCustomerName(protractorWO);
-      console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}, ID: ${latestWorkOrderId}, Customer: ${customerName}`);
-    }
-  }
-  
-  // If still no RO, check if there are any work orders for this VIN directly
-  if (!latestRoNumber) {
-    const protractorWOByVin = await db.collection("protractor_work_orders").findOne(
+  const [protractorWO, tekmetricWO, autoflowWO] = await Promise.all([
+    // Protractor work orders
+    db.collection("protractor_work_orders").findOne(
       { 
         shopId,
         $or: [
-          { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
-          { "data.VIN": { $regex: new RegExp(`^${vin}$`, 'i') } }
+          { vin: { $regex: vinRegex } },
+          { "data.VIN": { $regex: vinRegex } }
         ]
       },
       { sort: { fetchedAt: -1, createdAt: -1 } }
-    );
-    
-    if (protractorWOByVin) {
-      const woNumber = protractorWOByVin.workOrderNumber || protractorWOByVin.WorkOrderNumber || protractorWOByVin.data?.WorkOrderNumber;
-      const woId = protractorWOByVin.workOrderId || protractorWOByVin.ID || protractorWOByVin.data?.ID;
-      if (woNumber) {
-        latestRoNumber = String(woNumber);
-        latestWorkOrderId = woId ? String(woId) : null;
-        customerName = extractCustomerName(protractorWOByVin);
-        console.log(`[Plan Debug] Found Protractor RO by VIN: ${latestRoNumber}, Customer: ${customerName}`);
-      }
-    }
-  }
-  
-  // Check Tekmetric work orders if still no RO
-  if (!latestRoNumber) {
-    const tekmetricWO = await db.collection("tekmetric_work_orders").findOne(
+    ),
+    // Tekmetric work orders
+    db.collection("tekmetric_work_orders").findOne(
+      { shopId, vin: { $regex: vinRegex } },
+      { sort: { updatedAt: -1, createdAt: -1 } }
+    ),
+    // AutoFlow work orders (via webhook events)
+    db.collection("autoflow_events").findOne(
       { 
         shopId,
-        vin: { $regex: new RegExp(`^${vin}$`, 'i') }
+        $or: [
+          { vehicleVin: { $regex: vinRegex } },
+          { vin: { $regex: vinRegex } },
+          { "payload.vehicle.vin": { $regex: vinRegex } }
+        ]
       },
-      { sort: { updatedAt: -1, createdAt: -1 } }
-    );
-    
-    if (tekmetricWO) {
-      const woNumber = tekmetricWO.repairOrderNumber || tekmetricWO.roNumber;
-      const woId = tekmetricWO.workOrderId || tekmetricWO.repairOrderId;
-      if (woNumber) {
-        latestRoNumber = String(woNumber);
-        latestWorkOrderId = woId ? String(woId) : null;
-        customerName = tekmetricWO.customerName || tekmetricWO.contactName || null;
-        console.log(`[Plan Debug] Found Tekmetric RO: ${latestRoNumber}, Customer: ${customerName}`);
-      }
+      { sort: { createdAt: -1 } }
+    )
+  ]);
+  
+  // Pick the most recent work order from any connected source
+  type WOCandidate = { source: string; roNumber: string; workOrderId: string | null; customerName: string | null; updatedAt: Date };
+  const candidates: WOCandidate[] = [];
+  
+  if (protractorWO) {
+    const woNumber = protractorWO.workOrderNumber || protractorWO.WorkOrderNumber || protractorWO.data?.WorkOrderNumber;
+    if (woNumber) {
+      candidates.push({
+        source: 'Protractor',
+        roNumber: String(woNumber),
+        workOrderId: protractorWO.workOrderId || protractorWO.ID || protractorWO.data?.ID || null,
+        customerName: extractCustomerName(protractorWO),
+        updatedAt: protractorWO.fetchedAt || protractorWO.createdAt || new Date(0)
+      });
     }
   }
   
-  console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}`);
+  if (tekmetricWO) {
+    const woNumber = tekmetricWO.repairOrderNumber || tekmetricWO.roNumber;
+    if (woNumber) {
+      candidates.push({
+        source: 'Tekmetric',
+        roNumber: String(woNumber),
+        workOrderId: tekmetricWO.workOrderId || tekmetricWO.repairOrderId || null,
+        customerName: extractCustomerName(tekmetricWO),
+        updatedAt: tekmetricWO.updatedAt || tekmetricWO.createdAt || new Date(0)
+      });
+    }
+  }
+  
+  if (autoflowWO) {
+    const woNumber = autoflowWO.payload?.ticket?.invoice || autoflowWO.payload?.ticket?.id || autoflowWO.roNumber;
+    if (woNumber) {
+      candidates.push({
+        source: 'AutoFlow',
+        roNumber: String(woNumber),
+        workOrderId: null,
+        customerName: autoflowWO.payload?.customer?.name || autoflowWO.customerName || null,
+        updatedAt: autoflowWO.createdAt || new Date(0)
+      });
+    }
+  }
+  
+  // Sort by most recent and pick the best candidate
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    const best = candidates[0];
+    latestRoNumber = best.roNumber;
+    latestWorkOrderId = best.workOrderId ? String(best.workOrderId) : null;
+    customerName = best.customerName;
+    console.log(`[Plan Debug] Found ${best.source} RO: ${latestRoNumber}, Customer: ${customerName}`);
+  }
+  
+  console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}, sources checked: Protractor/Tekmetric/AutoFlow`);
 
   // PARALLEL CONFIG RESOLUTION - fetch all configs at once
   const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
