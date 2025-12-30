@@ -5,6 +5,7 @@ import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
   fetchDeferredWork,
+  fetchWorkOrderById,
 } from "@/lib/integrations/protractor";
 
 export const runtime = "nodejs";
@@ -24,6 +25,13 @@ export async function GET(req: NextRequest) {
       { error: "Protractor is not configured for this shop" },
       { status: 400 }
     );
+  }
+
+  // If workOrderId is provided, return full work order details
+  const workOrderId = req.nextUrl.searchParams.get("workOrderId");
+  if (workOrderId) {
+    const result = await fetchWorkOrderById(shopId, workOrderId);
+    return NextResponse.json({ workOrder: result.workOrder, error: result.error });
   }
 
   const endDate = new Date();
