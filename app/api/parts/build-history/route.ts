@@ -25,6 +25,7 @@ export async function POST() {
   }
 
   const shopId = Number(session.shopId);
+  console.log(`[Parts History] Session shopId: ${session.shopId}, parsed: ${shopId}`);
   const config = await resolveProtractorConfig(shopId);
   
   if (!config.configured) {
