@@ -275,6 +275,12 @@ interface CachedMaintenanceData {
     items: MaintenanceItem[];
     error?: string;
   };
+  vehicle?: {
+    year: number;
+    make: string;
+    model: string;
+    engine: string;
+  };
   fetchedAt: Date;
   expiresAt: Date;
   source: "api" | "cache";
@@ -286,6 +292,12 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
   squish: string;
   count: number;
   items: MaintenanceItem[];
+  vehicle?: {
+    year: number;
+    make: string;
+    model: string;
+    engine: string;
+  };
   error?: string;
   source: "api" | "cache";
   cachedAt?: Date;
@@ -300,8 +312,8 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     // Check for cached data
     const cached = await cacheCollection.findOne({ squish });
     
-    if (cached && cached.expiresAt > now) {
-      // Cache hit - return cached data
+    if (cached && cached.expiresAt > now && cached.vehicle) {
+      // Cache hit with vehicle info - return cached data
       console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
       return {
         ok: cached.data.ok,
@@ -309,15 +321,34 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
         squish,
         count: cached.data.count,
         items: cached.data.items,
+        vehicle: cached.vehicle,
         error: cached.data.error,
         source: "cache",
         cachedAt: cached.fetchedAt,
       };
     }
     
+    // If cache hit but missing vehicle info, mark for re-fetch
+    if (cached && cached.expiresAt > now && !cached.vehicle) {
+      console.log(`[DataOne Cache] HIT but missing vehicle info for squish ${squish}, re-fetching...`);
+    }
+    
     // Cache miss or expired - fetch from API
     console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from API...`);
-    const apiResult = await getMaintenanceSchedule(vin);
+    
+    // Fetch both maintenance schedule and vehicle decode in parallel
+    const [apiResult, decoded] = await Promise.all([
+      getMaintenanceSchedule(vin),
+      decodeVin(vin)
+    ]);
+    
+    // Extract vehicle info from decode
+    const vehicleInfo = decoded.ok && decoded.decoded ? {
+      year: decoded.decoded.year,
+      make: decoded.decoded.make,
+      model: decoded.decoded.model,
+      engine: decoded.decoded.engine_name,
+    } : undefined;
     
     // Store in cache (even if API failed, to avoid hammering)
     const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
@@ -334,6 +365,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
             items: apiResult.items,
             error: apiResult.error,
           },
+          vehicle: vehicleInfo,
           fetchedAt: now,
           expiresAt,
           source: "api",
@@ -350,6 +382,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       squish,
       count: apiResult.count,
       items: apiResult.items,
+      vehicle: vehicleInfo,
       error: apiResult.error,
       source: "api",
     };
