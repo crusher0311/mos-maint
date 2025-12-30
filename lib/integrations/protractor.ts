@@ -287,24 +287,55 @@ export async function fetchActiveWorkOrders(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const params = new URLSearchParams();
-  if (options?.startDate) params.set("startDate", options.startDate);
-  if (options?.endDate) params.set("endDate", options.endDate);
-  if (options?.readInProgress !== undefined) {
-    params.set("readInProgress", String(options.readInProgress));
+  const allWorkOrders: ProtractorWorkOrder[] = [];
+  const pageSize = 100;
+  let skip = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const params = new URLSearchParams();
+    if (options?.startDate) params.set("startDate", options.startDate);
+    if (options?.endDate) params.set("endDate", options.endDate);
+    if (options?.readInProgress !== undefined) {
+      params.set("readInProgress", String(options.readInProgress));
+    }
+    params.set("take", String(pageSize));
+    params.set("skip", String(skip));
+
+    const queryStr = `?${params.toString()}`;
+    const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
+      `/WorkOrder/${queryStr}`,
+      config
+    );
+
+    if (!result.ok) {
+      // If first page fails, return error; otherwise return what we have
+      if (skip === 0) {
+        return { ok: false, error: result.error };
+      }
+      break;
+    }
+
+    const pageItems = result.data?.ItemCollection || [];
+    allWorkOrders.push(...pageItems);
+    
+    console.log(`[Protractor] Fetched work orders page: skip=${skip}, got ${pageItems.length}, total so far: ${allWorkOrders.length}`);
+
+    // If we got fewer items than page size, we've reached the end
+    if (pageItems.length < pageSize) {
+      hasMore = false;
+    } else {
+      skip += pageSize;
+    }
+
+    // Safety limit: max 5000 work orders (50 pages)
+    if (skip >= 5000) {
+      console.log(`[Protractor] Reached safety limit of 5000 work orders`);
+      hasMore = false;
+    }
   }
 
-  const queryStr = params.toString() ? `?${params.toString()}` : "";
-  const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
-    `/WorkOrder/${queryStr}`,
-    config
-  );
-
-  if (!result.ok) {
-    return { ok: false, error: result.error };
-  }
-
-  return { ok: true, workOrders: result.data?.ItemCollection || [] };
+  return { ok: true, workOrders: allWorkOrders };
 }
 
 export async function fetchWorkOrderById(
