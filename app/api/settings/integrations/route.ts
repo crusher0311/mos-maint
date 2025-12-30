@@ -20,13 +20,6 @@ export async function GET(req: NextRequest) {
       { projection: { protractor: 1, tekmetric: 1, autoflow: 1 } }
     );
 
-    console.log(`[Integrations] Shop ${shopId} config:`, {
-      protractor: !!shop?.protractor?.configured,
-      tekmetric: !!shop?.tekmetric?.configured,
-      autoflow: !!shop?.autoflow?.configured,
-      raw: shop
-    });
-
     return NextResponse.json({
       protractor: {
         configured: !!shop?.protractor?.configured
