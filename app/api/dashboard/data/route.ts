@@ -437,13 +437,13 @@ export async function GET(request: NextRequest) {
 
     // Fetch Tekmetric work orders from synced collection (like Protractor)
     // Terminal statuses that indicate vehicle has left the shop
-    const TEKMETRIC_TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
+    const TEKMETRIC_ALLOWED_STATUSES = ["Estimate", "Estimates", "Work-In-Progress", "Complete", "Completed"];
     const tekmetricRows = await db.collection("tekmetric_work_orders").aggregate([
       {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           vin: { $ne: null, $type: "string" },
-          status: { $nin: TEKMETRIC_TERMINAL_STATUSES }
+          status: { $in: TEKMETRIC_ALLOWED_STATUSES }
         }
       },
       { $sort: { fetchedAt: -1 } },
