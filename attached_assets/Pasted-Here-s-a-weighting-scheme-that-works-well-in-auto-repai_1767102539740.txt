@@ -1,0 +1,204 @@
+Here’s a weighting scheme that works well in auto repair job lookup when you want near-perfect Y/M/M/engine for most jobs, but still allow “smart” matches when the powertrain spans multiple years (or even sibling makes).
+
+Core idea
+
+Use a two-stage score:
+
+Hard gate (eligibility): reject obvious wrong-powertrain results fast.
+
+Weighted score (ranking): among eligible results, rank by how exact the fit is + how trustworthy the evidence is.
+
+This prevents “kinda close” stuff from floating to the top just because it shares a make/model name.
+
+Stage 1: Hard gates (rules before scoring)
+
+These gates keep you in the “95% must be perfect” world:
+
+Gate A (Powertrain family must match)
+
+Pass if engine family matches via at least one of:
+
+Exact engine code / RPO / engine ID (best)
+
+Displacement + aspiration + cylinder count + fuel type (good)
+
+Known crosswalk “engine family group” (e.g., GM 5.3 variants) (good)
+
+Fail if:
+
+Fuel type mismatch (gas vs diesel)
+
+Cylinder/aspiration mismatch (I4 vs V6, NA vs turbo) unless explicitly tagged as compatible
+
+Gate B (Critical option constraints)
+
+Some jobs are meaningless without these:
+
+Drivetrain: FWD/RWD/AWD/4WD (for many labor ops)
+
+Transmission family (some ops)
+
+Brake package, cab/bed config, wheelbase (truck stuff)
+
+If the job record says it requires a constraint and the vehicle doesn’t match, drop it.
+
+After gates, scoring ranks what remains.
+
+Stage 2: Weighted score (ranking)
+
+Score components out of 100 points. For your requirement (“Y/M/M/Engine must be 100% for ~95%”), set it up so perfect YMME dominates, but allow year flexibility when powertrain matches strongly.
+
+Recommended weights (default)
+
+A) Powertrain match (40 points)
+
+Exact engine code match: 40
+
+Exact displacement + aspiration + cylinders + fuel: 34
+
+Engine family group match (crosswalk): 28
+
+Only partial engine info match: 10–20 (depending on confidence)
+
+B) Make/Model match (30 points)
+
+Exact make + exact model: 30
+
+Exact make + model family (e.g., Silverado 1500 vs Silverado): 24
+
+Sister-make equivalent (GMC Sierra vs Chevy Silverado) only if crosswalked: 18–22
+
+“Same platform” but not confirmed: 10–15
+
+C) Year match (10 points) — “soft”
+Year should matter, but not override powertrain:
+
+Exact year: 10
+
+Within same generation range (from your platform table): 8
+
+Within powertrain overlap range (engine unchanged): 6–7
+
+Off-range: 0–3 (but not auto-fail if engine is very strong)
+
+D) Configuration / constraints match (10 points)
+
+Drivetrain match: 0–4
+
+Transmission family match: 0–3
+
+Body/cab/bed/wheelbase match: 0–3
+(Only score what’s relevant/known for that job.)
+
+E) Evidence & quality (10 points)
+This is huge in practice:
+
+OEM procedure / service manual reference: 10
+
+Trusted labor guide (Mitchell/ALLDATA/Chilton): 7–9
+
+Community/UGC: 1–5 depending on verification
+
+If job record has “confirmed on VINs count”: add up to +2 (cap at 10)
+
+How to enforce “95% must be perfect”
+
+Use score bands + behavior:
+
+Band 1: “Exact Fit” (≥ 90)
+
+Show normally, default selected.
+
+Usually requires: powertrain strong + make/model exact + year exact or gen-correct.
+
+Band 2: “Likely Fit” (80–89)
+
+Show with a label: “Matches powertrain; year differs but same engine family.”
+
+This is where your year-flex logic lives.
+
+Band 3: “Possible / Needs review” (70–79)
+
+Collapsed by default, requires click to expand.
+
+Below 70: hide.
+
+Additionally, add a rule:
+
+If Make+Model is exact AND Powertrain is exact → allow year drift.
+
+If Make/Model is not exact (sister-make), require stronger powertrain evidence (engine code or family + platform crosswalk), or downrank hard.
+
+Practical scoring math (simple, robust)
+
+Use multipliers so wrong categories can’t “make up” for a miss.
+
+Example:
+
+BaseScore = A + B + C + D + E
+
+Apply penalties:
+
+Fuel mismatch: score = 0 (gate)
+
+Engine mismatch: score = 0 (gate)
+
+Sister-make without crosswalk: score × 0.6
+
+Year outside known overlap: score × 0.85 (still can pass if engine is exact)
+
+This keeps the ranking sane.
+
+Special handling: year drift & cross-make
+
+To do what you described (“year could be off and still match”):
+
+When to “forgive” year
+
+Forgive year when:
+
+Engine is exact (code/RPO) OR engine family is strong
+
+AND generation/platform is same (or explicitly mapped)
+
+AND job type is powertrain-invariant across that span (e.g., alternator replace might be same; body trim work not)
+
+So you can even implement job-type sensitivity:
+
+Year sensitivity by job category (multiplier on Year points)
+
+Engine mechanical: Year factor 0.7 (less year-sensitive)
+
+Electrical/charging: 0.6
+
+Emissions/OBD components: 1.2 (very year-sensitive)
+
+Body/trim/interior: 1.4
+
+Brakes/suspension: 1.0 (varies)
+
+HVAC: 1.0–1.2
+
+This is one of the biggest “feels smart” upgrades.
+
+Minimum viable version (if you want to ship fast)
+
+If you’re implementing quickly, do this:
+
+Gate on fuel type + cylinders + aspiration (and ideally engine code if available)
+
+Score:
+
+Powertrain 45
+
+Make/Model 30
+
+Year 10 (soft)
+
+Constraints 10
+
+Evidence 5
+
+Bands: ≥90 exact, 80–89 likely, 70–79 possible
+
+This already behaves the way techs/advisors expect.
