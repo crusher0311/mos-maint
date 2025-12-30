@@ -13,6 +13,11 @@ import {
   fetchServicePackageTemplateDetail,
   upsertCannedJobsCache,
 } from "@/lib/integrations/protractor";
+import {
+  extractJobIndexFromWorkOrder,
+  upsertJobIndexEntries,
+  updatePartCrossReferences,
+} from "@/lib/job-index";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -59,9 +64,13 @@ export async function POST(req: NextRequest) {
     vehiclesSynced: 0,
     deferredWorkSynced: 0,
     cannedJobsSynced: 0,
+    jobsIndexed: 0,
+    partsIndexed: 0,
     vehicleDetails: [] as Array<{ vin: string; year?: number; make?: string; model?: string; odometer?: number; woOdometer?: number }>,
     errors: [] as string[],
   };
+  
+  const allJobIndexEntries: any[] = [];
 
   // Sync canned jobs / service package templates
   console.log(`[Protractor Sync] Fetching service packages...`);
@@ -319,8 +328,35 @@ export async function POST(req: NextRequest) {
       }
 
       await upsertProtractorWorkOrderSnapshot(shopId, wo);
+      
+      // Extract job index entries for parts intelligence
+      try {
+        const jobEntries = extractJobIndexFromWorkOrder(shopId, wo, "protractor");
+        if (jobEntries.length > 0) {
+          allJobIndexEntries.push(...jobEntries);
+        }
+      } catch (indexErr: any) {
+        console.log(`[Protractor Sync] Job index extraction error for WO ${wo.ID}: ${indexErr.message}`);
+      }
     } catch (err: any) {
       results.errors.push(`Work order ${wo.ID}: ${err.message}`);
+    }
+  }
+  
+  // Index jobs for parts intelligence / job lookup
+  if (allJobIndexEntries.length > 0) {
+    try {
+      console.log(`[Protractor Sync] Indexing ${allJobIndexEntries.length} jobs for parts intelligence...`);
+      const indexResult = await upsertJobIndexEntries(allJobIndexEntries);
+      results.jobsIndexed = indexResult.inserted + indexResult.updated;
+      console.log(`[Protractor Sync] Job index: ${indexResult.inserted} inserted, ${indexResult.updated} updated`);
+      
+      const partsUpdated = await updatePartCrossReferences(allJobIndexEntries);
+      results.partsIndexed = partsUpdated;
+      console.log(`[Protractor Sync] Part cross-references: ${partsUpdated} parts updated`);
+    } catch (indexErr: any) {
+      console.log(`[Protractor Sync] Job indexing error: ${indexErr.message}`);
+      results.errors.push(`Job indexing: ${indexErr.message}`);
     }
   }
 

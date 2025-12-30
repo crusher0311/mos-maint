@@ -190,7 +190,7 @@ export async function resolveProtractorConfig(shopId: number | string): Promise<
   };
 }
 
-async function protractorFetch<T>(
+export async function protractorFetch<T>(
   endpoint: string,
   config: ProtractorConfig,
   options: RequestInit = {}
