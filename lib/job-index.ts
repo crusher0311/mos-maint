@@ -226,6 +226,113 @@ export function extractJobIndexFromWorkOrder(
   return entries;
 }
 
+export function extractJobIndexFromCachedWorkOrder(
+  shopId: number,
+  cachedWO: any,
+  vehicleData?: any
+): JobIndexEntry[] {
+  const entries: JobIndexEntry[] = [];
+  
+  const servicePackages = cachedWO.servicePackages?.ItemCollection || 
+                          cachedWO.servicePackages || 
+                          [];
+  
+  if (!Array.isArray(servicePackages) || servicePackages.length === 0) {
+    return entries;
+  }
+  
+  const performedAt = cachedWO.fetchedAt || cachedWO.scheduledTime || new Date();
+  
+  for (const pkg of servicePackages) {
+    const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.title || "";
+    const description = pkg.ServicePackageHeader?.Description || pkg.Description || pkg.description || "";
+    
+    if (!title) continue;
+    
+    const lines: JobLineItem[] = [];
+    let laborHours = 0;
+    let laborAmount = 0;
+    let partsAmount = 0;
+    let totalAmount = 0;
+    
+    const packageLines = pkg.ServicePackageLines?.ItemCollection || 
+                         pkg.ServicePackageLines || 
+                         pkg.lines || 
+                         [];
+    
+    if (Array.isArray(packageLines)) {
+      for (const line of packageLines) {
+        const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
+        const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
+        const unitPrice = parseFloat(line.Price || line.UnitPrice || line.unitPrice || "0") || 0;
+        const extendedPrice = parseFloat(line.ExtendedPrice || line.ExtendedTotal || line.Total || line.total || "0") || (quantity * unitPrice);
+        
+        lines.push({
+          lineType,
+          description: line.Description || line.description || "",
+          partNumber: line.PartNumber || line.partNumber || undefined,
+          manufacturer: line.Manufacturer || line.manufacturer || undefined,
+          quantity,
+          unitPrice,
+          extendedPrice,
+        });
+        
+        if (lineType === "labor") {
+          const hours = parseFloat(line.EstimatedHours || line.Hours || line.Quantity || line.quantity || "0") || quantity;
+          laborHours += hours;
+          laborAmount += extendedPrice;
+        } else if (lineType === "part") {
+          partsAmount += extendedPrice;
+        }
+        totalAmount += extendedPrice;
+      }
+    }
+    
+    if (lines.length === 0) continue;
+    
+    entries.push({
+      shopId,
+      workOrderId: cachedWO.workOrderId || cachedWO.ID,
+      workOrderNumber: cachedWO.workOrderNumber,
+      servicePackageId: pkg.ID || pkg.id || `${cachedWO.workOrderId}-${entries.length}`,
+      performedAt: new Date(performedAt),
+      
+      vehicle: {
+        vin: cachedWO.vin,
+        year: vehicleData?.year || vehicleData?.Year,
+        make: vehicleData?.make || vehicleData?.Make,
+        model: vehicleData?.model || vehicleData?.Model,
+        engine: vehicleData?.engine || vehicleData?.Engine,
+        serviceItemId: cachedWO.serviceItemId,
+      },
+      
+      job: {
+        title,
+        description,
+        code: pkg.Code || pkg.code || pkg.ServicePackageHeader?.Code,
+        chapter: pkg.Chapter || pkg.chapter,
+        keywords: extractKeywords(title, description),
+      },
+      
+      lines,
+      
+      totals: {
+        laborHours,
+        laborAmount,
+        partsAmount,
+        totalAmount,
+      },
+      
+      metadata: {
+        indexedAt: new Date(),
+        sourceType: "protractor",
+      },
+    });
+  }
+  
+  return entries;
+}
+
 export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{ inserted: number; updated: number }> {
   if (entries.length === 0) {
     return { inserted: 0, updated: 0 };
