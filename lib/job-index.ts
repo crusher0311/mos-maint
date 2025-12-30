@@ -436,20 +436,19 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
           { shopId, normalizedPartNumber },
           {
             $set: {
+              shopId,
               partNumber: firstUsage.line.partNumber,
               normalizedPartNumber,
               description: firstUsage.line.description,
               manufacturer: firstUsage.line.manufacturer,
               updatedAt: new Date(),
+              lastUsedAt: new Date(),
             },
             $setOnInsert: {
-              shopId,
               crossReferences: [],
               createdAt: new Date(),
-              usageCount: 0,
             },
-            $max: { lastUsedAt: new Date() },
-            $inc: { usageCount: newUsageCount },
+            $inc: { usageCount: newUsageCount || 1 },
             $addToSet: { 
               usedOn: { $each: uniqueUsedOn },
               workOrderIds: { $each: uniqueWorkOrderIds },
