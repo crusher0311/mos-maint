@@ -284,31 +284,59 @@ type OEMItem = {
 type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
 // Service key mappings aligned with CARFAX categories
+// Note: Order matters - more specific patterns should come first to avoid false matches
 const SERVICE_KEYS: Record<string, string[]> = {
-  oil: ["oil and filter", "engine oil", "oil change", "replace engine oil and filter", "oil filter"],
-  tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated"],
-  cabin_air: ["cabin air filter", "pollen filter"],
-  engine_air: ["engine air filter", "air filter"],
-  coolant: ["engine coolant", "coolant flush", "replace coolant", "cooling system", "antifreeze", "radiator flush"],
-  trans_auto: ["automatic transmission fluid", "atf fluid", "atf flush"],
-  trans_manual: ["manual transmission fluid", "manual trans fluid"],
-  transfer_case: ["transfer case fluid", "transfer case flush"],
-  differential: ["differential fluid", "differential flush", "rear differential", "front differential"],
-  serpentine_belt: ["serpentine belt", "drive belt", "accessory belt"],
-  fuel_system: ["fuel system cleaning", "fuel injector cleaning", "fuel system service"],
+  // Oil change - normalize oil filter, engine oil, etc. to oil change
+  oil: [
+    "oil and filter", "engine oil", "oil change", "replace engine oil", 
+    "oil filter", "replace oil filter", "change oil", "motor oil",
+    "crankcase oil", "oil & filter"
+  ],
+  tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels"],
+  // Cabin air must come before engine air to avoid false matches
+  cabin_air: ["cabin air filter", "cabin filter", "pollen filter", "hvac filter", "interior air filter"],
+  engine_air: ["engine air filter", "air cleaner element", "air filter element"],
+  coolant: [
+    "engine coolant", "coolant flush", "replace coolant", "cooling system", 
+    "antifreeze", "radiator flush", "drain and fill coolant"
+  ],
+  trans_auto: ["automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid"],
+  trans_manual: ["manual transmission fluid", "manual trans fluid", "mtf fluid"],
+  transfer_case: ["transfer case fluid", "transfer case flush", "transfer case oil"],
+  differential: [
+    "differential fluid", "differential flush", "rear differential", 
+    "front differential", "rear axle fluid", "front axle fluid"
+  ],
+  serpentine_belt: ["serpentine belt", "drive belt", "accessory belt", "v-belt", "fan belt"],
+  fuel_system: ["fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction"],
   fuel_filter: ["fuel filter"],
-  brake_pads: ["brake pads", "brake linings", "brake rotor", "brake pads replaced", "brake lining"],
-  emissions: ["emissions test", "emissions inspection", "smog test", "smog check"],
-  power_steering: ["power steering fluid", "power steering flush"],
-  battery: ["battery replaced", "battery replacement", "battery/charging"],
-  ac_refrigerant: ["a/c refrigerant", "ac refrigerant", "air conditioning refill", "a/c recharge"],
+  brake_pads: [
+    "brake pads", "brake linings", "brake rotor", "brake pads replaced", 
+    "brake lining", "disc brake", "front brakes", "rear brakes", "brake shoes"
+  ],
+  emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
+  power_steering: ["power steering fluid", "power steering flush", "power steering service"],
+  battery: ["battery replaced", "battery replacement", "battery/charging", "replace battery", "new battery"],
+  ac_refrigerant: [
+    "a/c refrigerant", "ac refrigerant", "air conditioning refill", 
+    "a/c recharge", "ac recharge", "refrigerant", "r-134a", "r134a"
+  ],
 };
 
 function toKeyFromName(name: string): string | null {
   const n = name.toLowerCase();
+  
+  // Special handling for "air filter" without "cabin" - this is engine air filter
+  // Must check cabin_air first to avoid false positives
+  if (n.includes("cabin") && n.includes("air") && n.includes("filter")) return "cabin_air";
+  
   for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
     if (vals.some((v) => n.includes(v))) return key;
   }
+  
+  // Catch-all for generic "air filter" (without cabin) - treat as engine air
+  if (n.includes("air filter") && !n.includes("cabin")) return "engine_air";
+  
   if (n.includes("exhaust system")) return "exhaust";
   // Legacy mappings for backward compatibility
   if (n.includes("transmission fluid") || n.includes("transmission flush")) return "trans_auto";
