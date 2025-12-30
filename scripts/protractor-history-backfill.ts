@@ -71,19 +71,23 @@ async function protractorFetch<T>(
   }
 }
 
-async function fetchAllWorkOrders(
+async function fetchClosedWorkOrders(
   config: ProtractorConfig,
-  options?: { startDate?: string; endDate?: string }
+  options?: { startDate?: string; endDate?: string; maxPages?: number }
 ): Promise<ProtractorWorkOrder[]> {
   const allWorkOrders: ProtractorWorkOrder[] = [];
   const pageSize = 100;
   let skip = 0;
-  let hasMore = true;
+  let pageCount = 0;
+  const maxPages = options?.maxPages || 500; // Safety limit
+  const seenIds = new Set<string>();
 
-  while (hasMore) {
+  while (pageCount < maxPages) {
     const params = new URLSearchParams();
     if (options?.startDate) params.set("startDate", options.startDate);
     if (options?.endDate) params.set("endDate", options.endDate);
+    // Only fetch invoiced/closed work orders
+    params.set("workflowStage", "Invoiced");
     params.set("take", String(pageSize));
     params.set("skip", String(skip));
 
@@ -98,18 +102,34 @@ async function fetchAllWorkOrders(
     }
 
     const pageItems = result.data?.ItemCollection || [];
-    allWorkOrders.push(...pageItems);
     
-    console.log(`[Backfill] Fetched page: skip=${skip}, got ${pageItems.length}, total: ${allWorkOrders.length}`);
-
-    if (pageItems.length < pageSize) {
-      hasMore = false;
-    } else {
-      skip += pageSize;
+    // Deduplicate using work order ID
+    let newItems = 0;
+    for (const item of pageItems) {
+      if (item.ID && !seenIds.has(item.ID)) {
+        seenIds.add(item.ID);
+        allWorkOrders.push(item);
+        newItems++;
+      }
     }
+    
+    console.log(`[Backfill] Page ${pageCount + 1}: skip=${skip}, fetched=${pageItems.length}, new=${newItems}, total unique: ${allWorkOrders.length}`);
 
-    // Rate limiting - wait 100ms between requests
-    await new Promise(r => setTimeout(r, 100));
+    // Stop if no new items (pagination is cycling)
+    if (newItems === 0 || pageItems.length === 0) {
+      console.log("[Backfill] No new items, stopping pagination");
+      break;
+    }
+    
+    if (pageItems.length < pageSize) {
+      break;
+    }
+    
+    skip += pageSize;
+    pageCount++;
+
+    // Rate limiting
+    await new Promise(r => setTimeout(r, 50));
   }
 
   return allWorkOrders;
@@ -130,6 +150,68 @@ async function fetchWorkOrderDetails(
   }
   
   return result.data || null;
+}
+
+type ServicePackage = {
+  ID: string;
+  Description?: string;
+  Category?: string;
+  Quantity?: number;
+  LaborItems?: Array<{
+    ID?: string;
+    Description?: string;
+    Hours?: number;
+    Rate?: number;
+    Total?: number;
+  }>;
+  PartItems?: Array<{
+    ID?: string;
+    PartNumber?: string;
+    Description?: string;
+    Quantity?: number;
+    UnitPrice?: number;
+    Total?: number;
+  }>;
+  Summary?: {
+    LaborTotal?: number;
+    PartsTotal?: number;
+    Total?: number;
+  };
+};
+
+async function fetchServicePackages(
+  config: ProtractorConfig,
+  workOrderId: string
+): Promise<ServicePackage[]> {
+  // Fetch service packages for this work order
+  const result = await protractorFetch<{ ItemCollection?: ServicePackage[] }>(
+    `/ServicePackage/WorkOrder/${workOrderId}`,
+    config
+  );
+  
+  if (!result.ok || !result.data?.ItemCollection) {
+    return [];
+  }
+  
+  const packages = result.data.ItemCollection;
+  
+  // Fetch details for each package to get line items
+  const enrichedPackages: ServicePackage[] = [];
+  
+  for (const pkg of packages) {
+    const detailResult = await protractorFetch<ServicePackage>(
+      `/ServicePackage/${pkg.ID}`,
+      config
+    );
+    
+    if (detailResult.ok && detailResult.data) {
+      enrichedPackages.push(detailResult.data);
+    } else {
+      enrichedPackages.push(pkg); // Use basic data if details fail
+    }
+  }
+  
+  return enrichedPackages;
 }
 
 async function main() {
@@ -173,21 +255,11 @@ async function main() {
   const endDate = new Date().toISOString().split("T")[0];
   const startDate = new Date(Date.now() - 365 * 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   
-  console.log(`Fetching work orders from ${startDate} to ${endDate}...`);
+  console.log(`Fetching closed/invoiced work orders from ${startDate} to ${endDate}...`);
   
-  const workOrders = await fetchAllWorkOrders(config, { startDate, endDate });
+  const closedWorkOrders = await fetchClosedWorkOrders(config, { startDate, endDate, maxPages: 5 }); // Test with small batch
   
-  console.log(`\nTotal work orders fetched: ${workOrders.length}`);
-  
-  // Filter to closed/invoiced work orders for history
-  const closedWorkOrders = workOrders.filter(wo => 
-    wo.WorkflowStage === "Invoiced" || 
-    wo.WorkflowStage === "Closed" ||
-    wo.Status === "Closed" ||
-    wo.Completed === true
-  );
-  
-  console.log(`Closed/invoiced work orders: ${closedWorkOrders.length}`);
+  console.log(`\nTotal closed work orders fetched: ${closedWorkOrders.length}`);
   
   // Store raw work orders in historical collection
   const historicalCollection = db.collection("sms_historical_work_orders");
@@ -197,12 +269,15 @@ async function main() {
   let partsIndexed = 0;
   
   for (const wo of closedWorkOrders) {
-    // Fetch full details including service packages
+    // Fetch full details 
     const details = await fetchWorkOrderDetails(config, wo.ID);
     
     if (!details) continue;
     
-    // Store raw data
+    // Fetch service packages separately (main work order endpoint doesn't include them)
+    const servicePackages = await fetchServicePackages(config, wo.ID);
+    
+    // Store raw data with enriched service packages
     await historicalCollection.updateOne(
       { shopId: SHOP_ID, sourceSystem: "protractor", workOrderId: wo.ID },
       {
@@ -226,8 +301,8 @@ async function main() {
             email: details.Contact.Email,
             phone: details.Contact.Phone1,
           } : null,
-          servicePackages: details.ServicePackages || [],
-          rawData: details,
+          servicePackages: servicePackages,
+          rawData: { ...details, ServicePackages: servicePackages },
           importedAt: new Date(),
         },
       },
@@ -235,8 +310,9 @@ async function main() {
     );
     storedCount++;
     
-    // Extract job index entries
-    const jobEntries = extractJobIndexFromWorkOrder(SHOP_ID, details, "protractor");
+    // Extract job index entries using the enriched data
+    const enrichedDetails = { ...details, ServicePackages: servicePackages };
+    const jobEntries = extractJobIndexFromWorkOrder(SHOP_ID, enrichedDetails, "protractor");
     
     if (jobEntries.length > 0) {
       const jobCollection = db.collection("job_index");
