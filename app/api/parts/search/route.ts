@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/features";
+import { updatePartCrossReferences, JobIndexEntry } from "@/lib/job-index";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,22 @@ type PartCrossRef = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+async function ensurePartsIndexed(shopId: number): Promise<void> {
+  const db = await getDb();
+  const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
+  
+  if (partsCount === 0) {
+    const jobEntries = await db.collection<JobIndexEntry>("job_index")
+      .find({ shopId })
+      .toArray();
+    
+    if (jobEntries.length > 0) {
+      console.log(`[Parts] Auto-indexing ${jobEntries.length} jobs for shop ${shopId}`);
+      await updatePartCrossReferences(jobEntries);
+    }
+  }
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -44,6 +61,8 @@ export async function GET(req: NextRequest) {
   }
 
   const db = await getDb();
+  
+  await ensurePartsIndexed(shopId);
   const collection = db.collection<PartCrossRef>("part_cross_ref");
 
   const filter: Record<string, any> = { shopId };
