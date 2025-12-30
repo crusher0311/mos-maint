@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Plus, Loader2, Check, AlertCircle, ChevronDown, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
+import { AddToROButton } from "./AddToROButton";
 
 type HistoricalJob = {
   _id: string;
@@ -32,26 +33,37 @@ type HistoricalJob = {
   matchBandLabel?: string;
 };
 
+type CannedJobOption = {
+  id: string;
+  title: string;
+};
+
 type Props = {
   vin: string;
   serviceTitle: string;
+  serviceKey?: string;
   vehicleYear?: number;
   vehicleMake?: string;
   vehicleModel?: string;
   vehicleEngine?: string;
   workOrderGuid?: string;
+  workOrderId?: string;
+  cannedJobOptions?: CannedJobOption[];
 };
 
 export function AddToROWithHistory({
   vin,
   serviceTitle,
+  serviceKey,
   vehicleYear,
   vehicleMake,
   vehicleModel,
   vehicleEngine,
   workOrderGuid,
+  workOrderId,
+  cannedJobOptions = [],
 }: Props) {
-  const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [historicalJobs, setHistoricalJobs] = useState<HistoricalJob[]>([]);
@@ -96,11 +108,21 @@ export function AddToROWithHistory({
         (job: HistoricalJob) => job.matchBand !== "poor" && job.matchScore && job.matchScore >= 70
       );
 
-      setHistoricalJobs(filteredJobs);
-      setStatus("loaded");
+      if (filteredJobs.length === 0 && cannedJobOptions.length > 0) {
+        setStatus("fallback");
+        setShowDropdown(false);
+      } else {
+        setHistoricalJobs(filteredJobs);
+        setStatus("loaded");
+      }
     } catch (err: unknown) {
-      setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Failed to search");
+      if (cannedJobOptions.length > 0) {
+        setStatus("fallback");
+        setShowDropdown(false);
+      } else {
+        setStatus("error");
+        setErrorMsg(err instanceof Error ? err.message : "Failed to search");
+      }
     }
   }
 
@@ -177,6 +199,17 @@ export function AddToROWithHistory({
         <Check className="w-3 h-3" />
         Added to RO
       </span>
+    );
+  }
+
+  if (status === "fallback" && cannedJobOptions.length > 0 && serviceKey) {
+    return (
+      <AddToROButton
+        vin={vin}
+        serviceKey={serviceKey}
+        cannedJobOptions={cannedJobOptions}
+        workOrderId={workOrderId}
+      />
     );
   }
 
