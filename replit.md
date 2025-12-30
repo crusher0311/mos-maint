@@ -61,6 +61,42 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals (via Chrome Extension)
 
+## Future Features
+
+### Job Lookup / Parts Intelligence (Planned)
+**Concept:** Allow advisors to search historical work orders for parts and services, then add them to an open work order on any vehicle.
+
+**Use Case:**
+1. Advisor searches "oil change 2018 Civic"
+2. System finds matching historical jobs with exact parts, quantities, and pricing
+3. AI scores matches based on year/make/model/engine similarity
+4. Advisor selects best match and adds to current RO
+
+**Technical Approach:**
+- Index historical work order line items (parts, labor, quantities, pricing)
+- Store vehicle associations (year, make, model, engine)
+- Use OpenAI embeddings or structured comparison for match scoring
+- Push to open work orders via existing `POST /WorkOrder/{guid}` pattern (same as canned jobs)
+
+**Data to Extract from Work Orders:**
+- Service description keywords
+- Part numbers & descriptions
+- Make/Model/Year/Engine associations
+- Quantities and unit pricing
+- Labor hours
+
+**AI Matching:**
+- Compare current vehicle (YMM/engine) against historical job vehicles
+- Score by: exact match > same generation > same model > same make
+- Factor in part number compatibility and service type
+
+**Implementation Notes:**
+- Reuses existing Protractor work order sync data
+- Same API pattern as `addServicePackageToWorkOrder()` function
+- Could leverage TimeClock API for inserting individual lines
+
+---
+
 ## Scalability Roadmap (Future Phase)
 The current MVP architecture supports early-stage usage (dozens of shops, hundreds of users). To scale to thousands of concurrent users, the following improvements are needed:
 
