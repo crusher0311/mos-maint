@@ -230,7 +230,7 @@ class ProtractorAdapter implements ISMSAdapter {
       Rank: existingPackages.length + 1,
       ServicePackageHeader: {
         Title: servicePackage.title,
-        Description: servicePackage.description || "",
+        Description: servicePackage.description ? `${servicePackage.description} [Added by MOS]` : `[Added by MOS]`,
       },
       ServicePackageLines: {
         ItemCollection: protractorLines,
