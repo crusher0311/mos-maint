@@ -467,14 +467,15 @@ export async function GET(request: NextRequest) {
           workOrderId: "$workOrderId",
           dviDone: { $literal: false },
           source: { $literal: "tekmetric" },
+          displayStatus: { 
+            $cond: {
+              if: { $and: [{ $ifNull: ["$label", false] }, { $ne: ["$label", ""] }] },
+              then: "$label",
+              else: { $ifNull: ["$status", "Open"] }
+            }
+          },
           af: {
-            status: { 
-              $cond: {
-                if: { $and: [{ $ifNull: ["$label", false] }, { $ne: ["$label", ""] }] },
-                then: "$label",
-                else: { $ifNull: ["$status", "Open"] }
-              }
-            },
+            status: { $ifNull: ["$status", "Open"] },
             createdAt: "$fetchedAt",
             miles: "$odometer"
           },

@@ -412,7 +412,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               <tbody className="divide-y divide-gray-200">
                 {sortedRows.map((r: any, index: number) => {
                   const vin = r.displayVin || "";
-                  const statusText = r.af?.status || "Unknown";
+                  const statusText = r.displayStatus || r.af?.status || "Unknown";
                   const rowKey = r.displayRo ? `${vin}-${r.displayRo}` : `${vin}-${index}`;
                   
                   return (
