@@ -164,7 +164,7 @@ The platform now supports à la carte feature toggles, allowing shops to enable/
 - `maintenance` - OEM schedules, recommendations, DVI insights (default enabled)
 - `job_lookup` - Job Lookup / History Writer - historical job search, parts intelligence
 - `oil_sticker` - Oil change sticker platform (planned)
-- `part_xref` - Part cross-reference tool (planned)
+- `part_xref` - Part cross-reference tool - find interchangeable parts by part number or vehicle
 
 **Key Files:**
 - `lib/features.ts` - Feature definitions, enable/disable logic, shop_features collection

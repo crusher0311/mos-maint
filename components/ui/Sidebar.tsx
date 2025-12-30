@@ -22,7 +22,8 @@ import {
   Building2,
   Check,
   BarChart3,
-  LogOut
+  LogOut,
+  RefreshCw
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -154,6 +155,12 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       href: "/dashboard/jobs",
       icon: <Search className="w-5 h-5" />,
       featureId: "job_lookup",
+    },
+    {
+      name: "Part Cross-Ref",
+      href: "/dashboard/parts",
+      icon: <RefreshCw className="w-5 h-5" />,
+      featureId: "part_xref",
     },
     {
       name: "Shop Onboarding",
