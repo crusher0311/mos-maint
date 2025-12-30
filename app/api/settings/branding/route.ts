@@ -10,13 +10,22 @@ export async function GET() {
 
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { branding: 1, locationIdentifier: 1 } }
+      { projection: { branding: 1, locationIdentifier: 1, tekmetric: 1, protractor: 1 } }
     );
+
+    // Determine SMS type for fallback logo
+    let smsType = "none";
+    if (shop?.tekmetric?.configured || shop?.tekmetric?.shopId) {
+      smsType = "tekmetric";
+    } else if (shop?.protractor?.configured) {
+      smsType = "protractor";
+    }
 
     return NextResponse.json({
       logo: shop?.branding?.logo || null,
       shopName: shop?.branding?.displayName || null,
       locationIdentifier: shop?.locationIdentifier || null,
+      smsType,
     });
   } catch (err: any) {
     console.error("Error fetching branding:", err);
