@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         configured: !!shop?.protractor?.configured
       },
       tekmetric: {
-        configured: !!shop?.tekmetric?.configured
+        configured: !!(shop?.tekmetric?.configured || shop?.tekmetric?.shopId)
       },
       autoflow: {
         configured: !!shop?.autoflow?.configured
