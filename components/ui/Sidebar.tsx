@@ -210,7 +210,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, userEmail, userRole, u
               <img 
                 src={shopLogo} 
                 alt="" 
-                className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                className="h-6 w-auto max-w-[32px] object-contain flex-shrink-0"
               />
             )}
             <span className="font-medium truncate">{shopName}</span>
