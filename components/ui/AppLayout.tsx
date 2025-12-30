@@ -11,6 +11,7 @@ interface AppLayoutProps {
   shopName?: string;
   userInitials?: string;
   actions?: ReactNode;
+  enabledFeatures?: string[];
 }
 
 export function AppLayout({ 
@@ -19,11 +20,12 @@ export function AppLayout({
   titleIcon,
   shopName,
   userInitials,
-  actions 
+  actions,
+  enabledFeatures 
 }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar shopName={shopName} userInitials={userInitials} />
+      <Sidebar shopName={shopName} userInitials={userInitials} enabledFeatures={enabledFeatures} />
       
       <div className="flex-1 flex flex-col">
         <header className="bg-white border-b border-gray-200 px-6 py-4">

@@ -73,6 +73,7 @@ export type PartCrossRef = {
     confidence: number;
   }[];
   
+  workOrderIds: string[];
   usageCount: number;
   lastUsedAt: Date;
   createdAt: Date;
@@ -170,7 +171,8 @@ export function extractJobIndexFromWorkOrder(
         });
         
         if (lineType === "labor") {
-          laborHours += quantity;
+          const hours = parseFloat(line.EstimatedHours || line.Hours || line.Quantity || line.quantity || "0") || quantity;
+          laborHours += hours;
           laborAmount += extendedPrice;
         } else if (lineType === "part") {
           partsAmount += extendedPrice;
@@ -267,6 +269,7 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
   const partsByShop = new Map<number, Map<string, { 
     entry: JobIndexEntry; 
     line: JobLineItem;
+    workOrderId: string;
   }[]>>();
   
   for (const entry of entries) {
@@ -285,7 +288,7 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
         shopParts.set(normalized, []);
       }
       
-      shopParts.get(normalized)!.push({ entry, line });
+      shopParts.get(normalized)!.push({ entry, line, workOrderId: entry.workOrderId });
     }
   }
   
@@ -306,27 +309,48 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
         new Map(usedOn.map(u => [`${u.year}-${u.make}-${u.model}`, u])).values()
       );
       
-      await collection.updateOne(
-        { shopId, normalizedPartNumber },
-        {
-          $set: {
-            partNumber: firstUsage.line.partNumber,
-            normalizedPartNumber,
-            description: firstUsage.line.description,
-            manufacturer: firstUsage.line.manufacturer,
-            updatedAt: new Date(),
+      const uniqueWorkOrderIds = [...new Set(usages.map(u => u.workOrderId))];
+      
+      const existing = await collection.findOne({ shopId, normalizedPartNumber });
+      const existingWorkOrderIds = new Set(existing?.workOrderIds || []);
+      const newWorkOrderIds = uniqueWorkOrderIds.filter(id => !existingWorkOrderIds.has(id));
+      const newUsageCount = newWorkOrderIds.length;
+      
+      if (newUsageCount === 0 && existing) {
+        await collection.updateOne(
+          { shopId, normalizedPartNumber },
+          {
+            $set: { updatedAt: new Date() },
+            $addToSet: { usedOn: { $each: uniqueUsedOn } },
+          }
+        );
+      } else {
+        await collection.updateOne(
+          { shopId, normalizedPartNumber },
+          {
+            $set: {
+              partNumber: firstUsage.line.partNumber,
+              normalizedPartNumber,
+              description: firstUsage.line.description,
+              manufacturer: firstUsage.line.manufacturer,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: {
+              shopId,
+              crossReferences: [],
+              createdAt: new Date(),
+              usageCount: 0,
+            },
+            $max: { lastUsedAt: new Date() },
+            $inc: { usageCount: newUsageCount },
+            $addToSet: { 
+              usedOn: { $each: uniqueUsedOn },
+              workOrderIds: { $each: uniqueWorkOrderIds },
+            },
           },
-          $setOnInsert: {
-            shopId,
-            crossReferences: [],
-            createdAt: new Date(),
-          },
-          $max: { lastUsedAt: new Date() },
-          $inc: { usageCount: usages.length },
-          $addToSet: { usedOn: { $each: uniqueUsedOn } },
-        },
-        { upsert: true }
-      );
+          { upsert: true }
+        );
+      }
       
       updatedCount++;
     }
@@ -350,6 +374,7 @@ export async function ensureJobIndexIndexes(): Promise<void> {
   await partXref.createIndex({ shopId: 1, normalizedPartNumber: 1 }, { unique: true });
   await partXref.createIndex({ shopId: 1, partNumber: 1 });
   await partXref.createIndex({ shopId: 1, "usedOn.make": 1, "usedOn.model": 1 });
+  await partXref.createIndex({ shopId: 1, workOrderIds: 1 });
   
   console.log("[JobIndex] Database indexes created");
 }

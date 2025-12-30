@@ -40,10 +40,11 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 -   **Versioning**: Semantic Versioning (MAJOR.MINOR.PATCH) is followed.
 
 ## Version History
-**Current Version: v1.6.0**
+**Current Version: v1.7.0**
 
 | Version | Date | Summary |
 |---------|------|---------|
+| v1.7.0 | 2025-12-30 | Modular feature system (à la carte), Job Lookup with parts intelligence, SMS adapter architecture |
 | v1.6.0 | 2025-12-30 | Protractor DVI integration, auto deep sync for canned jobs, dashboard mileage filter |
 | v1.5.0 | 2025-12-29 | Workflow stage preferences for Protractor, "Inspect" item sorting, removed 30-day work order limit |
 | v1.4.0 | 2025-12-29 | Vehicle detail tab renames (OE/DVI/CARFAX), CARFAX logo replacement, query param navigation |
@@ -63,8 +64,9 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 
 ## Future Features
 
-### Job Lookup / Parts Intelligence (Planned)
+### Job Lookup / Parts Intelligence (IMPLEMENTED - v1.7.0)
 **Concept:** Allow advisors to search historical work orders for parts and services, then add them to an open work order on any vehicle.
+**Status:** Phase 1 complete (structured matching). AI-powered semantic matching planned for Phase 2.
 
 **Use Case:**
 1. Advisor searches "oil change 2018 Civic"
@@ -155,7 +157,43 @@ The current MVP architecture supports early-stage usage (dozens of shops, hundre
 - Sessions stored in DB without in-memory cache
 - Third-party API rate limiting is per-request, not coordinated
 
+## Modular Feature Architecture (v1.7.0)
+The platform now supports à la carte feature toggles, allowing shops to enable/disable specific tools.
+
+**Available Features:**
+- `maintenance` - OEM schedules, recommendations, DVI insights (default enabled)
+- `job_lookup` - Historical job search, parts intelligence
+- `history_writer` - CARFAX History Writer integration (planned)
+- `oil_sticker` - Oil change sticker platform (planned)
+- `part_xref` - Part cross-reference tool (planned)
+
+**Key Files:**
+- `lib/features.ts` - Feature definitions, enable/disable logic, shop_features collection
+- `lib/sms-adapter.ts` - SMS abstraction interface for multi-SMS support
+- `lib/sms-adapters/protractor-adapter.ts` - Protractor implementation of SMS adapter
+- `app/admin/features/` - Platform admin UI for managing features per shop
+- `app/api/admin/features/` - Admin API for feature management
+- `app/api/shop/features/route.ts` - Get enabled features for current shop
+
+**SMS Adapter Architecture:**
+The `ISMSAdapter` interface provides abstraction for shop management systems:
+- `getWorkOrders()`, `getWorkOrderById()` - Fetch work orders
+- `addServicePackageToWorkOrder()` - Add jobs to work orders
+- `getCannedJobs()` - Get canned job templates
+- `getVehicle()`, `getVehicleByVin()` - Vehicle lookup
+
+Currently implemented: Protractor. Future: Tekmetric, AutoFlow.
+
+**Feature Gating:**
+- Sidebar navigation items have `featureId` property
+- Dashboard layout fetches enabled features and passes to Sidebar
+- Sidebar filters nav items based on enabled features
+- API routes can check `isFeatureEnabled(shopId, featureId)`
+
 ## Recent Changes (December 2025)
+*   **v1.7.0**: Modular feature system - shops can enable/disable specific features via admin panel
+*   **v1.7.0**: Job Lookup feature - search historical jobs, match scoring, add to work orders
+*   **v1.7.0**: SMS adapter architecture - abstraction layer for multi-SMS support
 *   **v1.6.0**: Protractor DVI integration - inspections from AutoVitals now display in vehicle detail DVI tab
 *   **v1.6.0**: Auto deep sync for canned jobs - enriched library auto-populates on first load, uses cache until manually refreshed
 *   **v1.6.0**: Dashboard mileage filter - only shows vehicles with mileage entered

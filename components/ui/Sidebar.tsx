@@ -30,7 +30,8 @@ interface NavItem {
   name: string;
   href: string;
   icon: React.ReactNode;
-  children?: { name: string; href: string }[];
+  featureId?: string;
+  children?: { name: string; href: string; featureId?: string }[];
 }
 
 interface ShopOption {
@@ -46,9 +47,10 @@ interface SidebarProps {
   isPlatformAdmin?: boolean;
   currentShopId?: number;
   enterpriseId?: string | null;
+  enabledFeatures?: string[];
 }
 
-export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"] }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
@@ -150,7 +152,8 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
     {
       name: "Job Lookup",
       href: "/dashboard/jobs",
-      icon: <Search className="w-5 h-5" />
+      icon: <Search className="w-5 h-5" />,
+      featureId: "job_lookup",
     },
     {
       name: "Shop Onboarding",
@@ -174,6 +177,22 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       ]
     }
   ];
+
+  const filteredNavItems = navItems.filter(item => {
+    if (!item.featureId) return true;
+    return enabledFeatures.includes(item.featureId);
+  }).map(item => {
+    if (item.children) {
+      return {
+        ...item,
+        children: item.children.filter(child => {
+          if (!child.featureId) return true;
+          return enabledFeatures.includes(child.featureId);
+        }),
+      };
+    }
+    return item;
+  });
 
   return (
     <aside className="w-64 min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
@@ -256,7 +275,7 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
 
       <nav className="flex-1 px-3 pb-4 overflow-y-auto">
         <ul className="space-y-1">
-          {navItems.map((item) => (
+          {filteredNavItems.map((item) => (
             <li key={item.name}>
               {item.children ? (
                 <div>

@@ -113,8 +113,7 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const fullWorkOrderPayload = {
-    ...existingWorkOrder,
+  const minimalPayload = {
     ID: workOrderGuid,
     ServicePackages: {
       ItemCollection: [...existingPackages, newServicePackage],
@@ -128,7 +127,7 @@ export async function POST(req: NextRequest) {
     config,
     {
       method: "POST",
-      body: JSON.stringify(fullWorkOrderPayload),
+      body: JSON.stringify(minimalPayload),
     }
   );
 
