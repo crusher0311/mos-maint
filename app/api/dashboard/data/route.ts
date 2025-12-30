@@ -645,7 +645,8 @@ export async function GET(request: NextRequest) {
       smsType = "tekmetric";
     }
 
-    return NextResponse.json({
+    // Add cache-control headers to prevent browser caching
+    const response = NextResponse.json({
       rows: paginatedRows,
       pagination: {
         page,
@@ -662,6 +663,12 @@ export async function GET(request: NextRequest) {
       },
       smsType
     });
+    
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
 
   } catch (error) {
     console.error("Dashboard data error:", error);
