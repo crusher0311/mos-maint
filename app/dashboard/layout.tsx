@@ -11,6 +11,7 @@ interface UserInfo {
   shopName: string;
   authenticated: boolean;
   isPlatformAdmin?: boolean;
+  enterpriseId?: string | null;
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -46,6 +47,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         userInitials={userInitials}
         isPlatformAdmin={userInfo?.isPlatformAdmin}
         currentShopId={userInfo?.shopId}
+        enterpriseId={userInfo?.enterpriseId}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {children}

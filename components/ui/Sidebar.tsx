@@ -45,9 +45,10 @@ interface SidebarProps {
   userInitials?: string;
   isPlatformAdmin?: boolean;
   currentShopId?: number;
+  enterpriseId?: string | null;
 }
 
-export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
@@ -151,11 +152,6 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       href: "/dashboard/onboarding",
       icon: <ClipboardCheck className="w-5 h-5" />
     },
-    ...(hasMultipleShops ? [{
-      name: "Enterprise",
-      href: "/dashboard/enterprise",
-      icon: <Building2 className="w-5 h-5" />
-    }] : []),
     {
       name: "Settings",
       href: "/dashboard/settings",
@@ -327,6 +323,19 @@ export function Sidebar({ shopName = "My Shop", userEmail, userRole, userInitial
       )}
 
       <div className="p-4 border-t border-white/20">
+        {enterpriseId && (userRole === "owner" || userRole === "admin") && (
+          <Link
+            href="/dashboard/enterprise"
+            className={`flex items-center gap-3 px-3 py-2 mb-3 rounded-lg text-sm font-medium transition-colors ${
+              pathname?.startsWith("/dashboard/enterprise")
+                ? "bg-white/20 text-white"
+                : "text-white/80 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            <Building2 className="w-5 h-5" />
+            <span>Enterprise</span>
+          </Link>
+        )}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-medium">
             {userInitials}

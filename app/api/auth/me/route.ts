@@ -24,5 +24,6 @@ export async function GET() {
     shopId: sess.shopId,
     shopName: shop?.name || `Shop ${sess.shopId}`,
     isPlatformAdmin: sess.isPlatformAdmin || false,
+    enterpriseId: shop?.enterpriseId || null,
   });
 }
