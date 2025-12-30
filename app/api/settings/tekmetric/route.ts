@@ -1,12 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/tekmetric";
 
+async function getUserShopId(): Promise<string | null> {
+  const store = await cookies();
+  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
+  if (!sid) return null;
+
+  const db = await getDb();
+  const now = new Date();
+  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
+  if (!sess) return null;
+
+  const user = await db.collection("users").findOne({ _id: sess.userId });
+  return user?.shopId ? String(user.shopId) : null;
+}
+
 export async function GET(request: NextRequest) {
   try {
+    const shopId = await getUserShopId();
+    if (!shopId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const db = await getDb();
     
-    const shop = await db.collection("shops").findOne({});
+    const shop = await db.collection("shops").findOne({
+      shopId: { $in: [shopId, Number(shopId)] }
+    });
     
     if (!shop?.tekmetric?.shopId) {
       return NextResponse.json({
@@ -33,6 +55,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const userShopId = await getUserShopId();
+    if (!userShopId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { shopId } = body;
 
@@ -43,8 +70,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const shopIdNum = parseInt(shopId, 10);
-    if (isNaN(shopIdNum)) {
+    const tekmetricShopId = parseInt(shopId, 10);
+    if (isNaN(tekmetricShopId)) {
       return NextResponse.json(
         { error: "Shop ID must be a number" },
         { status: 400 }
@@ -58,7 +85,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validation = await validateShopAccess(shopIdNum);
+    const validation = await validateShopAccess(tekmetricShopId);
     if (!validation.valid) {
       return NextResponse.json(
         { error: validation.error || "Unable to access shop" },
@@ -69,10 +96,10 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
 
     await db.collection("shops").updateOne(
-      {},
+      { shopId: { $in: [userShopId, Number(userShopId)] } },
       {
         $set: {
-          "tekmetric.shopId": shopIdNum,
+          "tekmetric.shopId": tekmetricShopId,
           "tekmetric.shopName": validation.shop?.name,
           "tekmetric.connectedAt": new Date(),
         },
@@ -82,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      shopId: shopIdNum,
+      shopId: tekmetricShopId,
       shopName: validation.shop?.name,
     });
   } catch (error: any) {
@@ -96,10 +123,15 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userShopId = await getUserShopId();
+    if (!userShopId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const db = await getDb();
 
     await db.collection("shops").updateOne(
-      {},
+      { shopId: { $in: [userShopId, Number(userShopId)] } },
       { $unset: { tekmetric: "" } }
     );
 

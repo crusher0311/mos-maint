@@ -19,6 +19,10 @@ args = "MOS Maintenance MVP"
 task = "workflow.run"
 args = "Protractor Sync Worker"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Tekmetric Sync Worker"
+
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -38,6 +42,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx tsx scripts/protractor-sync-worker.ts"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Tekmetric Sync Worker"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx scripts/tekmetric-sync-worker.ts"
 
 [workflows.workflow.metadata]
 outputType = "console"
