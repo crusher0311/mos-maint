@@ -64,6 +64,17 @@ export async function POST(req: NextRequest) {
   }
 
   const existingWorkOrder = existingWOResult.workOrder;
+  
+  const workOrderStage = existingWorkOrder.WorkflowStage || existingWorkOrder.workflowStage;
+  const blockedStages = ["WorkCompleted", "Invoiced", "Void", "Closed"];
+  
+  if (blockedStages.includes(workOrderStage)) {
+    console.log(`[Jobs Add to RO] Blocked: WO ${workOrderGuid} is in stage "${workOrderStage}"`);
+    return NextResponse.json(
+      { error: `Cannot add to this work order - it's already ${workOrderStage.replace(/([A-Z])/g, ' $1').trim().toLowerCase()}` },
+      { status: 400 }
+    );
+  }
   const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
   const mapLineType = (lineType: string): string => {
