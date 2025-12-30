@@ -111,25 +111,12 @@ export function AddToROWithHistory({
         (job: HistoricalJob) => job.matchBand !== "poor"
       );
 
-      // If no historical jobs found, fall back to canned jobs (mapped or all)
-      const hasCannedFallback = cannedJobOptions.length > 0 || allCannedJobs.length > 0;
-      
-      if (filteredJobs.length === 0 && hasCannedFallback) {
-        setStatus("fallback");
-        setShowDropdown(false);
-      } else {
-        setHistoricalJobs(filteredJobs);
-        setStatus("loaded");
-      }
+      // Always show the dropdown with results (or empty state)
+      setHistoricalJobs(filteredJobs);
+      setStatus("loaded");
     } catch (err: unknown) {
-      const hasCannedFallback = cannedJobOptions.length > 0 || allCannedJobs.length > 0;
-      if (hasCannedFallback) {
-        setStatus("fallback");
-        setShowDropdown(false);
-      } else {
-        setStatus("error");
-        setErrorMsg(err instanceof Error ? err.message : "Failed to search");
-      }
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Failed to search");
     }
   }
 
@@ -209,20 +196,6 @@ export function AddToROWithHistory({
     );
   }
 
-  // Use mapped canned jobs, or fall back to all canned jobs
-  const fallbackCannedJobs = cannedJobOptions.length > 0 ? cannedJobOptions : allCannedJobs;
-  
-  if (status === "fallback" && fallbackCannedJobs.length > 0) {
-    return (
-      <AddToROButton
-        vin={vin}
-        serviceKey={serviceKey || serviceTitle}
-        cannedJobOptions={fallbackCannedJobs}
-        workOrderId={workOrderId}
-      />
-    );
-  }
-
   return (
     <div className="flex items-center gap-2">
       {/* Add History button */}
@@ -246,7 +219,7 @@ export function AddToROWithHistory({
           ) : (
             <>
               <Plus className="w-3 h-3" />
-              + History
+              History
             </>
           )}
         </button>
@@ -363,14 +336,14 @@ export function AddToROWithHistory({
       )}
       </div>
       
-      {/* Add Canned Job button - uses the fallback canned jobs */}
-      {(cannedJobOptions.length > 0 || allCannedJobs.length > 0) && (
+      {/* Add Canned Job button - only show if there are mapped canned jobs for this service */}
+      {cannedJobOptions.length > 0 && (
         <AddToROButton
           vin={vin}
           serviceKey={serviceKey || serviceTitle}
-          cannedJobOptions={cannedJobOptions.length > 0 ? cannedJobOptions : allCannedJobs}
+          cannedJobOptions={cannedJobOptions}
           workOrderId={workOrderId}
-          buttonLabel="+ Canned"
+          buttonLabel="Canned"
         />
       )}
     </div>

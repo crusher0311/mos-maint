@@ -16,7 +16,7 @@ type Props = {
   buttonLabel?: string;
 };
 
-export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId, buttonLabel = "+ Add to RO" }: Props) {
+export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId, buttonLabel = "Add to RO" }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO" | "copied">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
