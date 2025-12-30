@@ -648,6 +648,7 @@ export async function upsertProtractorWorkOrderSnapshot(
       $set: {
         shopId,
         workOrderId: workOrder.ID,
+        workOrderGuid: workOrder.ID,
         workOrderNumber: workOrder.WorkOrderNumber ?? null,
         type: workOrder.Type ?? null,
         status: workOrder.Status ?? null,
