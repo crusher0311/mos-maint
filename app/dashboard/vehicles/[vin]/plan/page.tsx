@@ -547,10 +547,10 @@ function triage({
       dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
     }
     
-    // Clamp dueAtDate to not be earlier than the vehicle's model year
-    // This prevents showing dates like "12/4/1999" for a 2004 vehicle
+    // If calculated date is before the vehicle was built, don't show a date at all
+    // Just show miles overdue instead of a confusing/impossible date
     if (dueAtDate && dueAtDate < earliestDate) {
-      dueAtDate = earliestDate;
+      dueAtDate = null;
     }
 
     const daysToGo =
