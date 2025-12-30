@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       const inspectionData = data;
       
       if (repairOrderId) {
-        await db.collection("tekmetric_work_orders").updateOne(
+        const result = await db.collection("tekmetric_work_orders").updateMany(
           { workOrderId: String(repairOrderId) },
           { 
             $set: { 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
             }
           }
         );
-        console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete`);
+        console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`);
       }
     }
     
