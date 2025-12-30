@@ -9,6 +9,7 @@ interface UserInfo {
   role: string;
   shopId: number;
   shopName: string;
+  shopLogo?: string | null;
   authenticated: boolean;
   isPlatformAdmin?: boolean;
   enterpriseId?: string | null;
@@ -56,6 +57,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar 
         shopName={userInfo?.shopName || "Loading..."} 
+        shopLogo={userInfo?.shopLogo}
         userEmail={userInfo?.email}
         userRole={userInfo?.role}
         userInitials={userInitials}
