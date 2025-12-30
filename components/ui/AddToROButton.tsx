@@ -8,15 +8,27 @@ type CannedJobOption = {
   title: string;
 };
 
+type IntegrationType = "protractor" | "tekmetric";
+
 type Props = {
   vin: string;
   serviceKey: string;
   cannedJobOptions: CannedJobOption[];
   workOrderId?: string;
+  repairOrderId?: string | number;
   buttonLabel?: string;
+  integration?: IntegrationType;
 };
 
-export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId, buttonLabel = "Add to RO" }: Props) {
+export function AddToROButton({ 
+  vin, 
+  serviceKey, 
+  cannedJobOptions, 
+  workOrderId: propWorkOrderId, 
+  repairOrderId: propRepairOrderId,
+  buttonLabel = "Add to RO",
+  integration = "protractor"
+}: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO" | "copied">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -55,14 +67,26 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
     setShowDropdown(false);
 
     const effectiveWorkOrderId = manualWorkOrderId || propWorkOrderId;
+    const effectiveRepairOrderId = manualWorkOrderId || propRepairOrderId;
 
     try {
-      const body: Record<string, string> = { vin, cannedJobId, cannedJobTitle };
-      if (effectiveWorkOrderId) {
-        body.workOrderId = effectiveWorkOrderId;
+      const apiEndpoint = integration === "tekmetric" 
+        ? "/api/tekmetric/apply-canned-job"
+        : "/api/protractor/apply-canned-job";
+      
+      const body: Record<string, string | number | undefined> = { vin, cannedJobId, cannedJobTitle };
+      
+      if (integration === "tekmetric") {
+        if (effectiveRepairOrderId) {
+          body.repairOrderId = effectiveRepairOrderId;
+        }
+      } else {
+        if (effectiveWorkOrderId) {
+          body.workOrderId = effectiveWorkOrderId;
+        }
       }
 
-      const res = await fetch("/api/protractor/apply-canned-job", {
+      const res = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -230,7 +254,7 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
         {showDropdown && (
           <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
             <div className="p-2 border-b border-gray-100">
-              <span className="text-xs text-gray-500 font-medium">Copy code to add in Protractor:</span>
+              <span className="text-xs text-gray-500 font-medium">Copy code to add manually:</span>
             </div>
             <div className="max-h-48 overflow-y-auto">
               {cannedJobOptions.map((job) => (

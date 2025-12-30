@@ -870,6 +870,8 @@ async function PlanContent({ params }: PageProps) {
   
   let latestRoNumber = ros[0]?.roNumber ?? null;
   let latestWorkOrderId: string | null = null;
+  let latestRepairOrderId: string | number | null = null;
+  let activeIntegration: "protractor" | "tekmetric" | null = null;
   let customerName: string | null = null;
   
   // Helper to extract customer name from work order (works for all integrations)
@@ -907,7 +909,7 @@ async function PlanContent({ params }: PageProps) {
     ),
     // Tekmetric work orders
     db.collection("tekmetric_work_orders").findOne(
-      { shopId, vin: { $regex: vinRegex } },
+      { shopId: { $in: [String(shopId), Number(shopId)] }, vin: { $regex: vinRegex } },
       { sort: { updatedAt: -1, createdAt: -1 } }
     ),
     // AutoFlow work orders (via webhook events)
@@ -942,14 +944,15 @@ async function PlanContent({ params }: PageProps) {
   }
   
   if (tekmetricWO) {
-    const woNumber = tekmetricWO.repairOrderNumber || tekmetricWO.roNumber;
+    // Tekmetric snapshot uses: workOrderNumber for display, workOrderId for the actual repair order ID
+    const woNumber = tekmetricWO.workOrderNumber || tekmetricWO.data?.repairOrderNumber;
     if (woNumber) {
       candidates.push({
         source: 'Tekmetric',
         roNumber: String(woNumber),
-        workOrderId: tekmetricWO.workOrderId || tekmetricWO.repairOrderId || null,
+        workOrderId: tekmetricWO.workOrderId || (tekmetricWO.data?.id ? String(tekmetricWO.data.id) : null),
         customerName: extractCustomerName(tekmetricWO),
-        updatedAt: tekmetricWO.updatedAt || tekmetricWO.createdAt || new Date(0)
+        updatedAt: tekmetricWO.updatedDate ? new Date(tekmetricWO.updatedDate) : (tekmetricWO.fetchedAt || new Date(0))
       });
     }
   }
@@ -974,7 +977,16 @@ async function PlanContent({ params }: PageProps) {
     latestRoNumber = best.roNumber;
     latestWorkOrderId = best.workOrderId ? String(best.workOrderId) : null;
     customerName = best.customerName;
-    console.log(`[Plan Debug] Found ${best.source} RO: ${latestRoNumber}, Customer: ${customerName}`);
+    
+    // Set active integration based on which source won
+    if (best.source === 'Tekmetric') {
+      activeIntegration = 'tekmetric';
+      latestRepairOrderId = best.workOrderId;
+    } else if (best.source === 'Protractor') {
+      activeIntegration = 'protractor';
+    }
+    
+    console.log(`[Plan Debug] Found ${best.source} RO: ${latestRoNumber}, Customer: ${customerName}, Integration: ${activeIntegration}`);
   }
   
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}, sources checked: Protractor/Tekmetric/AutoFlow`);
@@ -1340,8 +1352,10 @@ async function PlanContent({ params }: PageProps) {
                           vehicleEngine={vehicleEngine}
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
+                          repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
+                          integration={activeIntegration ?? "protractor"}
                         />
                       );
                     })()}
@@ -1508,8 +1522,10 @@ async function PlanContent({ params }: PageProps) {
                           vehicleEngine={vehicleEngine}
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
+                          repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
+                          integration={activeIntegration ?? "protractor"}
                         />
                       );
                     })()}
@@ -1635,8 +1651,10 @@ async function PlanContent({ params }: PageProps) {
                           vehicleEngine={vehicleEngine}
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
+                          repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
+                          integration={activeIntegration ?? "protractor"}
                         />
                       );
                     })()}

@@ -38,6 +38,8 @@ type CannedJobOption = {
   title: string;
 };
 
+type IntegrationType = "protractor" | "tekmetric";
+
 type Props = {
   vin: string;
   serviceTitle: string;
@@ -48,8 +50,10 @@ type Props = {
   vehicleEngine?: string;
   workOrderGuid?: string;
   workOrderId?: string;
+  repairOrderId?: string | number;
   cannedJobOptions?: CannedJobOption[];
   allCannedJobs?: CannedJobOption[]; // Fallback when no mapped options
+  integration?: IntegrationType;
 };
 
 export function AddToROWithHistory({
@@ -62,8 +66,10 @@ export function AddToROWithHistory({
   vehicleEngine,
   workOrderGuid,
   workOrderId,
+  repairOrderId,
   cannedJobOptions = [],
   allCannedJobs = [],
+  integration = "protractor",
 }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -443,7 +449,9 @@ export function AddToROWithHistory({
           serviceKey={serviceKey || serviceTitle}
           cannedJobOptions={cannedJobOptions}
           workOrderId={workOrderId}
+          repairOrderId={repairOrderId}
           buttonLabel="Canned"
+          integration={integration}
         />
       )}
     </div>
