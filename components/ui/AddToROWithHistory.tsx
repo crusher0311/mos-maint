@@ -49,6 +49,7 @@ type Props = {
   workOrderGuid?: string;
   workOrderId?: string;
   cannedJobOptions?: CannedJobOption[];
+  allCannedJobs?: CannedJobOption[]; // Fallback when no mapped options
 };
 
 export function AddToROWithHistory({
@@ -62,6 +63,7 @@ export function AddToROWithHistory({
   workOrderGuid,
   workOrderId,
   cannedJobOptions = [],
+  allCannedJobs = [],
 }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -109,7 +111,10 @@ export function AddToROWithHistory({
         (job: HistoricalJob) => job.matchBand !== "poor"
       );
 
-      if (filteredJobs.length === 0 && cannedJobOptions.length > 0) {
+      // If no historical jobs found, fall back to canned jobs (mapped or all)
+      const hasCannedFallback = cannedJobOptions.length > 0 || allCannedJobs.length > 0;
+      
+      if (filteredJobs.length === 0 && hasCannedFallback) {
         setStatus("fallback");
         setShowDropdown(false);
       } else {
@@ -117,7 +122,8 @@ export function AddToROWithHistory({
         setStatus("loaded");
       }
     } catch (err: unknown) {
-      if (cannedJobOptions.length > 0) {
+      const hasCannedFallback = cannedJobOptions.length > 0 || allCannedJobs.length > 0;
+      if (hasCannedFallback) {
         setStatus("fallback");
         setShowDropdown(false);
       } else {
@@ -203,12 +209,15 @@ export function AddToROWithHistory({
     );
   }
 
-  if (status === "fallback" && cannedJobOptions.length > 0 && serviceKey) {
+  // Use mapped canned jobs, or fall back to all canned jobs
+  const fallbackCannedJobs = cannedJobOptions.length > 0 ? cannedJobOptions : allCannedJobs;
+  
+  if (status === "fallback" && fallbackCannedJobs.length > 0) {
     return (
       <AddToROButton
         vin={vin}
-        serviceKey={serviceKey}
-        cannedJobOptions={cannedJobOptions}
+        serviceKey={serviceKey || serviceTitle}
+        cannedJobOptions={fallbackCannedJobs}
         workOrderId={workOrderId}
       />
     );
