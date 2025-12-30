@@ -92,7 +92,7 @@ export function AddToROWithHistory({
         throw new Error(data.error || "Failed to search job history");
       }
 
-      const filteredJobs = (data.jobs || []).filter(
+      const filteredJobs = (data.results || []).filter(
         (job: HistoricalJob) => job.matchBand !== "poor" && job.matchScore && job.matchScore >= 70
       );
 
@@ -106,7 +106,8 @@ export function AddToROWithHistory({
 
   async function addJobToRO(job: HistoricalJob) {
     if (!workOrderGuid) {
-      setErrorMsg("No work order available");
+      setStatus("error");
+      setErrorMsg("No open work order - open one in Protractor first");
       return;
     }
 
