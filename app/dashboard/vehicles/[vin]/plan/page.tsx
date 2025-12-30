@@ -870,6 +870,19 @@ async function PlanContent({ params }: PageProps) {
   
   let latestRoNumber = ros[0]?.roNumber ?? null;
   let latestWorkOrderId: string | null = null;
+  let customerName: string | null = null;
+  
+  // Helper to extract customer name from work order
+  const extractCustomerName = (wo: any): string | null => {
+    const contact = wo?.Contact || wo?.data?.Contact;
+    if (contact?.Name) {
+      const firstName = contact.Name.FirstName || '';
+      const lastName = contact.Name.LastName || '';
+      const name = [firstName, lastName].filter(Boolean).join(' ').trim();
+      if (name) return name;
+    }
+    return wo?.customerName || wo?.data?.customerName || null;
+  };
   
   // Also check Protractor for active work orders
   // First get the vehicle's Protractor ServiceItemID
@@ -913,7 +926,8 @@ async function PlanContent({ params }: PageProps) {
     if (woNumber) {
       latestRoNumber = String(woNumber);
       latestWorkOrderId = woId ? String(woId) : null;
-      console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}, ID: ${latestWorkOrderId}`);
+      customerName = extractCustomerName(protractorWO);
+      console.log(`[Plan Debug] Found Protractor RO: ${latestRoNumber}, ID: ${latestWorkOrderId}, Customer: ${customerName}`);
     }
   }
   
@@ -936,7 +950,8 @@ async function PlanContent({ params }: PageProps) {
       if (woNumber) {
         latestRoNumber = String(woNumber);
         latestWorkOrderId = woId ? String(woId) : null;
-        console.log(`[Plan Debug] Found Protractor RO by VIN: ${latestRoNumber}`);
+        customerName = extractCustomerName(protractorWOByVin);
+        console.log(`[Plan Debug] Found Protractor RO by VIN: ${latestRoNumber}, Customer: ${customerName}`);
       }
     }
   }
@@ -1163,10 +1178,12 @@ async function PlanContent({ params }: PageProps) {
   console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
   console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
 
+  const deferredCount = protractorDeferredWork.length;
   const counts = {
     overdue: buckets.overdue.length,
     soon: buckets.dueSoon.length,
     upcoming: buckets.upcoming.length,
+    deferred: deferredCount,
   };
 
   return (
@@ -1191,6 +1208,8 @@ async function PlanContent({ params }: PageProps) {
                 {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Plan
               </h1>
               <div className="text-sm text-neutral-600">
+                {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
+                {latestRoNumber && <>RO# <code className="font-medium">{latestRoNumber}</code> • </>}
                 VIN <code>{vin}</code>
                 {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
                 {mpdBlended != null && <> • ~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</>}
@@ -1201,7 +1220,7 @@ async function PlanContent({ params }: PageProps) {
               <PrintButton />
               <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
                 <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
-                  Overdue {counts.overdue}
+                  Overdue {counts.overdue}{counts.deferred > 0 && <span className="ml-1 text-red-200">({counts.deferred} deferred)</span>}
                 </a>
                 <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
                   Due Soon {counts.soon}
