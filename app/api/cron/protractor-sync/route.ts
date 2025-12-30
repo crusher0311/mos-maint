@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       ]
     }).toArray();
 
-    const results: { shopId: number; synced: number; removed: number; error?: string }[] = [];
+    const results: { shopId: number; synced: number; removed: number; staleDeleted?: number; error?: string }[] = [];
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
@@ -85,14 +85,25 @@ export async function GET(req: NextRequest) {
           }
         }
 
+        // Delete stale records that don't have workflowStage (old cache format)
+        const staleResult = await db.collection("protractor_work_orders").deleteMany({
+          shopId: { $in: [String(shopId), Number(shopId)] },
+          workflowStage: { $exists: false }
+        });
+        
+        // Also delete records with null/empty workflowStage that aren't in active list
         const cachedWOs = await db.collection("protractor_work_orders").find({
           shopId: { $in: [String(shopId), Number(shopId)] },
-          workflowStage: { $nin: INVOICED_STAGES }
+          $or: [
+            { workflowStage: { $nin: INVOICED_STAGES } },
+            { workflowStage: null },
+            { workflowStage: "" }
+          ]
         }).toArray();
 
-        let removedCount = 0;
+        let removedCount = staleResult.deletedCount || 0;
         for (const cached of cachedWOs) {
-          const guid = cached.workOrderGuid || cached.data?.ID;
+          const guid = cached.workOrderGuid || cached.workOrderId || cached.data?.ID;
           if (guid && !activeGuids.has(guid)) {
             await db.collection("protractor_work_orders").updateOne(
               { _id: cached._id },
@@ -109,7 +120,7 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        results.push({ shopId, synced: activeWOs.length, removed: removedCount });
+        results.push({ shopId, synced: activeWOs.length, removed: removedCount, staleDeleted: staleResult.deletedCount });
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
       }
