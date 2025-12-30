@@ -26,9 +26,29 @@ async function ensurePartsIndexed(shopId: number): Promise<void> {
   const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
   
   if (partsCount === 0) {
-    const jobEntries = await db.collection<JobIndexEntry>("job_index")
+    let jobEntries = await db.collection<JobIndexEntry>("job_index")
       .find({ shopId })
       .toArray();
+    
+    if (jobEntries.length === 0) {
+      const { extractJobIndexFromWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
+      const cachedWOs = await db.collection("protractor_work_orders")
+        .find({ shopId })
+        .toArray();
+      
+      if (cachedWOs.length > 0) {
+        console.log(`[Parts] Building job index from ${cachedWOs.length} cached work orders`);
+        const allEntries: JobIndexEntry[] = [];
+        for (const wo of cachedWOs) {
+          const entries = extractJobIndexFromWorkOrder(shopId, wo.data || wo, "protractor");
+          allEntries.push(...entries);
+        }
+        if (allEntries.length > 0) {
+          await upsertJobIndexEntries(allEntries);
+          jobEntries = allEntries;
+        }
+      }
+    }
     
     if (jobEntries.length > 0) {
       console.log(`[Parts] Auto-indexing ${jobEntries.length} jobs for shop ${shopId}`);
