@@ -528,9 +528,18 @@ function triage({
 
   const triaged: TriagedItem[] = [];
   const usedDviKeys = new Set<string>();
+  const usedServiceKeys = new Set<string>(); // Dedupe items with same serviceKey
 
   for (const o of oemItems) {
     const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
+    
+    // Skip duplicate service keys - only keep first occurrence
+    // This prevents "Change engine oil" and "Replace oil filter" from both showing
+    if (usedServiceKeys.has(serviceKey) && !serviceKey.startsWith("misc_")) {
+      continue;
+    }
+    usedServiceKeys.add(serviceKey);
+    
     const uniqueKey = `${serviceKey}_${o.maintenance_id}`;
     const last = lastMap.get(serviceKey) ?? null;
     

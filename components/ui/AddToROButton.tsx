@@ -13,9 +13,10 @@ type Props = {
   serviceKey: string;
   cannedJobOptions: CannedJobOption[];
   workOrderId?: string;
+  buttonLabel?: string;
 };
 
-export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId }: Props) {
+export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: propWorkOrderId, buttonLabel = "+ Add to RO" }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "needsRO" | "copied">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -264,7 +265,7 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
         ) : (
           <Plus className="w-3 h-3" />
         )}
-        Add to RO
+        {buttonLabel}
       </button>
     );
   }
@@ -281,7 +282,7 @@ export function AddToROButton({ vin, serviceKey, cannedJobOptions, workOrderId: 
         ) : (
           <Plus className="w-3 h-3" />
         )}
-        Add to RO
+        {buttonLabel}
         <ChevronDown className="w-3 h-3" />
       </button>
 
