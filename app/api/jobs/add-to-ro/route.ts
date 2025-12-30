@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     Status: "Pending",
     ServicePackageHeader: {
       Title: job.title,
-      Description: job.description || `Added from Job Lookup`,
+      Description: job.description ? `${job.description} [Added by MOS]` : `[Added by MOS]`,
     },
     ServicePackageLines: {
       ItemCollection: servicePackageLines,
