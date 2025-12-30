@@ -562,19 +562,39 @@ export async function GET(request: NextRequest) {
     }
 
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
-    // Deduplicate by work order number to avoid duplicates from different sources
-    // When Protractor is primary, skip AutoFlow to avoid stale/conflicting status data
+    // When both AutoFlow and Protractor are configured, use AutoFlow status with Protractor data
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
     
+    // Build a lookup map of AutoFlow status by VIN (if AutoFlow is configured)
+    const autoflowStatusByVin = new Map<string, string>();
+    if (isAutoFlowConfigured && autoflowRows.length > 0) {
+      for (const row of autoflowRows) {
+        if (row.displayVin && row.af?.status) {
+          autoflowStatusByVin.set(row.displayVin.toUpperCase(), row.af.status);
+        }
+      }
+    }
+    
+    // When Protractor is primary, use Protractor rows but merge AutoFlow status if available
+    // When only AutoFlow is configured, use AutoFlow rows directly
     const rowSources = isProtractorPrimary 
-      ? [...protractorRows, ...tekmetricRows]  // Skip AutoFlow when Protractor is primary
+      ? [...protractorRows, ...tekmetricRows]
       : [...autoflowRows, ...protractorRows, ...tekmetricRows];
     
     for (const row of rowSources) {
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
       if (!seenWorkOrders.has(woKey)) {
         seenWorkOrders.add(woKey);
+        
+        // If this is a Protractor row and AutoFlow is also configured, use AutoFlow status
+        if (row.source === 'protractor' && isAutoFlowConfigured && row.displayVin) {
+          const afStatus = autoflowStatusByVin.get(row.displayVin.toUpperCase());
+          if (afStatus) {
+            row.af.status = afStatus;
+          }
+        }
+        
         allRows.push(row);
       }
     }
