@@ -95,17 +95,29 @@ export async function GET(req: NextRequest) {
   
   const matchStage: any = { shopId };
   
+  // Stopwords: common verbs and filler terms that don't identify the service
+  const stopwords = new Set([
+    "replace", "inspect", "check", "service", "repair", "install", "remove",
+    "adjust", "flush", "bleed", "test", "clean", "lube", "lubricate", 
+    "change", "perform", "complete", "top", "off", "the", "and", "for"
+  ]);
+  
   if (query) {
-    const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    if (keywords.length > 0) {
-      // Use $in for broader matching - any keyword match counts
-      // Also search in job title and description for better coverage
+    const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    // Core tokens: remove stopwords to get the essential service identifiers
+    const coreTokens = allTokens.filter(w => !stopwords.has(w));
+    
+    // If we have core tokens, require ALL of them to match in keywords or title
+    // If all tokens were stopwords, use original tokens but match ANY
+    if (coreTokens.length > 0) {
+      // Require ALL core tokens to appear in keywords or title
       matchStage.$or = [
-        { "job.keywords": { $in: keywords } },
-        { "job.title": { $regex: keywords.join("|"), $options: "i" } },
-        { "job.description": { $regex: keywords.join("|"), $options: "i" } },
-        { "lines.description": { $regex: keywords.join("|"), $options: "i" } },
+        { "job.keywords": { $all: coreTokens } },
+        { "job.title": { $regex: coreTokens.map(t => `(?=.*${t})`).join(""), $options: "i" } },
       ];
+    } else if (allTokens.length > 0) {
+      // Fallback: if only stopwords, match any token in keywords
+      matchStage["job.keywords"] = { $in: allTokens };
     }
   }
   
