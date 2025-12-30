@@ -546,12 +546,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Check if Protractor is the primary SMS for this shop
+    const shopConfig = await db.collection("shops").findOne({ shopId: Number(user.shopId) });
+    const isProtractorPrimary = !!shopConfig?.protractor?.configured;
+
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     // Deduplicate by work order number to avoid duplicates from different sources
+    // When Protractor is primary, skip AutoFlow to avoid stale/conflicting status data
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
     
-    for (const row of [...autoflowRows, ...protractorRows, ...tekmetricRows]) {
+    const rowSources = isProtractorPrimary 
+      ? [...protractorRows, ...tekmetricRows]  // Skip AutoFlow when Protractor is primary
+      : [...autoflowRows, ...protractorRows, ...tekmetricRows];
+    
+    for (const row of rowSources) {
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
       if (!seenWorkOrders.has(woKey)) {
         seenWorkOrders.add(woKey);
