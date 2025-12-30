@@ -1192,9 +1192,9 @@ async function PlanContent({ params }: PageProps) {
 
   return (
     <PlanTrialGate vin={vin}>
-      <main className="mx-auto max-w-5xl p-0 sm:p-6 space-y-8">
+      <div className="flex flex-col h-full">
       {/* Sticky summary header */}
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b shadow-sm">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3">
           {/* Top navigation menu */}
           <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
@@ -1238,8 +1238,10 @@ async function PlanContent({ params }: PageProps) {
         </div>
       </div>
 
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto">
       {/* Print-only header with shop logo */}
-      <div className="hidden print:block mb-6 border-b pb-4">
+      <div className="hidden print:block mb-6 border-b pb-4 mx-auto max-w-5xl px-4 sm:px-6">
         <div className="flex items-center justify-between">
           {shopLogo ? (
             <img src={shopLogo} alt="Shop Logo" className="h-12" />
@@ -1688,7 +1690,8 @@ async function PlanContent({ params }: PageProps) {
           </pre>
         </details>
       </div>
-    </main>
+      </div>
+      </div>
     </PlanTrialGate>
   );
 }
