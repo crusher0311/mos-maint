@@ -54,7 +54,7 @@ async function upsertTekmetricWorkOrderSnapshot(
 
   const statusName = ro.repairOrderStatus?.name || ro.repairOrderStatus?.code || "Open";
   const statusCode = ro.repairOrderStatus?.code || "";
-  const label = ro.repairOrderLabel?.name || ro.repairOrderCustomLabel?.name || "";
+  const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
   
   const snapshot: TekmetricWorkOrderSnapshot = {
     shopId,
