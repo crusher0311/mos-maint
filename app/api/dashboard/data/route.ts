@@ -570,18 +570,6 @@ export async function GET(request: NextRequest) {
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
     
-    // Debug: Log shop configuration and row counts
-    console.log(`[Dashboard] Shop ${user.shopId}: isProtractorPrimary=${isProtractorPrimary}, isAutoFlowConfigured=${isAutoFlowConfigured}`);
-    console.log(`[Dashboard] Row counts BEFORE merge: autoflow=${autoflowRows.length}, protractor=${protractorRows.length}, tekmetric=${tekmetricRows.length}`);
-    if (protractorRows.length > 0) {
-      const statuses = protractorRows.slice(0, 5).map((r: any) => r.af?.status);
-      console.log(`[Dashboard] Sample Protractor statuses: ${statuses.join(', ')}`);
-    }
-    if (autoflowRows.length > 0) {
-      const statuses = autoflowRows.slice(0, 5).map((r: any) => r.af?.status);
-      console.log(`[Dashboard] Sample AutoFlow statuses: ${statuses.join(', ')}`);
-    }
-    
     // When Protractor is primary, use Protractor rows (which have workflowStage as status)
     // When only AutoFlow is configured, use AutoFlow rows directly
     // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
@@ -630,7 +618,6 @@ export async function GET(request: NextRequest) {
 
     // Calculate pagination
     const totalCount = allRows.length;
-    console.log(`[Dashboard] FINAL row count after all filters: ${totalCount}`);
     const totalPages = Math.ceil(totalCount / pageSize);
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
