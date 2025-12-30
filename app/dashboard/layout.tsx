@@ -55,7 +55,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     : "??";
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar 
         shopName={userInfo?.shopName || "Loading..."} 
         shopLogo={userInfo?.shopLogo}
