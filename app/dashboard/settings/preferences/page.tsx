@@ -22,6 +22,7 @@ export default function PreferencesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [hasProtractor, setHasProtractor] = useState(false);
 
   useEffect(() => {
     fetchPreferences();
@@ -29,13 +30,22 @@ export default function PreferencesPage() {
 
   async function fetchPreferences() {
     try {
-      const res = await fetch("/api/settings/preferences");
-      if (res.ok) {
-        const data = await res.json();
+      const [prefsRes, integrationsRes] = await Promise.all([
+        fetch("/api/settings/preferences"),
+        fetch("/api/settings/integrations")
+      ]);
+      
+      if (prefsRes.ok) {
+        const data = await prefsRes.json();
         setDistanceUnit(data.distanceUnit || "miles");
         setWorkflowStages(data.workflowStages || DEFAULT_STAGES);
         setShowInspectItems(data.showInspectItems !== false);
         setShowOnlyWithMileage(data.showOnlyWithMileage !== false);
+      }
+      
+      if (integrationsRes.ok) {
+        const integrations = await integrationsRes.json();
+        setHasProtractor(!!integrations.protractor?.configured);
       }
     } catch (err) {
       console.error("Failed to fetch preferences:", err);
@@ -143,51 +153,53 @@ export default function PreferencesPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <List className="w-5 h-5 text-gray-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Dashboard Workflow Stages</h2>
-          </div>
-
-          <div className="space-y-4">
-            <p className="text-sm text-gray-500">
-              Select which Protractor workflow stages should appear on your dashboard. 
-              Only work orders matching selected stages will be shown.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {WORKFLOW_STAGES.map((stage) => (
-                <label
-                  key={stage.key}
-                  className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                    workflowStages.includes(stage.key)
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={workflowStages.includes(stage.key)}
-                    onChange={() => toggleWorkflowStage(stage.key)}
-                    className="w-4 h-4 text-blue-600 mt-0.5"
-                  />
-                  <div>
-                    <p className="font-medium text-gray-900">{stage.label}</p>
-                    <p className="text-sm text-gray-500">{stage.description}</p>
-                  </div>
-                </label>
-              ))}
+        {hasProtractor && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <List className="w-5 h-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Dashboard Workflow Stages</h2>
             </div>
 
-            {workflowStages.length === 0 && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  No stages selected. Your dashboard will show no Protractor vehicles.
-                </p>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Select which Protractor workflow stages should appear on your dashboard. 
+                Only work orders matching selected stages will be shown.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {WORKFLOW_STAGES.map((stage) => (
+                  <label
+                    key={stage.key}
+                    className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                      workflowStages.includes(stage.key)
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={workflowStages.includes(stage.key)}
+                      onChange={() => toggleWorkflowStage(stage.key)}
+                      className="w-4 h-4 text-blue-600 mt-0.5"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">{stage.label}</p>
+                      <p className="text-sm text-gray-500">{stage.description}</p>
+                    </div>
+                  </label>
+                ))}
               </div>
-            )}
+
+              {workflowStages.length === 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    No stages selected. Your dashboard will show no Protractor vehicles.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-3 mb-6">
