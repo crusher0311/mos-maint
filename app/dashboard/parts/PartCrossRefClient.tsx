@@ -106,8 +106,54 @@ export default function PartCrossRefClient() {
     }
   };
 
+  const buildHistory = async () => {
+    setRebuilding(true);
+    setRebuildMessage("Building parts history from 5 years of invoices... This may take a few minutes.");
+    try {
+      const res = await fetch("/api/parts/build-history", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setRebuildMessage(`Done! ${data.invoicesFetched} invoices processed, ${data.partsIndexed} parts indexed.`);
+      } else {
+        setRebuildMessage(data.error || "Failed to build parts history");
+      }
+    } catch {
+      setRebuildMessage("Failed to build parts history");
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+        <div>
+          <p className="font-medium text-blue-900">Parts Database</p>
+          <p className="text-sm text-blue-700">
+            Build or refresh your parts database from 5 years of Protractor invoice history.
+          </p>
+        </div>
+        <button
+          onClick={buildHistory}
+          disabled={rebuilding}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+        >
+          {rebuilding ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <Database className="w-4 h-4" />
+          )}
+          Build Parts History
+        </button>
+      </div>
+
+      {rebuildMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+          <Database className="w-5 h-5 text-green-500 flex-shrink-0" />
+          <p className="text-green-700">{rebuildMessage}</p>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex gap-4 mb-4">
           <button
@@ -230,13 +276,6 @@ export default function PartCrossRefClient() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
           <p className="text-red-700">{error}</p>
-        </div>
-      )}
-
-      {rebuildMessage && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
-          <Database className="w-5 h-5 text-blue-500 flex-shrink-0" />
-          <p className="text-blue-700">{rebuildMessage}</p>
         </div>
       )}
 
