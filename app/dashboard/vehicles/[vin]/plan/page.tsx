@@ -874,6 +874,10 @@ async function PlanContent({ params }: PageProps) {
   
   // Helper to extract customer name from work order
   const extractCustomerName = (wo: any): string | null => {
+    // Check flat contactName field first (stored by sync)
+    if (wo?.contactName) return wo.contactName;
+    if (wo?.data?.contactName) return wo.data.contactName;
+    // Fall back to nested Contact structure
     const contact = wo?.Contact || wo?.data?.Contact;
     if (contact?.Name) {
       const firstName = contact.Name.FirstName || '';

@@ -68,7 +68,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         enterpriseId={userInfo?.enterpriseId}
         enabledFeatures={userInfo?.enabledFeatures}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-y-auto">
         {children}
       </div>
     </div>
