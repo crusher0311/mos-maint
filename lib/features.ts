@@ -6,8 +6,7 @@ import "@/lib/sms-adapters/protractor-adapter";
 
 export type FeatureId = 
   | "maintenance"      // OEM schedules, recommendations, DVI insights
-  | "job_lookup"       // Historical job search, parts intelligence
-  | "history_writer"   // CARFAX History Writer integration
+  | "job_lookup"       // Historical job search, parts intelligence (aka History Writer)
   | "oil_sticker"      // Oil change sticker platform
   | "part_xref";       // Part cross-reference tool
 
@@ -34,19 +33,11 @@ export const FEATURES: FeatureConfig[] = [
   },
   {
     id: "job_lookup",
-    name: "Job Lookup / Parts Intelligence",
+    name: "Job Lookup / History Writer",
     description: "Search historical jobs for parts, labor, and pricing. Add matching jobs to open work orders.",
     icon: "Search",
     requiresSMS: true,
     smsProviders: ["protractor", "tekmetric"],
-  },
-  {
-    id: "history_writer",
-    name: "CARFAX History Writer",
-    description: "Automatically report service history to CARFAX",
-    icon: "FileText",
-    requiresSMS: true,
-    smsProviders: ["protractor", "tekmetric", "autoflow"],
   },
   {
     id: "oil_sticker",
