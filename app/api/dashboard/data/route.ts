@@ -465,7 +465,7 @@ export async function GET(request: NextRequest) {
           displayMiles: "$odometer",
           displayRo: "$workOrderNumber",
           workOrderId: "$workOrderId",
-          dviDone: { $literal: false },
+          dviDone: { $ifNull: ["$dviDone", false] },
           source: { $literal: "tekmetric" },
           displayStatus: { 
             $cond: {
