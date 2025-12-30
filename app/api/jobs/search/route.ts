@@ -7,6 +7,30 @@ import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
+function parseEngineString(engine: string): { cylinders: number | null; displacement: number | null } {
+  if (!engine) return { cylinders: null, displacement: null };
+  
+  const normalized = engine.toUpperCase();
+  
+  let cylinders: number | null = null;
+  const v8Match = normalized.match(/V\s*8|8\s*CYL/);
+  const v6Match = normalized.match(/V\s*6|6\s*CYL/);
+  const i4Match = normalized.match(/I\s*4|4\s*CYL|L\s*4/);
+  const v4Match = normalized.match(/V\s*4/);
+  
+  if (v8Match) cylinders = 8;
+  else if (v6Match) cylinders = 6;
+  else if (i4Match || v4Match) cylinders = 4;
+  
+  let displacement: number | null = null;
+  const literMatch = normalized.match(/(\d+\.?\d*)\s*L/);
+  if (literMatch) {
+    displacement = parseFloat(literMatch[1]);
+  }
+  
+  return { cylinders, displacement };
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -57,45 +81,84 @@ export async function GET(req: NextRequest) {
   const jobs = await db.collection("job_index").aggregate(pipeline).toArray();
 
   const scoredJobs = jobs.map((job: any) => {
-    let score = 50;
+    let score = 0;
+    const matchDetails: string[] = [];
     
-    if (vehicleYear && job.vehicle.year) {
-      const yearDiff = Math.abs(parseInt(vehicleYear) - job.vehicle.year);
-      if (yearDiff === 0) score += 30;
-      else if (yearDiff <= 2) score += 20;
-      else if (yearDiff <= 5) score += 10;
-    }
+    const targetYear = vehicleYear ? parseInt(vehicleYear) : null;
+    const jobYear = job.vehicle?.year;
     
-    if (vehicleMake && job.vehicle.make) {
-      if (job.vehicle.make.toLowerCase() === vehicleMake.toLowerCase()) {
+    if (targetYear && jobYear) {
+      const yearDiff = Math.abs(targetYear - jobYear);
+      if (yearDiff === 0) {
+        score += 25;
+        matchDetails.push("Exact year match");
+      } else if (yearDiff === 1) {
+        score += 20;
+        matchDetails.push("1 year difference");
+      } else if (yearDiff === 2) {
         score += 15;
+        matchDetails.push("2 years difference");
+      } else if (yearDiff <= 4) {
+        score += 8;
+        matchDetails.push(`${yearDiff} years difference`);
+      } else {
+        score += 2;
+        matchDetails.push(`${yearDiff} years difference`);
       }
     }
     
-    if (vehicleModel && job.vehicle.model) {
+    if (vehicleMake && job.vehicle?.make) {
+      if (job.vehicle.make.toLowerCase() === vehicleMake.toLowerCase()) {
+        score += 20;
+        matchDetails.push("Same make");
+      }
+    }
+    
+    if (vehicleModel && job.vehicle?.model) {
       if (job.vehicle.model.toLowerCase() === vehicleModel.toLowerCase()) {
         score += 20;
+        matchDetails.push("Same model");
       }
     }
     
-    if (vehicleEngine && job.vehicle.engine) {
-      if (job.vehicle.engine.toLowerCase().includes(vehicleEngine.toLowerCase())) {
+    const targetEngineInfo = parseEngineString(vehicleEngine || "");
+    const jobEngineInfo = parseEngineString(job.vehicle?.engine || "");
+    
+    if (targetEngineInfo.cylinders || jobEngineInfo.cylinders) {
+      const cylinderMatch = targetEngineInfo.cylinders === jobEngineInfo.cylinders;
+      const displacementMatch = targetEngineInfo.displacement && jobEngineInfo.displacement &&
+        Math.abs(targetEngineInfo.displacement - jobEngineInfo.displacement) < 0.3;
+      
+      if (cylinderMatch && displacementMatch) {
+        score += 25;
+        matchDetails.push("Same engine");
+      } else if (cylinderMatch) {
         score += 15;
+        matchDetails.push("Same cylinder count");
+      } else if (displacementMatch) {
+        score += 10;
+        matchDetails.push("Similar displacement");
+      } else if (targetEngineInfo.cylinders && jobEngineInfo.cylinders) {
+        score -= 10;
+        matchDetails.push("Different engine");
       }
     }
     
-    if (job.lines?.length > 0) {
+    if (job.lines?.some((l: any) => l.lineType === "part" && l.partNumber)) {
       score += 5;
+      matchDetails.push("Has part numbers");
     }
     
     const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSincePerformed < 90) score += 5;
     else if (daysSincePerformed < 365) score += 2;
     
+    const normalizedScore = Math.max(0, Math.min(100, score));
+    
     return {
       ...job,
-      matchScore: Math.min(score, 100),
-      matchReason: buildMatchReason(job, vehicleYear, vehicleMake, vehicleModel, vehicleEngine),
+      matchScore: normalizedScore,
+      matchReason: matchDetails.join(" | ") || "Keyword match",
     };
   });
 
@@ -120,40 +183,6 @@ export async function GET(req: NextRequest) {
     totalFound: jobs.length,
     returned: results.length,
   });
-}
-
-function buildMatchReason(
-  job: any, 
-  targetYear?: string | null, 
-  targetMake?: string | null, 
-  targetModel?: string | null, 
-  targetEngine?: string | null
-): string {
-  const reasons: string[] = [];
-  
-  if (targetYear && job.vehicle.year) {
-    const diff = Math.abs(parseInt(targetYear) - job.vehicle.year);
-    if (diff === 0) reasons.push("Exact year match");
-    else if (diff <= 2) reasons.push(`${diff} year${diff > 1 ? 's' : ''} difference`);
-  }
-  
-  if (targetMake && job.vehicle.make?.toLowerCase() === targetMake.toLowerCase()) {
-    reasons.push("Same make");
-  }
-  
-  if (targetModel && job.vehicle.model?.toLowerCase() === targetModel.toLowerCase()) {
-    reasons.push("Same model");
-  }
-  
-  if (targetEngine && job.vehicle.engine?.toLowerCase().includes(targetEngine.toLowerCase())) {
-    reasons.push("Similar engine");
-  }
-  
-  if (job.lines?.some((l: any) => l.lineType === "part" && l.partNumber)) {
-    reasons.push("Has part numbers");
-  }
-  
-  return reasons.join(" | ") || "Keyword match";
 }
 
 export async function POST(req: NextRequest) {
