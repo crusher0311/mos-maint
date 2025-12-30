@@ -163,6 +163,69 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  console.log(`[Jobs Add to RO] Service package added successfully`);
+  
+  const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
+                           updateResult.data?.ServicePackages || [];
+  const newPackage = Array.isArray(responsePackages) 
+    ? responsePackages.find((p: any) => 
+        p.ServicePackageHeader?.Title === job.title || 
+        p.Code === newServicePackage.Code
+      )
+    : null;
+  
+  const servicePackageId = newPackage?.ID;
+  
+  if (servicePackageId && servicePackageId !== ZERO_GUID && job.lines.length > 0) {
+    console.log(`[Jobs Add to RO] Adding ${job.lines.length} lines to service package ${servicePackageId}...`);
+    
+    let linesAdded = 0;
+    const lineErrors: string[] = [];
+    
+    for (const line of servicePackageLines) {
+      const linePayload = {
+        ID: ZERO_GUID,
+        WorkOrderID: workOrderGuid,
+        ServicePackageID: servicePackageId,
+        Type: line.Type,
+        Description: line.Description,
+        Quantity: line.Quantity,
+        Unit: line.Unit,
+        Price: line.Price,
+        PriceUnit: line.PriceUnit,
+        Total: line.Total,
+        ExtendedTotal: line.ExtendedTotal,
+        PartNumber: line.PartNumber,
+        Manufacturer: line.Manufacturer,
+        Completed: false,
+      };
+      
+      const lineResult = await protractorFetch<any>(
+        `/WorkOrder/ServicePackageLine`,
+        config,
+        {
+          method: "POST",
+          body: JSON.stringify(linePayload),
+        }
+      );
+      
+      if (lineResult.ok) {
+        linesAdded++;
+        console.log(`[Jobs Add to RO] Line added: ${line.Description}`);
+      } else {
+        lineErrors.push(`${line.Description}: ${lineResult.error}`);
+        console.log(`[Jobs Add to RO] Line failed: ${line.Description} - ${lineResult.error}`);
+      }
+    }
+    
+    console.log(`[Jobs Add to RO] Lines added: ${linesAdded}/${job.lines.length}`);
+    if (lineErrors.length > 0) {
+      console.log(`[Jobs Add to RO] Line errors: ${lineErrors.join("; ")}`);
+    }
+  } else if (job.lines.length > 0) {
+    console.log(`[Jobs Add to RO] Could not add lines - no valid ServicePackageID returned`);
+  }
+
   console.log(`[Jobs Add to RO] Success: Added "${job.title}" to WO ${workOrderGuid}`);
 
   return NextResponse.json({
