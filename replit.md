@@ -191,6 +191,8 @@ Currently implemented: Protractor. Future: Tekmetric, AutoFlow.
 - **Dev Mode:** All features are auto-enabled when running in Replit dev environment (NODE_ENV=development or REPLIT_DEV_DOMAIN is set)
 
 ## Recent Changes (December 2025)
+*   **v1.7.0**: Tekmetric history backfill - import 5 years of historical repair orders and jobs for Job Lookup feature
+*   **v1.7.0**: Dashboard Workflow Stages now only shows for Protractor shops (hidden for Tekmetric)
 *   **v1.7.0**: Tekmetric canned jobs support - fetch, sync, and apply canned jobs to repair orders for Tekmetric shops
 *   **v1.7.0**: Multi-SMS canned jobs UI - settings page auto-detects Protractor or Tekmetric and shows appropriate interface
 *   **v1.7.0**: Shop branding settings - upload shop logo for service records, add location identifier for multi-location shops
