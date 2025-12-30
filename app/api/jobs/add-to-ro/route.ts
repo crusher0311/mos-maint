@@ -92,9 +92,9 @@ export async function POST(req: NextRequest) {
   const mapLineType = (lineType: string): string => {
     switch (lineType) {
       case "labor": return "Labor";
-      case "part": return "Part";
+      case "part": return "Material";
       case "sublet": return "Sublet";
-      default: return "Other";
+      default: return "Material";
     }
   };
 
