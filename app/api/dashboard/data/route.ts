@@ -535,12 +535,15 @@ export async function GET(request: NextRequest) {
     // Combine all rows
     let allRows = [...autoflowRows, ...uniqueProtractorRows, ...uniqueTekmetricRows];
 
-    // Filter to only show vehicles with mileage data
+    // Filter to only show vehicles with mileage data (if preference is enabled)
     // This ensures advisors know to enter mileage before the vehicle appears
-    allRows = allRows.filter((row: any) => {
-      const miles = row.displayMiles ?? row.af?.miles;
-      return miles != null && miles > 0;
-    });
+    const showOnlyWithMileage = shopPrefs?.preferences?.showOnlyWithMileage !== false; // default true
+    if (showOnlyWithMileage) {
+      allRows = allRows.filter((row: any) => {
+        const miles = row.displayMiles ?? row.af?.miles;
+        return miles != null && miles > 0;
+      });
+    }
 
     // Apply search filter if provided
     if (search) {

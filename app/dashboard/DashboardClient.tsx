@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench } from "lucide-react";
+import JobLookup from "@/components/JobLookup";
 import { ReactNode } from "react";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
@@ -86,6 +87,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [jobLookupVehicle, setJobLookupVehicle] = useState<{
+    vin: string;
+    year?: number;
+    make?: string;
+    model?: string;
+    engine?: string;
+    workOrderId?: string;
+    displayName?: string;
+  } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -122,11 +132,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     const dir = sortDirection === 'asc' ? 1 : -1;
     
     const getMileage = (r: any) => r.displayMiles ?? r.af?.miles ?? 0;
-    const hasMileageA = getMileage(a) > 0;
-    const hasMileageB = getMileage(b) > 0;
-    if (hasMileageA !== hasMileageB) {
-      return hasMileageA ? -1 : 1;
-    }
     
     switch (sortColumn) {
       case 'customer':
@@ -458,23 +463,49 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           : "—"}
                       </td>
                       <td className="px-6 py-4">
-                        {r.displayMiles != null && r.displayMiles > 0 ? (
-                          <Link
-                            href={VEHICLE_HREF(vin)}
-                            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                        <div className="flex items-center gap-2">
+                          {r.displayMiles != null && r.displayMiles > 0 ? (
+                            <Link
+                              href={VEHICLE_HREF(vin)}
+                              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                            >
+                              View
+                              <ChevronRight className="w-4 h-4" />
+                            </Link>
+                          ) : (
+                            <span 
+                              className="flex items-center gap-1 text-sm text-gray-400 cursor-not-allowed"
+                              title="Mileage required for recommendations"
+                            >
+                              View
+                              <ChevronRight className="w-4 h-4" />
+                            </span>
+                          )}
+                          <button
+                            onClick={() => {
+                              const vehicleStr = r.displayVehicle || "";
+                              const yearMatch = vehicleStr.match(/^(\d{4})/);
+                              const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                              const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                              const [make, ...modelParts] = afterYear.split(" ").filter(Boolean);
+                              const model = modelParts.join(" ") || undefined;
+                              
+                              setJobLookupVehicle({
+                                vin,
+                                year,
+                                make: make || undefined,
+                                model,
+                                engine: r.engine || r.vehicle?.engine,
+                                workOrderId: r.workOrderGuid || r.workOrderId || r.displayRo,
+                                displayName: r.displayName,
+                              });
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                            title="Job Lookup"
                           >
-                            View
-                            <ChevronRight className="w-4 h-4" />
-                          </Link>
-                        ) : (
-                          <span 
-                            className="flex items-center gap-1 text-sm text-gray-400 cursor-not-allowed"
-                            title="Mileage required for recommendations"
-                          >
-                            View
-                            <ChevronRight className="w-4 h-4" />
-                          </span>
-                        )}
+                            <Wrench className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -563,6 +594,44 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           </p>
         </div>
       </div>
+
+      {jobLookupVehicle && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Wrench className="w-5 h-5 text-amber-500" />
+                  Job Lookup
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {jobLookupVehicle.displayName} - {jobLookupVehicle.year} {jobLookupVehicle.make} {jobLookupVehicle.model}
+                </p>
+              </div>
+              <button
+                onClick={() => setJobLookupVehicle(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <JobLookup
+                currentVehicle={{
+                  year: jobLookupVehicle.year,
+                  make: jobLookupVehicle.make,
+                  model: jobLookupVehicle.model,
+                  engine: jobLookupVehicle.engine,
+                }}
+                workOrderGuid={jobLookupVehicle.workOrderId}
+                onJobAdded={() => {
+                  refreshData();
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
