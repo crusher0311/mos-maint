@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { 
   updatePartCrossReferences, 
   upsertJobIndexEntries,
-  extractJobIndexFromWorkOrder,
+  extractJobIndexFromCachedWorkOrder,
   JobIndexEntry 
 } from "@/lib/job-index";
 
@@ -21,7 +21,7 @@ export async function POST() {
   try {
     const db = await getDb();
     
-    let jobIndexEntries = await db.collection<JobIndexEntry>("job_index")
+    let jobIndexEntries: JobIndexEntry[] = await db.collection<JobIndexEntry>("job_index")
       .find({ shopId })
       .toArray();
     
@@ -44,9 +44,13 @@ export async function POST() {
       
       console.log(`[Parts Rebuild] Found ${cachedWorkOrders.length} cached work orders, building job index...`);
       
+      const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
+      const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
+      
       const allEntries: JobIndexEntry[] = [];
       for (const wo of cachedWorkOrders) {
-        const entries = extractJobIndexFromWorkOrder(shopId, wo.data || wo, "protractor");
+        const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
+        const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
         allEntries.push(...entries);
       }
       

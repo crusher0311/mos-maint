@@ -26,21 +26,26 @@ async function ensurePartsIndexed(shopId: number): Promise<void> {
   const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
   
   if (partsCount === 0) {
-    let jobEntries = await db.collection<JobIndexEntry>("job_index")
+    let jobEntries: JobIndexEntry[] = await db.collection<JobIndexEntry>("job_index")
       .find({ shopId })
       .toArray();
     
     if (jobEntries.length === 0) {
-      const { extractJobIndexFromWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
+      const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
       const cachedWOs = await db.collection("protractor_work_orders")
         .find({ shopId })
         .toArray();
       
       if (cachedWOs.length > 0) {
         console.log(`[Parts] Building job index from ${cachedWOs.length} cached work orders`);
+        
+        const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
+        const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
+        
         const allEntries: JobIndexEntry[] = [];
         for (const wo of cachedWOs) {
-          const entries = extractJobIndexFromWorkOrder(shopId, wo.data || wo, "protractor");
+          const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
+          const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
           allEntries.push(...entries);
         }
         if (allEntries.length > 0) {
