@@ -535,13 +535,6 @@ export async function GET(request: NextRequest) {
     // Combine all rows
     let allRows = [...autoflowRows, ...uniqueProtractorRows, ...uniqueTekmetricRows];
 
-    // Filter to only show vehicles with mileage data
-    // This ensures advisors know to enter mileage before the vehicle appears
-    allRows = allRows.filter((row: any) => {
-      const miles = row.displayMiles ?? row.af?.miles;
-      return miles != null && miles > 0;
-    });
-
     // Apply search filter if provided
     if (search) {
       allRows = allRows.filter((row: any) => {
