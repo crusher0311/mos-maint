@@ -715,7 +715,10 @@ export default function CannedJobsSettingsPage() {
                 />
                 
                 {isAssigning && (
-                  <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                  <div className="fixed inset-0 z-40" onClick={() => setAssigningJobId(null)} />
+                )}
+                {isAssigning && (
+                  <div className="absolute bottom-full left-0 right-0 z-50 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
                     <div className="text-xs font-medium text-gray-500 mb-2">Assign to service:</div>
                     <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
                       {SERVICE_KEYS.map(({ key, name }) => {
