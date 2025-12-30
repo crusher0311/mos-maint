@@ -6,6 +6,7 @@ import {
   fetchActiveWorkOrders,
   fetchDeferredWork,
   fetchWorkOrderById,
+  resolveWorkOrderGuid,
 } from "@/lib/integrations/protractor";
 
 export const runtime = "nodejs";
@@ -30,8 +31,13 @@ export async function GET(req: NextRequest) {
   // If workOrderId is provided, return full work order details
   const workOrderId = req.nextUrl.searchParams.get("workOrderId");
   if (workOrderId) {
-    const result = await fetchWorkOrderById(shopId, workOrderId);
-    return NextResponse.json({ workOrder: result.workOrder, error: result.error });
+    // First try to lookup GUID if it's an RO number
+    const lookupResult = await resolveWorkOrderGuid(shopId, workOrderId);
+    if (!lookupResult.ok) {
+      return NextResponse.json({ error: lookupResult.error });
+    }
+    // Return the full work order from lookup
+    return NextResponse.json({ workOrder: lookupResult.workOrder, guid: lookupResult.workOrderGuid });
   }
 
   const endDate = new Date();
