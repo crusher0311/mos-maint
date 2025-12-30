@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { getDb } from "@/app/lib/mongo";
+import { getDb } from "@/lib/mongo";
 
 let stripeInstance: Stripe | null = null;
 

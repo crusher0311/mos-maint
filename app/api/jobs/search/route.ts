@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/app/lib/mongo";
+import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
