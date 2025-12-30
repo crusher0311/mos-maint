@@ -23,6 +23,7 @@ export async function GET() {
     role: sess.role,
     shopId: sess.shopId,
     shopName: shop?.name || `Shop ${sess.shopId}`,
+    shopLogo: shop?.branding?.logo || null,
     isPlatformAdmin: sess.isPlatformAdmin || false,
     enterpriseId: shop?.enterpriseId || null,
   });
