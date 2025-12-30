@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Loader2, Check, Globe, List, Eye, Car } from "lucide-react";
+import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag } from "lucide-react";
 
 const WORKFLOW_STAGES = [
   { key: "Unassigned", label: "Unassigned", description: "New work orders not yet assigned" },
@@ -14,6 +14,8 @@ const WORKFLOW_STAGES = [
 
 const DEFAULT_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted"];
 
+type TekmetricLabel = { name: string; color: string };
+
 export default function PreferencesPage() {
   const [distanceUnit, setDistanceUnit] = useState("miles");
   const [workflowStages, setWorkflowStages] = useState<string[]>(DEFAULT_STAGES);
@@ -23,6 +25,9 @@ export default function PreferencesPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hasProtractor, setHasProtractor] = useState(false);
+  const [hasTekmetric, setHasTekmetric] = useState(false);
+  const [tekmetricLabels, setTekmetricLabels] = useState<TekmetricLabel[]>([]);
+  const [selectedTekmetricLabels, setSelectedTekmetricLabels] = useState<string[]>([]);
 
   useEffect(() => {
     fetchPreferences();
@@ -30,9 +35,10 @@ export default function PreferencesPage() {
 
   async function fetchPreferences() {
     try {
-      const [prefsRes, integrationsRes] = await Promise.all([
+      const [prefsRes, integrationsRes, labelsRes] = await Promise.all([
         fetch("/api/settings/preferences"),
-        fetch("/api/settings/integrations")
+        fetch("/api/settings/integrations"),
+        fetch("/api/tekmetric/labels")
       ]);
       
       if (prefsRes.ok) {
@@ -41,11 +47,18 @@ export default function PreferencesPage() {
         setWorkflowStages(data.workflowStages || DEFAULT_STAGES);
         setShowInspectItems(data.showInspectItems !== false);
         setShowOnlyWithMileage(data.showOnlyWithMileage !== false);
+        setSelectedTekmetricLabels(data.tekmetricLabels || []);
       }
       
       if (integrationsRes.ok) {
         const integrations = await integrationsRes.json();
         setHasProtractor(!!integrations.protractor?.configured);
+        setHasTekmetric(!!integrations.tekmetric?.configured);
+      }
+      
+      if (labelsRes.ok) {
+        const labelsData = await labelsRes.json();
+        setTekmetricLabels(labelsData.labels || []);
       }
     } catch (err) {
       console.error("Failed to fetch preferences:", err);
@@ -62,6 +75,14 @@ export default function PreferencesPage() {
     );
   }
 
+  function toggleTekmetricLabel(label: string) {
+    setSelectedTekmetricLabels(prev => 
+      prev.includes(label) 
+        ? prev.filter(l => l !== label)
+        : [...prev, label]
+    );
+  }
+
   async function savePreferences() {
     setSaving(true);
     setSaved(false);
@@ -69,7 +90,13 @@ export default function PreferencesPage() {
       const res = await fetch("/api/settings/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ distanceUnit, workflowStages, showInspectItems, showOnlyWithMileage }),
+        body: JSON.stringify({ 
+          distanceUnit, 
+          workflowStages, 
+          showInspectItems, 
+          showOnlyWithMileage,
+          tekmetricLabels: selectedTekmetricLabels
+        }),
       });
       if (res.ok) {
         setSaved(true);
@@ -194,6 +221,60 @@ export default function PreferencesPage() {
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-sm text-amber-800">
                     No stages selected. Your dashboard will show no Protractor vehicles.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasTekmetric && tekmetricLabels.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Tag className="w-5 h-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Dashboard Labels</h2>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Select which Tekmetric custom labels should appear on your dashboard. 
+                Only repair orders with selected labels will be shown. Leave all unchecked to show all active repair orders.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {tekmetricLabels.map((label) => (
+                  <label
+                    key={label.name}
+                    className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                      selectedTekmetricLabels.includes(label.name)
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedTekmetricLabels.includes(label.name)}
+                      onChange={() => toggleTekmetricLabel(label.name)}
+                      className="w-4 h-4 text-blue-600 mt-0.5"
+                    />
+                    <div className="flex items-center gap-2">
+                      {label.color && (
+                        <span 
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: label.color }}
+                        />
+                      )}
+                      <p className="font-medium text-gray-900">{label.name}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              {selectedTekmetricLabels.length > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    {selectedTekmetricLabels.length} label{selectedTekmetricLabels.length > 1 ? 's' : ''} selected. 
+                    Dashboard will only show repair orders with these labels.
                   </p>
                 </div>
               )}
