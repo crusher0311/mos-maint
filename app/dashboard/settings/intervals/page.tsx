@@ -7,21 +7,25 @@ import { Settings, Wrench, RotateCcw } from "lucide-react";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Categories aligned with CARFAX service categories
 const COMMON_SERVICES = [
-  { key: "oil", name: "Oil & Filter Change", defaultMiles: 5000, defaultMonths: 6 },
+  { key: "oil", name: "Oil Change / Engine Oil Filter", defaultMiles: 5000, defaultMonths: 6 },
   { key: "tire_rotation", name: "Tire Rotation", defaultMiles: 7500, defaultMonths: 6 },
-  { key: "engine_air", name: "Engine Air Filter", defaultMiles: 30000, defaultMonths: 36 },
-  { key: "cabin_air", name: "Cabin Air Filter", defaultMiles: 25000, defaultMonths: 24 },
-  { key: "inspect_brakes", name: "Brake Inspection", defaultMiles: 15000, defaultMonths: 12 },
-  { key: "brake_fluid", name: "Brake Fluid Flush", defaultMiles: 30000, defaultMonths: 36 },
-  { key: "coolant", name: "Coolant Flush", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "trans_fluid", name: "Transmission Fluid", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "spark_plugs", name: "Spark Plugs", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "battery", name: "Battery Inspection/Replace", defaultMiles: null, defaultMonths: 48 },
-  { key: "alignment", name: "Wheel Alignment", defaultMiles: 25000, defaultMonths: 24 },
-  { key: "multi_point", name: "Multi-Point Inspection", defaultMiles: 15000, defaultMonths: 12 },
-  { key: "steering", name: "Steering Components", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "suspension", name: "Suspension", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "cabin_air", name: "Cabin Air Filter Replacement", defaultMiles: 25000, defaultMonths: 24 },
+  { key: "engine_air", name: "Air Filter Replacement", defaultMiles: 30000, defaultMonths: 36 },
+  { key: "coolant", name: "Radiator Antifreeze Flush", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "trans_auto", name: "Automatic Transmission Fluid", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "trans_manual", name: "Manual Transmission Fluid", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "transfer_case", name: "Transfer Case Fluid", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "differential", name: "Differential Fluid", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "serpentine_belt", name: "Serpentine Belt Replacement", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "fuel_system", name: "Fuel System Cleaning", defaultMiles: 30000, defaultMonths: 36 },
+  { key: "fuel_filter", name: "Fuel Filter Replacement", defaultMiles: 30000, defaultMonths: 36 },
+  { key: "brake_pads", name: "Brake Linings/Pads Replacement", defaultMiles: 40000, defaultMonths: 48 },
+  { key: "emissions", name: "Emissions Test", defaultMiles: null, defaultMonths: 24 },
+  { key: "power_steering", name: "Power Steering Fluid", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "battery", name: "Battery Replacement", defaultMiles: null, defaultMonths: 48 },
+  { key: "ac_refrigerant", name: "A/C Refrigerant Refill", defaultMiles: null, defaultMonths: 36 },
 ];
 
 export type ShopInterval = {

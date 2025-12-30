@@ -21,21 +21,25 @@ import {
   Eye,
 } from "lucide-react";
 
+// Service keys aligned with CARFAX categories
 const SERVICE_KEYS = [
-  { key: "oil", name: "Oil & Filter Change" },
+  { key: "oil", name: "Oil Change / Engine Oil Filter" },
   { key: "tire_rotation", name: "Tire Rotation" },
-  { key: "engine_air", name: "Engine Air Filter" },
-  { key: "cabin_air", name: "Cabin Air Filter" },
-  { key: "inspect_brakes", name: "Brake Inspection" },
-  { key: "brake_fluid", name: "Brake Fluid Flush" },
-  { key: "coolant", name: "Coolant Flush" },
-  { key: "trans_fluid", name: "Transmission Fluid" },
-  { key: "spark_plugs", name: "Spark Plugs" },
-  { key: "battery", name: "Battery" },
-  { key: "alignment", name: "Wheel Alignment" },
-  { key: "multi_point", name: "Multi-Point Inspection" },
-  { key: "steering", name: "Steering Components" },
-  { key: "suspension", name: "Suspension" },
+  { key: "cabin_air", name: "Cabin Air Filter Replacement" },
+  { key: "engine_air", name: "Air Filter Replacement" },
+  { key: "coolant", name: "Radiator Antifreeze Flush" },
+  { key: "trans_auto", name: "Automatic Transmission Fluid" },
+  { key: "trans_manual", name: "Manual Transmission Fluid" },
+  { key: "transfer_case", name: "Transfer Case Fluid" },
+  { key: "differential", name: "Differential Fluid" },
+  { key: "serpentine_belt", name: "Serpentine Belt Replacement" },
+  { key: "fuel_system", name: "Fuel System Cleaning" },
+  { key: "fuel_filter", name: "Fuel Filter Replacement" },
+  { key: "brake_pads", name: "Brake Linings/Pads Replacement" },
+  { key: "emissions", name: "Emissions Test" },
+  { key: "power_steering", name: "Power Steering Fluid" },
+  { key: "battery", name: "Battery Replacement" },
+  { key: "ac_refrigerant", name: "A/C Refrigerant Refill" },
 ];
 
 type CannedJobLine = {
