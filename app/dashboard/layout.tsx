@@ -12,6 +12,7 @@ interface UserInfo {
   authenticated: boolean;
   isPlatformAdmin?: boolean;
   enterpriseId?: string | null;
+  enabledFeatures?: string[];
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -20,11 +21,24 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function fetchUserInfo() {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated) {
-            setUserInfo(data);
+        const [authRes, featuresRes] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/shop/features"),
+        ]);
+        
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          if (authData.authenticated) {
+            let enabledFeatures = ["maintenance"];
+            
+            if (featuresRes.ok) {
+              const featuresData = await featuresRes.json();
+              if (featuresData.enabledFeatureIds) {
+                enabledFeatures = featuresData.enabledFeatureIds;
+              }
+            }
+            
+            setUserInfo({ ...authData, enabledFeatures });
           }
         }
       } catch (err) {
@@ -48,6 +62,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         isPlatformAdmin={userInfo?.isPlatformAdmin}
         currentShopId={userInfo?.shopId}
         enterpriseId={userInfo?.enterpriseId}
+        enabledFeatures={userInfo?.enabledFeatures}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {children}
