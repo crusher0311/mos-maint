@@ -245,25 +245,25 @@ export default function PartCrossRefClient() {
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
           <p className="text-gray-600 font-medium">No parts found</p>
           <p className="text-sm text-gray-500 mt-1 mb-4">
-            The parts index may need to be rebuilt from your work order history.
+            Build the parts database from your Protractor invoice history (5 years).
           </p>
           <button
             onClick={async () => {
               setRebuilding(true);
-              setRebuildMessage(null);
+              setRebuildMessage("Building parts history from invoices... This may take a few minutes.");
               try {
-                const res = await fetch("/api/parts/build-database", { method: "POST" });
+                const res = await fetch("/api/parts/build-history", { method: "POST" });
                 const data = await res.json();
                 if (data.ok) {
-                  setRebuildMessage(`${data.message}. ${data.totalParts || data.partsCreated} parts in database.`);
-                  if ((data.totalParts || data.partsCreated) > 0) {
+                  setRebuildMessage(`${data.message}. ${data.partsIndexed} parts indexed.`);
+                  if (data.partsIndexed > 0) {
                     searchParts();
                   }
                 } else {
                   setRebuildMessage(data.error || data.message || "No parts found in history");
                 }
               } catch {
-                setRebuildMessage("Failed to build parts database");
+                setRebuildMessage("Failed to build parts history");
               } finally {
                 setRebuilding(false);
               }
@@ -276,7 +276,7 @@ export default function PartCrossRefClient() {
             ) : (
               <Database className="w-4 h-4" />
             )}
-            Build Parts Database
+            Build Parts History
           </button>
         </div>
       )}
