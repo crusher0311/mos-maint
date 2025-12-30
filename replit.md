@@ -90,10 +90,39 @@ The application features a modern SaaS-style design with a dark sidebar (slate-9
 - Score by: exact match > same generation > same model > same make
 - Factor in part number compatibility and service type
 
+**AI Evolution Phases:**
+1. **Phase 1 (Months 1-6): OpenAI API** - Use GPT-4 to score matches, log every query + advisor feedback as training data
+2. **Phase 2 (Month 6+): Fine-Tuned Model** - After 10,000+ interactions, fine-tune GPT-3.5 or open-source model (10x cheaper)
+3. **Phase 3 (Optional): Custom Model** - Train lightweight classifier that runs locally with near-zero API cost
+
+**Data Collection for Training:**
+- Log every search query
+- Track which suggestions advisors view
+- Record when advisor adds suggestion to RO (positive signal)
+- Record when advisor ignores suggestion (negative signal)
+
 **Implementation Notes:**
 - Reuses existing Protractor work order sync data
 - Same API pattern as `addServicePackageToWorkOrder()` function
 - Could leverage TimeClock API for inserting individual lines
+
+### Part Number Cross-Reference Tool (Planned)
+**Concept:** Input a part number, get all compatible/interchangeable part numbers across manufacturers.
+
+**Use Case:**
+1. Advisor enters "51372" (WIX oil filter)
+2. System returns: Fram PH7317, Purolator L14670, Mobil 1 M1-113, OEM 15400-PLM-A02
+3. Shows pricing/availability from shop's inventory or suppliers
+
+**Technical Approach:**
+- Build cross-reference database from historical work order parts
+- Use AI to identify patterns: same vehicle + same service = interchangeable parts
+- Could integrate with PartsTech API for live pricing
+
+**Data Sources:**
+- Historical work orders (which parts were used on which vehicles)
+- Manufacturer cross-reference databases
+- AI pattern matching across shops (anonymized)
 
 ---
 
