@@ -749,6 +749,9 @@ async function PlanContent({ params }: PageProps) {
       .map(id => cannedJobsById[id])
       .filter(Boolean);
   }
+  
+  // All available canned jobs for fallback when no mapped jobs exist
+  const allCannedJobsList = Object.values(cannedJobsById);
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
@@ -1230,6 +1233,7 @@ async function PlanContent({ params }: PageProps) {
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
                           cannedJobOptions={opts}
+                          allCannedJobs={allCannedJobsList}
                         />
                       );
                     })()}
@@ -1397,6 +1401,7 @@ async function PlanContent({ params }: PageProps) {
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
                           cannedJobOptions={opts}
+                          allCannedJobs={allCannedJobsList}
                         />
                       );
                     })()}
@@ -1523,6 +1528,7 @@ async function PlanContent({ params }: PageProps) {
                           workOrderGuid={latestWorkOrderId ?? undefined}
                           workOrderId={latestRoNumber ?? undefined}
                           cannedJobOptions={opts}
+                          allCannedJobs={allCannedJobsList}
                         />
                       );
                     })()}
