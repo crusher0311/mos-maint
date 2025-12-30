@@ -91,10 +91,10 @@ export async function POST(req: NextRequest) {
 
   const mapLineType = (lineType: string): string => {
     switch (lineType) {
-      case "labor": return "LaborLine";
-      case "part": return "PartLine";
-      case "sublet": return "SubletLine";
-      default: return "OtherLine";
+      case "labor": return "Labor";
+      case "part": return "Part";
+      case "sublet": return "Sublet";
+      default: return "Other";
     }
   };
 
@@ -104,17 +104,16 @@ export async function POST(req: NextRequest) {
     Type: mapLineType(line.lineType),
     Description: line.description,
     Quantity: String(line.quantity),
-    Unit: line.lineType === "labor" ? "Hour" : "Each",
-    Price: line.unitPrice,
-    PriceUnit: line.lineType === "labor" ? "Hour" : "Each",
+    RateCode: "1",
     MinimumCharge: 0,
-    Total: line.extendedPrice,
+    Total: String(line.extendedPrice.toFixed(2)),
     Discount: 0,
-    ExtendedTotal: line.extendedPrice,
-    TotalCost: 0,
+    ExtendedTotal: String(line.extendedPrice.toFixed(2)),
+    TotalCost: String(line.extendedPrice.toFixed(2)),
     PartNumber: line.partNumber || "",
     Manufacturer: line.manufacturer || "",
     Completed: false,
+    TechnicianHour: line.lineType === "labor" ? String(line.quantity) : "0",
   }));
 
   const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
@@ -163,73 +162,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log(`[Jobs Add to RO] Service package added successfully`);
-  
   const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
                            updateResult.data?.ServicePackages || [];
-  const newPackage = Array.isArray(responsePackages) 
+  const addedPackage = Array.isArray(responsePackages) 
     ? responsePackages.find((p: any) => 
         p.ServicePackageHeader?.Title === job.title || 
         p.Code === newServicePackage.Code
       )
     : null;
   
-  const servicePackageId = newPackage?.ID;
+  const linesInResponse = addedPackage?.ServicePackageLines?.ItemCollection?.length || 
+                          addedPackage?.ServicePackageLines?.length || 0;
   
-  if (servicePackageId && servicePackageId !== ZERO_GUID && job.lines.length > 0) {
-    console.log(`[Jobs Add to RO] Attempting to add ${job.lines.length} lines via TimeClock API...`);
-    
-    let linesAdded = 0;
-    const lineErrors: string[] = [];
-    
-    for (let i = 0; i < servicePackageLines.length; i++) {
-      const line = servicePackageLines[i];
-      
-      const timeClockPayload = {
-        Type: line.Type,
-        EmployeeID: ZERO_GUID,
-        ClockedIn: false,
-        WorkOrderID: workOrderGuid,
-        ServicePackageID: servicePackageId,
-        Description: line.Description,
-        Quantity: line.Quantity,
-        Unit: line.Unit,
-        Price: line.Price,
-        Total: line.Total,
-        ExtendedTotal: line.ExtendedTotal,
-        PartNumber: line.PartNumber || "",
-        Manufacturer: line.Manufacturer || "",
-      };
-      
-      console.log(`[Jobs Add to RO] TimeClock payload for line ${i + 1}:`, JSON.stringify(timeClockPayload).substring(0, 200));
-      
-      const lineResult = await protractorFetch<any>(
-        `/TimeClock/List/WorkOrder/${workOrderGuid}`,
-        config,
-        {
-          method: "POST",
-          body: JSON.stringify(timeClockPayload),
-        }
-      );
-      
-      if (lineResult.ok) {
-        linesAdded++;
-        console.log(`[Jobs Add to RO] Line added via TimeClock: ${line.Description}`);
-      } else {
-        lineErrors.push(`${line.Description}: ${lineResult.error}`);
-        console.log(`[Jobs Add to RO] TimeClock line failed: ${line.Description} - ${lineResult.error}`);
-      }
-    }
-    
-    console.log(`[Jobs Add to RO] Lines added: ${linesAdded}/${job.lines.length}`);
-    if (lineErrors.length > 0) {
-      console.log(`[Jobs Add to RO] Line errors: ${lineErrors.join("; ")}`);
-    }
-  } else if (job.lines.length > 0) {
-    console.log(`[Jobs Add to RO] Could not add lines - no valid ServicePackageID returned`);
-  }
-
-  console.log(`[Jobs Add to RO] Success: Added "${job.title}" to WO ${workOrderGuid}`);
+  console.log(`[Jobs Add to RO] Success: Added "${job.title}" with ${linesInResponse} lines to WO ${workOrderGuid}`);
 
   return NextResponse.json({
     ok: true,
