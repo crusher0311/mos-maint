@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Search, RefreshCw, Package, Car, Hash, AlertCircle } from "lucide-react";
+import { Search, RefreshCw, Package, Car, Hash, AlertCircle, Database } from "lucide-react";
 
 type PartResult = {
   partNumber: string;
@@ -39,6 +39,8 @@ export default function PartCrossRefClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
 
   const searchParts = useCallback(async () => {
     setLoading(true);
@@ -231,13 +233,51 @@ export default function PartCrossRefClient() {
         </div>
       )}
 
+      {rebuildMessage && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+          <Database className="w-5 h-5 text-blue-500 flex-shrink-0" />
+          <p className="text-blue-700">{rebuildMessage}</p>
+        </div>
+      )}
+
       {searched && !loading && !error && results.length === 0 && vehicleResults.length === 0 && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
           <p className="text-gray-600 font-medium">No parts found</p>
-          <p className="text-sm text-gray-500 mt-1">
-            Try a different search term or vehicle combination
+          <p className="text-sm text-gray-500 mt-1 mb-4">
+            The parts index may need to be rebuilt from your work order history.
           </p>
+          <button
+            onClick={async () => {
+              setRebuilding(true);
+              setRebuildMessage(null);
+              try {
+                const res = await fetch("/api/parts/rebuild", { method: "POST" });
+                const data = await res.json();
+                if (data.ok) {
+                  setRebuildMessage(`${data.message}. ${data.partsUpdated} parts indexed.`);
+                  if (data.partsUpdated > 0) {
+                    searchParts();
+                  }
+                } else {
+                  setRebuildMessage(data.error || "Failed to rebuild index");
+                }
+              } catch {
+                setRebuildMessage("Failed to rebuild parts index");
+              } finally {
+                setRebuilding(false);
+              }
+            }}
+            disabled={rebuilding}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            {rebuilding ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Database className="w-4 h-4" />
+            )}
+            Rebuild Parts Index
+          </button>
         </div>
       )}
 

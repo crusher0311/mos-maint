@@ -1,7 +1,7 @@
 // lib/job-index.ts
 // Job Lookup / Parts Intelligence - Data Indexing Layer
 
-import { getDb } from "@/app/lib/mongo";
+import { getDb } from "@/lib/mongo";
 
 export type JobIndexEntry = {
   shopId: number;
