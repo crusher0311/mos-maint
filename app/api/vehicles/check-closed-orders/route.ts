@@ -97,6 +97,28 @@ export async function POST(request: NextRequest) {
             provider: source.provider,
             mileage: workOrderMileage
           });
+          
+          if (source.provider === "protractor") {
+            await db.collection("protractor_work_orders").updateMany(
+              {
+                $and: [
+                  { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+                  { $or: [
+                    { workOrderGuid: source.workOrderId },
+                    { "data.ID": source.workOrderId }
+                  ]}
+                ]
+              },
+              {
+                $set: {
+                  workflowStage: "Invoiced",
+                  status: "Invoiced",
+                  closedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            );
+          }
         }
       }
     }
