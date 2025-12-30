@@ -1178,14 +1178,22 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         )}
                       </div>
                     </div>
-                    <AddToROWithHistory
-                      vin={vin}
-                      serviceTitle={t.title}
-                      vehicleYear={vehicle?.year}
-                      vehicleMake={vehicle?.make}
-                      vehicleModel={vehicle?.model}
-                      workOrderGuid={latestWorkOrderId ?? undefined}
-                    />
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
+                      return (
+                        <AddToROWithHistory
+                          vin={vin}
+                          serviceTitle={t.title}
+                          serviceKey={t.serviceKey}
+                          vehicleYear={vehicle?.year}
+                          vehicleMake={vehicle?.make}
+                          vehicleModel={vehicle?.model}
+                          workOrderGuid={latestWorkOrderId ?? undefined}
+                          workOrderId={latestRoNumber ?? undefined}
+                          cannedJobOptions={opts}
+                        />
+                      );
+                    })()}
                   </div>
 
                   <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
@@ -1327,14 +1335,22 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
-                    <AddToROWithHistory
-                      vin={vin}
-                      serviceTitle={t.title}
-                      vehicleYear={vehicle?.year}
-                      vehicleMake={vehicle?.make}
-                      vehicleModel={vehicle?.model}
-                      workOrderGuid={latestWorkOrderId ?? undefined}
-                    />
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
+                      return (
+                        <AddToROWithHistory
+                          vin={vin}
+                          serviceTitle={t.title}
+                          serviceKey={t.serviceKey}
+                          vehicleYear={vehicle?.year}
+                          vehicleMake={vehicle?.make}
+                          vehicleModel={vehicle?.model}
+                          workOrderGuid={latestWorkOrderId ?? undefined}
+                          workOrderId={latestRoNumber ?? undefined}
+                          cannedJobOptions={opts}
+                        />
+                      );
+                    })()}
                   </div>
 
                   <div className="text-sm mt-2">
@@ -1444,14 +1460,22 @@ export default async function VehiclePlanPage({ params }: PageProps) {
                         Previously declined
                       </span>
                     )}
-                    <AddToROWithHistory
-                      vin={vin}
-                      serviceTitle={t.title}
-                      vehicleYear={vehicle?.year}
-                      vehicleMake={vehicle?.make}
-                      vehicleModel={vehicle?.model}
-                      workOrderGuid={latestWorkOrderId ?? undefined}
-                    />
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
+                      return (
+                        <AddToROWithHistory
+                          vin={vin}
+                          serviceTitle={t.title}
+                          serviceKey={t.serviceKey}
+                          vehicleYear={vehicle?.year}
+                          vehicleMake={vehicle?.make}
+                          vehicleModel={vehicle?.model}
+                          workOrderGuid={latestWorkOrderId ?? undefined}
+                          workOrderId={latestRoNumber ?? undefined}
+                          cannedJobOptions={opts}
+                        />
+                      );
+                    })()}
                   </div>
 
                   <div className="text-sm mt-2">
