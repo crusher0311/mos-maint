@@ -1179,7 +1179,16 @@ async function PlanContent({ params }: PageProps) {
                             {t.dviSource === "autovitals" ? "AutoVitals 🔴" : "DVI 🔴"}
                           </span>
                         )}
-                        {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
+                        {t.source === "protractor" && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5">
+                            <img 
+                              src={shopLogo || "/protractor-icon.png"} 
+                              alt="Shop" 
+                              className="w-4 h-4 rounded-full object-cover"
+                            />
+                            <span className="text-blue-700 text-xs">Deferred</span>
+                          </span>
+                        )}
                         {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                         {t.declined && (
                           <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
@@ -1338,7 +1347,16 @@ async function PlanContent({ params }: PageProps) {
                         {t.dviSource === "autovitals" ? "AutoVitals 🟡" : "DVI 🟡"}
                       </span>
                     )}
-                    {t.source === "protractor" && <span className="rounded-full bg-purple-600 text-white px-2 py-0.5">Protractor</span>}
+                    {t.source === "protractor" && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5">
+                            <img 
+                              src={shopLogo || "/protractor-icon.png"} 
+                              alt="Shop" 
+                              className="w-4 h-4 rounded-full object-cover"
+                            />
+                            <span className="text-blue-700 text-xs">Deferred</span>
+                          </span>
+                        )}
                     {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                     {t.declined && (
                       <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
