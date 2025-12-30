@@ -347,14 +347,15 @@ export async function GET(request: NextRequest) {
     // Fetch Protractor work orders directly (they have the odometer)
     // Filter by workflow stage preference - no date limit
     // Fetch Protractor work orders - each work order is a separate row (no VIN grouping)
-    // Show all non-completed work orders with any workflowStage (shop preferences can filter further)
+    // Exclude invoiced/closed work orders - those vehicles have left the shop
     const protractorRows = await db.collection("protractor_work_orders").aggregate([
       {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           vin: { $ne: null, $type: "string" },
-          completed: { $ne: true }, // Only show non-completed work orders
-          workflowStage: { $exists: true, $ne: null } // Must have a workflow stage
+          completed: { $ne: true }, // Exclude completed work orders
+          status: { $nin: ["Invoiced", "Closed", "Void"] }, // Exclude invoiced/closed/void
+          workflowStage: { $in: allowedStages } // Only show allowed workflow stages
         }
       },
       { $sort: { fetchedAt: -1 } },
