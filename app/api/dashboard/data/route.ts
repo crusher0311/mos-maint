@@ -468,7 +468,13 @@ export async function GET(request: NextRequest) {
           dviDone: { $literal: false },
           source: { $literal: "tekmetric" },
           af: {
-            status: { $ifNull: ["$status", "Open"] },
+            status: { 
+              $cond: {
+                if: { $and: [{ $ifNull: ["$label", false] }, { $ne: ["$label", ""] }] },
+                then: "$label",
+                else: { $ifNull: ["$status", "Open"] }
+              }
+            },
             createdAt: "$fetchedAt",
             miles: "$odometer"
           },
