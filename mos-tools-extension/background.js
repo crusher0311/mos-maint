@@ -180,7 +180,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ==================== MOS API FUNCTIONS ====================
 async function handleMosLogin(email, password, apiUrl) {
   try {
-    mosApiUrl = apiUrl || 'https://mos.tools';
+    // Remove trailing slash from API URL
+    mosApiUrl = (apiUrl || 'https://mos.tools').replace(/\/+$/, '');
     
     const response = await fetch(`${mosApiUrl}/api/extension/auth`, {
       method: 'POST',
