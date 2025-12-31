@@ -1,62 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
-
-// Scoring weights
-const SCORE_EXACT_TITLE = 100;
-const SCORE_TITLE_PREFIX = 50;
-const SCORE_TITLE_CONTAINS = 30;
-const SCORE_CODE_MATCH = 40;
-const SCORE_DESCRIPTION = 10;
-const SCORE_YEAR_MATCH = 15;
-const SCORE_MAKE_MATCH = 25;
-const SCORE_MODEL_MATCH = 20;
-
-function scoreJob(job: any, queryTokens: string[], queryFull: string, year?: string, make?: string, model?: string): number {
-  let score = 0;
-  
-  const title = (job.job?.title || job.title || "").toLowerCase();
-  const description = (job.job?.description || job.description || "").toLowerCase();
-  const code = (job.job?.code || job.code || "").toLowerCase();
-  const jobYear = job.vehicle?.year?.toString() || "";
-  const jobMake = (job.vehicle?.make || "").toLowerCase();
-  const jobModel = (job.vehicle?.model || "").toLowerCase();
-  
-  // Title scoring
-  if (title === queryFull) {
-    score += SCORE_EXACT_TITLE;
-  } else if (title.startsWith(queryFull)) {
-    score += SCORE_TITLE_PREFIX;
-  } else if (title.includes(queryFull)) {
-    score += SCORE_TITLE_CONTAINS;
-  } else {
-    // Token matching in title
-    const matchingTokens = queryTokens.filter(t => title.includes(t));
-    score += matchingTokens.length * (SCORE_TITLE_CONTAINS / queryTokens.length);
-  }
-  
-  // Code scoring
-  if (code && queryTokens.some(t => code.includes(t))) {
-    score += SCORE_CODE_MATCH;
-  }
-  
-  // Description scoring
-  const descTokenMatches = queryTokens.filter(t => description.includes(t)).length;
-  score += (descTokenMatches / Math.max(queryTokens.length, 1)) * SCORE_DESCRIPTION;
-  
-  // Y/M/M boosting - prioritize jobs from same vehicle type
-  if (year && jobYear === year) {
-    score += SCORE_YEAR_MATCH;
-  }
-  if (make && jobMake === make.toLowerCase()) {
-    score += SCORE_MAKE_MATCH;
-  }
-  if (model && jobModel.includes(model.toLowerCase())) {
-    score += SCORE_MODEL_MATCH;
-  }
-  
-  return score;
-}
+import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,6 +22,7 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get("year");
     const make = searchParams.get("make");
     const model = searchParams.get("model");
+    const engine = searchParams.get("engine");
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
 
     const auth = await validateExtensionToken(request);
@@ -116,47 +62,78 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
-    console.log(`[Jobs Search] Query: "${query}", Y/M/M: ${year}/${make}/${model}, limit: ${limit}`);
+    console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, shopId: ${mosShopId}`);
 
     const jobsCollection = db.collection("job_index");
 
-    // Use regex search instead of $text (no text index required)
-    const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    const searchQuery: Record<string, any> = {
-      $or: [
+    // Build search query using same stopword logic as web app
+    const { coreTokens, allTokens } = buildSearchQuery(query);
+    
+    const matchStage: Record<string, any> = {};
+    
+    // Shop filter
+    if (mosShopId) {
+      matchStage.shopId = mosShopId;
+    } else if (!isPlatformAdmin) {
+      matchStage.shopId = { $in: userShopIds };
+    }
+    
+    // Text search using same logic as web app
+    if (coreTokens.length > 0) {
+      matchStage.$or = [
+        { "job.keywords": { $all: coreTokens } },
+        { "job.title": { $regex: coreTokens.map(t => `(?=.*${t})`).join(""), $options: "i" } },
+      ];
+    } else if (allTokens.length > 0) {
+      matchStage["job.keywords"] = { $in: allTokens };
+    } else {
+      // Fallback to regex on title
+      const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      matchStage.$or = [
         { "job.title": searchRegex },
         { "title": searchRegex },
-        { "job.description": searchRegex },
-        { "job.code": searchRegex }
-      ]
-    };
-
-    if (mosShopId) {
-      searchQuery.shopId = mosShopId;
-    } else if (!isPlatformAdmin) {
-      searchQuery.shopId = { $in: userShopIds };
+      ];
+    }
+    
+    // Optional make/model filtering for pre-filtering
+    if (make) {
+      matchStage["vehicle.make"] = { $regex: new RegExp(make, "i") };
     }
 
-    // Fetch more candidates for proper scoring
+    // Fetch candidates
     const jobs: any[] = await jobsCollection
-      .find(searchQuery)
-      .limit(limit * 5)
+      .aggregate([
+        { $match: matchStage },
+        { $sort: { performedAt: -1 } },
+        { $limit: limit * 5 }
+      ])
       .toArray();
 
-    // Prepare query for scoring
-    const queryFull = query.toLowerCase().trim();
-    const queryTokens = queryFull.split(/\s+/).filter(t => t.length > 1);
+    console.log(`[Jobs Search] Found ${jobs.length} candidates for scoring`);
 
-    // Score each job using weighted algorithm
-    const scoredJobs = jobs.map((job: any) => {
-      const matchScore = scoreJob(job, queryTokens, queryFull, year || undefined, make || undefined, model || undefined);
-      return { ...job, matchScore };
-    });
+    // Score using shared scoring logic
+    const targetVehicle = { year, make, model, engine };
+    const scoredJobs: ScoredJob[] = jobs.map(job => scoreJob(job, targetVehicle));
+    
+    // Filter by gate pass and minimum score threshold
+    const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
+    
+    // Sort by score
+    eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
+    
+    // Deduplicate by job title + vehicle
+    const uniqueJobs = new Map<string, ScoredJob>();
+    for (const job of eligibleJobs) {
+      const key = `${job.job?.title || job.title || ''}-${job.vehicle?.make || ''}-${job.vehicle?.model || ''}-${job.vehicle?.year || ''}`;
+      const existing = uniqueJobs.get(key);
+      if (!existing || existing.matchScore < job.matchScore) {
+        uniqueJobs.set(key, job);
+      }
+    }
 
-    // Sort by relevance score (highest first)
-    scoredJobs.sort((a: any, b: any) => b.matchScore - a.matchScore);
+    const results = Array.from(uniqueJobs.values()).slice(0, limit);
 
-    const formattedJobs = scoredJobs.slice(0, limit).map((job: any) => ({
+    const formattedJobs = results.map((job: any) => ({
       _id: job._id.toString(),
       title: job.job?.title || job.title || "Job",
       description: job.job?.description,
@@ -181,13 +158,22 @@ export async function GET(request: NextRequest) {
         })),
       totals: job.job?.totals || job.totals || { totalAmount: 0 },
       matchScore: job.matchScore,
+      matchBand: job.matchBand,
+      matchBandLabel: job.matchBandLabel,
+      matchReason: job.matchReason,
       source: job.source || "protractor"
     }));
 
     return NextResponse.json({ 
       jobs: formattedJobs,
       total: formattedJobs.length,
-      query
+      query,
+      stats: {
+        totalFound: jobs.length,
+        gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
+        belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 40).length,
+        returned: formattedJobs.length,
+      }
     }, { headers: corsHeaders });
 
   } catch (error: any) {
