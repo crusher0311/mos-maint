@@ -206,9 +206,18 @@ async function runOnDemandAnalysis(
           }
         }
         
-        // Calculate milesToGo based on chosen interval
-        const intervalsPassed = currentMileage > 0 ? Math.floor(currentMileage / intervalMiles) : 0;
-        const nextDueMileage = (intervalsPassed + 1) * intervalMiles;
+        // Calculate nextDueMileage based on actual last performed mileage when available
+        let nextDueMileage: number;
+        if (lastPerformed.mileage && lastPerformed.mileage > 0) {
+          // Use actual service history: next due = last performed + interval
+          nextDueMileage = lastPerformed.mileage + intervalMiles;
+        } else if (currentMileage > 0) {
+          // Fallback: assume service was done at interval multiples from 0
+          const intervalsPassed = Math.floor(currentMileage / intervalMiles);
+          nextDueMileage = (intervalsPassed + 1) * intervalMiles;
+        } else {
+          nextDueMileage = intervalMiles;
+        }
         const milesToGo = currentMileage > 0 ? nextDueMileage - currentMileage : intervalMiles;
         
         // Determine status based on milesToGo
