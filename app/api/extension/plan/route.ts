@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,146 +14,64 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-function toSquish(vin: string) {
-  const v = String(vin).toUpperCase().trim();
-  return v.slice(0, 8) + v.slice(9, 11);
-}
-
-async function getLocalOeFromMongo(vin: string) {
-  const db = await getDb();
-  const SQUISH = toSquish(vin);
-  console.log(`[Extension] Looking up squish: ${SQUISH} from VIN: ${vin}`);
-
-  // First check if squish doc exists
-  const squishDoc = await db.collection("dataone_lkp_squish_maintenance").findOne({ squish: SQUISH });
-  console.log(`[Extension] Squish doc found: ${!!squishDoc}`, squishDoc ? `vin_maintenance_id: ${squishDoc.vin_maintenance_id}` : '');
-
-  const pipeline = [
-    { $match: { squish: SQUISH } },
-    { $project: { _id: 0, squish: 1, vin_maintenance_id: 1, maintenance_id: 1 } },
-    {
-      $lookup: {
-        from: "dataone_lkp_vin_maintenance_interval",
-        let: { vmi: "$vin_maintenance_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$vin_maintenance_id", "$$vmi"] } } },
-          { $project: { _id: 0, maintenance_interval_id: 1 } },
-        ],
-        as: "intervals",
-      },
-    },
-    { $unwind: "$intervals" },
-    {
-      $lookup: {
-        from: "dataone_lkp_maintenance_interval",
-        let: { mi: "$intervals.maintenance_interval_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$maintenance_interval_id", "$$mi"] } } },
-          { $project: { _id: 0, mileage: 1, service_items: 1 } },
-        ],
-        as: "schedule",
-      },
-    },
-    { $unwind: "$schedule" },
-    { $sort: { "schedule.mileage": 1 } },
-    {
-      $group: {
-        _id: null,
-        maintenance: { $push: { mileage: "$schedule.mileage", service_items: "$schedule.service_items" } },
-      },
-    },
-    { $project: { _id: 0, maintenance: 1 } },
-  ];
-
-  const result = await db.collection("dataone_lkp_squish_maintenance").aggregate(pipeline).toArray();
-  return result[0]?.maintenance || [];
-}
 
 async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number | null) {
   const db = await getDb();
   
-  console.log(`[Extension] Running on-demand analysis for VIN ${vin}, shop ${shopId}`);
+  console.log(`[Extension] Running on-demand analysis for VIN ${vin}, shop ${shopId}, mileage ${mileage}`);
   
-  let carfax: any = { ok: false };
-  try {
-    const carfaxCfg = await resolveCarfaxConfig(shopId);
-    if (carfaxCfg.configured) {
-      carfax = await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000);
-    }
-  } catch (e) {
-    console.warn('[Extension] CARFAX fetch failed:', e);
-  }
+  const currentMileage = mileage || 0;
+  const recommendations: any[] = [];
 
-  let oem: any[] = [];
+  // Fetch OEM maintenance schedule using the working DataOne API
   try {
-    oem = await getLocalOeFromMongo(vin);
-    console.log(`[Extension] OEM data for VIN ${vin}: ${oem.length} intervals`);
-    if (oem.length > 0) {
-      console.log(`[Extension] First interval:`, JSON.stringify(oem[0]).substring(0, 200));
+    const oemResult = await getMaintenanceScheduleCached(vin);
+    console.log(`[Extension] OEM data: ${oemResult.count} items, source: ${oemResult.source}`);
+    
+    if (oemResult.ok && oemResult.items?.length > 0) {
+      for (const item of oemResult.items) {
+        const dueMileage = item.miles || 0;
+        const isOverdue = currentMileage > 0 && currentMileage > dueMileage;
+        const isDueSoon = !isOverdue && currentMileage > 0 && (dueMileage - currentMileage) <= 5000;
+        
+        recommendations.push({
+          service: item.maintenance_name,
+          category: item.maintenance_category,
+          dueMileage,
+          dueMonths: item.months,
+          interval: item.miles,
+          source: "oe",
+          isOverdue,
+          isDueSoon,
+          status: isOverdue ? "overdue" : isDueSoon ? "due_soon" : "upcoming"
+        });
+      }
     }
   } catch (e) {
     console.warn('[Extension] OEM data fetch failed:', e);
   }
 
-  const recommendations: any[] = [];
-  const currentMileage = mileage || 0;
-
-  if (oem.length > 0) {
-    for (const interval of oem) {
-      if (interval.service_items && Array.isArray(interval.service_items)) {
-        for (const service of interval.service_items) {
-          const serviceName = service.service_name || service.name || service;
-          if (typeof serviceName !== 'string') continue;
-          
-          const dueMileage = interval.mileage || 0;
-          const isOverdue = currentMileage > dueMileage;
-          const isDueSoon = !isOverdue && (dueMileage - currentMileage) <= 5000;
-          
-          recommendations.push({
-            service: serviceName,
-            dueMileage,
-            interval: interval.mileage,
-            source: "oe",
-            isOverdue,
-            isDueSoon,
-            status: isOverdue ? "overdue" : isDueSoon ? "due_soon" : "upcoming"
-          });
-        }
+  // Also check CARFAX for service history
+  try {
+    const carfaxCfg = await resolveCarfaxConfig(shopId);
+    if (carfaxCfg.configured) {
+      const carfax: any = await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000);
+      if (carfax.ok && carfax.data?.serviceHistory) {
+        console.log(`[Extension] CARFAX: ${carfax.data.serviceHistory.length} service records`);
       }
     }
+  } catch (e) {
+    console.warn('[Extension] CARFAX fetch failed:', e);
   }
 
-  if (carfax.ok && carfax.data?.serviceHistory) {
-    const serviceHistory = carfax.data.serviceHistory || [];
-    const commonServices = ["Oil Change", "Tire Rotation", "Brake Inspection", "Air Filter", "Transmission Service"];
-    
-    for (const serviceName of commonServices) {
-      const lastService = serviceHistory.find((s: any) => 
-        s.service?.toLowerCase().includes(serviceName.toLowerCase())
-      );
-      
-      if (!lastService) {
-        const existing = recommendations.find(r => 
-          r.service.toLowerCase().includes(serviceName.toLowerCase())
-        );
-        if (!existing) {
-          recommendations.push({
-            service: serviceName,
-            source: "carfax",
-            status: "recommended",
-            reason: "No recent service history found"
-          });
-        }
-      }
-    }
-  }
-
+  // Deduplicate recommendations
   const uniqueRecs = recommendations.reduce((acc: any[], rec) => {
-    const exists = acc.find(r => r.service.toLowerCase() === rec.service.toLowerCase());
+    const exists = acc.find(r => r.service?.toLowerCase() === rec.service?.toLowerCase());
     if (!exists) acc.push(rec);
     return acc;
   }, []);
 
+  // Cache the analysis
   await db.collection("maintenance_analysis_cache").updateOne(
     { vin: vin.toUpperCase(), shopId },
     {
