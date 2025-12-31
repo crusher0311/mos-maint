@@ -1,0 +1,62 @@
+sidepanel.js:272 [MOS] Error loading plan: Error: Unauthorized shop access
+    at loadPlan (sidepanel.js:268:29)
+loadPlan @ sidepanel.js:272
+background.js:397 [MOS Tools] Background service worker loaded
+background.js:25 [MOS] Restored API token from storage
+background.js:29 [MOS] Restored API URL: https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev
+background.js:37 [Tekmetric] Restored session token
+background.js:93 [MOS] Side panel opens on action click
+background.js:77 [Tekmetric] Auth token captured
+background.js:98 [MOS] Message received: SET_SMS_CONTEXT
+background.js:127 [MOS] SMS context updated: Object
+background.js:98 [MOS] Message received: MOS_API_REQUEST
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
