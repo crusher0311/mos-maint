@@ -315,15 +315,105 @@ function renderPlan(data) {
     ).join('');
   }
   
-  // Add click handlers for add buttons
-  document.querySelectorAll('.btn-add[data-service]').forEach(btn => {
-    btn.addEventListener('click', () => handleAddService(JSON.parse(btn.dataset.service)));
+  // Setup dropdown handlers
+  setupAddDropdowns();
+}
+
+function setupAddDropdowns() {
+  // Toggle dropdown on button click
+  document.querySelectorAll('.btn-add-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dropdownId = btn.dataset.dropdown;
+      const dropdown = document.getElementById(dropdownId);
+      
+      // Close all other dropdowns
+      document.querySelectorAll('.add-dropdown-menu').forEach(menu => {
+        if (menu.id !== dropdownId) menu.classList.add('hidden');
+      });
+      
+      // Toggle this dropdown
+      dropdown.classList.toggle('hidden');
+    });
   });
+
+  // Handle dropdown item clicks
+  document.querySelectorAll('.add-dropdown-item').forEach(item => {
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const action = item.dataset.action;
+      const service = JSON.parse(item.dataset.service);
+      
+      // Close dropdown
+      item.closest('.add-dropdown-menu').classList.add('hidden');
+      
+      if (action === 'search-history') {
+        // Switch to Job Lookup tab and search for this service
+        switchToTab('lookup');
+        elements.jobSearch.value = service.name;
+        await handleJobSearch();
+      } else if (action === 'search-canned') {
+        // Switch to Canned Jobs tab and search
+        switchToTab('canned');
+        // Filter canned jobs for this service name
+        highlightCannedJob(service.name);
+      } else if (action === 'add-generic') {
+        // Add as generic job
+        await handleAddService(service);
+      }
+    });
+  });
+
+  // Close dropdowns when clicking outside
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.add-dropdown-menu').forEach(menu => {
+      menu.classList.add('hidden');
+    });
+  });
+}
+
+function switchToTab(tabName) {
+  // Update tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  
+  // Update tab panels
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.classList.toggle('hidden', panel.id !== `tab-${tabName}`);
+    panel.classList.toggle('active', panel.id === `tab-${tabName}`);
+  });
+  
+  // Load content for the tab
+  if (tabName === 'lookup') {
+    // Job lookup tab - ready for search
+  } else if (tabName === 'canned') {
+    loadCannedJobs();
+  }
+}
+
+function highlightCannedJob(serviceName) {
+  // Scroll to and highlight matching canned job if exists
+  setTimeout(() => {
+    const items = document.querySelectorAll('#canned-list .job-item');
+    const searchTerm = serviceName.toLowerCase();
+    
+    for (const item of items) {
+      const title = item.querySelector('.job-title')?.textContent?.toLowerCase() || '';
+      if (title.includes(searchTerm) || searchTerm.includes(title.split(' ')[0])) {
+        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        item.style.outline = '2px solid var(--primary)';
+        setTimeout(() => item.style.outline = '', 2000);
+        break;
+      }
+    }
+  }, 500);
 }
 
 function createServiceItemHTML(item, type) {
   const detail = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : 
                  item.interval ? `Every ${item.interval.toLocaleString()} mi` : '';
+  const itemId = `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   return `
     <li class="service-item">
@@ -331,9 +421,31 @@ function createServiceItemHTML(item, type) {
         <div class="service-name">${escapeHtml(item.name)}</div>
         ${detail ? `<div class="service-detail">${detail}</div>` : ''}
       </div>
-      <button class="btn-add" data-service='${JSON.stringify(item)}'>
-        + Add
-      </button>
+      <div class="add-dropdown">
+        <button class="btn-add btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
+          + Add
+        </button>
+        <div id="${itemId}" class="add-dropdown-menu hidden">
+          <button class="add-dropdown-item" data-action="search-history" data-service='${JSON.stringify(item)}'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            Search History
+          </button>
+          <button class="add-dropdown-item" data-action="search-canned" data-service='${JSON.stringify(item)}'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+            Search Canned Jobs
+          </button>
+          <button class="add-dropdown-item" data-action="add-generic" data-service='${JSON.stringify(item)}'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Generic Job
+          </button>
+        </div>
+      </div>
     </li>
   `;
 }
