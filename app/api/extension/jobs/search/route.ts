@@ -67,23 +67,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
-    // If no vehicle context provided but we have roId, look up the work order to get vehicle info
+    // If no vehicle context provided but we have roId, look up the repair order to get vehicle info
     if (!year && !make && !model && roId && mosShopId) {
-      const workOrder = await db.collection("work_orders").findOne({
+      // Try repair_orders collection first (Tekmetric cached data)
+      let vehicleData = await db.collection("repair_orders").findOne({
         shopId: mosShopId,
         $or: [
-          { roId: roId },
           { roId: parseInt(roId) },
+          { repairOrderId: parseInt(roId) },
           { "tekmetric.repairOrderId": parseInt(roId) }
         ]
       });
       
-      if (workOrder?.vehicle) {
-        year = workOrder.vehicle.year?.toString() || null;
-        make = workOrder.vehicle.make || null;
-        model = workOrder.vehicle.model || null;
-        engine = workOrder.vehicle.engine || null;
-        console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
+      // Also try work_orders collection
+      if (!vehicleData?.vehicle) {
+        vehicleData = await db.collection("work_orders").findOne({
+          shopId: mosShopId,
+          $or: [
+            { roId: roId },
+            { roId: parseInt(roId) },
+            { "tekmetric.repairOrderId": parseInt(roId) }
+          ]
+        });
+      }
+      
+      if (vehicleData?.vehicle) {
+        year = vehicleData.vehicle.year?.toString() || null;
+        make = vehicleData.vehicle.make || null;
+        model = vehicleData.vehicle.model || null;
+        engine = vehicleData.vehicle.engine || null;
+        console.log(`[Jobs Search] Resolved vehicle from RO ${roId}: ${year} ${make} ${model}`);
+      } else {
+        console.log(`[Jobs Search] No vehicle found for RO ${roId} in shop ${mosShopId}`);
       }
     }
     
