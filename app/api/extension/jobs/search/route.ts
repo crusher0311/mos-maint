@@ -67,22 +67,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
-    // If no vehicle context provided but we have roId, look up the work order to get vehicle info
+    // If no vehicle context provided but we have roId, look up the work order to get VIN, then get vehicle
     if (!year && !make && !model && roId && mosShopId) {
-      // Try tekmetric_work_orders collection (same as Plan API uses)
+      // Get VIN from tekmetric_work_orders
       const workOrder = await db.collection("tekmetric_work_orders").findOne({
         shopId: { $in: [String(mosShopId), Number(mosShopId)] },
         workOrderId: String(roId)
       });
       
-      if (workOrder?.vehicle) {
-        year = workOrder.vehicle.year?.toString() || null;
-        make = workOrder.vehicle.make || null;
-        model = workOrder.vehicle.model || null;
-        engine = workOrder.vehicle.engine || null;
-        console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
+      if (workOrder?.vin) {
+        // Look up vehicle details from vehicles collection (same as Plan API)
+        const vehicle = await db.collection("vehicles").findOne({
+          vin: workOrder.vin.toUpperCase(),
+          shopId: mosShopId
+        });
+        
+        if (vehicle) {
+          year = vehicle.year?.toString() || null;
+          make = vehicle.make || null;
+          model = vehicle.model || null;
+          engine = vehicle.engine || null;
+          console.log(`[Jobs Search] Resolved vehicle from VIN ${workOrder.vin}: ${year} ${make} ${model}`);
+        } else {
+          console.log(`[Jobs Search] No vehicle record for VIN ${workOrder.vin} in shop ${mosShopId}`);
+        }
       } else {
-        console.log(`[Jobs Search] No vehicle found for WO ${roId} in shop ${mosShopId}`);
+        console.log(`[Jobs Search] No VIN found in WO ${roId} for shop ${mosShopId}`);
       }
     }
     
