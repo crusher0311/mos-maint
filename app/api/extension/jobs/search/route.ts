@@ -34,9 +34,12 @@ export async function GET(request: NextRequest) {
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
-    let mosShopId: number | null = null;
+    // Use user's session shop if available (most reliable)
+    // This ensures extension uses the same shop as the web app
+    let mosShopId: number | null = auth.user.shopId ? parseInt(auth.user.shopId) : null;
     
-    if (smsShopId) {
+    // Only fall back to SMS shop ID lookup if user doesn't have a session shop
+    if (!mosShopId && smsShopId) {
       if (provider === "tekmetric") {
         const shopQuery: any = { "tekmetric.shopId": parseInt(smsShopId) };
         if (!isPlatformAdmin) {
