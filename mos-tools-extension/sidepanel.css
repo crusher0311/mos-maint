@@ -1,0 +1,535 @@
+/* MOS Tools Side Panel Styles */
+
+:root {
+  --primary: #3B82F6;
+  --primary-hover: #2563EB;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-600: #4B5563;
+  --gray-700: #374151;
+  --gray-800: #1F2937;
+  --gray-900: #111827;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  min-height: 100vh;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ==================== Loading & States ==================== */
+.state-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--gray-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--gray-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==================== Login ==================== */
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.logo h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+#login-form {
+  width: 100%;
+  max-width: 320px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+  background: var(--gray-400);
+  cursor: not-allowed;
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 13px;
+  margin-top: 12px;
+  text-align: center;
+}
+
+/* ==================== Header ==================== */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: white;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-icon:hover {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+/* ==================== Context Banner ==================== */
+.context-banner {
+  padding: 12px 16px;
+  background: white;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.no-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+.has-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vehicle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vehicle-display {
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.ro-display {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.mileage-display {
+  font-size: 13px;
+  color: var(--gray-600);
+  background: var(--gray-100);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* ==================== Tab Navigation ==================== */
+.tab-nav {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid var(--gray-200);
+  padding: 0 8px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--gray-700);
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* ==================== Tab Content ==================== */
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tab-panel {
+  padding: 16px;
+}
+
+.panel-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  color: var(--gray-500);
+}
+
+.panel-empty {
+  text-align: center;
+  padding: 32px;
+  color: var(--gray-500);
+}
+
+/* ==================== Plan Sections ==================== */
+.plan-section {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.section-overdue {
+  color: var(--danger);
+}
+
+.section-due-soon {
+  color: var(--warning);
+}
+
+.section-recommended {
+  color: var(--success);
+}
+
+.service-list {
+  list-style: none;
+}
+
+.service-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.service-info {
+  flex: 1;
+}
+
+.service-name {
+  font-weight: 500;
+  color: var(--gray-800);
+}
+
+.service-detail {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
+
+.btn-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-add:hover {
+  background: var(--primary-hover);
+}
+
+.btn-add:disabled {
+  background: var(--gray-300);
+  cursor: not-allowed;
+}
+
+/* ==================== Search ==================== */
+.search-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.btn-search {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-search:hover {
+  background: var(--primary-hover);
+}
+
+/* ==================== Job List ==================== */
+.job-list {
+  list-style: none;
+}
+
+.job-item {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.job-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.job-header:hover {
+  background: var(--gray-50);
+}
+
+.job-title {
+  font-weight: 500;
+  color: var(--gray-800);
+}
+
+.job-meta {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 4px;
+}
+
+.job-price {
+  font-weight: 600;
+  color: var(--success);
+}
+
+.job-details {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--gray-100);
+  background: var(--gray-50);
+}
+
+.job-details.hidden {
+  display: none;
+}
+
+.job-section {
+  margin-top: 12px;
+}
+
+.job-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--gray-500);
+  margin-bottom: 6px;
+}
+
+.line-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+  color: var(--gray-700);
+}
+
+.job-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gray-200);
+}
+
+/* ==================== Canned Jobs Tabs ==================== */
+.canned-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.canned-tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.canned-tab-btn:hover {
+  background: var(--gray-200);
+}
+
+.canned-tab-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 320px) {
+  .service-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .btn-add {
+    width: 100%;
+    justify-content: center;
+  }
+}
