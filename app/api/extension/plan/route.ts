@@ -18,9 +18,10 @@ export async function OPTIONS() {
 async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number | null) {
   const db = await getDb();
   
-  console.log(`[Extension] Running on-demand analysis for VIN ${vin}, shop ${shopId}, mileage ${mileage}`);
-  
   const currentMileage = mileage || 0;
+  console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage}`);
+  
+  const SOON_MILES = 3000; // Same as dashboard
   const recommendations: any[] = [];
 
   // Fetch OEM maintenance schedule using the working DataOne API
@@ -30,20 +31,38 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
     
     if (oemResult.ok && oemResult.items?.length > 0) {
       for (const item of oemResult.items) {
-        const dueMileage = item.miles || 0;
-        const isOverdue = currentMileage > 0 && currentMileage > dueMileage;
-        const isDueSoon = !isOverdue && currentMileage > 0 && (dueMileage - currentMileage) <= 5000;
+        const intervalMiles = item.miles || 0;
+        
+        // Skip items with no mileage interval
+        if (!intervalMiles) continue;
+        
+        // Calculate milesToGo: how many miles until next service
+        // If current mileage is 139,000 and interval is 7,500:
+        // - We've gone through 139000/7500 = 18.5 intervals
+        // - Next due at ceil(18.5) * 7500 = 19 * 7500 = 142,500
+        // - milesToGo = 142,500 - 139,000 = 3,500
+        const intervalsPassed = currentMileage > 0 ? Math.floor(currentMileage / intervalMiles) : 0;
+        const nextDueMileage = (intervalsPassed + 1) * intervalMiles;
+        const milesToGo = currentMileage > 0 ? nextDueMileage - currentMileage : intervalMiles;
+        
+        // Determine status based on milesToGo
+        let status: string;
+        if (currentMileage > 0 && milesToGo <= 0) {
+          status = "overdue";
+        } else if (currentMileage > 0 && milesToGo <= SOON_MILES) {
+          status = "due_soon";
+        } else {
+          status = "upcoming";
+        }
         
         recommendations.push({
           service: item.maintenance_name,
           category: item.maintenance_category,
-          dueMileage,
-          dueMonths: item.months,
-          interval: item.miles,
+          dueMileage: nextDueMileage,
+          interval: intervalMiles,
+          milesToGo,
           source: "oe",
-          isOverdue,
-          isDueSoon,
-          status: isOverdue ? "overdue" : isDueSoon ? "due_soon" : "upcoming"
+          status
         });
       }
     }
@@ -51,25 +70,20 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
     console.warn('[Extension] OEM data fetch failed:', e);
   }
 
-  // Also check CARFAX for service history
-  try {
-    const carfaxCfg = await resolveCarfaxConfig(shopId);
-    if (carfaxCfg.configured) {
-      const carfax: any = await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000);
-      if (carfax.ok && carfax.data?.serviceHistory) {
-        console.log(`[Extension] CARFAX: ${carfax.data.serviceHistory.length} service records`);
-      }
-    }
-  } catch (e) {
-    console.warn('[Extension] CARFAX fetch failed:', e);
-  }
-
-  // Deduplicate recommendations
+  // Deduplicate recommendations by service name
   const uniqueRecs = recommendations.reduce((acc: any[], rec) => {
     const exists = acc.find(r => r.service?.toLowerCase() === rec.service?.toLowerCase());
     if (!exists) acc.push(rec);
     return acc;
   }, []);
+
+  // Sort: overdue first (most overdue), then due_soon, then upcoming
+  uniqueRecs.sort((a, b) => {
+    const statusOrder: Record<string, number> = { overdue: 0, due_soon: 1, upcoming: 2 };
+    const orderDiff = (statusOrder[a.status] ?? 2) - (statusOrder[b.status] ?? 2);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.milesToGo ?? Infinity) - (b.milesToGo ?? Infinity);
+  });
 
   // Cache the analysis
   await db.collection("maintenance_analysis_cache").updateOne(
@@ -87,7 +101,9 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
     { upsert: true }
   );
 
-  console.log(`[Extension] Analysis complete: ${uniqueRecs.length} recommendations for VIN ${vin}`);
+  const counts = { overdue: 0, due_soon: 0, upcoming: 0 };
+  uniqueRecs.forEach(r => counts[r.status as keyof typeof counts]++);
+  console.log(`[Extension] Analysis complete: overdue=${counts.overdue}, dueSoon=${counts.due_soon}, upcoming=${counts.upcoming}`);
   
   return uniqueRecs;
 }
@@ -153,15 +169,15 @@ export async function GET(request: NextRequest) {
       let workOrder = null;
       
       if (provider === "tekmetric") {
+        // tekmetric_work_orders uses MOS shopId and workOrderId (Tekmetric RO ID as string)
         workOrder = await db.collection("tekmetric_work_orders").findOne({
           shopId: { $in: [String(mosShopId), Number(mosShopId)] },
-          $or: [
-            { workOrderId: roId },
-            { workOrderId: String(roId) },
-            { roNumber: roId },
-            { roNumber: parseInt(roId) }
-          ]
+          workOrderId: String(roId)
         });
+        console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
+        if (workOrder) {
+          console.log(`[Extension] WO data: vin=${workOrder.vehicleVin}, mileageIn=${workOrder.mileageIn}`);
+        }
       } else {
         workOrder = await db.collection("work_orders").findOne({
           shopId: mosShopId,
@@ -174,8 +190,8 @@ export async function GET(request: NextRequest) {
         });
       }
       
-      if (workOrder?.vin) {
-        vin = workOrder.vin;
+      if (workOrder) {
+        vin = workOrder.vehicleVin || workOrder.vin;
         mileage = workOrder.mileageIn || workOrder.mileage || workOrder.odometerIn;
       }
     }
