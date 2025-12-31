@@ -84,11 +84,11 @@ export async function GET(request: NextRequest) {
         
         // If not found, check enterprise shops
         if (!vehicle) {
-          const enterpriseShopIds = await getEnterpriseShopIds(mosShopId, db);
-          if (enterpriseShopIds.length > 1) {
+          const enterprise = await getEnterpriseByShopId(mosShopId);
+          if (enterprise && enterprise.shopIds.length > 1) {
             vehicle = await db.collection("vehicles").findOne({
               vin: workOrder.vin.toUpperCase(),
-              shopId: { $in: enterpriseShopIds }
+              shopId: { $in: enterprise.shopIds }
             });
           }
         }
