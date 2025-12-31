@@ -76,11 +76,22 @@ export async function GET(request: NextRequest) {
       });
       
       if (workOrder?.vin) {
-        // Look up vehicle details from vehicles collection (same as Plan API)
-        const vehicle = await db.collection("vehicles").findOne({
+        // Look up vehicle details - first in current shop, then across enterprise shops
+        let vehicle = await db.collection("vehicles").findOne({
           vin: workOrder.vin.toUpperCase(),
           shopId: mosShopId
         });
+        
+        // If not found, check enterprise shops
+        if (!vehicle) {
+          const enterpriseShopIds = await getEnterpriseShopIds(mosShopId, db);
+          if (enterpriseShopIds.length > 1) {
+            vehicle = await db.collection("vehicles").findOne({
+              vin: workOrder.vin.toUpperCase(),
+              shopId: { $in: enterpriseShopIds }
+            });
+          }
+        }
         
         if (vehicle) {
           year = vehicle.year?.toString() || null;
@@ -89,7 +100,7 @@ export async function GET(request: NextRequest) {
           engine = vehicle.engine || null;
           console.log(`[Jobs Search] Resolved vehicle from VIN ${workOrder.vin}: ${year} ${make} ${model}`);
         } else {
-          console.log(`[Jobs Search] No vehicle record for VIN ${workOrder.vin} in shop ${mosShopId}`);
+          console.log(`[Jobs Search] No vehicle record for VIN ${workOrder.vin}`);
         }
       } else {
         console.log(`[Jobs Search] No VIN found in WO ${roId} for shop ${mosShopId}`);
