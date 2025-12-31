@@ -281,10 +281,21 @@ function renderPlan(data) {
   elements.planLoading.classList.add('hidden');
   
   // Update vehicle/mileage display from API response (more reliable than page scraping)
+  // Also update currentContext.vehicle so Job Lookup has access to vehicle info
   if (data.vehicle) {
     const v = data.vehicle;
     if (v.year && v.make && v.model) {
       elements.vehicleDisplay.textContent = `${v.year} ${v.make} ${v.model}`;
+      // Update context with vehicle data from API for job lookup search
+      if (currentContext) {
+        currentContext.vehicle = {
+          year: v.year,
+          make: v.make,
+          model: v.model,
+          engine: v.engine || null
+        };
+        console.log('[MOS] Updated context with vehicle from API:', currentContext.vehicle);
+      }
     } else if (v.vin) {
       elements.vehicleDisplay.textContent = `VIN: ${v.vin.slice(-6)}`;
     }
@@ -292,6 +303,9 @@ function renderPlan(data) {
   if (data.mileage) {
     elements.mileageDisplay.textContent = `${data.mileage.toLocaleString()} mi`;
     elements.mileageDisplay.classList.remove('hidden');
+    if (currentContext) {
+      currentContext.mileage = data.mileage;
+    }
   }
   
   const hasOverdue = data.overdue && data.overdue.length > 0;
@@ -480,6 +494,7 @@ async function handleJobSearch() {
       if (currentContext.vehicle.year) params.set('year', currentContext.vehicle.year);
       if (currentContext.vehicle.make) params.set('make', currentContext.vehicle.make);
       if (currentContext.vehicle.model) params.set('model', currentContext.vehicle.model);
+      if (currentContext.vehicle.engine) params.set('engine', currentContext.vehicle.engine);
     }
     
     const result = await sendMessage({
