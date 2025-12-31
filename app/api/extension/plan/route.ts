@@ -21,6 +21,11 @@ function toSquish(vin: string) {
 async function getLocalOeFromMongo(vin: string) {
   const db = await getDb();
   const SQUISH = toSquish(vin);
+  console.log(`[Extension] Looking up squish: ${SQUISH} from VIN: ${vin}`);
+
+  // First check if squish doc exists
+  const squishDoc = await db.collection("dataone_lkp_squish_maintenance").findOne({ squish: SQUISH });
+  console.log(`[Extension] Squish doc found: ${!!squishDoc}`, squishDoc ? `vin_maintenance_id: ${squishDoc.vin_maintenance_id}` : '');
 
   const pipeline = [
     { $match: { squish: SQUISH } },
@@ -81,6 +86,10 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
   let oem: any[] = [];
   try {
     oem = await getLocalOeFromMongo(vin);
+    console.log(`[Extension] OEM data for VIN ${vin}: ${oem.length} intervals`);
+    if (oem.length > 0) {
+      console.log(`[Extension] First interval:`, JSON.stringify(oem[0]).substring(0, 200));
+    }
   } catch (e) {
     console.warn('[Extension] OEM data fetch failed:', e);
   }
