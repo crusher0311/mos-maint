@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>HEART Helper</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="panel-container">
+    <header class="panel-header">
+      <div class="logo">
+        <span class="heart-icon">&#10084;</span>
+        <span class="logo-text">HEART Helper</span>
+      </div>
+      <div class="header-actions">
+        <button id="openAppBtn" class="open-app-btn" title="Open Full App">
+          <span class="open-icon">&#8599;</span>
+        </button>
+        <button id="settingsBtn" class="settings-btn" title="Settings">
+          <span class="settings-icon">&#9881;</span>
+        </button>
+        <button id="refreshBtn" class="refresh-btn" title="Refresh">&#8635;</button>
+      </div>
+    </header>
+
+    <!-- User Section (shown when logged in) -->
+    <div id="userSection" class="user-section" style="display: none;"></div>
+
+    <!-- Login Section (shown when not logged in) -->
+    <div id="loginSection" class="login-section" style="display: none;">
+      <div class="login-card">
+        <div class="login-header">
+          <span class="heart-icon">&#10084;</span>
+          <h3>Sign In</h3>
+        </div>
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="loginEmail">Email</label>
+            <input type="email" id="loginEmail" placeholder="your.email@example.com" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" placeholder="Password" required />
+          </div>
+          <div id="loginError" class="login-error" style="display: none;"></div>
+          <button type="submit" id="loginBtn" class="btn btn-primary login-submit">
+            Sign In
+          </button>
+        </form>
+        <div class="login-footer">
+          <span>Need an account?</span>
+          <button id="showRegisterBtn" class="link-btn">Register</button>
+        </div>
+      </div>
+      
+      <!-- Registration Form (initially hidden) -->
+      <div id="registerCard" class="login-card" style="display: none;">
+        <div class="login-header">
+          <span class="heart-icon">&#10084;</span>
+          <h3>Create Account</h3>
+        </div>
+        <form id="registerForm">
+          <div class="form-group">
+            <label for="registerEmail">Email</label>
+            <input type="email" id="registerEmail" placeholder="your.email@example.com" required />
+          </div>
+          <div class="form-group">
+            <label for="registerFirstName">First Name</label>
+            <input type="text" id="registerFirstName" placeholder="First name" />
+          </div>
+          <div class="form-group">
+            <label for="registerLastName">Last Name</label>
+            <input type="text" id="registerLastName" placeholder="Last name" />
+          </div>
+          <div class="form-group">
+            <label for="registerPassword">Password</label>
+            <input type="password" id="registerPassword" placeholder="At least 8 characters" required minlength="8" />
+          </div>
+          <div id="registerError" class="login-error" style="display: none;"></div>
+          <button type="submit" id="registerBtn" class="btn btn-primary login-submit">
+            Create Account
+          </button>
+        </form>
+        <div class="login-footer">
+          <span>Already have an account?</span>
+          <button id="showLoginBtn" class="link-btn">Sign In</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Navigation - Icon-only circular buttons -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="incoming" title="Incoming Caller">
+        <span class="tab-icon">&#128222;</span>
+      </button>
+      <button class="tab-btn" data-tab="search" title="Search Jobs">
+        <span class="tab-icon">&#128269;</span>
+      </button>
+      <button class="tab-btn" data-tab="sales" title="Sales Script">
+        <span class="tab-icon">&#128176;</span>
+      </button>
+      <button class="tab-btn" data-tab="tips" title="Coaching Tips">
+        <span class="tab-icon">&#128161;</span>
+      </button>
+      <button class="tab-btn" data-tab="rates" title="Labor Rates">
+        <span class="tab-icon">&#128178;</span>
+      </button>
+      <button class="tab-btn" data-tab="history" title="Vehicle History">
+        <span class="tab-icon">&#128218;</span>
+      </button>
+    </div>
+
+    <!-- ==================== INCOMING CALLER TAB ==================== -->
+    <div id="incomingTab" class="tab-content active">
+      <!-- Phone Answer Script -->
+      <div class="phone-script-section" id="phoneScriptSection">
+        <div class="section-header">
+          <span class="section-icon">&#128222;</span>
+          <span>Phone Answer Script</span>
+          <button class="copy-small-btn" id="copyScriptBtn" title="Copy">&#128203;</button>
+        </div>
+        <div class="phone-script" id="phoneScript">Loading...</div>
+      </div>
+
+      <!-- Customer Info Collection -->
+      <div id="customerInfoStep" class="incoming-step active">
+        <div class="form-group">
+          <label for="customerName">Customer Name</label>
+          <input type="text" id="customerName" placeholder="Ask for their name..." />
+        </div>
+
+        <div class="form-group">
+          <label for="referralSource">How did they hear about us?</label>
+          <input type="text" id="referralSource" placeholder="Google, friend, etc..." />
+        </div>
+
+        <div class="form-group">
+          <label>Symptoms / Issues</label>
+          <div class="symptoms-list" id="symptomsList">
+            <div class="symptom-input-row">
+              <input type="text" class="symptom-input" placeholder="Describe the issue..." />
+              <button class="add-symptom-btn" id="addSymptomBtn">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Vehicle Info</label>
+          <div class="vehicle-row">
+            <input type="text" id="vehicleYear" placeholder="Year" class="vehicle-field" />
+            <input type="text" id="vehicleMake" placeholder="Make" class="vehicle-field" />
+            <input type="text" id="vehicleModel" placeholder="Model" class="vehicle-field" />
+          </div>
+        </div>
+
+        <button id="startConversationBtn" class="btn btn-primary">
+          <span class="btn-icon">&#128222;</span>
+          Start Conversation
+        </button>
+      </div>
+
+      <!-- AI Questions Step -->
+      <div id="questionsStep" class="incoming-step" style="display: none;">
+        <div class="customer-summary" id="customerSummary"></div>
+        
+        <div class="step-indicator">
+          <div class="step active" data-step="1">1. Questions</div>
+          <div class="step" data-step="2">2. Summary</div>
+        </div>
+
+        <div id="questionSection">
+          <div class="question-section">
+            <div class="question-header">
+              <span>Question <span id="questionNum">1</span> of <span id="totalQuestions">5</span></span>
+            </div>
+            <div class="current-question" id="currentQuestion"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="customerAnswer">Customer's Answer</label>
+            <textarea id="customerAnswer" placeholder="Record what the customer says..." rows="3"></textarea>
+          </div>
+
+          <div class="button-row">
+            <button id="nextQuestionBtn" class="btn btn-primary flex-1">
+              Next <span class="btn-arrow">&#8594;</span>
+            </button>
+            <button id="skipQuestionBtn" class="btn btn-secondary">Skip</button>
+          </div>
+
+          <div class="answered-questions" id="answeredQuestions" style="display: none;">
+            <div class="section-label">Recorded Answers</div>
+            <div id="answeredList"></div>
+          </div>
+
+          <button id="finalizeEarlyBtn" class="btn btn-outline">Finalize Now</button>
+        </div>
+
+        <div id="summarySection" style="display: none;">
+          <div class="summary-section">
+            <div class="section-label">Formatted Concern for RO</div>
+            <div class="summary-text" id="summaryText"></div>
+          </div>
+
+          <div class="button-row">
+            <button id="copyBtn" class="btn btn-secondary flex-1">
+              <span class="btn-icon">&#128203;</span>
+              Copy
+            </button>
+            <button id="sendToTekmetricBtn" class="btn btn-primary flex-1">
+              <span class="btn-icon">&#128196;</span>
+              Add to RO
+            </button>
+          </div>
+
+          <button id="restartBtn" class="btn btn-outline">
+            <span class="btn-icon">&#8635;</span>
+            Start New Call
+          </button>
+        </div>
+      </div>
+
+      <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Generating...</div>
+      </div>
+    </div>
+
+    <!-- ==================== SEARCH TAB ==================== -->
+    <div id="searchTab" class="tab-content" style="display: none;">
+      <!-- Search Form -->
+      <div class="search-form-section">
+        <div class="form-group">
+          <label>Vehicle Info</label>
+          <div class="vehicle-row">
+            <input type="text" id="searchYear" placeholder="Year" class="vehicle-field" />
+            <input type="text" id="searchMake" placeholder="Make" class="vehicle-field" />
+            <input type="text" id="searchModel" placeholder="Model" class="vehicle-field" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="searchEngine">Engine (optional)</label>
+          <input type="text" id="searchEngine" placeholder="e.g., 3.5L V6, 2.0T..." />
+        </div>
+
+        <div class="form-group">
+          <label for="searchRepairType">Repair Type *</label>
+          <input type="text" id="searchRepairType" placeholder="e.g., brake pads, timing belt, alternator..." />
+        </div>
+
+        <button id="searchBtn" class="btn btn-primary">
+          <span class="btn-icon">&#128269;</span>
+          Search Jobs
+        </button>
+      </div>
+
+      <!-- Search Results -->
+      <div id="searchResultsSection" class="search-results-section" style="display: none;">
+        <div class="results-header">
+          <span id="resultsCount">0 results</span>
+          <button id="clearSearchBtn" class="clear-search-btn">Clear</button>
+        </div>
+        <div id="searchResultsList" class="search-results-list"></div>
+      </div>
+
+      <!-- Job Detail View -->
+      <div id="jobDetailSection" class="job-detail-section" style="display: none;">
+        <button id="backToResultsBtn" class="back-btn">
+          <span>&#8592;</span> Back to Results
+        </button>
+        <div id="jobDetailContent"></div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="searchEmptyState" class="search-empty-state">
+        <div class="empty-icon">&#128269;</div>
+        <div class="empty-title">Search Historical Jobs</div>
+        <div class="empty-desc">Enter a repair type to find similar jobs from your shop's history. Add vehicle details for better AI matching.</div>
+      </div>
+
+      <div id="searchLoadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Searching...</div>
+      </div>
+    </div>
+
+    <!-- ==================== SALES SCRIPT TAB ==================== -->
+    <div id="salesTab" class="tab-content" style="display: none;">
+      <div id="roInfoSection" class="ro-info-compact">
+        <div class="ro-details" id="roDetails">
+          <div class="ro-placeholder">Navigate to a Tekmetric repair order to load details</div>
+        </div>
+      </div>
+
+      <!-- Jobs List with Warranty Status -->
+      <div id="roJobsSection" class="ro-jobs-section" style="display: none;">
+        <div class="ro-jobs-header">
+          <span>Recommended Services</span>
+          <span class="ro-jobs-count" id="roJobsCount">0</span>
+        </div>
+        <div id="roJobsList" class="ro-jobs-list"></div>
+        <div id="roJobsLoading" class="ro-jobs-loading" style="display: none;">
+          <span class="small-spinner"></span> Checking warranty status...
+        </div>
+      </div>
+
+      <div id="salesScriptSection" class="sales-script-section" style="display: none;">
+        <div class="script-header">
+          <span>Sales Script</span>
+          <button class="refresh-script-btn" id="regenerateBtn" title="Regenerate">&#8635;</button>
+        </div>
+        <div class="sales-script-content" id="salesScriptContent"></div>
+        <div class="script-actions">
+          <button class="copy-btn-full" id="copySalesScriptBtn">
+            <span>&#128203;</span> Copy
+          </button>
+        </div>
+        <div class="feedback-section">
+          <div class="feedback-label">How did this go?</div>
+          <div class="feedback-buttons">
+            <button class="feedback-btn success" id="feedbackSuccess">
+              <span>&#128077;</span> Success
+            </button>
+            <button class="feedback-btn fail" id="feedbackFail">
+              <span>&#128078;</span> Didn't Work
+            </button>
+          </div>
+        </div>
+
+        <!-- Objection Handling Section -->
+        <div class="objection-section">
+          <div class="objection-header">Handle Objections</div>
+          <div class="objection-buttons" id="objectionButtons">
+            <button class="objection-btn" data-objection="price_high" data-testid="btn-objection-price">
+              Price Too High
+            </button>
+            <button class="objection-btn" data-objection="no_money" data-testid="btn-objection-money">
+              No Money
+            </button>
+            <button class="objection-btn" data-objection="spouse" data-testid="btn-objection-spouse">
+              Talk to Spouse
+            </button>
+            <button class="objection-btn" data-objection="waiting" data-testid="btn-objection-wait">
+              I'll Wait
+            </button>
+            <button class="objection-btn" data-objection="selling_car" data-testid="btn-objection-selling">
+              Selling Car
+            </button>
+            <button class="objection-btn" data-objection="need_car" data-testid="btn-objection-needcar">
+              Need Car Today
+            </button>
+            <button class="objection-btn" data-objection="always_selling" data-testid="btn-objection-selling-me">
+              Always Selling Me
+            </button>
+          </div>
+          <div id="objectionResponse" class="objection-response" style="display: none;">
+            <div class="objection-response-header">
+              <span id="objectionResponseLabel"></span>
+              <button class="objection-copy-btn" id="copyObjectionBtn" title="Copy response">Copy</button>
+            </div>
+            <div class="objection-response-content" id="objectionResponseContent"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="noRoMessage" class="no-ro-message">
+        <p>Open a Tekmetric repair order to generate a sales script</p>
+      </div>
+
+      <button id="generateSalesScriptBtn" class="btn btn-primary" style="display: none;" disabled>
+        <span class="btn-icon">&#10024;</span>
+        Generate Sales Script
+      </button>
+
+      <div id="salesLoadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Generating script...</div>
+      </div>
+    </div>
+
+    <!-- ==================== LIVE TIPS TAB ==================== -->
+    <div id="tipsTab" class="tab-content" style="display: none;">
+      <div class="tips-section">
+        <div class="section-header">
+          <span class="section-icon">&#128161;</span>
+          <span>Live Call Tips</span>
+          <button id="refreshTipsBtn" class="refresh-btn" title="Shuffle Tips">&#8635;</button>
+        </div>
+        <p class="tips-description">
+          Quick reminders to help you during customer calls. Use these tips to improve your service.
+        </p>
+
+        <!-- Current Tip Highlight -->
+        <div id="currentTipHighlight" class="current-tip-highlight">
+          <div class="tip-highlight-label">Focus on this:</div>
+          <div id="highlightedTip" class="highlighted-tip">Loading...</div>
+        </div>
+
+        <!-- Tips List -->
+        <div id="tipsListContainer" class="tips-list-container">
+          <div class="tips-list-header">
+            <span>All Coaching Tips</span>
+            <span id="tipsCount" class="tips-count">0 tips</span>
+          </div>
+          <div id="tipsList" class="tips-list">
+            <div class="loading-tips">Loading tips...</div>
+          </div>
+        </div>
+
+        <!-- HEART 9-Point Method Quick Reference -->
+        <div class="heart-method-section">
+          <div class="method-header">
+            <span class="method-icon">&#10084;</span>
+            <span>HEART 9-Point Sales Method</span>
+          </div>
+          <div class="method-steps">
+            <div class="method-step"><span class="step-num">1</span>Build Rapport</div>
+            <div class="method-step"><span class="step-num">2</span>Inspection Credentials</div>
+            <div class="method-step"><span class="step-num">3</span>Digital Resources</div>
+            <div class="method-step"><span class="step-num">4</span>Good-Good-Bad</div>
+            <div class="method-step"><span class="step-num">5</span>Safety Urgency</div>
+            <div class="method-step"><span class="step-num">6</span>Warranty Value</div>
+            <div class="method-step"><span class="step-num">7</span>Price as Investment</div>
+            <div class="method-step"><span class="step-num">8</span>Permission to Inspect</div>
+            <div class="method-step"><span class="step-num">9</span>Follow-up Commitment</div>
+          </div>
+        </div>
+
+        <!-- No Tips State -->
+        <div id="noTipsMessage" class="no-tips-message" style="display: none;">
+          <p>No coaching tips available.</p>
+          <p class="help-text">Ask your admin to configure coaching criteria in the HEART Helper app.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== LABOR RATES TAB ==================== -->
+    <div id="ratesTab" class="tab-content" style="display: none;">
+      <div class="rates-section">
+        <div class="section-header">
+          <span class="section-icon">&#128178;</span>
+          <span>Auto Labor Rate Groups</span>
+        </div>
+        <p class="rates-description">
+          Labor rates are automatically applied when you open a repair order in Tekmetric, 
+          based on the vehicle's make.
+        </p>
+
+        <!-- Current Shop Info -->
+        <div id="ratesShopInfo" class="rates-shop-info">
+          <span id="ratesShopLabel">Loading...</span>
+        </div>
+
+        <!-- Groups List (fetched from server) -->
+        <div id="laborRateGroupsList" class="labor-rate-groups-list"></div>
+
+        <!-- Job-Based Labor Rates Section -->
+        <div class="section-header job-rates-header" style="margin-top: 16px;">
+          <span class="section-icon">&#127991;</span>
+          <span>Job-Based Labor Rates</span>
+        </div>
+        <p class="rates-description">
+          Fixed labor charges for specific job types. These override make-based hourly rates.
+        </p>
+        <div id="jobLaborRatesList" class="labor-rate-groups-list"></div>
+
+        <!-- Info Section -->
+        <div class="rates-info-section">
+          <div class="info-box">
+            <strong>How it works:</strong>
+            <ul>
+              <li>Labor rate groups are configured by your admin in the HEART Helper app</li>
+              <li>When you open a repair order in Tekmetric, the extension detects the vehicle make</li>
+              <li>If the make matches a group for your location, the labor rate is automatically updated</li>
+            </ul>
+          </div>
+          <div id="ratesAdminLink" class="admin-link-section" style="display: none;">
+            <a href="#" id="openLaborRatesAdmin" class="admin-link">
+              &#9881; Manage Labor Rates (Admin)
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== VEHICLE HISTORY TAB ==================== -->
+    <div id="historyTab" class="tab-content" style="display: none;">
+      <div class="history-section">
+        <div class="section-header">
+          <span class="section-icon">&#128218;</span>
+          <span>Vehicle Service History</span>
+        </div>
+        
+        <!-- VIN Input (when no vehicle detected) -->
+        <div id="historyVinInput" class="history-vin-input">
+          <div class="form-group">
+            <label for="historyVin">Enter VIN</label>
+            <input type="text" id="historyVin" placeholder="Enter 17-character VIN..." maxlength="17" />
+          </div>
+          <div class="form-group">
+            <label for="historyMileage">Current Mileage (optional)</label>
+            <input type="number" id="historyMileage" placeholder="e.g., 85000" />
+          </div>
+          <button id="fetchHistoryBtn" class="btn btn-primary">
+            <span class="btn-icon">&#128218;</span>
+            Check History
+          </button>
+        </div>
+
+        <!-- Vehicle Summary (when vehicle detected) -->
+        <div id="historyVehicleSummary" class="history-vehicle-summary" style="display: none;">
+          <div class="vehicle-badge">
+            <span id="historyVehicleInfo">Loading...</span>
+          </div>
+          <div class="vin-display">
+            <span class="vin-label">VIN:</span>
+            <span id="historyVinDisplay" class="vin-value"></span>
+          </div>
+          <button id="refreshHistoryBtn" class="btn btn-secondary btn-sm">
+            &#8635; Refresh
+          </button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="historyLoading" class="history-loading" style="display: none;">
+          <div class="loading-spinner"></div>
+          <span>Checking service history...</span>
+        </div>
+
+        <!-- Service History List -->
+        <div id="historyResults" class="history-results" style="display: none;">
+          <!-- Warranty Summary -->
+          <div id="warrantySummary" class="warranty-summary">
+            <div class="warranty-header">
+              <span class="warranty-icon">&#128737;</span>
+              <span>Warranty Status</span>
+            </div>
+            <div id="warrantyDetails" class="warranty-details"></div>
+          </div>
+
+          <!-- HEART Shop History -->
+          <div class="history-source-section">
+            <div class="source-header heart-source">
+              <span class="heart-icon">&#10084;</span>
+              <span>HEART Service History</span>
+              <span id="heartHistoryCount" class="history-count"></span>
+            </div>
+            <div id="heartHistoryList" class="history-list"></div>
+          </div>
+
+          <!-- Carfax History (if available) -->
+          <div id="carfaxSection" class="history-source-section" style="display: none;">
+            <div class="source-header carfax-source">
+              <span class="carfax-icon">&#128663;</span>
+              <span>External Service History</span>
+              <span id="carfaxHistoryCount" class="history-count"></span>
+            </div>
+            <div id="carfaxHistoryList" class="history-list"></div>
+          </div>
+        </div>
+
+        <!-- No History State -->
+        <div id="historyEmpty" class="history-empty" style="display: none;">
+          <div class="empty-icon">&#128218;</div>
+          <p>No service history found for this vehicle.</p>
+          <p class="help-text">This may be a new customer or the VIN wasn't found in our records.</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="historyError" class="history-error" style="display: none;">
+          <p id="historyErrorMessage">Unable to fetch history.</p>
+          <button id="retryHistoryBtn" class="btn btn-secondary">Try Again</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="panel-footer">
+      <div class="connection-status" id="connectionStatus">
+        <span class="status-dot disconnected"></span>
+        <span id="connectionText">Not connected</span>
+        <button id="settingsBtn" class="settings-btn" title="Settings">&#9881;</button>
+      </div>
+    </footer>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="settings-modal" style="display: none;">
+      <div class="settings-content">
+        <div class="settings-header">
+          <span>Settings</span>
+          <button id="closeSettingsBtn" class="close-btn">&times;</button>
+        </div>
+        <div class="form-group">
+          <label for="appUrlInput">HEART Helper App URL</label>
+          <input type="text" id="appUrlInput" placeholder="https://your-app.replit.app" />
+          <div class="help-text">Enter the URL of your HEART Helper app</div>
+        </div>
+        <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

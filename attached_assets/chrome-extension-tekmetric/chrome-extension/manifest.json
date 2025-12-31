@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "HEART Helper - Tekmetric Integration",
+  "version": "3.26.0",
+  "description": "HEART Certified Auto Care - Helper",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "scripting",
+    "sidePanel",
+    "contextMenus",
+    "cookies",
+    "webRequest"
+  ],
+  "commands": {
+    "open-side-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description": "Open HEART Helper side panel"
+    }
+  },
+  "host_permissions": [
+    "https://shop.tekmetric.com/*",
+    "https://sandbox.tekmetric.com/*",
+    "https://cba.tekmetric.com/*",
+    "https://*.tekmetric.com/*",
+    "http://localhost:5000/*",
+    "*://*.replit.dev/*",
+    "*://*.replit.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://shop.tekmetric.com/*",
+        "https://sandbox.tekmetric.com/*",
+        "https://cba.tekmetric.com/*",
+        "https://*.tekmetric.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:5000/*",
+        "*://*.replit.dev/*"
+      ],
+      "js": ["inject.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Open HEART Helper",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
