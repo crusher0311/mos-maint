@@ -82,6 +82,36 @@ export async function GET(request: NextRequest) {
         model = workOrder.vehicleModel || null;
         engine = workOrder.vehicleEngine || null;
         console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
+      } else if (provider === "tekmetric") {
+        // Work order not in sync cache - fetch directly from Tekmetric API
+        console.log(`[Jobs Search] WO ${roId} not in cache, fetching from Tekmetric API`);
+        try {
+          const tekApiToken = process.env.TEKMETRIC_API_TOKEN;
+          if (tekApiToken) {
+            const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
+              headers: { Authorization: `Bearer ${tekApiToken}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              // If no VIN but we have vehicleId, fetch vehicle details
+              if (data?.vehicleId) {
+                const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
+                  headers: { Authorization: `Bearer ${tekApiToken}` }
+                });
+                if (vehRes.ok) {
+                  const vehData = await vehRes.json();
+                  year = vehData?.year?.toString() || null;
+                  make = vehData?.make || null;
+                  model = vehData?.model || null;
+                  engine = vehData?.engine || null;
+                  console.log(`[Jobs Search] Resolved vehicle from Tekmetric API: ${year} ${make} ${model}`);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[Jobs Search] Tekmetric API fetch failed:`, e);
+        }
       } else {
         console.log(`[Jobs Search] No WO found for roId ${roId} in shop ${mosShopId}`);
       }
