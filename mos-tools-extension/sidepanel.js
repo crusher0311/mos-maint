@@ -399,8 +399,10 @@ function highlightCannedJob(serviceName, attempts = 0) {
 }
 
 function createServiceItemHTML(item, type) {
-  const detail = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : 
-                 item.interval ? `Every ${item.interval.toLocaleString()} mi` : '';
+  // Show intervalText (e.g., "OEM: 7,500 mi / 6mo") instead of just "Due at X mi"
+  const detail = item.intervalText || 
+                 (item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : 
+                  item.interval ? `Every ${item.interval.toLocaleString()} mi` : '');
   const itemId = `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   return `
