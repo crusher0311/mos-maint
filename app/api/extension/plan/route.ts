@@ -15,11 +15,30 @@ export async function OPTIONS() {
 }
 
 
-async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number | null) {
+function isInspectItem(serviceName: string): boolean {
+  const name = serviceName?.toLowerCase() || '';
+  return name.startsWith('inspect') || 
+         name.includes('inspection') || 
+         name.startsWith('check ') ||
+         name.includes('visual check');
+}
+
+function formatIntervalText(intervalMiles: number, intervalMonths?: number): string {
+  const parts: string[] = [];
+  if (intervalMiles) {
+    parts.push(`${intervalMiles.toLocaleString()} mi`);
+  }
+  if (intervalMonths) {
+    parts.push(`${intervalMonths}mo`);
+  }
+  return parts.join(' / ') || '';
+}
+
+async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number | null, showInspectItems: boolean = true) {
   const db = await getDb();
   
   const currentMileage = mileage || 0;
-  console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage}`);
+  console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage}, showInspect=${showInspectItems}`);
   
   const SOON_MILES = 3000; // Same as dashboard
   const recommendations: any[] = [];
@@ -32,9 +51,15 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
     if (oemResult.ok && oemResult.items?.length > 0) {
       for (const item of oemResult.items) {
         const intervalMiles = item.miles || 0;
+        const intervalMonths = item.months || null;
         
         // Skip items with no mileage interval
         if (!intervalMiles) continue;
+        
+        // Filter inspect items if preference is set
+        if (!showInspectItems && isInspectItem(item.maintenance_name)) {
+          continue;
+        }
         
         // Calculate milesToGo: how many miles until next service
         // If current mileage is 139,000 and interval is 7,500:
@@ -60,6 +85,8 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
           category: item.maintenance_category,
           dueMileage: nextDueMileage,
           interval: intervalMiles,
+          intervalMonths,
+          intervalText: `OEM: ${formatIntervalText(intervalMiles, intervalMonths || undefined)}`,
           milesToGo,
           source: "oe",
           status
@@ -95,7 +122,8 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
         recommendations: uniqueRecs,
         analyzedAt: new Date(),
         source: "extension_on_demand",
-        mileageAtAnalysis: currentMileage
+        mileageAtAnalysis: currentMileage,
+        showInspectItems
       }
     },
     { upsert: true }
@@ -134,24 +162,25 @@ export async function GET(request: NextRequest) {
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
     let mosShopId: number | null = null;
+    let shopDoc: any = null;
     
     if (provider === "tekmetric") {
       const query: any = { "tekmetric.shopId": parseInt(smsShopId) };
       if (!isPlatformAdmin) {
         query.shopId = { $in: userShopIds };
       }
-      const shop = await db.collection("shops").findOne(query);
-      if (shop) {
-        mosShopId = shop.shopId;
+      shopDoc = await db.collection("shops").findOne(query);
+      if (shopDoc) {
+        mosShopId = shopDoc.shopId;
       }
     } else if (provider === "protractor") {
       const query: any = { "protractor.connectionId": smsShopId };
       if (!isPlatformAdmin) {
         query.shopId = { $in: userShopIds };
       }
-      const shop = await db.collection("shops").findOne(query);
-      if (shop) {
-        mosShopId = shop.shopId;
+      shopDoc = await db.collection("shops").findOne(query);
+      if (shopDoc) {
+        mosShopId = shopDoc.shopId;
       }
     }
 
@@ -161,6 +190,9 @@ export async function GET(request: NextRequest) {
         { status: 404, headers: corsHeaders }
       );
     }
+    
+    // Get shop preferences - showInspectItems defaults to true if not set
+    const showInspectItems = shopDoc?.preferences?.showInspectItems !== false;
 
     let vehicle = null;
     let mileage = null;
@@ -228,10 +260,14 @@ export async function GET(request: NextRequest) {
       : Infinity;
     const maxAge = 24 * 60 * 60 * 1000;
 
-    if (!analysisData || forceRefresh || analysisAge > maxAge) {
+    // Also re-run if showInspectItems preference changed
+    const cachedShowInspect = analysisData?.showInspectItems ?? true;
+    const prefsChanged = cachedShowInspect !== showInspectItems;
+    
+    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged) {
       try {
-        const recommendations = await runOnDemandAnalysis(mosShopId, vin, mileage);
-        analysisData = { recommendations };
+        const recommendations = await runOnDemandAnalysis(mosShopId, vin, mileage, showInspectItems);
+        analysisData = { recommendations, showInspectItems };
       } catch (e) {
         console.error("[Extension] On-demand analysis failed:", e);
       }
@@ -249,6 +285,7 @@ export async function GET(request: NextRequest) {
           name: rec.service || rec.name,
           dueAt: rec.dueMileage,
           interval: rec.interval,
+          intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} mi`,
           source: rec.source || "oe",
           priority: rec.priority,
           laborHours: rec.laborHours || 1,
