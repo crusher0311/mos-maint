@@ -255,7 +255,8 @@ async function loadPlan() {
   try {
     const params = new URLSearchParams({
       shopId: currentContext.shopId,
-      roId: currentContext.roId
+      roId: currentContext.roId,
+      provider: currentContext.provider || 'tekmetric'
     });
     if (currentContext.vin) params.set('vin', currentContext.vin);
     

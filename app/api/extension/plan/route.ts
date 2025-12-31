@@ -15,24 +15,50 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const shopId = searchParams.get("shopId");
+    const smsShopId = searchParams.get("shopId");
     const vin = searchParams.get("vin");
     const roId = searchParams.get("roId");
+    const provider = searchParams.get("provider") || "tekmetric";
 
-    if (!shopId) {
+    if (!smsShopId) {
       return NextResponse.json(
         { error: "shopId is required" },
         { status: 400, headers: corsHeaders }
       );
     }
 
-    const auth = await validateExtensionToken(request, shopId);
+    const db = await getDb();
+
+    let mosShopId: number | null = null;
+    
+    if (provider === "tekmetric") {
+      const shop = await db.collection("shops").findOne({
+        tekmetricShopId: parseInt(smsShopId)
+      });
+      if (shop) {
+        mosShopId = shop.shopId;
+      }
+    } else if (provider === "protractor") {
+      const shop = await db.collection("shops").findOne({
+        protractorShopId: smsShopId
+      });
+      if (shop) {
+        mosShopId = shop.shopId;
+      }
+    }
+
+    if (!mosShopId) {
+      return NextResponse.json(
+        { error: `Shop not configured for ${provider}` },
+        { status: 404, headers: corsHeaders }
+      );
+    }
+
+    const auth = await validateExtensionToken(request, String(mosShopId));
     if (!auth.authorized) {
       const status = auth.error === "Unauthorized shop access" ? 403 : 401;
       return NextResponse.json({ error: auth.error }, { status, headers: corsHeaders });
     }
-
-    const db = await getDb();
 
     let vehicle = null;
     let mileage = null;
@@ -40,7 +66,7 @@ export async function GET(request: NextRequest) {
     if (vin) {
       vehicle = await db.collection("vehicles").findOne({
         vin: vin.toUpperCase(),
-        shopId: parseInt(shopId)
+        shopId: mosShopId
       });
 
       if (vehicle) {
@@ -52,7 +78,7 @@ export async function GET(request: NextRequest) {
     if (vin) {
       analysisData = await db.collection("maintenance_analysis_cache").findOne({
         vin: vin.toUpperCase(),
-        shopId: parseInt(shopId)
+        shopId: mosShopId
       });
     }
 
