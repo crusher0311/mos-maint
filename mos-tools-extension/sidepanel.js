@@ -349,6 +349,7 @@ async function handleJobSearch() {
   try {
     const params = new URLSearchParams({ q: query });
     if (currentContext?.shopId) params.set('shopId', currentContext.shopId);
+    params.set('provider', currentContext?.provider || 'tekmetric');
     if (currentContext?.vehicle) {
       if (currentContext.vehicle.year) params.set('year', currentContext.vehicle.year);
       if (currentContext.vehicle.make) params.set('make', currentContext.vehicle.make);
@@ -492,7 +493,7 @@ async function loadCannedJobs() {
       // Fetch from MOS enriched library
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}`
+        endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
       });
       
       jobs = result.jobs || [];

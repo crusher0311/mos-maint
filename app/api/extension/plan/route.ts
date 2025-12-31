@@ -222,19 +222,33 @@ export async function GET(request: NextRequest) {
     let mileage = null;
 
     if (roId && !vin) {
-      const workOrder = await db.collection("work_orders").findOne({
-        shopId: mosShopId,
-        $or: [
-          { smsRoId: roId },
-          { smsRoId: parseInt(roId) },
-          { roNumber: roId },
-          { roNumber: parseInt(roId) }
-        ]
-      });
+      let workOrder = null;
+      
+      if (provider === "tekmetric") {
+        workOrder = await db.collection("tekmetric_work_orders").findOne({
+          shopId: { $in: [String(mosShopId), Number(mosShopId)] },
+          $or: [
+            { workOrderId: roId },
+            { workOrderId: String(roId) },
+            { roNumber: roId },
+            { roNumber: parseInt(roId) }
+          ]
+        });
+      } else {
+        workOrder = await db.collection("work_orders").findOne({
+          shopId: mosShopId,
+          $or: [
+            { smsRoId: roId },
+            { smsRoId: parseInt(roId) },
+            { roNumber: roId },
+            { roNumber: parseInt(roId) }
+          ]
+        });
+      }
       
       if (workOrder?.vin) {
         vin = workOrder.vin;
-        mileage = workOrder.mileageIn || workOrder.mileage;
+        mileage = workOrder.mileageIn || workOrder.mileage || workOrder.odometerIn;
       }
     }
 

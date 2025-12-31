@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,33 +15,64 @@ export async function OPTIONS() {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const shopId = searchParams.get("shopId");
+    const smsShopId = searchParams.get("shopId");
+    const provider = searchParams.get("provider") || "tekmetric";
 
-    if (!shopId) {
+    if (!smsShopId) {
       return NextResponse.json(
         { error: "shopId is required" },
         { status: 400, headers: corsHeaders }
       );
     }
 
-    const auth = await validateExtensionToken(request, shopId);
-    if (!auth.authorized) {
-      const status = auth.error === "Unauthorized shop access" ? 403 : 401;
-      return NextResponse.json({ error: auth.error }, { status, headers: corsHeaders });
+    const auth = await validateExtensionToken(request);
+    if (!auth.authorized || !auth.user) {
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
     const db = await getDb();
+    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
+    const isPlatformAdmin = auth.user.role === "platform_admin";
+
+    let mosShopId: number | null = null;
+    
+    if (provider === "tekmetric") {
+      const query: any = { "tekmetric.shopId": parseInt(smsShopId) };
+      if (!isPlatformAdmin) {
+        query.shopId = { $in: userShopIds };
+      }
+      const shop = await db.collection("shops").findOne(query);
+      if (shop) {
+        mosShopId = shop.shopId;
+      }
+    } else if (provider === "protractor") {
+      const query: any = { "protractor.connectionId": smsShopId };
+      if (!isPlatformAdmin) {
+        query.shopId = { $in: userShopIds };
+      }
+      const shop = await db.collection("shops").findOne(query);
+      if (shop) {
+        mosShopId = shop.shopId;
+      }
+    }
+
+    if (!mosShopId) {
+      return NextResponse.json(
+        { error: `No accessible shop configured for ${provider}` },
+        { status: 404, headers: corsHeaders }
+      );
+    }
 
     const cannedJobs = await db.collection("canned_jobs")
       .find({ 
-        shopId: parseInt(shopId),
+        shopId: mosShopId,
         enriched: true 
       })
       .limit(100)
       .toArray();
 
     const shop = await db.collection("shops").findOne({ 
-      shopId: parseInt(shopId) 
+      shopId: mosShopId 
     });
 
     const shopIntervals = shop?.maintenanceIntervals || [];
