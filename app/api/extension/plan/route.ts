@@ -377,8 +377,10 @@ export async function GET(request: NextRequest) {
               const res = await fetch(`https://sandbox.tekmetric.com/api/v1/repair-orders/${roId}`, {
                 headers: { Authorization: `Bearer ${tekApiToken}` }
               });
+              console.log(`[Extension] Tekmetric API response status: ${res.status}`);
               if (res.ok) {
                 const data = await res.json();
+                console.log(`[Extension] Tekmetric API data: vehicleId=${data?.vehicleId}, vin=${data?.vehicle?.vin || data?.vehicleVin}`);
                 if (data) {
                   workOrder = {
                     vin: data.vehicle?.vin || data.vehicleVin,
@@ -386,7 +388,11 @@ export async function GET(request: NextRequest) {
                   };
                   console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
                 }
+              } else {
+                console.log(`[Extension] Tekmetric API returned error: ${res.status} ${res.statusText}`);
               }
+            } else {
+              console.log(`[Extension] No TEKMETRIC_API_TOKEN available`);
             }
           } catch (e) {
             console.error(`[Extension] Tekmetric API fetch failed:`, e);
