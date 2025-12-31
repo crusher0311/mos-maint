@@ -33,14 +33,14 @@ export async function GET(request: NextRequest) {
     
     if (provider === "tekmetric") {
       const shop = await db.collection("shops").findOne({
-        tekmetricShopId: parseInt(smsShopId)
+        "tekmetric.shopId": parseInt(smsShopId)
       });
       if (shop) {
         mosShopId = shop.shopId;
       }
     } else if (provider === "protractor") {
       const shop = await db.collection("shops").findOne({
-        protractorShopId: smsShopId
+        "protractor.connectionId": smsShopId
       });
       if (shop) {
         mosShopId = shop.shopId;
