@@ -1,15 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
 
-export async function POST(request: Request) {
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
+export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email and password are required" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -23,7 +33,7 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -31,14 +41,12 @@ export async function POST(request: Request) {
     if (!isValidPassword) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
-    // Generate a simple extension token (in production, use JWT)
     const extensionToken = `ext_${user._id.toString()}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
     
-    // Store the extension token
     await usersCollection.updateOne(
       { _id: user._id },
       { 
@@ -58,12 +66,12 @@ export async function POST(request: Request) {
         shopId: user.shopId,
         role: user.role
       }
-    });
+    }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Auth] Error:", error);
     return NextResponse.json(
       { error: "Authentication failed" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
