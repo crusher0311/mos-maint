@@ -113,9 +113,12 @@ export async function GET(request: NextRequest) {
       ];
     }
     
-    // Optional make/model filtering for pre-filtering
+    // Optional make/model filtering for pre-filtering (same as web app)
     if (make) {
       matchStage["vehicle.make"] = { $regex: new RegExp(make, "i") };
+    }
+    if (model) {
+      matchStage["vehicle.model"] = { $regex: new RegExp(model, "i") };
     }
 
     // Fetch candidates
