@@ -62,8 +62,15 @@ export async function GET(request: NextRequest) {
 
     const jobsCollection = db.collection("job_index");
 
+    // Use regex search instead of $text (no text index required)
+    const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     const searchQuery: Record<string, any> = {
-      $text: { $search: query }
+      $or: [
+        { "job.title": searchRegex },
+        { "title": searchRegex },
+        { "job.description": searchRegex },
+        { "job.code": searchRegex }
+      ]
     };
 
     if (mosShopId) {
@@ -73,12 +80,9 @@ export async function GET(request: NextRequest) {
     }
 
     const jobs: any[] = await jobsCollection
-      .aggregate([
-        { $match: searchQuery },
-        { $addFields: { score: { $meta: "textScore" } } },
-        { $sort: { score: -1 } },
-        { $limit: limit * 3 }
-      ])
+      .find(searchQuery)
+      .sort({ createdAt: -1 })
+      .limit(limit * 3)
       .toArray();
 
     const scoredJobs = jobs.map((job: any) => {
