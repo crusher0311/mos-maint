@@ -414,7 +414,7 @@ type Buckets = { overdue: TriagedItem[]; dueSoon: TriagedItem[]; upcoming: Triag
 const DEFAULT_SOON_MILES = 1000;
 const DEFAULT_SOON_DAYS = 30;
 
-type ProtractorServiceHistory = {
+type ShopServiceHistory = {
   serviceName: string;
   mileage: number | null;
   date: Date | null;
@@ -439,7 +439,7 @@ function isMatchingHistory(
 function triage({
   oemItems,
   carfaxRecords,
-  protractorHistory = [],
+  shopServiceHistory = [],
   currentMiles,
   today = new Date(),
   dviFindings,
@@ -453,7 +453,7 @@ function triage({
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
-  protractorHistory?: ProtractorServiceHistory[];
+  shopServiceHistory?: ShopServiceHistory[];
   currentMiles: number | null;
   today?: Date;
   dviFindings: Array<{ name?: string; status?: string | number; source?: string }>;
@@ -476,27 +476,27 @@ function triage({
     defaultRate: milesPerDay,
   });
 
-  // Build Protractor service history map first (shop data is primary)
+  // Build shop service history map (from Protractor and/or Tekmetric work orders)
   const shopHistoryByKey = new Map<string, { miles: number | null; date: Date | null }[]>();
-  for (const ph of protractorHistory || []) {
-    const keys = toKeyFromFreeText(ph.serviceName || "");
+  for (const sh of shopServiceHistory || []) {
+    const keys = toKeyFromFreeText(sh.serviceName || "");
     for (const k of keys) {
       if (!shopHistoryByKey.has(k)) shopHistoryByKey.set(k, []);
-      shopHistoryByKey.get(k)!.push({ miles: ph.mileage, date: ph.date });
+      shopHistoryByKey.get(k)!.push({ miles: sh.mileage, date: sh.date });
     }
   }
 
-  // last-done map: merge CARFAX with Protractor (shop wins if matching)
+  // last-done map: merge CARFAX with shop history (shop wins if matching)
   const lastMap = new Map<string, LastDone>();
   
-  // First, add all Protractor history as shop source
-  for (const ph of protractorHistory || []) {
-    const keys = toKeyFromFreeText(ph.serviceName || "");
+  // First, add all shop service history as shop source
+  for (const sh of shopServiceHistory || []) {
+    const keys = toKeyFromFreeText(sh.serviceName || "");
     for (const k of keys) {
       const prev = lastMap.get(k);
-      const cand: LastDone = { miles: ph.mileage, date: ph.date, source: "shop" };
+      const cand: LastDone = { miles: sh.mileage, date: sh.date, source: "shop" };
       const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
-      const candScore = ph.date ? ph.date.getTime() : -Infinity;
+      const candScore = sh.date ? sh.date.getTime() : -Infinity;
       if (!prev || candScore > prevScore) lastMap.set(k, cand);
     }
   }
@@ -564,9 +564,12 @@ function triage({
     const uniqueKey = `${serviceKey}_${o.maintenance_id}`;
     const last = lastMap.get(serviceKey) ?? null;
     
-    // Check for shop interval override
+    // Check for shop interval override - only use shop intervals if:
+    // 1. Shop has configured custom intervals for this service (useShop === true)
+    // 2. Service was last performed at shop (last?.source === 'shop')
     const shopOverride = shopIntervals[serviceKey];
-    const usingShopInterval = shopOverride?.useShop === true;
+    const lastPerformedAtShop = last?.source === 'shop';
+    const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
     const intervalMiles = usingShopInterval && shopOverride.miles != null 
       ? shopOverride.miles 
       : (o.miles ?? null);
@@ -1005,7 +1008,7 @@ async function PlanContent({ params }: PageProps) {
 
   // PARALLEL DATA FETCHING - fetch external data and local queries simultaneously
   const vinUpper = vin.toUpperCase();
-  const [dvi, carfax, protractorVehicleResult, avInspectionResult, protractorCompletedWOs, shopBranding] = await Promise.all([
+  const [dvi, carfax, protractorVehicleResult, avInspectionResult, protractorCompletedWOs, tekmetricCompletedWOs, shopBranding] = await Promise.all([
     latestRoNumber && autoCfg.configured
       ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
       : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
@@ -1026,6 +1029,10 @@ async function PlanContent({ params }: PageProps) {
         { "ServiceItem.VIN": vinUpper }
       ]
     }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
+    db.collection("tekmetric_work_orders").find({
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      vehicleVin: vinUpper
+    }).sort({ closedDate: -1 }).limit(50).toArray(),
     db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
   ]);
 
@@ -1044,7 +1051,7 @@ async function PlanContent({ params }: PageProps) {
   }
 
   // Extract service history from Protractor completed work orders
-  const protractorHistory: ProtractorServiceHistory[] = [];
+  const shopServiceHistory: ShopServiceHistory[] = [];
   for (const wo of protractorCompletedWOs) {
     const mileage = wo.Odometer ?? wo.OutUsage ?? wo.data?.Odometer ?? null;
     const dateStr = wo.Header?.LastModifiedTime ?? wo.Header?.CreationTime ?? wo.data?.Header?.LastModifiedTime ?? null;
@@ -1054,17 +1061,32 @@ async function PlanContent({ params }: PageProps) {
     for (const pkg of servicePackages) {
       const serviceName = pkg.Title ?? pkg.Description ?? "";
       if (serviceName) {
-        protractorHistory.push({ serviceName, mileage, date });
+        shopServiceHistory.push({ serviceName, mileage, date });
       }
       for (const line of pkg.ServicePackageLines ?? []) {
         const lineName = line.Description ?? "";
         if (lineName && lineName !== serviceName) {
-          protractorHistory.push({ serviceName: lineName, mileage, date });
+          shopServiceHistory.push({ serviceName: lineName, mileage, date });
         }
       }
     }
   }
-  console.log(`[Plan Debug] Protractor service history entries: ${protractorHistory.length}`);
+  console.log(`[Plan Debug] Protractor service history entries: ${shopServiceHistory.length}`);
+  
+  // Extract service history from Tekmetric completed work orders
+  for (const wo of tekmetricCompletedWOs) {
+    const mileage = wo.mileageOut ?? wo.mileageIn ?? null;
+    const date = wo.closedDate ? new Date(wo.closedDate) : null;
+    
+    const jobs = wo.jobs ?? [];
+    for (const job of jobs) {
+      const serviceName = job.name ?? job.description ?? "";
+      if (serviceName) {
+        shopServiceHistory.push({ serviceName, mileage, date });
+      }
+    }
+  }
+  console.log(`[Plan Debug] Total shop service history entries (Protractor + Tekmetric): ${shopServiceHistory.length}`);
 
   const shopLogo: string | null = shopBranding?.branding?.logo || null;
 
@@ -1184,7 +1206,7 @@ async function PlanContent({ params }: PageProps) {
   const rawBuckets = triage({
     oemItems,
     carfaxRecords,
-    protractorHistory,
+    shopServiceHistory,
     currentMiles,
     dviFindings,
     protractorDeferredWork,
