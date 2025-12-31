@@ -16,36 +16,60 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q") || "";
-    const shopId = searchParams.get("shopId");
+    const smsShopId = searchParams.get("shopId");
+    const provider = searchParams.get("provider") || "tekmetric";
     const year = searchParams.get("year");
     const make = searchParams.get("make");
     const model = searchParams.get("model");
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
 
-    const auth = await validateExtensionToken(request, shopId || undefined);
-    if (!auth.authorized) {
-      const status = auth.error === "Unauthorized shop access" ? 403 : 401;
-      return NextResponse.json({ error: auth.error }, { status, headers: corsHeaders });
+    const auth = await validateExtensionToken(request);
+    if (!auth.authorized || !auth.user) {
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
+    }
+
+    const db = await getDb();
+    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
+    const isPlatformAdmin = auth.user.role === "platform_admin";
+
+    let mosShopId: number | null = null;
+    
+    if (smsShopId) {
+      if (provider === "tekmetric") {
+        const shopQuery: any = { "tekmetric.shopId": parseInt(smsShopId) };
+        if (!isPlatformAdmin) {
+          shopQuery.shopId = { $in: userShopIds };
+        }
+        const shop = await db.collection("shops").findOne(shopQuery);
+        if (shop) {
+          mosShopId = shop.shopId;
+        }
+      } else if (provider === "protractor") {
+        const shopQuery: any = { "protractor.connectionId": smsShopId };
+        if (!isPlatformAdmin) {
+          shopQuery.shopId = { $in: userShopIds };
+        }
+        const shop = await db.collection("shops").findOne(shopQuery);
+        if (shop) {
+          mosShopId = shop.shopId;
+        }
+      }
     }
 
     if (!query.trim()) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
 
-    const db = await getDb();
     const jobsCollection = db.collection("job_index");
 
     const searchQuery: Record<string, any> = {
       $text: { $search: query }
     };
 
-    if (shopId) {
-      searchQuery.shopId = parseInt(shopId);
-    } else {
-      const userShopIds = getUserShopIds(auth.user);
-      if (userShopIds.length > 0) {
-        searchQuery.shopId = { $in: userShopIds.map(id => parseInt(id)) };
-      }
+    if (mosShopId) {
+      searchQuery.shopId = mosShopId;
+    } else if (!isPlatformAdmin) {
+      searchQuery.shopId = { $in: userShopIds };
     }
 
     const jobs: any[] = await jobsCollection
