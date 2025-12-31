@@ -374,7 +374,7 @@ export async function GET(request: NextRequest) {
           try {
             const tekApiToken = process.env.TEKMETRIC_API_TOKEN;
             if (tekApiToken) {
-              const res = await fetch(`https://sandbox.tekmetric.com/api/v1/repair-orders/${roId}`, {
+              const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
                 headers: { Authorization: `Bearer ${tekApiToken}` }
               });
               console.log(`[Extension] Tekmetric API response status: ${res.status}`);
