@@ -319,6 +319,8 @@ function renderPlan(data) {
   setupAddDropdowns();
 }
 
+let dropdownClickHandlerRegistered = false;
+
 function setupAddDropdowns() {
   // Toggle dropdown on button click
   document.querySelectorAll('.btn-add-toggle').forEach(btn => {
@@ -349,13 +351,13 @@ function setupAddDropdowns() {
       
       if (action === 'search-history') {
         // Switch to Job Lookup tab and search for this service
-        switchToTab('lookup');
+        switchTab('lookup');
         elements.jobSearch.value = service.name;
         await handleJobSearch();
       } else if (action === 'search-canned') {
         // Switch to Canned Jobs tab and search
-        switchToTab('canned');
-        // Filter canned jobs for this service name
+        switchTab('canned');
+        // Highlight matching canned job with retry
         highlightCannedJob(service.name);
       } else if (action === 'add-generic') {
         // Add as generic job
@@ -364,50 +366,36 @@ function setupAddDropdowns() {
     });
   });
 
-  // Close dropdowns when clicking outside
-  document.addEventListener('click', () => {
-    document.querySelectorAll('.add-dropdown-menu').forEach(menu => {
-      menu.classList.add('hidden');
+  // Register global click handler only once
+  if (!dropdownClickHandlerRegistered) {
+    dropdownClickHandlerRegistered = true;
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.add-dropdown-menu').forEach(menu => {
+        menu.classList.add('hidden');
+      });
     });
-  });
-}
-
-function switchToTab(tabName) {
-  // Update tab buttons
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabName);
-  });
-  
-  // Update tab panels
-  document.querySelectorAll('.tab-panel').forEach(panel => {
-    panel.classList.toggle('hidden', panel.id !== `tab-${tabName}`);
-    panel.classList.toggle('active', panel.id === `tab-${tabName}`);
-  });
-  
-  // Load content for the tab
-  if (tabName === 'lookup') {
-    // Job lookup tab - ready for search
-  } else if (tabName === 'canned') {
-    loadCannedJobs();
   }
 }
 
-function highlightCannedJob(serviceName) {
-  // Scroll to and highlight matching canned job if exists
-  setTimeout(() => {
-    const items = document.querySelectorAll('#canned-list .job-item');
-    const searchTerm = serviceName.toLowerCase();
-    
-    for (const item of items) {
-      const title = item.querySelector('.job-title')?.textContent?.toLowerCase() || '';
-      if (title.includes(searchTerm) || searchTerm.includes(title.split(' ')[0])) {
-        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        item.style.outline = '2px solid var(--primary)';
-        setTimeout(() => item.style.outline = '', 2000);
-        break;
-      }
+function highlightCannedJob(serviceName, attempts = 0) {
+  const items = document.querySelectorAll('#canned-list .job-item');
+  const searchTerm = serviceName.toLowerCase();
+  
+  // If no items and we haven't retried too many times, wait and retry
+  if (items.length === 0 && attempts < 5) {
+    setTimeout(() => highlightCannedJob(serviceName, attempts + 1), 300);
+    return;
+  }
+  
+  for (const item of items) {
+    const title = item.querySelector('.job-title')?.textContent?.toLowerCase() || '';
+    if (title.includes(searchTerm) || searchTerm.includes(title.split(' ')[0])) {
+      item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      item.style.outline = '2px solid var(--primary)';
+      setTimeout(() => item.style.outline = '', 2000);
+      break;
     }
-  }, 500);
+  }
 }
 
 function createServiceItemHTML(item, type) {
