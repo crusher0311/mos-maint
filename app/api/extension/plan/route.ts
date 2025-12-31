@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -12,20 +22,18 @@ export async function GET(request: NextRequest) {
     if (!shopId) {
       return NextResponse.json(
         { error: "shopId is required" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
-    // Validate token AND shop access
     const auth = await validateExtensionToken(request, shopId);
     if (!auth.authorized) {
       const status = auth.error === "Unauthorized shop access" ? 403 : 401;
-      return NextResponse.json({ error: auth.error }, { status });
+      return NextResponse.json({ error: auth.error }, { status, headers: corsHeaders });
     }
 
     const db = await getDb();
 
-    // Get vehicle data if VIN provided
     let vehicle = null;
     let mileage = null;
 
@@ -40,7 +48,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get cached maintenance analysis for this vehicle
     let analysisData = null;
     if (vin) {
       analysisData = await db.collection("maintenance_analysis_cache").findOne({
@@ -49,7 +56,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Build plan response
     const plan = {
       overdue: [] as any[],
       dueSoon: [] as any[],
@@ -78,7 +84,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // If no cached analysis, try to get basic OEM schedule
     if (!analysisData && vehicle?.year && vehicle?.make && vehicle?.model) {
       const oeIntervals = await db.collection("oe_schedules").findOne({
         year: vehicle.year,
@@ -108,13 +113,13 @@ export async function GET(request: NextRequest) {
       overdue: plan.overdue,
       dueSoon: plan.dueSoon,
       recommended: plan.recommended
-    });
+    }, { headers: corsHeaders });
 
   } catch (error: any) {
     console.error("[Extension Plan] Error:", error);
     return NextResponse.json(
       { error: "Failed to load plan" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
