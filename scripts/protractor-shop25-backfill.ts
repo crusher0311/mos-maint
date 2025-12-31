@@ -1,16 +1,14 @@
-// Protractor history backfill for Shop 25 (resumable, chunked)
+// Protractor history backfill (resumable, chunked)
 // Usage: 
-//   npx tsx scripts/protractor-shop25-backfill.ts              # Process next 3 months
-//   npx tsx scripts/protractor-shop25-backfill.ts --months 6   # Process next 6 months
-//   npx tsx scripts/protractor-shop25-backfill.ts --reset      # Reset progress and start over
+//   npx tsx scripts/protractor-shop25-backfill.ts --shop 25              # Process next 3 months for shop 25
+//   npx tsx scripts/protractor-shop25-backfill.ts --shop 28 --months 2   # Process 2 months for shop 28
+//   npx tsx scripts/protractor-shop25-backfill.ts --shop 25 --reset      # Reset progress and start over
 
 import crypto from "node:crypto";
 import { getDb } from "../lib/mongo";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences } from "../lib/job-index";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
-const SHOP_ID = 25;
-const PROGRESS_KEY = `shop25_backfill_progress`;
 const DEFAULT_MONTHS_PER_RUN = 3; // Process 3 months at a time to stay under limits
 
 type ProtractorConfig = {
@@ -232,8 +230,17 @@ async function main() {
   const resetFlag = args.includes("--reset");
   const monthsIndex = args.indexOf("--months");
   const monthsPerRun = monthsIndex >= 0 ? parseInt(args[monthsIndex + 1]) || DEFAULT_MONTHS_PER_RUN : DEFAULT_MONTHS_PER_RUN;
+  const shopIndex = args.indexOf("--shop");
+  const SHOP_ID = shopIndex >= 0 ? parseInt(args[shopIndex + 1]) : null;
   
-  console.log("=== Protractor History Backfill - Shop 25 (Resumable) ===");
+  if (!SHOP_ID) {
+    console.error("Usage: npx tsx scripts/protractor-shop25-backfill.ts --shop <shopId> [--months N] [--reset]");
+    process.exit(1);
+  }
+  
+  const PROGRESS_KEY = `shop${SHOP_ID}_backfill_progress`;
+  
+  console.log("=== Protractor History Backfill (Resumable) ===");
   console.log(`Target shop: ${SHOP_ID}`);
   console.log(`Months per run: ${monthsPerRun}`);
   
@@ -274,7 +281,7 @@ async function main() {
   const config = await resolveProtractorConfig(SHOP_ID);
   
   if (!config.configured) {
-    console.error("Protractor not configured for shop 25");
+    console.error(`Protractor not configured for shop ${SHOP_ID}`);
     process.exit(1);
   }
   
