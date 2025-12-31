@@ -367,6 +367,32 @@ export async function GET(request: NextRequest) {
           workOrderId: String(roId)
         });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
+        
+        // If not found in cache, fetch directly from Tekmetric API
+        if (!workOrder && shopDoc?.tekmetric?.shopId) {
+          console.log(`[Extension] Fetching RO ${roId} directly from Tekmetric API`);
+          try {
+            const tekApiToken = process.env.TEKMETRIC_API_TOKEN;
+            if (tekApiToken) {
+              const res = await fetch(`https://sandbox.tekmetric.com/api/v1/repair-orders/${roId}`, {
+                headers: { Authorization: `Bearer ${tekApiToken}` }
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data) {
+                  workOrder = {
+                    vin: data.vehicle?.vin || data.vehicleVin,
+                    odometer: data.milesIn || data.mileageIn || data.vehicle?.mileage
+                  };
+                  console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
+                }
+              }
+            }
+          } catch (e) {
+            console.error(`[Extension] Tekmetric API fetch failed:`, e);
+          }
+        }
+        
         if (workOrder) {
           console.log(`[Extension] WO data: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
         }
@@ -384,8 +410,9 @@ export async function GET(request: NextRequest) {
       
       if (workOrder) {
         // Tekmetric sync stores: vin, odometer (not vehicleVin, mileageIn)
-        vin = workOrder.vin || workOrder.vehicleVin;
-        mileage = workOrder.odometer || workOrder.mileageIn || workOrder.mileage || workOrder.odometerIn;
+        const wo: any = workOrder;
+        vin = wo.vin || wo.vehicleVin;
+        mileage = wo.odometer || wo.mileageIn || wo.mileage || wo.odometerIn;
       }
     }
 
