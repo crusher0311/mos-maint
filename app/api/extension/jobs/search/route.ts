@@ -205,36 +205,54 @@ export async function GET(request: NextRequest) {
 
     const results = Array.from(uniqueJobs.values()).slice(0, limit);
 
-    const formattedJobs = results.map((job: any) => ({
-      _id: job._id.toString(),
-      title: job.job?.title || job.title || "Job",
-      description: job.job?.description,
-      code: job.job?.code,
-      vehicle: job.vehicle,
-      workOrderNumber: job.workOrderNumber,
-      laborItems: (job.job?.lines || job.lines || [])
-        .filter((l: any) => l.lineType === "labor")
-        .map((l: any) => ({
+    const formattedJobs = results.map((job: any) => {
+      const sourceType = job.metadata?.sourceType || "protractor";
+      // Tekmetric stores prices in cents, need to convert to dollars
+      const isTekmetric = sourceType === "tekmetric";
+      const priceMultiplier = isTekmetric ? 0.01 : 1;
+      
+      const lines = job.job?.lines || job.lines || [];
+      const rawTotals = job.job?.totals || job.totals || {};
+      
+      // Extract labor hours from labor lines
+      const laborLines = lines.filter((l: any) => l.lineType === "labor");
+      const laborHours = laborLines.reduce((sum: number, l: any) => 
+        sum + (parseFloat(l.hours) || parseFloat(l.quantity) || 0), 0);
+      
+      return {
+        _id: job._id.toString(),
+        title: job.job?.title || job.title || "Job",
+        description: job.job?.description,
+        code: job.job?.code,
+        vehicle: job.vehicle,
+        workOrderNumber: job.workOrderNumber,
+        laborItems: laborLines.map((l: any) => ({
           name: l.description,
-          hours: l.quantity || l.hours || 1
+          hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0
         })),
-      parts: (job.job?.lines || job.lines || [])
-        .filter((l: any) => l.lineType === "part")
-        .map((l: any) => ({
-          name: l.description,
-          partNumber: l.partNumber,
-          brand: l.manufacturer,
-          quantity: l.quantity || 1,
-          cost: l.cost || 0,
-          retail: l.unitPrice || l.extendedPrice || 0
-        })),
-      totals: job.job?.totals || job.totals || { totalAmount: 0 },
-      matchScore: job.matchScore,
-      matchBand: job.matchBand,
-      matchBandLabel: job.matchBandLabel,
-      matchReason: job.matchReason,
-      source: job.source || "protractor"
-    }));
+        parts: lines
+          .filter((l: any) => l.lineType === "part")
+          .map((l: any) => ({
+            name: l.description,
+            partNumber: l.partNumber,
+            brand: l.manufacturer,
+            quantity: l.quantity || 1,
+            cost: (l.cost || 0) * priceMultiplier,
+            retail: (l.unitPrice || l.extendedPrice || 0) * priceMultiplier
+          })),
+        totals: {
+          laborHours: rawTotals.laborHours || laborHours || 0,
+          laborAmount: (rawTotals.laborAmount || 0) * priceMultiplier,
+          partsAmount: (rawTotals.partsAmount || 0) * priceMultiplier,
+          totalAmount: (rawTotals.totalAmount || 0) * priceMultiplier,
+        },
+        matchScore: job.matchScore,
+        matchBand: job.matchBand,
+        matchBandLabel: job.matchBandLabel,
+        matchReason: job.matchReason,
+        source: sourceType
+      };
+    });
 
     return NextResponse.json({ 
       jobs: formattedJobs,
