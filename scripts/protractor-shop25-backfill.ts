@@ -26,15 +26,25 @@ function computeAuthentication(connectionId: string, apiKey: string): string {
   return hmac.digest("base64");
 }
 
-async function resolveProtractorConfig(shopId: number): Promise<ProtractorConfig> {
+async function resolveProtractorConfig(shopId: number, useEnvFallback = false): Promise<ProtractorConfig> {
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
     { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
     { projection: { protractor: 1, protractorConnectionId: 1, protractorApiKey: 1 } }
   );
 
-  const connectionId = shop?.protractorConnectionId ?? shop?.protractor?.connectionId ?? "";
-  const apiKey = shop?.protractorApiKey ?? shop?.protractor?.apiKey ?? "";
+  let connectionId = shop?.protractorConnectionId ?? shop?.protractor?.connectionId ?? "";
+  let apiKey = shop?.protractorApiKey ?? shop?.protractor?.apiKey ?? "";
+  
+  // Fallback to environment variables if no db credentials and flag is set
+  if (!connectionId && !apiKey && useEnvFallback) {
+    connectionId = process.env.PROTRACTOR_BACKFILL_CONNECTION_ID ?? "";
+    apiKey = process.env.PROTRACTOR_BACKFILL_API_KEY ?? "";
+    if (connectionId && apiKey) {
+      console.log("Using credentials from environment secrets (PROTRACTOR_BACKFILL_*)");
+    }
+  }
+  
   const configured = Boolean(connectionId && apiKey);
   const authentication = configured ? computeAuthentication(connectionId, apiKey) : "";
 
@@ -228,13 +238,15 @@ async function fetchServicePackages(
 async function main() {
   const args = process.argv.slice(2);
   const resetFlag = args.includes("--reset");
+  const useEnvFlag = args.includes("--use-env");
   const monthsIndex = args.indexOf("--months");
   const monthsPerRun = monthsIndex >= 0 ? parseInt(args[monthsIndex + 1]) || DEFAULT_MONTHS_PER_RUN : DEFAULT_MONTHS_PER_RUN;
   const shopIndex = args.indexOf("--shop");
   const SHOP_ID = shopIndex >= 0 ? parseInt(args[shopIndex + 1]) : null;
   
   if (!SHOP_ID) {
-    console.error("Usage: npx tsx scripts/protractor-shop25-backfill.ts --shop <shopId> [--months N] [--reset]");
+    console.error("Usage: npx tsx scripts/protractor-shop25-backfill.ts --shop <shopId> [--months N] [--reset] [--use-env]");
+    console.error("  --use-env: Use PROTRACTOR_BACKFILL_* env secrets instead of shop database credentials");
     process.exit(1);
   }
   
@@ -277,11 +289,14 @@ async function main() {
   console.log(`This run will process: ${resumeFrom.toISOString().split("T")[0]} to ${runEndDate.toISOString().split("T")[0]}`);
   console.log(`Global end date: ${globalEndDate.toISOString().split("T")[0]}\n`);
   
-  // Get shop-specific credentials from database
-  const config = await resolveProtractorConfig(SHOP_ID);
+  // Get shop-specific credentials from database (or env if --use-env flag)
+  const config = await resolveProtractorConfig(SHOP_ID, useEnvFlag);
   
   if (!config.configured) {
     console.error(`Protractor not configured for shop ${SHOP_ID}`);
+    if (!useEnvFlag) {
+      console.error("Tip: Use --use-env flag to use PROTRACTOR_BACKFILL_* environment secrets");
+    }
     process.exit(1);
   }
   
