@@ -368,7 +368,7 @@ export async function GET(request: NextRequest) {
         });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         if (workOrder) {
-          console.log(`[Extension] WO data: vin=${workOrder.vehicleVin}, mileageIn=${workOrder.mileageIn}`);
+          console.log(`[Extension] WO data: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
         }
       } else {
         workOrder = await db.collection("work_orders").findOne({
@@ -383,8 +383,9 @@ export async function GET(request: NextRequest) {
       }
       
       if (workOrder) {
-        vin = workOrder.vehicleVin || workOrder.vin;
-        mileage = workOrder.mileageIn || workOrder.mileage || workOrder.odometerIn;
+        // Tekmetric sync stores: vin, odometer (not vehicleVin, mileageIn)
+        vin = workOrder.vin || workOrder.vehicleVin;
+        mileage = workOrder.odometer || workOrder.mileageIn || workOrder.mileage || workOrder.odometerIn;
       }
     }
 
