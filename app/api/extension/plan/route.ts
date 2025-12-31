@@ -87,13 +87,14 @@ function getLastPerformedInfo(
   const servicePatterns = SERVICE_KEY_PATTERNS[serviceKey];
   if (servicePatterns && shopWorkOrders.length > 0) {
     for (const wo of shopWorkOrders) {
-      const jobs = wo.jobs || [];
+      // Jobs are stored in wo.data.jobs (canonical) or wo.jobs (fallback for legacy documents)
+      const jobs = wo.data?.jobs ?? wo.jobs ?? [];
       for (const job of jobs) {
         const jobName = job.name || job.description || '';
         if (servicePatterns.some(p => p.test(jobName))) {
           shopLastDone = {
-            date: wo.closedDate ? new Date(wo.closedDate) : undefined,
-            mileage: wo.mileageOut || wo.mileageIn
+            date: wo.completedDate ? new Date(wo.completedDate) : undefined,
+            mileage: wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn
           };
           break;
         }
@@ -158,9 +159,9 @@ async function runOnDemandAnalysis(
   let shopWorkOrders: any[] = [];
   try {
     shopWorkOrders = await db.collection("tekmetric_work_orders").find({
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      vehicleVin: vin.toUpperCase()
-    }).sort({ closedDate: -1 }).limit(50).toArray();
+      shopId: Number(shopId),
+      vin: vin.toUpperCase()
+    }).sort({ completedDate: -1 }).limit(50).toArray();
     console.log(`[Extension] Preloaded ${shopWorkOrders.length} work orders for VIN ${vin}`);
   } catch (e) {
     console.warn('[Extension] Error preloading shop work orders:', e);
