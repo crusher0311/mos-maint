@@ -34,7 +34,118 @@ function formatIntervalText(intervalMiles: number, intervalMonths?: number): str
   return parts.join(' / ') || '';
 }
 
-async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number | null, showInspectItems: boolean = true) {
+// Map OEM service names to shop interval keys
+const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
+  oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i],
+  tire_rotation: [/tire rotation/i, /rotate tire/i],
+  cabin_air: [/cabin air/i, /cabin filter/i],
+  engine_air: [/air filter/i, /engine air/i],
+  coolant: [/coolant/i, /antifreeze/i, /radiator flush/i],
+  trans_auto: [/automatic trans/i, /atf/i, /auto trans/i],
+  trans_manual: [/manual trans/i, /mtf/i],
+  transfer_case: [/transfer case/i],
+  differential: [/differential/i],
+  serpentine_belt: [/serpentine/i, /drive belt/i],
+  fuel_system: [/fuel system/i, /fuel injection/i, /injector clean/i],
+  fuel_filter: [/fuel filter/i],
+  brake_pads: [/brake pad/i, /brake lining/i, /brake shoe/i],
+  power_steering: [/power steering/i],
+  battery: [/battery/i],
+  ac_refrigerant: [/a\/c/i, /refrigerant/i, /ac refr/i],
+};
+
+function mapServiceToKey(serviceName: string): string | null {
+  const name = serviceName?.toLowerCase() || '';
+  for (const [key, patterns] of Object.entries(SERVICE_KEY_PATTERNS)) {
+    if (patterns.some(p => p.test(name))) {
+      return key;
+    }
+  }
+  return null;
+}
+
+type LastPerformedInfo = {
+  source: 'shop' | 'external' | 'unknown';
+  date?: Date;
+  mileage?: number;
+};
+
+function getLastPerformedInfo(
+  serviceName: string,
+  shopWorkOrders: any[],
+  carfaxRecords: any[] | null
+): LastPerformedInfo {
+  const serviceKey = mapServiceToKey(serviceName);
+  if (!serviceKey) {
+    return { source: 'unknown' };
+  }
+  
+  let shopLastDone: { date?: Date; mileage?: number } | null = null;
+  let carfaxLastDone: { date?: Date; mileage?: number } | null = null;
+  
+  // Check shop work orders for this service (already preloaded)
+  const servicePatterns = SERVICE_KEY_PATTERNS[serviceKey];
+  if (servicePatterns && shopWorkOrders.length > 0) {
+    for (const wo of shopWorkOrders) {
+      const jobs = wo.jobs || [];
+      for (const job of jobs) {
+        const jobName = job.name || job.description || '';
+        if (servicePatterns.some(p => p.test(jobName))) {
+          shopLastDone = {
+            date: wo.closedDate ? new Date(wo.closedDate) : undefined,
+            mileage: wo.mileageOut || wo.mileageIn
+          };
+          break;
+        }
+      }
+      if (shopLastDone) break;
+    }
+  }
+  
+  // Check CARFAX records
+  if (carfaxRecords?.length && servicePatterns) {
+    for (const record of carfaxRecords) {
+      const desc = record.description || '';
+      if (servicePatterns.some(p => p.test(desc))) {
+        carfaxLastDone = {
+          date: record.date ? new Date(record.date) : undefined,
+          mileage: record.odometer
+        };
+        break;
+      }
+    }
+  }
+  
+  // Determine which is more recent
+  if (shopLastDone && carfaxLastDone) {
+    if (shopLastDone.date && carfaxLastDone.date) {
+      if (shopLastDone.date >= carfaxLastDone.date) {
+        return { source: 'shop', ...shopLastDone };
+      } else {
+        return { source: 'external', ...carfaxLastDone };
+      }
+    }
+    // If no dates, prefer shop
+    return { source: 'shop', ...shopLastDone };
+  } else if (shopLastDone) {
+    return { source: 'shop', ...shopLastDone };
+  } else if (carfaxLastDone) {
+    return { source: 'external', ...carfaxLastDone };
+  }
+  
+  return { source: 'unknown' };
+}
+
+type ShopIntervals = Record<string, { useShop: boolean; miles: number | null; months: number | null }>;
+
+async function runOnDemandAnalysis(
+  shopId: number, 
+  vin: string, 
+  mileage: number | null, 
+  showInspectItems: boolean = true,
+  shopIntervals: ShopIntervals = {},
+  carfaxRecords: any[] | null = null
+) {
   const db = await getDb();
   
   const currentMileage = mileage || 0;
@@ -42,6 +153,18 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
   
   const SOON_MILES = 3000; // Same as dashboard
   const recommendations: any[] = [];
+  
+  // Preload shop work orders ONCE for this vehicle (for performance)
+  let shopWorkOrders: any[] = [];
+  try {
+    shopWorkOrders = await db.collection("tekmetric_work_orders").find({
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      vehicleVin: vin.toUpperCase()
+    }).sort({ closedDate: -1 }).limit(50).toArray();
+    console.log(`[Extension] Preloaded ${shopWorkOrders.length} work orders for VIN ${vin}`);
+  } catch (e) {
+    console.warn('[Extension] Error preloading shop work orders:', e);
+  }
 
   // Fetch OEM maintenance schedule using the working DataOne API
   try {
@@ -50,22 +173,39 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
     
     if (oemResult.ok && oemResult.items?.length > 0) {
       for (const item of oemResult.items) {
-        const intervalMiles = item.miles || 0;
-        const intervalMonths = item.months || null;
+        const oemIntervalMiles = item.miles || 0;
+        const oemIntervalMonths = item.months || null;
         
         // Skip items with no mileage interval
-        if (!intervalMiles) continue;
+        if (!oemIntervalMiles) continue;
         
         // Filter inspect items if preference is set
         if (!showInspectItems && isInspectItem(item.maintenance_name)) {
           continue;
         }
         
-        // Calculate milesToGo: how many miles until next service
-        // If current mileage is 139,000 and interval is 7,500:
-        // - We've gone through 139000/7500 = 18.5 intervals
-        // - Next due at ceil(18.5) * 7500 = 19 * 7500 = 142,500
-        // - milesToGo = 142,500 - 139,000 = 3,500
+        // Determine where service was last performed (uses preloaded data)
+        const lastPerformed = getLastPerformedInfo(item.maintenance_name, shopWorkOrders, carfaxRecords);
+        const serviceKey = mapServiceToKey(item.maintenance_name);
+        
+        // Decide which interval to use based on last performed location
+        let intervalMiles = oemIntervalMiles;
+        let intervalMonths = oemIntervalMonths;
+        let intervalSource = 'oem';
+        
+        // Use shop intervals only if:
+        // 1. Service was last done at shop, AND
+        // 2. Shop has custom intervals configured for this service
+        if (lastPerformed.source === 'shop' && serviceKey && shopIntervals[serviceKey]?.useShop) {
+          const shopInterval = shopIntervals[serviceKey];
+          if (shopInterval.miles) {
+            intervalMiles = shopInterval.miles;
+            intervalMonths = shopInterval.months;
+            intervalSource = 'shop';
+          }
+        }
+        
+        // Calculate milesToGo based on chosen interval
         const intervalsPassed = currentMileage > 0 ? Math.floor(currentMileage / intervalMiles) : 0;
         const nextDueMileage = (intervalsPassed + 1) * intervalMiles;
         const milesToGo = currentMileage > 0 ? nextDueMileage - currentMileage : intervalMiles;
@@ -80,15 +220,22 @@ async function runOnDemandAnalysis(shopId: number, vin: string, mileage: number 
           status = "upcoming";
         }
         
+        // Format interval text based on source
+        const sourceLabel = intervalSource === 'shop' ? 'Shop' : 'OEM';
+        const intervalText = `${sourceLabel}: ${formatIntervalText(intervalMiles, intervalMonths || undefined)}`;
+        
         recommendations.push({
           service: item.maintenance_name,
           category: item.maintenance_category,
           dueMileage: nextDueMileage,
           interval: intervalMiles,
           intervalMonths,
-          intervalText: `OEM: ${formatIntervalText(intervalMiles, intervalMonths || undefined)}`,
+          intervalText,
+          intervalSource, // 'shop' or 'oem'
+          lastPerformedBy: lastPerformed.source,
+          lastPerformedMileage: lastPerformed.mileage,
           milesToGo,
-          source: "oe",
+          source: intervalSource === 'shop' ? 'shop' : 'oe',
           status
         });
       }
@@ -193,6 +340,9 @@ export async function GET(request: NextRequest) {
     
     // Get shop preferences - showInspectItems defaults to true if not set
     const showInspectItems = shopDoc?.preferences?.showInspectItems !== false;
+    
+    // Get shop maintenance intervals
+    const shopIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
 
     let vehicle = null;
     let mileage = null;
@@ -266,7 +416,26 @@ export async function GET(request: NextRequest) {
     
     if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged) {
       try {
-        const recommendations = await runOnDemandAnalysis(mosShopId, vin, mileage, showInspectItems);
+        // Fetch CARFAX service history for determining where services were last performed
+        let carfaxRecords: any[] | null = null;
+        try {
+          const carfaxResult = await fetchCarfaxWithCache(mosShopId, vin);
+          if (carfaxResult.ok && carfaxResult.serviceRecords?.length) {
+            // Sort by date descending (most recent first)
+            carfaxRecords = carfaxResult.serviceRecords.sort((a, b) => {
+              const dateA = a.date ? new Date(a.date).getTime() : 0;
+              const dateB = b.date ? new Date(b.date).getTime() : 0;
+              return dateB - dateA;
+            });
+            console.log(`[Extension] CARFAX: ${carfaxRecords.length} service records`);
+          }
+        } catch (e) {
+          console.warn('[Extension] CARFAX fetch failed (will use OEM intervals):', e);
+        }
+        
+        const recommendations = await runOnDemandAnalysis(
+          mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords
+        );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
         console.error("[Extension] On-demand analysis failed:", e);
@@ -286,6 +455,7 @@ export async function GET(request: NextRequest) {
           dueAt: rec.dueMileage,
           interval: rec.interval,
           intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} mi`,
+          intervalSource: rec.intervalSource || 'oem', // 'shop' or 'oem'
           source: rec.source || "oe",
           priority: rec.priority,
           laborHours: rec.laborHours || 1,

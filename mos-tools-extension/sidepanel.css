@@ -347,6 +347,24 @@ body {
   font-size: 12px;
   color: var(--gray-500);
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.interval-source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.interval-source.shop {
+  color: var(--success);
+}
+
+.interval-source svg {
+  width: 14px;
+  height: 14px;
 }
 
 .btn-add {

@@ -399,17 +399,26 @@ function highlightCannedJob(serviceName, attempts = 0) {
 }
 
 function createServiceItemHTML(item, type) {
-  // Show intervalText (e.g., "OEM: 7,500 mi / 6mo") instead of just "Due at X mi"
+  // Show intervalText (e.g., "OEM: 7,500 mi / 6mo" or "Shop: 5,000 mi / 3mo")
   const detail = item.intervalText || 
                  (item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : 
                   item.interval ? `Every ${item.interval.toLocaleString()} mi` : '');
   const itemId = `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
+  // Show shop icon for shop-based intervals
+  const isShopInterval = item.intervalSource === 'shop';
+  const sourceIcon = isShopInterval ? 
+    `<span class="interval-source shop" title="Shop recommendation">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+      </svg>
+    </span>` : '';
+  
   return `
     <li class="service-item">
       <div class="service-info">
         <div class="service-name">${escapeHtml(item.name)}</div>
-        ${detail ? `<div class="service-detail">${detail}</div>` : ''}
+        ${detail ? `<div class="service-detail">${sourceIcon}${detail}</div>` : ''}
       </div>
       <div class="add-dropdown">
         <button class="btn-add btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
