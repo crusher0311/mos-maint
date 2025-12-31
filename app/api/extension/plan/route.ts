@@ -382,10 +382,23 @@ export async function GET(request: NextRequest) {
                 const data = await res.json();
                 console.log(`[Extension] Tekmetric API data: vehicleId=${data?.vehicleId}, vin=${data?.vehicle?.vin || data?.vehicleVin}`);
                 if (data) {
-                  workOrder = {
-                    vin: data.vehicle?.vin || data.vehicleVin,
-                    odometer: data.milesIn || data.mileageIn || data.vehicle?.mileage
-                  };
+                  let roVin = data.vehicle?.vin || data.vehicleVin;
+                  const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
+                  
+                  // If no VIN but we have vehicleId, fetch vehicle details
+                  if (!roVin && data.vehicleId) {
+                    console.log(`[Extension] Fetching vehicle ${data.vehicleId} from Tekmetric API`);
+                    const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
+                      headers: { Authorization: `Bearer ${tekApiToken}` }
+                    });
+                    if (vehRes.ok) {
+                      const vehData = await vehRes.json();
+                      roVin = vehData?.vin;
+                      console.log(`[Extension] Vehicle API returned: vin=${roVin}`);
+                    }
+                  }
+                  
+                  workOrder = { vin: roVin, odometer };
                   console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
                 }
               } else {
