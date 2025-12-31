@@ -20,11 +20,11 @@ function detectContext() {
   };
 
   // Extract shop ID and RO ID from URL
-  // Patterns: /shop/123/repair-order/456 or /sandbox/123/repair-order/456
-  const urlMatch = url.match(/\/(shop|sandbox|cba)\/(\d+)\/repair-order\/(\d+)/);
+  // Patterns: /admin/shop/123/repair-orders/456 or /shop/123/repair-orders/456
+  const urlMatch = url.match(/\/(?:admin\/)?shop\/(\d+)\/repair-orders\/(\d+)/);
   if (urlMatch) {
-    context.shopId = urlMatch[2];
-    context.roId = urlMatch[3];
+    context.shopId = urlMatch[1];
+    context.roId = urlMatch[2];
   }
 
   // Try to extract vehicle info from the page
