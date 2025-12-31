@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -12,21 +22,19 @@ export async function GET(request: NextRequest) {
     const model = searchParams.get("model");
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
 
-    // Validate token - if shopId provided, also validate shop access
     const auth = await validateExtensionToken(request, shopId || undefined);
     if (!auth.authorized) {
       const status = auth.error === "Unauthorized shop access" ? 403 : 401;
-      return NextResponse.json({ error: auth.error }, { status });
+      return NextResponse.json({ error: auth.error }, { status, headers: corsHeaders });
     }
 
     if (!query.trim()) {
-      return NextResponse.json({ jobs: [] });
+      return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
 
     const db = await getDb();
     const jobsCollection = db.collection("job_index");
 
-    // Build search query - scope to user's shops if no specific shopId
     const searchQuery: Record<string, any> = {
       $text: { $search: query }
     };
@@ -34,14 +42,12 @@ export async function GET(request: NextRequest) {
     if (shopId) {
       searchQuery.shopId = parseInt(shopId);
     } else {
-      // If no shopId specified, only search user's accessible shops
       const userShopIds = getUserShopIds(auth.user);
       if (userShopIds.length > 0) {
         searchQuery.shopId = { $in: userShopIds.map(id => parseInt(id)) };
       }
     }
 
-    // Search with text score using aggregation
     const jobs: any[] = await jobsCollection
       .aggregate([
         { $match: searchQuery },
@@ -51,7 +57,6 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
 
-    // Score and sort by vehicle match
     const scoredJobs = jobs.map((job: any) => {
       let matchScore = 0;
       
@@ -64,7 +69,6 @@ export async function GET(request: NextRequest) {
 
     scoredJobs.sort((a: any, b: any) => b.matchScore - a.matchScore);
 
-    // Format response
     const formattedJobs = scoredJobs.slice(0, limit).map((job: any) => ({
       _id: job._id.toString(),
       title: job.job?.title || job.title || "Job",
@@ -97,13 +101,13 @@ export async function GET(request: NextRequest) {
       jobs: formattedJobs,
       total: formattedJobs.length,
       query
-    });
+    }, { headers: corsHeaders });
 
   } catch (error: any) {
     console.error("[Extension Jobs Search] Error:", error);
     return NextResponse.json(
       { error: "Search failed" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
