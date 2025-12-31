@@ -19,11 +19,12 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q") || "";
     const smsShopId = searchParams.get("shopId");
+    const roId = searchParams.get("roId"); // RO ID for vehicle lookup fallback
     const provider = searchParams.get("provider") || "tekmetric";
-    const year = searchParams.get("year");
-    const make = searchParams.get("make");
-    const model = searchParams.get("model");
-    const engine = searchParams.get("engine");
+    let year = searchParams.get("year");
+    let make = searchParams.get("make");
+    let model = searchParams.get("model");
+    let engine = searchParams.get("engine");
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
 
     const auth = await validateExtensionToken(request);
@@ -64,6 +65,26 @@ export async function GET(request: NextRequest) {
 
     if (!query.trim()) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
+    }
+    
+    // If no vehicle context provided but we have roId, look up the work order to get vehicle info
+    if (!year && !make && !model && roId && mosShopId) {
+      const workOrder = await db.collection("work_orders").findOne({
+        shopId: mosShopId,
+        $or: [
+          { roId: roId },
+          { roId: parseInt(roId) },
+          { "tekmetric.repairOrderId": parseInt(roId) }
+        ]
+      });
+      
+      if (workOrder?.vehicle) {
+        year = workOrder.vehicle.year?.toString() || null;
+        make = workOrder.vehicle.make || null;
+        model = workOrder.vehicle.model || null;
+        engine = workOrder.vehicle.engine || null;
+        console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
+      }
     }
     
     // Check if shop is part of an enterprise - if so, search all enterprise shops

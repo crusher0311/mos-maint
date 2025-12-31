@@ -489,6 +489,7 @@ async function handleJobSearch() {
   try {
     const params = new URLSearchParams({ q: query });
     if (currentContext?.shopId) params.set('shopId', currentContext.shopId);
+    if (currentContext?.roId) params.set('roId', currentContext.roId); // Pass roId for server-side vehicle lookup
     params.set('provider', currentContext?.provider || 'tekmetric');
     if (currentContext?.vehicle) {
       if (currentContext.vehicle.year) params.set('year', currentContext.vehicle.year);
