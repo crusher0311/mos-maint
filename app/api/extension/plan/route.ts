@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,21 +27,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const auth = await validateExtensionToken(request);
+    if (!auth.authorized || !auth.user) {
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
+    }
+
     const db = await getDb();
+    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
+    const isPlatformAdmin = auth.user.role === "platform_admin";
 
     let mosShopId: number | null = null;
     
     if (provider === "tekmetric") {
-      const shop = await db.collection("shops").findOne({
-        "tekmetric.shopId": parseInt(smsShopId)
-      });
+      const query: any = { "tekmetric.shopId": parseInt(smsShopId) };
+      if (!isPlatformAdmin) {
+        query.shopId = { $in: userShopIds };
+      }
+      const shop = await db.collection("shops").findOne(query);
       if (shop) {
         mosShopId = shop.shopId;
       }
     } else if (provider === "protractor") {
-      const shop = await db.collection("shops").findOne({
-        "protractor.connectionId": smsShopId
-      });
+      const query: any = { "protractor.connectionId": smsShopId };
+      if (!isPlatformAdmin) {
+        query.shopId = { $in: userShopIds };
+      }
+      const shop = await db.collection("shops").findOne(query);
       if (shop) {
         mosShopId = shop.shopId;
       }
@@ -49,15 +60,9 @@ export async function GET(request: NextRequest) {
 
     if (!mosShopId) {
       return NextResponse.json(
-        { error: `Shop not configured for ${provider}` },
+        { error: `No accessible shop configured for ${provider}` },
         { status: 404, headers: corsHeaders }
       );
-    }
-
-    const auth = await validateExtensionToken(request, String(mosShopId));
-    if (!auth.authorized) {
-      const status = auth.error === "Unauthorized shop access" ? 403 : 401;
-      return NextResponse.json({ error: auth.error }, { status, headers: corsHeaders });
     }
 
     let vehicle = null;
