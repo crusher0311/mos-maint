@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getEnterpriseByShopId } from "@/lib/enterprise";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,17 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   
-  const matchStage: any = { shopId };
+  // Check if shop is part of an enterprise - if so, search all enterprise shops
+  let searchShopIds: number[] = [shopId];
+  const enterprise = await getEnterpriseByShopId(shopId);
+  if (enterprise && enterprise.shopIds.length > 1) {
+    searchShopIds = enterprise.shopIds;
+    console.log(`[Jobs Search] Enterprise search: shops ${searchShopIds.join(', ')}`);
+  }
+  
+  const matchStage: any = searchShopIds.length === 1 
+    ? { shopId: searchShopIds[0] }
+    : { shopId: { $in: searchShopIds } };
   
   // Stopwords: common verbs and filler terms that don't identify the service
   const stopwords = new Set([

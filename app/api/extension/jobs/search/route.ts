@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
+import { getEnterpriseByShopId } from "@/lib/enterprise";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,7 +66,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
-    console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, shopId: ${mosShopId}`);
+    // Check if shop is part of an enterprise - if so, search all enterprise shops
+    let searchShopIds: number[] = [];
+    if (mosShopId) {
+      const enterprise = await getEnterpriseByShopId(mosShopId);
+      if (enterprise && enterprise.shopIds.length > 1) {
+        searchShopIds = enterprise.shopIds;
+        console.log(`[Jobs Search] Enterprise search: shops ${searchShopIds.join(', ')}`);
+      } else {
+        searchShopIds = [mosShopId];
+      }
+    } else if (!isPlatformAdmin) {
+      searchShopIds = userShopIds;
+    }
+    
+    console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, shopIds: ${searchShopIds.join(',')}`);
 
     const jobsCollection = db.collection("job_index");
 
@@ -74,11 +89,11 @@ export async function GET(request: NextRequest) {
     
     const matchStage: Record<string, any> = {};
     
-    // Shop filter
-    if (mosShopId) {
-      matchStage.shopId = mosShopId;
-    } else if (!isPlatformAdmin) {
-      matchStage.shopId = { $in: userShopIds };
+    // Shop filter - search all enterprise shops if applicable
+    if (searchShopIds.length === 1) {
+      matchStage.shopId = searchShopIds[0];
+    } else if (searchShopIds.length > 1) {
+      matchStage.shopId = { $in: searchShopIds };
     }
     
     // Text search using same logic as web app
