@@ -280,6 +280,20 @@ async function loadPlan() {
 function renderPlan(data) {
   elements.planLoading.classList.add('hidden');
   
+  // Update vehicle/mileage display from API response (more reliable than page scraping)
+  if (data.vehicle) {
+    const v = data.vehicle;
+    if (v.year && v.make && v.model) {
+      elements.vehicleDisplay.textContent = `${v.year} ${v.make} ${v.model}`;
+    } else if (v.vin) {
+      elements.vehicleDisplay.textContent = `VIN: ${v.vin.slice(-6)}`;
+    }
+  }
+  if (data.mileage) {
+    elements.mileageDisplay.textContent = `${data.mileage.toLocaleString()} mi`;
+    elements.mileageDisplay.classList.remove('hidden');
+  }
+  
   const hasOverdue = data.overdue && data.overdue.length > 0;
   const hasDueSoon = data.dueSoon && data.dueSoon.length > 0;
   const hasRecommended = data.recommended && data.recommended.length > 0;
