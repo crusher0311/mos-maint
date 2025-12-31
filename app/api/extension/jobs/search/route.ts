@@ -216,8 +216,27 @@ export async function GET(request: NextRequest) {
       
       // Extract labor hours from labor lines
       const laborLines = lines.filter((l: any) => l.lineType === "labor");
+      const partLines = lines.filter((l: any) => l.lineType === "part");
+      
       const laborHours = laborLines.reduce((sum: number, l: any) => 
         sum + (parseFloat(l.hours) || parseFloat(l.quantity) || 0), 0);
+      
+      // Calculate parts amount from line items if stored total is 0
+      const calculatedPartsAmount = partLines.reduce((sum: number, l: any) => {
+        const qty = l.quantity || 1;
+        const price = l.unitPrice || l.extendedPrice || 0;
+        return sum + (qty * price * priceMultiplier);
+      }, 0);
+      
+      // Calculate labor amount from line items if stored total is 0
+      const calculatedLaborAmount = laborLines.reduce((sum: number, l: any) => {
+        const price = l.unitPrice || l.extendedPrice || 0;
+        return sum + (price * priceMultiplier);
+      }, 0);
+      
+      const partsAmount = rawTotals.partsAmount ? rawTotals.partsAmount * priceMultiplier : calculatedPartsAmount;
+      const laborAmount = rawTotals.laborAmount ? rawTotals.laborAmount * priceMultiplier : calculatedLaborAmount;
+      const totalAmount = rawTotals.totalAmount ? rawTotals.totalAmount * priceMultiplier : (partsAmount + laborAmount);
       
       return {
         _id: job._id.toString(),
@@ -230,21 +249,19 @@ export async function GET(request: NextRequest) {
           name: l.description,
           hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0
         })),
-        parts: lines
-          .filter((l: any) => l.lineType === "part")
-          .map((l: any) => ({
-            name: l.description,
-            partNumber: l.partNumber,
-            brand: l.manufacturer,
-            quantity: l.quantity || 1,
-            cost: (l.cost || 0) * priceMultiplier,
-            retail: (l.unitPrice || l.extendedPrice || 0) * priceMultiplier
-          })),
+        parts: partLines.map((l: any) => ({
+          name: l.description,
+          partNumber: l.partNumber,
+          brand: l.manufacturer,
+          quantity: l.quantity || 1,
+          cost: (l.cost || 0) * priceMultiplier,
+          retail: (l.unitPrice || l.extendedPrice || 0) * priceMultiplier
+        })),
         totals: {
           laborHours: rawTotals.laborHours || laborHours || 0,
-          laborAmount: (rawTotals.laborAmount || 0) * priceMultiplier,
-          partsAmount: (rawTotals.partsAmount || 0) * priceMultiplier,
-          totalAmount: (rawTotals.totalAmount || 0) * priceMultiplier,
+          laborAmount,
+          partsAmount,
+          totalAmount,
         },
         matchScore: job.matchScore,
         matchBand: job.matchBand,
