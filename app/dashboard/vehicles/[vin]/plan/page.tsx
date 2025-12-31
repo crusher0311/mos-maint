@@ -1030,9 +1030,9 @@ async function PlanContent({ params }: PageProps) {
       ]
     }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
     db.collection("tekmetric_work_orders").find({
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      vehicleVin: vinUpper
-    }).sort({ closedDate: -1 }).limit(50).toArray(),
+      shopId: Number(shopId),
+      vin: vinUpper
+    }).sort({ completedDate: -1 }).limit(50).toArray(),
     db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
   ]);
 
@@ -1075,10 +1075,11 @@ async function PlanContent({ params }: PageProps) {
   
   // Extract service history from Tekmetric completed work orders
   for (const wo of tekmetricCompletedWOs) {
-    const mileage = wo.mileageOut ?? wo.mileageIn ?? null;
-    const date = wo.closedDate ? new Date(wo.closedDate) : null;
+    const mileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn ?? null;
+    const date = wo.completedDate ? new Date(wo.completedDate) : null;
     
-    const jobs = wo.jobs ?? [];
+    // Jobs are stored in wo.data.jobs (canonical) or wo.jobs (fallback for legacy documents)
+    const jobs = wo.data?.jobs ?? wo.jobs ?? [];
     for (const job of jobs) {
       const serviceName = job.name ?? job.description ?? "";
       if (serviceName) {
