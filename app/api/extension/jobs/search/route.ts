@@ -67,43 +67,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
-    // If no vehicle context provided but we have roId, look up the work order to get VIN, then get vehicle
+    // If no vehicle context provided but we have roId, look up the work order to get vehicle info
     if (!year && !make && !model && roId && mosShopId) {
-      // Get VIN from tekmetric_work_orders
+      // Get vehicle info directly from tekmetric_work_orders (stores vehicleYear/vehicleMake/vehicleModel)
       const workOrder = await db.collection("tekmetric_work_orders").findOne({
         shopId: { $in: [String(mosShopId), Number(mosShopId)] },
         workOrderId: String(roId)
       });
       
-      if (workOrder?.vin) {
-        // Look up vehicle details - first in current shop, then across enterprise shops
-        let vehicle = await db.collection("vehicles").findOne({
-          vin: workOrder.vin.toUpperCase(),
-          shopId: mosShopId
-        });
-        
-        // If not found, check enterprise shops
-        if (!vehicle) {
-          const enterprise = await getEnterpriseByShopId(mosShopId);
-          if (enterprise && enterprise.shopIds.length > 1) {
-            vehicle = await db.collection("vehicles").findOne({
-              vin: workOrder.vin.toUpperCase(),
-              shopId: { $in: enterprise.shopIds }
-            });
-          }
-        }
-        
-        if (vehicle) {
-          year = vehicle.year?.toString() || null;
-          make = vehicle.make || null;
-          model = vehicle.model || null;
-          engine = vehicle.engine || null;
-          console.log(`[Jobs Search] Resolved vehicle from VIN ${workOrder.vin}: ${year} ${make} ${model}`);
-        } else {
-          console.log(`[Jobs Search] No vehicle record for VIN ${workOrder.vin}`);
-        }
+      if (workOrder) {
+        // Work order has vehicle fields at top level (vehicleYear, vehicleMake, etc.)
+        year = workOrder.vehicleYear?.toString() || null;
+        make = workOrder.vehicleMake || null;
+        model = workOrder.vehicleModel || null;
+        engine = workOrder.vehicleEngine || null;
+        console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
       } else {
-        console.log(`[Jobs Search] No VIN found in WO ${roId} for shop ${mosShopId}`);
+        console.log(`[Jobs Search] No WO found for roId ${roId} in shop ${mosShopId}`);
       }
     }
     
