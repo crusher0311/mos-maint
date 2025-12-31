@@ -500,29 +500,61 @@ function renderJobResults(jobs) {
   setupJobItemHandlers();
 }
 
+function getBandStyle(band) {
+  switch (band) {
+    case 'exact': return 'badge-exact';
+    case 'likely': return 'badge-likely';
+    case 'possible': return 'badge-possible';
+    default: return 'badge-poor';
+  }
+}
+
 function createJobItemHTML(job) {
   const vehicle = job.vehicle ? 
     `${job.vehicle.year || ''} ${job.vehicle.make || ''} ${job.vehicle.model || ''}`.trim() : '';
+  const engine = job.vehicle?.engine ? ` | ${job.vehicle.engine}` : '';
   
   const totalAmount = job.totals?.totalAmount || 0;
+  const laborHours = job.laborItems?.reduce((sum, l) => sum + (l.hours || 0), 0) || 0;
+  const partsCount = job.parts?.length || 0;
+  const lineCount = (job.laborItems?.length || 0) + partsCount;
+  
+  const matchBand = job.matchBand || 'poor';
+  const matchLabel = job.matchBandLabel || `${job.matchScore || 0}%`;
+  const matchScore = job.matchScore || 0;
+  const matchReason = job.matchReason || '';
   
   return `
     <li class="job-item" data-job-id="${job._id}">
       <div class="job-header">
-        <div>
-          <div class="job-title">${escapeHtml(job.title || job.name)}</div>
-          <div class="job-meta">${vehicle} ${job.workOrderNumber ? `• RO #${job.workOrderNumber}` : ''}</div>
+        <div class="job-header-left">
+          <div class="job-title-row">
+            <span class="job-title">${escapeHtml(job.title || job.name)}</span>
+            <span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>
+            <span class="match-score">${matchScore}%</span>
+          </div>
+          <div class="job-vehicle">${vehicle}${engine}</div>
+          ${matchReason ? `<div class="job-match-reason">${escapeHtml(matchReason)}</div>` : ''}
         </div>
-        <div class="job-price">$${totalAmount.toFixed(2)}</div>
+        <div class="job-header-right">
+          <div class="job-price">$${totalAmount.toFixed(2)}</div>
+          <div class="job-lines">${lineCount} line${lineCount !== 1 ? 's' : ''}</div>
+        </div>
       </div>
       <div class="job-details hidden">
+        <div class="job-summary-row">
+          <div class="summary-item"><span class="summary-label">Labor:</span> ${laborHours.toFixed(1)}h</div>
+          <div class="summary-item"><span class="summary-label">Parts:</span> ${partsCount}</div>
+          <div class="summary-item"><span class="summary-label">Total:</span> $${totalAmount.toFixed(2)}</div>
+        </div>
         ${job.laborItems?.length ? `
           <div class="job-section">
             <div class="job-section-title">Labor</div>
             ${job.laborItems.map(item => `
               <div class="line-item">
-                <span>${escapeHtml(item.name || item.description)}</span>
-                <span>${item.hours}h</span>
+                <span class="line-type labor">labor</span>
+                <span class="line-desc">${escapeHtml(item.name || item.description)}</span>
+                <span class="line-qty">${item.hours}h</span>
               </div>
             `).join('')}
           </div>
@@ -532,13 +564,17 @@ function createJobItemHTML(job) {
             <div class="job-section-title">Parts</div>
             ${job.parts.map(part => `
               <div class="line-item">
-                <span>${escapeHtml(part.name || part.description)} ${part.partNumber ? `(${part.partNumber})` : ''}</span>
-                <span>x${part.quantity}</span>
+                <span class="line-type part">part</span>
+                <span class="line-desc">${escapeHtml(part.name || part.description)}</span>
+                ${part.partNumber ? `<span class="line-pn">${part.partNumber}</span>` : ''}
+                <span class="line-qty">x${part.quantity}</span>
+                <span class="line-price">$${(part.retail || 0).toFixed(2)}</span>
               </div>
             `).join('')}
           </div>
         ` : ''}
-        <div class="job-actions">
+        <div class="job-footer">
+          <div class="job-meta">WO #${job.workOrderNumber || 'N/A'}</div>
           <button class="btn-add btn-add-job" data-job='${JSON.stringify(job)}'>
             + Add to RO
           </button>

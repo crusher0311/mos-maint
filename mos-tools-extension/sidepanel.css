@@ -508,6 +508,158 @@ body {
   border-top: 1px solid var(--gray-200);
 }
 
+/* ==================== Job Lookup (Web App Style) ==================== */
+.job-header-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.job-header-right {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.job-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.job-vehicle {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 4px;
+}
+
+.job-match-reason {
+  font-size: 11px;
+  color: var(--gray-400);
+  margin-top: 2px;
+}
+
+.job-lines {
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.match-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.badge-exact {
+  color: #15803d;
+  background: #dcfce7;
+  border-color: #bbf7d0;
+}
+
+.badge-likely {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.badge-possible {
+  color: #b45309;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.badge-poor {
+  color: var(--gray-600);
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+}
+
+.match-score {
+  font-size: 11px;
+  color: var(--gray-400);
+}
+
+.job-summary-row {
+  display: flex;
+  gap: 16px;
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-label {
+  color: var(--gray-500);
+}
+
+.line-type {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.line-type.labor {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.line-type.part {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.line-desc {
+  flex: 1;
+  margin: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-pn {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-right: 8px;
+}
+
+.line-qty {
+  color: var(--gray-600);
+  flex-shrink: 0;
+}
+
+.line-price {
+  font-weight: 500;
+  color: var(--gray-800);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.job-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gray-200);
+}
+
+.job-footer .job-meta {
+  font-size: 11px;
+  color: var(--gray-400);
+  margin-top: 0;
+}
+
 /* ==================== Canned Jobs Tabs ==================== */
 .canned-tabs {
   display: flex;
