@@ -179,11 +179,27 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
   const invoices = await fetchInvoicesForDateRange(config, startStr, endStr);
   console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices`);
 
+  let loggedSample = false;
   for (const invoice of invoices) {
     const details = await fetchInvoiceDetails(config, invoice.ID);
     if (!details) continue;
 
     const servicePackages = await fetchServicePackages(config, invoice.ID);
+    
+    // Log first invoice structure for debugging
+    if (!loggedSample && servicePackages.length > 0) {
+      console.log(`[Backfill] Shop ${shopId} sample invoice structure:`, {
+        hasDetails: !!details,
+        hasServiceItem: !!details?.ServiceItem,
+        servicePackagesCount: servicePackages.length,
+        firstPkgKeys: servicePackages[0] ? Object.keys(servicePackages[0]).slice(0, 10) : [],
+        firstPkgTitle: servicePackages[0]?.ServicePackageHeader?.Title || servicePackages[0]?.Title || 'NO_TITLE',
+        firstPkgLinesCount: servicePackages[0]?.ServicePackageLines?.ItemCollection?.length || 
+                           servicePackages[0]?.ServicePackageLines?.length || 0,
+      });
+      loggedSample = true;
+    }
+    
     const enrichedDetails = { ...details, ServicePackages: servicePackages };
 
     const jobEntries = extractJobIndexFromWorkOrder(shopId, enrichedDetails, "protractor");
