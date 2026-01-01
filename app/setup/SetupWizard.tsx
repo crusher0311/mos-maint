@@ -24,6 +24,12 @@ interface IntegrationData {
     apiKey?: string;
     shopId?: string;
   };
+  tekmetric?: {
+    shopId?: string;
+  };
+  carfax?: {
+    locationId?: string;
+  };
 }
 
 export default function SetupWizard() {
@@ -76,6 +82,8 @@ export default function SetupWizard() {
           autovitalsPersonalCode: integrations.autovitals?.personalCode,
           protractorApiKey: integrations.protractor?.apiKey,
           protractorShopId: integrations.protractor?.shopId,
+          tekmetricShopId: integrations.tekmetric?.shopId,
+          carfaxLocationId: integrations.carfax?.locationId,
         }),
       });
 
@@ -363,6 +371,86 @@ export default function SetupWizard() {
                   onChange={(e) => setIntegrations({ 
                     ...integrations, 
                     protractor: { ...integrations.protractor, apiKey: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Tekmetric Integration */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleIntegration("tekmetric")}
+              className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <span className="text-orange-600 font-bold text-sm">TK</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900">Tekmetric</p>
+                  <p className="text-xs text-gray-500">Shop management & repair orders</p>
+                </div>
+              </div>
+              <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedIntegration === "tekmetric" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {expandedIntegration === "tekmetric" && (
+              <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                <p className="text-xs text-gray-600 mb-2">
+                  Enter your Tekmetric Shop ID (found in your Tekmetric account settings)
+                </p>
+                <input
+                  type="text"
+                  placeholder="Shop ID (e.g., 12345)"
+                  value={integrations.tekmetric?.shopId || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    tekmetric: { ...integrations.tekmetric, shopId: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* CARFAX Integration */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleIntegration("carfax")}
+              className="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                  <span className="text-red-600 font-bold text-sm">CF</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-gray-900">CARFAX</p>
+                  <p className="text-xs text-gray-500">Vehicle history reports</p>
+                </div>
+              </div>
+              <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedIntegration === "carfax" ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {expandedIntegration === "carfax" && (
+              <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                <p className="text-xs text-gray-600 mb-2">
+                  Enter your CARFAX Location ID from your CARFAX account
+                </p>
+                <input
+                  type="text"
+                  placeholder="Location ID"
+                  value={integrations.carfax?.locationId || ""}
+                  onChange={(e) => setIntegrations({ 
+                    ...integrations, 
+                    carfax: { ...integrations.carfax, locationId: e.target.value }
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                 />
