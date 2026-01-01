@@ -186,7 +186,7 @@ function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopI
           placeholder={displayDefaultDistance?.toLocaleString() ?? "—"}
           disabled={isDisabled}
           min={0}
-          step={distanceUnit === "kilometers" ? 1000 : 1000}
+          step={10}
           className={`w-full px-3 py-1.5 border rounded-lg text-center text-sm ${
             isDisabled
               ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
