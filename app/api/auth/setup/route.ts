@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getNextShopId } from "@/lib/ids";
+import { sendEmail, makeWelcomeEmail } from "@/lib/email";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
@@ -143,6 +144,17 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       expiresAt,
     });
+
+    // Send welcome email (fire-and-forget)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${req.headers.get("host") || "mos.tools"}`;
+    const loginUrl = `${baseUrl}/login`;
+    try {
+      const welcomeMsg = makeWelcomeEmail(shopName, loginUrl);
+      await sendEmail({ to: adminEmail, ...welcomeMsg });
+      console.log(`[Setup] Welcome email sent to ${adminEmail}`);
+    } catch (emailErr) {
+      console.error("[Setup] Failed to send welcome email:", emailErr);
+    }
 
     const res = NextResponse.json({ 
       ok: true, 

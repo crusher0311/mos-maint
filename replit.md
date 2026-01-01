@@ -45,6 +45,7 @@ The application features a modern SaaS-style design with a dark sidebar, light c
     *   **Chrome Extension VIN Tracking**: Extension plan views now track against trial limits with the same VIN+RO logic. Shows upgrade prompt when limit reached.
     *   **Tekmetric Automatic Backfill Worker**: Added continuous background worker for Tekmetric historical data, matching Protractor's approach. Processes 1-month chunks every 5 minutes, storing progress in `tekmetric_backfill_progress` collection. Both integrations can now backfill simultaneously.
     *   **Platform Admin Backfill Display Fix**: Fixed Tekmetric shops showing 0 backfill - now correctly queries `job_index` collection for Tekmetric and `tekmetric_backfill_progress` for progress tracking.
+    *   **Welcome Emails via Resend**: New shop owners receive a branded welcome email from noreply@mos.tools when they complete signup. Uses Resend API with mos.tools domain.
 *   **v1.7.2 Updates**:
     *   **Feature Gating Fix**: Fixed critical bug where Platform Admin feature toggles (Part Cross-Ref, Job Lookup, etc.) weren't reflected in the sidebar. The `/api/shop/features` endpoint now uses the unified `featureResolver` system instead of the deprecated `shop_features` collection.
     *   **Navigation Cleanup**: Removed Reporting, Billing, and Shop Onboarding from sidebar navigation until verified with live production users. Pages still exist but are hidden from menu.

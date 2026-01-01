@@ -106,6 +106,7 @@ build = ["npm", "run", "build"]
 DATAONE_API_URL = "http://3.144.191.161:3000"
 CARFAX_POST_URL = "https://servicesocket.carfax.com/data/1"
 CARFAX_PDI = "207625C61DD1C38E"
+EMAIL_FROM = "MOS Tools <noreply@mos.tools>"
 
 [userenv.development]
 DEV_AUTO_LOGIN = "true"

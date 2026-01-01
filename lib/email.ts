@@ -74,3 +74,49 @@ export function makeInviteEmail(inviteUrl: string, shopId: number, role: string)
   return { subject, html, text };
 }
 
+export function makeWelcomeEmail(shopName: string, loginUrl: string) {
+  const subject = `Welcome to MOS Tools!`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:30px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <h1 style="color:#1f2937;font-size:24px;margin-bottom:16px">Welcome to MOS Tools!</h1>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Thank you for signing up <b>${shopName}</b> with MOS Tools. Your account is ready to go!
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        With MOS Tools, you can:
+      </p>
+      
+      <ul style="color:#4b5563;font-size:16px;padding-left:20px">
+        <li>Get AI-powered maintenance recommendations for every vehicle</li>
+        <li>Search job history across your shop (or enterprise)</li>
+        <li>Track services and build customer trust</li>
+        <li>Integrate with Tekmetric, Protractor, AutoFlow, and more</li>
+      </ul>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${loginUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Go to Dashboard</a>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Need help getting started? Reply to this email or reach out to <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+      </p>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      
+      <p style="color:#9ca3af;font-size:14px;text-align:center">
+        MOS Tools - Smarter Maintenance for Auto Shops<br />
+        <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
+      </p>
+    </div>`;
+  const text = `Welcome to MOS Tools!\n\nThank you for signing up ${shopName}. Your account is ready.\n\nLog in: ${loginUrl}\n\nNeed help? Contact support@mos.tools`;
+  return { subject, html, text };
+}
+
