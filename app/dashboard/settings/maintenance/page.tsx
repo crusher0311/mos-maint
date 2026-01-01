@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import MaintenanceForm from "./MaintenanceForm";
+import MaintenanceHeader from "./MaintenanceHeader";
 import { revalidatePath } from "next/cache";
 import { Settings, Clock, Car } from "lucide-react";
 
@@ -52,9 +53,7 @@ export default async function MaintenanceSettingsPage() {
 
   return (
     <main className="p-6 space-y-6 max-w-2xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Maintenance Thresholds</h1>
-      </div>
+      <MaintenanceHeader />
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <div className="flex items-start gap-3">

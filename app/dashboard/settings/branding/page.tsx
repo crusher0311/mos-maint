@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, Loader2, Check, Image as ImageIcon } from "lucide-react";
+import CopyFromLocationDropdown from "@/components/ui/CopyFromLocationDropdown";
 
 export default function BrandingPage() {
   const [loading, setLoading] = useState(true);
@@ -129,7 +130,14 @@ export default function BrandingPage() {
 
   return (
     <main className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Shop Branding</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold text-gray-900">Shop Branding</h1>
+        <CopyFromLocationDropdown
+          settingType="branding"
+          onCopyComplete={fetchBranding}
+          disabled={saving}
+        />
+      </div>
       <p className="text-gray-600 mb-6">
         Upload your shop logo to display on service history records performed at your shop.
       </p>

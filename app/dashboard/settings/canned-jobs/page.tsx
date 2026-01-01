@@ -20,6 +20,7 @@ import {
   EyeOff,
   Eye,
 } from "lucide-react";
+import CopyFromLocationDropdown from "@/components/ui/CopyFromLocationDropdown";
 
 // Service keys aligned with CARFAX categories
 const SERVICE_KEYS = [
@@ -422,13 +423,20 @@ export default function CannedJobsSettingsPage() {
   return (
     <div className="max-w-3xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Package className="w-6 h-6" />
-          Canned Job Mappings
-          <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-            {integrationName}
-          </span>
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Package className="w-6 h-6" />
+            Canned Job Mappings
+            <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+              {integrationName}
+            </span>
+          </h1>
+          <CopyFromLocationDropdown
+            settingType="cannedJobs"
+            onCopyComplete={fetchMappings}
+            disabled={saving}
+          />
+        </div>
         <p className="mt-2 text-gray-600">
           Map maintenance recommendations to {integrationName} canned jobs. You can assign multiple canned jobs
           to each service - advisors will choose which one to apply when adding to the RO.
