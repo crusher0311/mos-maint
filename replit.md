@@ -30,11 +30,19 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Multi-Shop Management**: User authentication with role-based access for multiple shops.
 *   **Maintenance Planning**: Intelligent queue-based prefetching for vehicle data, configurable "Due Soon" thresholds, and display of OEM, shop, DVI, CARFAX, and Protractor recommendations.
 *   **Component Tracking & Declined Services**: Advisors can track vehicle components and log declined services.
-*   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, and revenue attribution tracking via webhooks.
+*   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution tracking via webhooks, enterprise-wide job search with location badges, and copy settings between locations.
 *   **Platform Admin Panel**: Internal MOS staff panel for platform-wide statistics, shop management, user directory, and OpenAI API usage tracking.
 *   **Modular Feature Architecture**: Supports à la carte feature toggles (`maintenance`, `job_lookup`, `oil_sticker`, `part_xref`) allowing shops to enable/disable specific tools.
 *   **SMS Adapter Architecture**: An `ISMSAdapter` interface provides abstraction for shop management systems (currently Protractor, with future support for Tekmetric, AutoFlow).
 *   **MOS Tools Chrome Extension**: A side panel MV3 extension for Tekmetric integration, providing maintenance plans, job history search, and push-to-RO functionality.
+*   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
+
+## Recent Changes (January 2026)
+*   **Enterprise Location Identifiers**: Shop locations now use `locationIdentifier` field for display names (e.g., "Southern Pines", "NC 87") while `name` inherits enterprise name.
+*   **Job Search Location Awareness**: Job Lookup queries all enterprise locations, displays location badges on results, and prioritizes current location with a scoring bonus.
+*   **VIN Compound Index**: Changed from single-field unique to compound (shopId + vin) to support same VIN across different enterprise locations.
+*   **Copy Settings Between Locations**: Enterprise admins can copy logo, canned job mappings, and maintenance thresholds between locations.
+*   **Location Switcher Enhancement**: Dropdown displays location identifiers instead of primary shop names, sorted alphabetically.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
