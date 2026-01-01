@@ -52,6 +52,7 @@ const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   power_steering: [/power steering/i],
   battery: [/battery/i],
   ac_refrigerant: [/a\/c/i, /refrigerant/i, /ac refr/i],
+  wheel_alignment: [/wheel alignment/i, /alignment/i, /front end align/i, /4 wheel align/i],
 };
 
 function mapServiceToKey(serviceName: string): string | null {

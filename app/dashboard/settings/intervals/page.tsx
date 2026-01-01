@@ -27,6 +27,7 @@ const COMMON_SERVICES = [
   { key: "power_steering", name: "Power Steering Fluid", defaultMiles: 60000, defaultMonths: 60 },
   { key: "battery", name: "Battery Replacement", defaultMiles: null, defaultMonths: 48 },
   { key: "ac_refrigerant", name: "A/C Refrigerant Refill", defaultMiles: null, defaultMonths: 36 },
+  { key: "wheel_alignment", name: "Wheel Alignment", defaultMiles: 15000, defaultMonths: 12 },
 ];
 
 export type ShopInterval = {
