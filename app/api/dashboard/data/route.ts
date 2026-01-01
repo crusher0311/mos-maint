@@ -119,13 +119,13 @@ export async function GET(request: NextRequest) {
         $match: {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           provider: "autoflow",
-          createdAt: { $gte: thirtyDaysAgo }
+          receivedAt: { $gte: thirtyDaysAgo }
         }
       },
       // Normalize basic fields we need from events
       {
         $addFields: {
-          createdAtDate: "$createdAt",
+          createdAtDate: { $ifNull: ["$receivedAt", "$createdAt"] },
           statusRaw: {
             $ifNull: [
               "$payload.ticket.status",
