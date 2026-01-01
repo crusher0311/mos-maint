@@ -6,25 +6,25 @@ type TekmetricJobWithDetails = {
   repairOrderId: number;
   name: string;
   authorized: boolean;
-  laborAmount?: number;
-  partsAmount?: number;
-  discountAmount?: number;
-  totalAmount?: number;
-  laborEntries?: Array<{
+  laborTotal?: number;
+  partsTotal?: number;
+  discountTotal?: number;
+  subtotal?: number;
+  laborHours?: number;
+  labor?: Array<{
     id: number;
-    description?: string;
+    name?: string;
     hours?: number;
     rate?: number;
-    amount?: number;
   }>;
   parts?: Array<{
     id: number;
     partNumber?: string;
+    name?: string;
     description?: string;
     quantity?: number;
     cost?: number;
-    retailPrice?: number;
-    amount?: number;
+    retail?: number;
     brand?: string;
   }>;
 };
@@ -114,28 +114,28 @@ export async function indexTekmetricWorkOrderJobs(
     for (const job of jobs) {
       if (!job.name) continue;
       
-      const laborAmountDollars = (job.laborAmount || 0) / 100;
-      const partsAmountDollars = (job.partsAmount || 0) / 100;
-      const totalAmountDollars = (job.totalAmount || 0) / 100;
+      const laborAmountDollars = (job.laborTotal || 0) / 100;
+      const partsAmountDollars = (job.partsTotal || 0) / 100;
+      const totalAmountDollars = (job.subtotal || 0) / 100;
       
       const lines: TekmetricJobIndexEntry["lines"] = [];
-      let laborHours = 0;
+      let laborHours = job.laborHours || 0;
       
-      if (job.laborEntries && job.laborEntries.length > 0) {
-        for (const entry of job.laborEntries) {
+      if (job.labor && job.labor.length > 0) {
+        for (const entry of job.labor) {
           const hours = entry.hours || 0;
-          laborHours += hours;
+          const rateDollars = (entry.rate || 0) / 100;
           lines.push({
             lineType: "labor",
-            description: entry.description || job.name,
+            description: entry.name || job.name,
             quantity: 1,
-            unitPrice: (entry.rate || 0) / 100,
-            extendedPrice: (entry.amount || 0) / 100,
+            unitPrice: rateDollars,
+            extendedPrice: hours * rateDollars,
             hours
           });
         }
       } else if (laborAmountDollars > 0) {
-        laborHours = Math.round(laborAmountDollars / 150 * 10) / 10;
+        laborHours = laborHours || Math.round(laborAmountDollars / 150 * 10) / 10;
         lines.push({
           lineType: "labor",
           description: job.name,
@@ -148,14 +148,16 @@ export async function indexTekmetricWorkOrderJobs(
       
       if (job.parts && job.parts.length > 0) {
         for (const part of job.parts) {
+          const qty = part.quantity || 1;
+          const retailDollars = (part.retail || part.cost || 0) / 100;
           lines.push({
             lineType: "part",
-            description: part.description || "",
+            description: part.name || part.description || "",
             partNumber: part.partNumber,
             manufacturer: part.brand,
-            quantity: part.quantity || 1,
-            unitPrice: (part.retailPrice || part.cost || 0) / 100,
-            extendedPrice: (part.amount || 0) / 100
+            quantity: qty,
+            unitPrice: retailDollars,
+            extendedPrice: qty * retailDollars
           });
         }
       } else if (partsAmountDollars > 0) {
