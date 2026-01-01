@@ -33,7 +33,7 @@ export async function GET() {
     
     const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress] = await Promise.all([
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, jobHistoryCounts] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -46,12 +46,22 @@ export async function GET() {
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray(),
-      db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray()
+      db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
+      db.collection("job_history").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray()
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
     const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
+    
+    const jobHistoryCountMap = new Map<string, number>();
+    for (const j of jobHistoryCounts) {
+      const key = String(j._id);
+      jobHistoryCountMap.set(key, (jobHistoryCountMap.get(key) || 0) + j.count);
+    }
     
     const vehicleCountMap = new Map<string, number>();
     for (const v of vehicleCounts) {
@@ -71,7 +81,9 @@ export async function GET() {
       const vinLimit = shop.trialVinLimit ?? defaultVinLimit;
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
       const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
+      const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
       const backfill = backfillMap.get(String(shop.shopId));
+      const jobHistoryCount = jobHistoryCountMap.get(String(shop.shopId)) || 0;
       
       const protractorLocation = shop.protractor?.locations?.[0];
       
@@ -98,10 +110,11 @@ export async function GET() {
           vinViewCount,
         },
         enabledFeatures: shop.enabledFeatures || {},
-        backfill: hasProtractor ? {
-          completed: backfill?.completed || false,
-          totalJobsIndexed: backfill?.totalJobsIndexed || 0,
+        backfill: (hasProtractor || hasTekmetric) ? {
+          completed: hasProtractor ? (backfill?.completed || false) : (jobHistoryCount > 0),
+          totalJobsIndexed: hasProtractor ? (backfill?.totalJobsIndexed || jobHistoryCount) : jobHistoryCount,
           currentChunkStart: backfill?.currentChunkStart || null,
+          source: hasProtractor ? "protractor" : "tekmetric",
         } : null,
         integrationDetails: {
           protractor: shop.protractor?.configured ? {
