@@ -38,6 +38,7 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **Maintenance Interval Exclusion & KM Support**: Shops can now exclude specific services from recommendations entirely using the new "Exclude" checkbox. When checked, that service will not appear in maintenance plans regardless of OEM data. Also added full kilometer support - shops with km preference see KM in the intervals settings page, and values are properly converted for display/storage.
 *   **Setup Wizard Integration Options**: Added Tekmetric and CARFAX to the onboarding wizard. New shops can now configure all 5 integrations during signup: AutoFlow, AutoVitals, Protractor, Tekmetric, and CARFAX. The setup API route now saves all integration configurations to the shop document.
 *   **Self-Service Webhook URLs (v1.6)**: Shops can now view and copy their AutoFlow webhook URL directly from Settings > Integrations. Tokens are auto-generated per shop for security. URL format: `https://mos.tools/api/webhooks/autoflow/{token}`.
 *   **AutoFlow Dashboard Fix**: Fixed dashboard not showing vehicles for AutoFlow-only shops. The events collection uses `receivedAt` timestamp, but the query was filtering by `createdAt`. Now correctly queries 30 days of AutoFlow webhook events.

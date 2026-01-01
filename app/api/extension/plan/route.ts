@@ -137,7 +137,7 @@ function getLastPerformedInfo(
   return { source: 'unknown' };
 }
 
-type ShopIntervals = Record<string, { useShop: boolean; miles: number | null; months: number | null }>;
+type ShopIntervals = Record<string, { useShop: boolean; excluded?: boolean; miles: number | null; months: number | null }>;
 
 async function runOnDemandAnalysis(
   shopId: number, 
@@ -185,9 +185,16 @@ async function runOnDemandAnalysis(
           continue;
         }
         
+        // Map to service key first to check exclusion
+        const serviceKey = mapServiceToKey(item.maintenance_name);
+        
+        // Skip excluded services
+        if (serviceKey && shopIntervals[serviceKey]?.excluded) {
+          continue;
+        }
+        
         // Determine where service was last performed (uses preloaded data)
         const lastPerformed = getLastPerformedInfo(item.maintenance_name, shopWorkOrders, carfaxRecords);
-        const serviceKey = mapServiceToKey(item.maintenance_name);
         
         // Decide which interval to use based on last performed location
         let intervalMiles = oemIntervalMiles;

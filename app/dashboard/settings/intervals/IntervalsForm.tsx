@@ -6,11 +6,19 @@ import type { ShopInterval } from "./page";
 
 type Props = {
   intervals: ShopInterval[];
+  distanceUnit: "miles" | "kilometers";
   saveAction: (formData: FormData) => Promise<void>;
   resetAction: () => Promise<void>;
 };
 
-export default function IntervalsForm({ intervals, saveAction, resetAction }: Props) {
+const MILES_TO_KM = 1.60934;
+
+function convertMilesToKm(miles: number | null): number | null {
+  if (miles === null) return null;
+  return Math.round(miles * MILES_TO_KM);
+}
+
+export default function IntervalsForm({ intervals, distanceUnit, saveAction, resetAction }: Props) {
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -34,8 +42,12 @@ export default function IntervalsForm({ intervals, saveAction, resetAction }: Pr
     window.location.reload();
   };
 
+  const distanceLabel = distanceUnit === "kilometers" ? "KM" : "Miles";
+  const distanceAbbr = distanceUnit === "kilometers" ? "km" : "mi";
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <input type="hidden" name="distanceUnit" value={distanceUnit} />
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -62,13 +74,16 @@ export default function IntervalsForm({ intervals, saveAction, resetAction }: Pr
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Service
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                   Use Shop
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                  Miles
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  Exclude
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                  {distanceLabel}
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
                   Months
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
@@ -78,7 +93,7 @@ export default function IntervalsForm({ intervals, saveAction, resetAction }: Pr
             </thead>
             <tbody className="divide-y divide-gray-100">
               {intervals.map((svc) => (
-                <IntervalRow key={svc.key} interval={svc} />
+                <IntervalRow key={svc.key} interval={svc} distanceUnit={distanceUnit} distanceAbbr={distanceAbbr} />
               ))}
             </tbody>
           </table>
@@ -113,18 +128,33 @@ export default function IntervalsForm({ intervals, saveAction, resetAction }: Pr
   );
 }
 
-function IntervalRow({ interval }: { interval: ShopInterval }) {
+function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopInterval; distanceUnit: "miles" | "kilometers"; distanceAbbr: string }) {
   const [useShop, setUseShop] = useState(interval.useShop);
+  const [excluded, setExcluded] = useState(interval.excluded);
+
+  // Convert stored miles to display units
+  const displayDistance = distanceUnit === "kilometers" 
+    ? convertMilesToKm(interval.miles) 
+    : interval.miles;
+  
+  const displayDefaultDistance = distanceUnit === "kilometers"
+    ? convertMilesToKm(interval.defaultMiles)
+    : interval.defaultMiles;
 
   const defaultDisplay = [
-    interval.defaultMiles ? `${interval.defaultMiles.toLocaleString()} mi` : null,
+    displayDefaultDistance ? `${displayDefaultDistance.toLocaleString()} ${distanceAbbr}` : null,
     interval.defaultMonths ? `${interval.defaultMonths} mo` : null,
   ].filter(Boolean).join(" / ") || "—";
 
+  const isDisabled = excluded || !useShop;
+  const rowClass = excluded ? "bg-red-50" : useShop ? "bg-green-50" : "";
+
   return (
-    <tr className={useShop ? "bg-green-50" : ""}>
+    <tr className={rowClass}>
       <td className="px-4 py-3">
-        <span className="font-medium text-gray-900">{interval.name}</span>
+        <span className={`font-medium ${excluded ? "text-gray-400 line-through" : "text-gray-900"}`}>
+          {interval.name}
+        </span>
       </td>
       <td className="px-4 py-3 text-center">
         <input
@@ -132,22 +162,35 @@ function IntervalRow({ interval }: { interval: ShopInterval }) {
           name={`${interval.key}_useShop`}
           checked={useShop}
           onChange={(e) => setUseShop(e.target.checked)}
-          className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+          disabled={excluded}
+          className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
+        />
+      </td>
+      <td className="px-4 py-3 text-center">
+        <input
+          type="checkbox"
+          name={`${interval.key}_excluded`}
+          checked={excluded}
+          onChange={(e) => {
+            setExcluded(e.target.checked);
+            if (e.target.checked) setUseShop(false);
+          }}
+          className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
         />
       </td>
       <td className="px-4 py-3">
         <input
           type="number"
-          name={`${interval.key}_miles`}
-          defaultValue={interval.miles ?? ""}
-          placeholder={interval.defaultMiles?.toLocaleString() ?? "—"}
-          disabled={!useShop}
+          name={`${interval.key}_distance`}
+          defaultValue={displayDistance ?? ""}
+          placeholder={displayDefaultDistance?.toLocaleString() ?? "—"}
+          disabled={isDisabled}
           min={0}
-          step={1000}
+          step={distanceUnit === "kilometers" ? 1000 : 1000}
           className={`w-full px-3 py-1.5 border rounded-lg text-center text-sm ${
-            useShop 
-              ? "border-gray-300 bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500" 
-              : "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+            isDisabled
+              ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "border-gray-300 bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500"
           }`}
         />
       </td>
@@ -157,12 +200,12 @@ function IntervalRow({ interval }: { interval: ShopInterval }) {
           name={`${interval.key}_months`}
           defaultValue={interval.months ?? ""}
           placeholder={interval.defaultMonths?.toString() ?? "—"}
-          disabled={!useShop}
+          disabled={isDisabled}
           min={0}
           className={`w-full px-3 py-1.5 border rounded-lg text-center text-sm ${
-            useShop 
-              ? "border-gray-300 bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500" 
-              : "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+            isDisabled
+              ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "border-gray-300 bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500"
           }`}
         />
       </td>
