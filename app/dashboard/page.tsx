@@ -25,7 +25,7 @@ export default async function DashboardPage() {
     rows: [],
     pagination: {
       page: 1,
-      pageSize: 50,
+      pageSize: 100,
       totalCount: 0,
       totalPages: 0,
       hasNextPage: false,
