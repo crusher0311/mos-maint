@@ -24,15 +24,17 @@ export async function GET() {
     const shops = await db
       .collection("shops")
       .find({ shopId: { $in: shopIds } })
-      .project({ shopId: 1, name: 1 })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
 
     const shopList = shops.map((s) => ({
       shopId: Number(s.shopId),
       name: s.name || `Shop ${s.shopId}`,
+      locationIdentifier: s.locationIdentifier || null,
+      displayName: s.locationIdentifier || s.name || `Shop ${s.shopId}`,
     }));
 
-    shopList.sort((a, b) => a.name.localeCompare(b.name));
+    shopList.sort((a, b) => a.displayName.localeCompare(b.displayName));
 
     return NextResponse.json({
       currentShopId: session.shopId,
