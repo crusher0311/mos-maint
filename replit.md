@@ -38,6 +38,9 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **v1.7.3 Updates**:
+    *   **Visit-Based Billing (VIN+RO Tracking)**: Changed trial limit tracking from unique VINs to unique visits (VIN + RO# combination). Each new repair order for a vehicle now counts as a separate visit toward the trial limit. Same VIN with same RO viewed multiple times only counts once. This applies to both dashboard and Chrome extension.
+    *   **Chrome Extension VIN Tracking**: Extension plan views now track against trial limits with the same VIN+RO logic. Shows upgrade prompt when limit reached.
 *   **v1.7.2 Updates**:
     *   **Feature Gating Fix**: Fixed critical bug where Platform Admin feature toggles (Part Cross-Ref, Job Lookup, etc.) weren't reflected in the sidebar. The `/api/shop/features` endpoint now uses the unified `featureResolver` system instead of the deprecated `shop_features` collection.
     *   **Navigation Cleanup**: Removed Reporting, Billing, and Shop Onboarding from sidebar navigation until verified with live production users. Pages still exist but are hidden from menu.
