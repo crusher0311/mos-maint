@@ -1,0 +1,139 @@
+Privacy Policy
+
+MOS Tools
+Last updated: January 2026
+
+1. Introduction
+
+MOS Tools (“we,” “us,” or “our”) operates the mos.tools website and the MOS Tools Chrome Extension (the “Service”).
+
+This Privacy Policy explains how we collect, use, disclose, and safeguard information when you use our website, software platform, and Chrome extension. By using the Service, you agree to the collection and use of information in accordance with this policy.
+
+2. Information We Collect
+2.1 Information Collected by the Chrome Extension
+
+The MOS Tools Chrome Extension collects contextual, non-personal data from the active Tekmetric page in order to function correctly, including:
+
+Vehicle Identification Numbers (VINs)
+
+Repair Order (RO) numbers
+
+Vehicle mileage and service history context
+
+Shop identifiers and configuration data
+
+Feature usage and visit-based usage counts (VIN + RO combinations)
+
+Authentication tokens required to securely access MOS Tools services
+
+The extension does not collect:
+
+Names, email addresses, phone numbers, or contact details
+
+Payment or financial information
+
+Personal communications
+
+Precise physical location or GPS data
+
+2.2 Website and Platform Data
+
+When using the MOS Tools website or platform, we may collect:
+
+Account information (such as business name and login credentials)
+
+Subscription and plan entitlement status
+
+Usage analytics related to feature access and limits
+
+Support communications submitted by users
+
+3. How We Use Information
+
+We use collected information strictly for core product functionality, including:
+
+Displaying maintenance plans and recommendations
+
+Enabling job history lookup and enterprise search
+
+Managing subscriptions, feature access, and trial limits
+
+Providing secure authentication and authorization
+
+Improving reliability, security, and performance
+
+Providing customer support upon request
+
+We do not use collected data for advertising, profiling, or marketing purposes.
+
+4. Data Sharing and Disclosure
+
+We do not sell, rent, or trade user data to third parties.
+
+Data may be shared only with:
+
+Trusted service providers required to operate the platform (e.g., hosting, database, payment processors)
+
+Legal or regulatory authorities when required by law
+
+All service providers are contractually obligated to protect data and use it only for authorized purposes.
+
+5. Data Security
+
+We implement industry-standard security measures to protect data, including:
+
+Encrypted data transmission over HTTPS
+
+Secure storage of authentication credentials
+
+Role-based access controls
+
+Limited data retention aligned with operational needs
+
+Despite our efforts, no method of transmission or storage is 100% secure, and we cannot guarantee absolute security.
+
+6. Data Retention
+
+We retain collected data only as long as necessary to:
+
+Provide the Service
+
+Meet legal, accounting, or operational requirements
+
+Enforce subscription limits and platform integrity
+
+Data may be anonymized or deleted upon account termination unless retention is required by law.
+
+7. User Rights and Data Deletion
+
+Users may request:
+
+Access to their data
+
+Correction of inaccurate data
+
+Deletion of their data
+
+Requests can be submitted by contacting us at:
+support@mos.tools
+
+8. Third-Party Services
+
+MOS Tools integrates with third-party automotive systems (such as Tekmetric) solely to provide contextual functionality. We do not control the privacy practices of third-party platforms, and users should review their respective privacy policies.
+
+9. Children’s Privacy
+
+MOS Tools is a business-to-business service and is not intended for use by children under the age of 13. We do not knowingly collect personal information from children.
+
+10. Changes to This Privacy Policy
+
+We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated “Last updated” date. Continued use of the Service after changes constitutes acceptance of the updated policy.
+
+11. Contact Us
+
+If you have questions about this Privacy Policy or our data practices, contact us at:
+
+MOS Tools
+Website: https://mos.tools
+
+Email: support@mos.tools
