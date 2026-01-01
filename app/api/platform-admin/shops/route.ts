@@ -78,10 +78,12 @@ export async function GET() {
         isLocked: shop.isLocked || false,
         billing: {
           plan: shop.billing?.plan || "trial",
+          status: shop.billing?.status || "trial",
           isPaid,
           vinLimit,
           vinViewCount,
         },
+        enabledFeatures: shop.enabledFeatures || {},
         integrationDetails: {
           protractor: shop.protractor?.configured ? {
             configuredAt: shop.protractor.configuredAt,

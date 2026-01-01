@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,17 @@ export async function GET(req: NextRequest) {
   }
 
   const shopId = Number(session.shopId);
+  
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!entitlements.canUseFeature("job_lookup")) {
+    return NextResponse.json({ 
+      error: "Job Lookup is not available on your current plan",
+      code: "FEATURE_NOT_AVAILABLE",
+      upgradeRequired: true,
+      currentPlan: entitlements.billing.plan,
+    }, { status: 402 });
+  }
+  
   const { searchParams } = new URL(req.url);
   
   const query = searchParams.get("q") || "";

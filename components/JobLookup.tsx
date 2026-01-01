@@ -72,6 +72,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
   const [error, setError] = useState<string | null>(null);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [addingJob, setAddingJob] = useState<string | null>(null);
+  const [featureNotAvailable, setFeatureNotAvailable] = useState(false);
 
   const handleSearch = async () => {
     if (!query.trim() && !currentVehicle?.make) {
@@ -81,6 +82,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
 
     setLoading(true);
     setError(null);
+    setFeatureNotAvailable(false);
 
     try {
       const params = new URLSearchParams();
@@ -92,6 +94,12 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
 
       const res = await fetch(`/api/jobs/search?${params.toString()}`);
       const data = await res.json();
+
+      if (res.status === 402 && data.code === "FEATURE_NOT_AVAILABLE") {
+        setFeatureNotAvailable(true);
+        setResults([]);
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Search failed");
@@ -211,6 +219,32 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
       {error && (
         <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {featureNotAvailable && (
+        <div className="p-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Search className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">Job Lookup - Premium Feature</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Job Lookup allows you to search through your shop&apos;s historical jobs to quickly find 
+                pricing, parts, and labor information for any service.
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Upgrade to Professional or Enterprise to unlock this feature and access your complete job history.
+              </p>
+              <a 
+                href="/settings/billing"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                View Plans
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
