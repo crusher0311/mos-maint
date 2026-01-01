@@ -44,7 +44,7 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Dashboard Page Size**: Increased from 50 to 100 vehicles per page to show all active work orders.
 *   **Platform Admin Integration Detection**: Enhanced to recognize both nested (`shop.autoflow.apiKey`) and flat (`shop.autoflowApiKey`) credential field formats.
 *   **Protractor VIN Fallback**: Added fallback to fetch vehicle by ServiceItemID when VIN is missing from work order response.
-*   **Automatic Job History Backfill**: New dynamic backfill system that automatically detects Protractor shops needing historical data and processes them in chunks. Includes `/api/cron/protractor-backfill` endpoint and background worker script.
+*   **Automatic Job History Backfill (Fixed)**: Dynamic backfill system for Protractor shops. Fixed critical issue where `/WorkOrder/` endpoint didn't include ServicePackages. Now uses `/Invoice/` endpoint which contains complete job data. Uses pLimit(10) for parallel processing of invoice details. Processes 1-month chunks with 1 shop per run for efficiency.
 *   **Enterprise Location Identifiers**: Shop locations now use `locationIdentifier` field for display names (e.g., "Southern Pines", "NC 87") while `name` inherits enterprise name.
 *   **Job Search Location Awareness**: Job Lookup queries all enterprise locations, displays location badges on results, and prioritizes current location with a scoring bonus.
 *   **VIN Compound Index**: Changed from single-field unique to compound (shopId + vin) to support same VIN across different enterprise locations.
