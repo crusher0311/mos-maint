@@ -13,6 +13,7 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}) {
   
   const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
     ...options,
+    cache: 'no-store',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
