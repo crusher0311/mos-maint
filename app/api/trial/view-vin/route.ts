@@ -15,11 +15,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { vin } = await req.json();
+    const { vin, roId } = await req.json();
     
     if (!vin || typeof vin !== "string") {
       return NextResponse.json({ error: "VIN required" }, { status: 400 });
     }
+    
+    const normalizedRoId = roId && typeof roId === "string" ? roId.trim() : null;
 
     const shopId = Number(session.shopId);
     const db = await getDb();
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
     const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
     const shopLimit = shop?.trialVinLimit ?? defaultLimit;
 
-    const { count, isNew, allowed } = await checkAndTrackVin(db, shopId, vin.toUpperCase(), shopLimit);
+    const { count, isNew, allowed } = await checkAndTrackVin(db, shopId, vin.toUpperCase(), shopLimit, normalizedRoId);
 
     const remaining = Math.max(0, shopLimit - count);
 

@@ -45,21 +45,31 @@ export async function checkAndTrackVin(
   db: Db, 
   shopId: number, 
   vin: string, 
-  limit: number
+  limit: number,
+  roId?: string | null
 ): Promise<{ count: number; isNew: boolean; allowed: boolean }> {
   const normalizedVin = vin.toUpperCase();
+  const normalizedRoId = roId?.trim() || null;
   
-  const existing = await db.collection("viewed_vins").findOne({ shopId, vin: normalizedVin });
+  // Track by VIN + RO combination - each visit counts as a new view
+  const query: any = { shopId, vin: normalizedVin };
+  if (normalizedRoId) {
+    query.roId = normalizedRoId;
+  }
+  
+  const existing = await db.collection("viewed_vins").findOne(query);
   
   if (existing) {
+    // Same VIN + RO already viewed - doesn't count again
     const count = await db.collection("viewed_vins").countDocuments({ shopId });
     await db.collection("viewed_vins").updateOne(
-      { shopId, vin: normalizedVin },
+      query,
       { $set: { lastViewedAt: new Date() }, $inc: { viewCount: 1 } }
     );
     return { count, isNew: false, allowed: true };
   }
   
+  // New VIN + RO combination - counts as a new view
   const count = await db.collection("viewed_vins").countDocuments({ shopId });
   
   if (count >= limit) {
@@ -70,6 +80,7 @@ export async function checkAndTrackVin(
   await db.collection("viewed_vins").insertOne({
     shopId,
     vin: normalizedVin,
+    roId: normalizedRoId,
     firstViewedAt: now,
     lastViewedAt: now,
     viewCount: 1,
@@ -78,13 +89,22 @@ export async function checkAndTrackVin(
   return { count: count + 1, isNew: true, allowed: true };
 }
 
-export async function trackViewedVin(db: Db, shopId: number, vin: string): Promise<{ count: number; isNew: boolean }> {
+export async function trackViewedVin(db: Db, shopId: number, vin: string, roId?: string | null): Promise<{ count: number; isNew: boolean }> {
   const now = new Date();
+  const normalizedVin = vin.toUpperCase();
+  const normalizedRoId = roId?.trim() || null;
+  
+  const query: any = { shopId, vin: normalizedVin };
+  if (normalizedRoId) {
+    query.roId = normalizedRoId;
+  }
+  
   const result = await db.collection("viewed_vins").updateOne(
-    { shopId, vin: vin.toUpperCase() },
+    query,
     {
       $setOnInsert: {
         firstViewedAt: now,
+        roId: normalizedRoId,
       },
       $set: {
         lastViewedAt: now,
