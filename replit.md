@@ -38,8 +38,10 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **AutoFlow Dashboard Fix**: Fixed dashboard not showing vehicles for AutoFlow-only shops. The events collection uses `receivedAt` timestamp, but the query was filtering by `createdAt`. Now correctly queries 30 days of AutoFlow webhook events.
 *   **Feature Gatekeeping System** (In Progress): Hierarchical feature resolver combining billing plans, enterprise settings, and shop overrides. Platform Admin UI for managing shop billing/features. Job Lookup API returns 402 when feature not entitled. **TODO**: Add feature controls to Enterprises page UI and shop Settings page for owners.
 *   **Dashboard Page Size**: Increased from 50 to 100 vehicles per page to show all active work orders.
+*   **Platform Admin Integration Detection**: Enhanced to recognize both nested (`shop.autoflow.apiKey`) and flat (`shop.autoflowApiKey`) credential field formats.
 *   **Protractor VIN Fallback**: Added fallback to fetch vehicle by ServiceItemID when VIN is missing from work order response.
 *   **Automatic Job History Backfill**: New dynamic backfill system that automatically detects Protractor shops needing historical data and processes them in chunks. Includes `/api/cron/protractor-backfill` endpoint and background worker script.
 *   **Enterprise Location Identifiers**: Shop locations now use `locationIdentifier` field for display names (e.g., "Southern Pines", "NC 87") while `name` inherits enterprise name.
