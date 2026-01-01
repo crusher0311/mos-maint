@@ -41,6 +41,7 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Feature Gatekeeping System** (In Progress): Hierarchical feature resolver combining billing plans, enterprise settings, and shop overrides. Platform Admin UI for managing shop billing/features. Job Lookup API returns 402 when feature not entitled. **TODO**: Add feature controls to Enterprises page UI and shop Settings page for owners.
 *   **Dashboard Page Size**: Increased from 50 to 100 vehicles per page to show all active work orders.
 *   **Protractor VIN Fallback**: Added fallback to fetch vehicle by ServiceItemID when VIN is missing from work order response.
+*   **Automatic Job History Backfill**: New dynamic backfill system that automatically detects Protractor shops needing historical data and processes them in chunks. Includes `/api/cron/protractor-backfill` endpoint and background worker script.
 *   **Enterprise Location Identifiers**: Shop locations now use `locationIdentifier` field for display names (e.g., "Southern Pines", "NC 87") while `name` inherits enterprise name.
 *   **Job Search Location Awareness**: Job Lookup queries all enterprise locations, displays location badges on results, and prioritizes current location with a scoring bonus.
 *   **VIN Compound Index**: Changed from single-field unique to compound (shopId + vin) to support same VIN across different enterprise locations.
