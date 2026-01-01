@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4 } from "lucide-react";
 
 interface ShopBilling {
   plan: string;
@@ -36,6 +36,12 @@ interface IntegrationDetails {
   } | null;
 }
 
+interface BackfillStatus {
+  completed: boolean;
+  totalJobsIndexed: number;
+  currentChunkStart: string | null;
+}
+
 interface Shop {
   _id: string;
   shopId: number | string;
@@ -48,6 +54,7 @@ interface Shop {
   isLocked?: boolean;
   integrationDetails?: IntegrationDetails;
   enabledFeatures?: ShopFeatures;
+  backfill?: BackfillStatus | null;
 }
 
 export default function PlatformShopsPage() {
@@ -265,6 +272,7 @@ export default function PlatformShopsPage() {
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Vehicles</th>
               <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">VIN Usage</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Integrations</th>
+              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Backfill</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
             </tr>
@@ -272,7 +280,7 @@ export default function PlatformShopsPage() {
           <tbody className="divide-y divide-gray-100">
             {filteredShops.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                   {search ? "No shops match your search" : "No shops yet"}
                 </td>
               </tr>
@@ -379,6 +387,23 @@ export default function PlatformShopsPage() {
                       <span className="text-gray-400 text-sm">None</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-center">
+                    {shop.backfill ? (
+                      shop.backfill.completed ? (
+                        <div className="flex items-center justify-center gap-1" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed`}>
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span className="text-xs text-green-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs so far`}>
+                          <Clock4 className="w-4 h-4 text-amber-500" />
+                          <span className="text-xs text-amber-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      )
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {new Date(shop.createdAt).toLocaleDateString()}
                   </td>
@@ -440,7 +465,7 @@ export default function PlatformShopsPage() {
                 </tr>,
                 expandedShop === shop._id && shop.integrationDetails ? (
                   <tr key={`${shop._id}-expanded`} className="bg-blue-50">
-                    <td colSpan={8} className="px-4 py-4">
+                    <td colSpan={9} className="px-4 py-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {shop.integrationDetails.protractor && (
                           <div className="bg-white rounded-lg p-4 border border-blue-200">
