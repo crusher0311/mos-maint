@@ -9,6 +9,10 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
+import { 
+  indexTekmetricWorkOrderJobs, 
+  checkAndRunBackfillForNewShops 
+} from "@/lib/tekmetric-job-index";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,7 +126,9 @@ export async function GET(req: NextRequest) {
       "tekmetric.shopId": { $exists: true, $ne: null }
     }).toArray();
 
-    const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; error?: string }[] = [];
+    const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; error?: string }[] = [];
+    
+    await checkAndRunBackfillForNewShops();
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
@@ -198,6 +204,7 @@ export async function GET(req: NextRequest) {
         }).toArray();
 
         let removedCount = 0;
+        let indexedJobsCount = 0;
         for (const cached of cachedWOs) {
           if (!activeWoIds.has(cached.workOrderId)) {
             await db.collection("tekmetric_work_orders").updateOne(
@@ -211,6 +218,49 @@ export async function GET(req: NextRequest) {
               }
             );
             removedCount++;
+            
+            const retryCount = cached.jobIndexRetryCount || 0;
+            if (cached.vin && !cached.jobsIndexed && retryCount < 3) {
+              try {
+                const jobsIndexed = await indexTekmetricWorkOrderJobs(
+                  shopId,
+                  tekmetricShopId,
+                  Number(cached.workOrderId),
+                  cached.workOrderNumber,
+                  {
+                    vin: cached.vin,
+                    year: cached.vehicleYear,
+                    make: cached.vehicleMake,
+                    model: cached.vehicleModel,
+                    engine: cached.vehicleEngine
+                  },
+                  cached.completedDate || new Date().toISOString()
+                );
+                
+                if (jobsIndexed > 0) {
+                  indexedJobsCount += jobsIndexed;
+                  await db.collection("tekmetric_work_orders").updateOne(
+                    { _id: cached._id },
+                    { $set: { jobsIndexed: true, jobIndexRetryCount: 0 } }
+                  );
+                  console.log(`[Tekmetric] Indexed ${jobsIndexed} jobs for WO #${cached.workOrderNumber}`);
+                } else {
+                  await db.collection("tekmetric_work_orders").updateOne(
+                    { _id: cached._id },
+                    { $set: { jobsIndexed: true } }
+                  );
+                }
+              } catch (err: any) {
+                console.log(`[Tekmetric] Failed to index jobs for WO ${cached.workOrderId} (attempt ${retryCount + 1}): ${err.message}`);
+                await db.collection("tekmetric_work_orders").updateOne(
+                  { _id: cached._id },
+                  { 
+                    $inc: { jobIndexRetryCount: 1 },
+                    $set: { jobIndexLastError: err.message, jobIndexLastAttempt: new Date() }
+                  }
+                );
+              }
+            }
           }
         }
 
@@ -223,7 +273,8 @@ export async function GET(req: NextRequest) {
           shopId, 
           tekmetricShopId, 
           synced: activeWOs.length, 
-          removed: removedCount 
+          removed: removedCount,
+          jobsIndexed: indexedJobsCount
         });
       } catch (err: any) {
         console.error(`[Tekmetric] Shop ${shopId} sync error:`, err.message);
