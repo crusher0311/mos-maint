@@ -6,6 +6,8 @@ This Next.js-based automotive maintenance management system aims to streamline o
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
 
+**Git Workflow**: Push changes to `qa` branch only. User promotes to `main` after verification in QA environment.
+
 ## System Architecture
 The application is built using Next.js 14.2.5 with React 18 for the frontend and Next.js API Routes for backend functionality. MongoDB Atlas is the cloud-hosted database, and styling is managed with Tailwind CSS. The project uses TypeScript/JavaScript.
 
