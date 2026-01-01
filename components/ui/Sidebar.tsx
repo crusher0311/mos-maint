@@ -38,6 +38,8 @@ interface NavItem {
 interface ShopOption {
   shopId: number;
   name: string;
+  locationIdentifier?: string | null;
+  displayName: string;
 }
 
 interface SidebarProps {
@@ -247,6 +249,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
               {shops
                 .filter((shop) => 
                   !shopSearch || 
+                  shop.displayName.toLowerCase().includes(shopSearch.toLowerCase()) ||
                   shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
                   String(shop.shopId).includes(shopSearch)
                 )
@@ -261,12 +264,13 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                         : "text-gray-700 hover:bg-gray-100"
                     }`}
                   >
-                    <span className="truncate">{shop.name}</span>
+                    <span className="truncate">{shop.displayName}</span>
                     {shop.shopId === currentShopId && <Check className="w-4 h-4 flex-shrink-0 text-blue-600" />}
                   </button>
                 ))}
               {shops.filter((shop) => 
                 !shopSearch || 
+                shop.displayName.toLowerCase().includes(shopSearch.toLowerCase()) ||
                 shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
                 String(shop.shopId).includes(shopSearch)
               ).length === 0 && (
