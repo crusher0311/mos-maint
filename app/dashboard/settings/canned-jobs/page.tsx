@@ -41,6 +41,7 @@ const SERVICE_KEYS = [
   { key: "power_steering", name: "Power Steering Fluid" },
   { key: "battery", name: "Battery Replacement" },
   { key: "ac_refrigerant", name: "A/C Refrigerant Refill" },
+  { key: "wheel_alignment", name: "Wheel Alignment" },
 ];
 
 type CannedJobLine = {
