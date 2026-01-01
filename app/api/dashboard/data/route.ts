@@ -139,22 +139,39 @@ export async function GET(request: NextRequest) {
                 { $ifNull: ["$vin", "$payload.vehicle.vin"] }
               ]
             }
-          }
+          },
+          // Track active vs close status for smart filtering
+          isActiveStatus: {
+            $in: ["$payload.ticket.status", ["CHECKED IN", "IN PROGRESS", "EST", "RACK ATTACK", 
+              "Build Estimate (Workflow) and Presentation (Advisor)", "Authorized ready for work"]]
+          },
+          isCloseStatus: { $eq: ["$payload.ticket.status", "Close"] }
         }
       },
       // Require VIN
       { $match: { vinNorm: { $type: "string", $ne: "" } } },
-      // Sort by VIN asc, then time desc, so first in group is the latest per VIN
+      // Sort by VIN asc, then time desc
       { $sort: { vinNorm: 1, createdAtDate: -1 } },
       {
         $group: {
           _id: "$vinNorm",
-          latest: { $first: "$$ROOT" }
+          latest: { $first: "$$ROOT" },
+          // Track last active and last close timestamps
+          lastActive: { $max: { $cond: ["$isActiveStatus", "$createdAtDate", null] } },
+          lastClose: { $max: { $cond: ["$isCloseStatus", "$createdAtDate", null] } }
+        }
+      },
+      // Vehicle is active if: no close, OR last active is after last close
+      {
+        $match: {
+          lastActive: { $ne: null },
+          $or: [
+            { lastClose: null },
+            { $expr: { $gt: ["$lastActive", "$lastClose"] } }
+          ]
         }
       },
       { $replaceRoot: { newRoot: "$latest" } },
-      // Hide Closed, Invoiced, and Appointment statuses (vehicle has left the shop)
-      { $match: { statusRaw: { $not: /close|appoint|invoiced/i } } },
       // Compute display fields
       {
         $addFields: {
