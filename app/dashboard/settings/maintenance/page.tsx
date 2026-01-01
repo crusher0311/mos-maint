@@ -15,12 +15,12 @@ async function getMaintenanceSettings(shopId: number) {
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
     { shopId },
-    { projection: { maintenance: 1, distanceUnit: 1 } }
+    { projection: { maintenance: 1, preferences: 1 } }
   );
   return {
     dueSoonMiles: shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES,
     dueSoonDays: shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS,
-    distanceUnit: (shop?.distanceUnit as "miles" | "kilometers") || "miles",
+    distanceUnit: (shop?.preferences?.distanceUnit as "miles" | "kilometers") || "miles",
   };
 }
 
