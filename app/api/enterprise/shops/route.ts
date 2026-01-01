@@ -80,14 +80,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdminAuth();
-  if ("error" in auth) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  
+  if (!["owner", "admin"].includes(session.role || "")) {
+    return NextResponse.json({ error: "Only owners and admins can create locations" }, { status: 403 });
   }
 
   try {
     const body = await req.json();
-    const { enterpriseId, name, smsProvider, tekmetricShopId, protractorShopId, assignUserIds } = body;
+    const { enterpriseId, name, smsProvider, tekmetricShopId, protractorShopId, assignUserIds, assignUserEmails } = body;
     
     if (!enterpriseId) {
       return NextResponse.json({ error: "Enterprise ID is required" }, { status: 400 });
@@ -100,6 +104,10 @@ export async function POST(req: NextRequest) {
     const enterprise = await getEnterpriseById(enterpriseId);
     if (!enterprise) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
+    }
+    
+    if (!enterprise.shopIds.includes(session.shopId)) {
+      return NextResponse.json({ error: "You don't have permission for this enterprise" }, { status: 403 });
     }
 
     const db = await getDb();
@@ -142,28 +150,45 @@ export async function POST(req: NextRequest) {
     
     await addShopToEnterprise(enterpriseId, shopId);
 
+    let usersToClone: any[] = [];
+    
     if (assignUserIds && assignUserIds.length > 0) {
-      const usersToClone = await db.collection("users")
+      usersToClone = await db.collection("users")
         .find({ _id: { $in: assignUserIds.map((id: string) => new ObjectId(id)) } })
         .toArray();
+    } else if (assignUserEmails && assignUserEmails.length > 0) {
+      usersToClone = await db.collection("users")
+        .find({ 
+          email: { $in: assignUserEmails },
+          shopId: { $in: enterprise.shopIds }
+        })
+        .toArray();
       
-      for (const user of usersToClone) {
-        const existingUser = await db.collection("users").findOne({
-          email: user.email,
-          shopId
-        });
-        
-        if (!existingUser) {
-          await db.collection("users").insertOne({
-            email: user.email,
-            name: user.name,
-            passwordHash: user.passwordHash,
-            role: user.role,
-            shopId,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
+      const uniqueEmails = new Map();
+      usersToClone.forEach(u => {
+        if (!uniqueEmails.has(u.email)) {
+          uniqueEmails.set(u.email, u);
         }
+      });
+      usersToClone = Array.from(uniqueEmails.values());
+    }
+    
+    for (const user of usersToClone) {
+      const existingUser = await db.collection("users").findOne({
+        email: user.email,
+        shopId
+      });
+      
+      if (!existingUser) {
+        await db.collection("users").insertOne({
+          email: user.email,
+          name: user.name,
+          passwordHash: user.passwordHash,
+          role: user.role,
+          shopId,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
       }
     }
 
