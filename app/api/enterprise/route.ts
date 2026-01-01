@@ -33,7 +33,24 @@ export async function GET(req: NextRequest) {
       if (!enterprise) {
         return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
       }
-      return NextResponse.json({ enterprise });
+      
+      const db = await getDb();
+      const availableUsers = await db.collection("users")
+        .find({ shopId: { $in: enterprise.shopIds } })
+        .project({ email: 1, name: 1, role: 1 })
+        .toArray();
+      
+      const uniqueUsers = new Map();
+      availableUsers.forEach((u: any) => {
+        if (!uniqueUsers.has(u.email)) {
+          uniqueUsers.set(u.email, u);
+        }
+      });
+      
+      return NextResponse.json({ 
+        enterprise,
+        availableUsers: Array.from(uniqueUsers.values())
+      });
     }
     
     const db = await getDb();
