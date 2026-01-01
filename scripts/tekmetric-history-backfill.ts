@@ -400,6 +400,27 @@ async function main() {
               }
             }
             
+            // Tekmetric stores amounts in cents - convert to dollars
+            const laborAmountDollars = (job.laborAmount || 0) / 100;
+            const partsAmountDollars = (job.partsAmount || 0) / 100;
+            const totalAmountDollars = (job.totalAmount || 0) / 100;
+            
+            // Calculate labor hours from labor entries if available
+            let laborHours = 0;
+            if (job.laborEntries && job.laborEntries.length > 0) {
+              laborHours = job.laborEntries.reduce((sum, l) => sum + (l.hours || 0), 0);
+            } else if (laborAmountDollars > 0) {
+              // Estimate labor hours based on ~$150/hr rate
+              laborHours = Math.round(laborAmountDollars / 150 * 10) / 10;
+            }
+            
+            // Convert line amounts to dollars
+            const convertedLines = lines.map(line => ({
+              ...line,
+              unitPrice: line.unitPrice / 100,
+              extendedPrice: line.extendedPrice / 100,
+            }));
+            
             const jobEntry: JobIndexEntry = {
               shopId,
               workOrderId: String(ro.id),
@@ -420,13 +441,13 @@ async function main() {
                 keywords: extractKeywords(job.name),
               },
               
-              lines,
+              lines: convertedLines,
               
               totals: {
-                laborHours: 0, // Tekmetric doesn't expose this at job level
-                laborAmount: job.laborAmount || 0,
-                partsAmount: job.partsAmount || 0,
-                totalAmount: job.totalAmount || 0,
+                laborHours,
+                laborAmount: laborAmountDollars,
+                partsAmount: partsAmountDollars,
+                totalAmount: totalAmountDollars,
               },
               
               metadata: {
