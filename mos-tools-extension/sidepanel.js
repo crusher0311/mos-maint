@@ -868,13 +868,45 @@ async function handleAddCannedJob(job) {
 }
 
 // ==================== UTILITIES ====================
-function sendMessage(message) {
-  return new Promise((resolve) => {
+function sendMessage(message, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      resolve({ error: 'Request timed out. Please try again.' });
+    }, timeoutMs);
+    
     chrome.runtime.sendMessage(message, (response) => {
-      resolve(response || {});
+      clearTimeout(timeout);
+      if (chrome.runtime.lastError) {
+        console.error('[MOS] Message error:', chrome.runtime.lastError);
+        resolve({ error: chrome.runtime.lastError.message || 'Extension error' });
+      } else {
+        resolve(response || {});
+      }
     });
   });
 }
+
+// Keep service worker alive while sidepanel is open
+let keepAliveInterval = null;
+function startKeepAlive() {
+  if (keepAliveInterval) return;
+  keepAliveInterval = setInterval(() => {
+    chrome.runtime.sendMessage({ action: 'PING' }).catch(() => {});
+  }, 20000); // Ping every 20 seconds to prevent sleep
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+}
+
+// Start keepalive when panel loads
+startKeepAlive();
+
+// Stop when panel closes
+window.addEventListener('unload', stopKeepAlive);
 
 function escapeHtml(str) {
   if (!str) return '';

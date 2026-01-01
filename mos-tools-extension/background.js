@@ -95,6 +95,12 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
 
 // ==================== MESSAGE HANDLERS ====================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Handle keepalive ping silently
+  if (message.action === "PING") {
+    sendResponse({ pong: true });
+    return false;
+  }
+  
   console.log("[MOS] Message received:", message.action);
 
   // -------------------- MOS Authentication --------------------
