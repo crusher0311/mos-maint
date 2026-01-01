@@ -4,6 +4,7 @@ import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
   fetchWorkOrderById,
+  fetchVehicleById,
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
@@ -81,13 +82,27 @@ export async function GET(req: NextRequest) {
 
         for (const wo of detailedWOs) {
           const stage = wo.WorkflowStage || (wo as any).Status || "";
-          const vin = wo.ServiceItem?.VIN?.toUpperCase() || (wo as any).VIN?.toUpperCase();
+          let vin = wo.ServiceItem?.VIN?.toUpperCase() || (wo as any).VIN?.toUpperCase();
+          let vehicle = wo.ServiceItem;
+          
+          // Fallback: If VIN is missing but ServiceItemID exists, fetch vehicle details separately
+          if (!vin && wo.ServiceItemID) {
+            try {
+              const vehicleResult = await fetchVehicleById(shopId, wo.ServiceItemID);
+              if (vehicleResult.ok && vehicleResult.vehicle?.VIN) {
+                vin = vehicleResult.vehicle.VIN.toUpperCase();
+                vehicle = vehicleResult.vehicle;
+                console.log(`[Cron] Shop ${shopId} - Recovered VIN ${vin} for WO ${wo.WorkOrderNumber} via ServiceItemID fallback`);
+              }
+            } catch (err) {
+              console.log(`[Cron] Shop ${shopId} - Failed to fetch vehicle for WO ${wo.WorkOrderNumber}:`, err);
+            }
+          }
           
           if (vin) {
             await upsertProtractorWorkOrderSnapshot(shopId, wo);
             
-            if (wo.ServiceItem) {
-              const vehicle = wo.ServiceItem;
+            if (vehicle) {
               await upsertProtractorVehicleSnapshot(shopId, vin, vehicle);
               
               const currentOdometer = (wo as any).InUsage ?? vehicle.Usage ?? (wo as any).Odometer ?? vehicle.Odometer;

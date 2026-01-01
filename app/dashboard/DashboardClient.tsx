@@ -25,7 +25,7 @@ type DashboardData = {
   smsType?: string;
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 // Map Protractor workflow stages to display names, colors, and icons
 const WORKFLOW_STAGE_MAP: Record<string, { label: string; color: string; icon: ReactNode }> = {

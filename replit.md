@@ -38,6 +38,9 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **Feature Gatekeeping System** (In Progress): Hierarchical feature resolver combining billing plans, enterprise settings, and shop overrides. Platform Admin UI for managing shop billing/features. Job Lookup API returns 402 when feature not entitled. **TODO**: Add feature controls to Enterprises page UI and shop Settings page for owners.
+*   **Dashboard Page Size**: Increased from 50 to 100 vehicles per page to show all active work orders.
+*   **Protractor VIN Fallback**: Added fallback to fetch vehicle by ServiceItemID when VIN is missing from work order response.
 *   **Enterprise Location Identifiers**: Shop locations now use `locationIdentifier` field for display names (e.g., "Southern Pines", "NC 87") while `name` inherits enterprise name.
 *   **Job Search Location Awareness**: Job Lookup queries all enterprise locations, displays location badges on results, and prioritizes current location with a scoring bonus.
 *   **VIN Compound Index**: Changed from single-field unique to compound (shopId + vin) to support same VIN across different enterprise locations.
