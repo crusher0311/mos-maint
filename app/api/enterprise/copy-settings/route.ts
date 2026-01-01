@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   if (!settingType || settingType === "branding") {
     settings.branding = {
-      logo: sourceShop.logo || null,
+      logo: sourceShop.branding?.logo || sourceShop.logo || null,
     };
   }
 
@@ -58,9 +58,10 @@ export async function GET(req: NextRequest) {
   }
 
   if (!settingType || settingType === "cannedJobs") {
-    settings.cannedJobMappings = sourceShop.cannedJobMappings || {};
-    settings.manualCannedJobs = sourceShop.manualCannedJobs || [];
-    settings.hiddenCannedJobIds = sourceShop.hiddenCannedJobIds || [];
+    // Check both root-level and protractor-nested locations for mappings
+    settings.cannedJobMappings = sourceShop.cannedJobMappings || sourceShop.protractor?.cannedJobMappings || {};
+    settings.manualCannedJobs = sourceShop.manualCannedJobs || sourceShop.protractor?.manualCannedJobs || [];
+    settings.hiddenCannedJobIds = sourceShop.hiddenCannedJobIds || sourceShop.protractor?.hiddenJobIds || [];
   }
 
   return NextResponse.json({
@@ -110,7 +111,10 @@ export async function POST(req: NextRequest) {
   const updates: Record<string, any> = { updatedAt: new Date() };
 
   if (types.includes("branding")) {
-    updates.logo = sourceShop.logo || null;
+    const logo = sourceShop.branding?.logo || sourceShop.logo || null;
+    if (logo) {
+      updates["branding.logo"] = logo;
+    }
   }
 
   if (types.includes("maintenance")) {
@@ -123,14 +127,23 @@ export async function POST(req: NextRequest) {
   }
 
   if (types.includes("cannedJobs")) {
-    if (sourceShop.cannedJobMappings) {
-      updates.cannedJobMappings = sourceShop.cannedJobMappings;
+    // Copy from either root-level or protractor-nested locations
+    const mappings = sourceShop.cannedJobMappings || sourceShop.protractor?.cannedJobMappings;
+    const manualJobs = sourceShop.manualCannedJobs || sourceShop.protractor?.manualCannedJobs;
+    const hiddenIds = sourceShop.hiddenCannedJobIds || sourceShop.protractor?.hiddenJobIds;
+    
+    // Copy to both locations to ensure compatibility
+    if (mappings && Object.keys(mappings).length > 0) {
+      updates["protractor.cannedJobMappings"] = mappings;
+      updates.cannedJobMappings = mappings;
     }
-    if (sourceShop.manualCannedJobs) {
-      updates.manualCannedJobs = sourceShop.manualCannedJobs;
+    if (manualJobs && manualJobs.length > 0) {
+      updates["protractor.manualCannedJobs"] = manualJobs;
+      updates.manualCannedJobs = manualJobs;
     }
-    if (sourceShop.hiddenCannedJobIds) {
-      updates.hiddenCannedJobIds = sourceShop.hiddenCannedJobIds;
+    if (hiddenIds && hiddenIds.length > 0) {
+      updates["protractor.hiddenJobIds"] = hiddenIds;
+      updates.hiddenCannedJobIds = hiddenIds;
     }
   }
 

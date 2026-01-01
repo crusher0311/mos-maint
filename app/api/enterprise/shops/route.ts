@@ -124,9 +124,12 @@ export async function POST(req: NextRequest) {
       console.log("[Enterprise Shops] Counter result:", JSON.stringify(counterResult));
     }
 
+    // For enterprise locations, use the enterprise name as the shop name
+    // and the provided "name" as the location identifier
     const shopDoc: any = {
       shopId,
-      name: name.trim(),
+      name: enterprise.name,
+      locationIdentifier: name.trim(),
       enterpriseId: new ObjectId(enterpriseId),
       webhookToken: crypto.randomBytes(12).toString("hex"),
       createdAt: new Date(),
