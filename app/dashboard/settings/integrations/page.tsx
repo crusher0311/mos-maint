@@ -473,8 +473,25 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Protractor connected" });
+        setMessage({ type: "success", text: "Protractor connected. Syncing..." });
         onUpdate();
+        // Auto-trigger initial sync
+        setSaving(false);
+        setSyncing(true);
+        try {
+          const syncRes = await fetch("/api/protractor/sync", { method: "POST" });
+          const syncData = await syncRes.json();
+          if (syncRes.ok) {
+            setMessage({ type: "success", text: `Connected and synced ${syncData.vehicles || 0} vehicles` });
+          } else {
+            setMessage({ type: "success", text: "Connected. Sync will run automatically." });
+          }
+        } catch {
+          setMessage({ type: "success", text: "Connected. Sync will run automatically." });
+        } finally {
+          setSyncing(false);
+        }
+        return;
       } else {
         const data = await res.json();
         setMessage({ type: "error", text: data.error || "Failed to connect" });
@@ -624,8 +641,25 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Tekmetric connected" });
+        setMessage({ type: "success", text: "Tekmetric connected. Syncing..." });
         onUpdate();
+        // Auto-trigger initial sync
+        setSaving(false);
+        setSyncing(true);
+        try {
+          const syncRes = await fetch("/api/tekmetric/sync", { method: "POST" });
+          const syncData = await syncRes.json();
+          if (syncRes.ok) {
+            setMessage({ type: "success", text: `Connected and synced ${syncData.imported || 0} vehicles` });
+          } else {
+            setMessage({ type: "success", text: "Connected. Sync will run automatically." });
+          }
+        } catch {
+          setMessage({ type: "success", text: "Connected. Sync will run automatically." });
+        } finally {
+          setSyncing(false);
+        }
+        return;
       } else {
         const data = await res.json();
         setMessage({ type: "error", text: data.error || "Failed to connect" });
