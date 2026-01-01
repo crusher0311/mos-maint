@@ -29,7 +29,7 @@ export async function GET() {
     
     const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
     
-    const [userCounts, vehicleCounts, vinViewCounts] = await Promise.all([
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -41,11 +41,13 @@ export async function GET() {
       db.collection("viewed_vins").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray()
+      ]).toArray(),
+      db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray()
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
+    const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
     
     const vehicleCountMap = new Map<string, number>();
     for (const v of vehicleCounts) {
@@ -64,6 +66,8 @@ export async function GET() {
       const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise";
       const vinLimit = shop.trialVinLimit ?? defaultVinLimit;
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
+      const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
+      const backfill = backfillMap.get(String(shop.shopId));
       
       const protractorLocation = shop.protractor?.locations?.[0];
       
@@ -84,6 +88,11 @@ export async function GET() {
           vinViewCount,
         },
         enabledFeatures: shop.enabledFeatures || {},
+        backfill: hasProtractor ? {
+          completed: backfill?.completed || false,
+          totalJobsIndexed: backfill?.totalJobsIndexed || 0,
+          currentChunkStart: backfill?.currentChunkStart || null,
+        } : null,
         integrationDetails: {
           protractor: shop.protractor?.configured ? {
             configuredAt: shop.protractor.configuredAt,
