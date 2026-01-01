@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
+import { checkAndTrackVin } from "@/lib/plan-cache";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -470,6 +471,32 @@ export async function GET(request: NextRequest) {
         recommended: [],
         message: "VIN not available for this repair order"
       }, { headers: corsHeaders });
+    }
+
+    // Track VIN+RO view against trial limit (skip for paid shops)
+    const isPaid = shopDoc?.billing?.plan === "professional" || shopDoc?.billing?.plan === "enterprise";
+    let vinTrackingResult: { allowed: boolean; count: number; limit: number | null } | null = null;
+    
+    if (!isPaid) {
+      const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
+      const defaultLimit = platformSettings?.vinLimit ?? 10;
+      const shopLimit = shopDoc?.trialVinLimit ?? defaultLimit;
+      
+      const trackResult = await checkAndTrackVin(db, mosShopId, vin.toUpperCase(), shopLimit, roId);
+      vinTrackingResult = { allowed: trackResult.allowed, count: trackResult.count, limit: shopLimit };
+      
+      if (!trackResult.allowed) {
+        return NextResponse.json({
+          vehicle: { vin: vin.toUpperCase() },
+          mileage,
+          overdue: [],
+          dueSoon: [],
+          recommended: [],
+          requiresUpgrade: true,
+          vinUsage: { count: trackResult.count, limit: shopLimit },
+          message: `Trial limit reached (${trackResult.count}/${shopLimit} visits). Upgrade to continue.`
+        }, { headers: corsHeaders });
+      }
     }
 
     let analysisData: any = await db.collection("maintenance_analysis_cache").findOne({
