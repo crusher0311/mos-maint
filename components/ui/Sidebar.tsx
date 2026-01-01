@@ -162,11 +162,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       featureId: "part_xref",
     },
     {
-      name: "Shop Onboarding",
-      href: "/dashboard/onboarding",
-      icon: <ClipboardCheck className="w-5 h-5" />
-    },
-    {
       name: "Settings",
       href: "/dashboard/settings",
       icon: <Settings className="w-5 h-5" />,
