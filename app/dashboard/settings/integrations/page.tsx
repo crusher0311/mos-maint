@@ -473,24 +473,10 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Protractor connected. Syncing..." });
+        setMessage({ type: "success", text: "Connected! Initial sync started in background." });
         onUpdate();
-        // Auto-trigger initial sync
-        setSaving(false);
-        setSyncing(true);
-        try {
-          const syncRes = await fetch("/api/protractor/sync", { method: "POST" });
-          const syncData = await syncRes.json();
-          if (syncRes.ok) {
-            setMessage({ type: "success", text: `Connected and synced ${syncData.vehicles || 0} vehicles` });
-          } else {
-            setMessage({ type: "success", text: "Connected. Sync will run automatically." });
-          }
-        } catch {
-          setMessage({ type: "success", text: "Connected. Sync will run automatically." });
-        } finally {
-          setSyncing(false);
-        }
+        // Fire-and-forget background sync - don't await
+        fetch("/api/protractor/sync", { method: "POST" }).catch(() => {});
         return;
       } else {
         const data = await res.json();
@@ -641,24 +627,10 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Tekmetric connected. Syncing..." });
+        setMessage({ type: "success", text: "Connected! Initial sync started in background." });
         onUpdate();
-        // Auto-trigger initial sync
-        setSaving(false);
-        setSyncing(true);
-        try {
-          const syncRes = await fetch("/api/tekmetric/sync", { method: "POST" });
-          const syncData = await syncRes.json();
-          if (syncRes.ok) {
-            setMessage({ type: "success", text: `Connected and synced ${syncData.imported || 0} vehicles` });
-          } else {
-            setMessage({ type: "success", text: "Connected. Sync will run automatically." });
-          }
-        } catch {
-          setMessage({ type: "success", text: "Connected. Sync will run automatically." });
-        } finally {
-          setSyncing(false);
-        }
+        // Fire-and-forget background sync - don't await
+        fetch("/api/tekmetric/sync", { method: "POST" }).catch(() => {});
         return;
       } else {
         const data = await res.json();
