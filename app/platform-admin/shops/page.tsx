@@ -40,6 +40,7 @@ interface BackfillStatus {
   completed: boolean;
   totalJobsIndexed: number;
   currentChunkStart: string | null;
+  source?: "protractor" | "tekmetric";
 }
 
 interface Shop {
@@ -480,12 +481,12 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-center">
                     {shop.backfill ? (
                       shop.backfill.completed ? (
-                        <div className="flex items-center justify-center gap-1" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed`}>
+                        <div className="flex items-center justify-center gap-1" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
                           <span className="text-xs text-green-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs so far`}>
+                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs so far (${shop.backfill.source || 'unknown'})`}>
                           <Clock4 className="w-4 h-4 text-amber-500" />
                           <span className="text-xs text-amber-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
@@ -743,12 +744,12 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-center">
                     {shop.backfill ? (
                       shop.backfill.completed ? (
-                        <div className="flex items-center justify-center gap-1 text-green-600" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed`}>
+                        <div className="flex items-center justify-center gap-1 text-green-600" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
                           <CheckCircle2 className="w-4 h-4" />
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1 text-orange-600" title={`In progress: ${shop.backfill.currentChunkStart || 'starting'}`}>
+                        <div className="flex items-center justify-center gap-1 text-orange-600" title={`In progress: ${shop.backfill.currentChunkStart || 'starting'} (${shop.backfill.source || 'unknown'})`}>
                           <Clock4 className="w-4 h-4 animate-pulse" />
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
