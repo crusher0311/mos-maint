@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Building2, Plus, Check, X, RefreshCw, ArrowLeft, Search } from "lucide-react";
+import { Building2, Plus, Check, X, RefreshCw, ArrowLeft, Search, Users, Settings, ExternalLink, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 interface Shop {
@@ -12,6 +12,7 @@ interface Shop {
   enterpriseId?: string;
   protractor?: { baseUrl: string };
   tekmetric?: { shopId: number };
+  userCount?: number;
 }
 
 interface Enterprise {
@@ -20,15 +21,33 @@ interface Enterprise {
   shopIds: number[];
 }
 
+interface AvailableUser {
+  _id: string;
+  email: string;
+  name?: string;
+  role: string;
+}
+
 function ShopManagementContent() {
   const searchParams = useSearchParams();
   const enterpriseId = searchParams.get("id");
   
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [allShops, setAllShops] = useState<Shop[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
+  
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newShop, setNewShop] = useState({
+    name: "",
+    smsProvider: "tekmetric" as "tekmetric" | "protractor" | "none",
+    tekmetricShopId: "",
+    protractorShopId: "",
+    assignUserIds: [] as string[]
+  });
 
   useEffect(() => {
     if (enterpriseId) {
@@ -49,11 +68,68 @@ function ShopManagementContent() {
       
       setEnterprise(entData.enterprise);
       setAllShops(shopsData.shops || []);
+      
+      if (entData.availableUsers) {
+        setAvailableUsers(entData.availableUsers);
+      }
     } catch (err) {
       console.error("Error loading data:", err);
     } finally {
       setLoading(false);
     }
+  };
+  
+  const createNewShop = async () => {
+    if (!newShop.name.trim() || !enterpriseId) return;
+    
+    setCreating(true);
+    try {
+      const res = await fetch("/api/enterprise/shops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enterpriseId,
+          name: newShop.name.trim(),
+          smsProvider: newShop.smsProvider,
+          tekmetricShopId: newShop.smsProvider === "tekmetric" && newShop.tekmetricShopId 
+            ? parseInt(newShop.tekmetricShopId) 
+            : undefined,
+          protractorShopId: newShop.smsProvider === "protractor" && newShop.protractorShopId 
+            ? newShop.protractorShopId 
+            : undefined,
+          assignUserIds: newShop.assignUserIds
+        })
+      });
+
+      if (res.ok) {
+        setNewShop({
+          name: "",
+          smsProvider: "tekmetric",
+          tekmetricShopId: "",
+          protractorShopId: "",
+          assignUserIds: []
+        });
+        setShowCreateModal(false);
+        await loadData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to create shop");
+      }
+    } catch (err) {
+      console.error("Error creating shop:", err);
+      alert("Failed to create shop");
+    } finally {
+      setCreating(false);
+    }
+  };
+  
+  const toggleUserSelection = (userId: string) => {
+    setNewShop(prev => ({
+      ...prev,
+      assignUserIds: prev.assignUserIds.includes(userId)
+        ? prev.assignUserIds.filter(id => id !== userId)
+        : [...prev.assignUserIds, userId]
+    }));
   };
 
   const addShopToEnterprise = async (shopId: number) => {
@@ -141,14 +217,23 @@ function ShopManagementContent() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link href="/admin/enterprise" className="p-2 hover:bg-gray-100 rounded-lg">
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Manage Shops</h1>
-              <p className="text-sm text-gray-500">{enterprise.name}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/admin/enterprise" className="p-2 hover:bg-gray-100 rounded-lg">
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </Link>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Manage Locations</h1>
+                <p className="text-sm text-gray-500">{enterprise.name}</p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              Create New Location
+            </button>
           </div>
         </div>
       </div>
@@ -258,6 +343,139 @@ function ShopManagementContent() {
           </div>
         </div>
       </div>
+      
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Location</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location Name *
+                </label>
+                <input
+                  type="text"
+                  value={newShop.name}
+                  onChange={(e) => setNewShop(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Downtown Auto Care"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Shop Management System
+                </label>
+                <select
+                  value={newShop.smsProvider}
+                  onChange={(e) => setNewShop(prev => ({ 
+                    ...prev, 
+                    smsProvider: e.target.value as "tekmetric" | "protractor" | "none" 
+                  }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="tekmetric">Tekmetric</option>
+                  <option value="protractor">Protractor</option>
+                  <option value="none">None / Configure Later</option>
+                </select>
+              </div>
+
+              {newShop.smsProvider === "tekmetric" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tekmetric Shop ID (optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={newShop.tekmetricShopId}
+                    onChange={(e) => setNewShop(prev => ({ ...prev, tekmetricShopId: e.target.value }))}
+                    placeholder="e.g., 14956"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Find this in your Tekmetric URL: shop.tekmetric.com/shop/[ID]
+                  </p>
+                </div>
+              )}
+
+              {newShop.smsProvider === "protractor" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Protractor Shop ID (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newShop.protractorShopId}
+                    onChange={(e) => setNewShop(prev => ({ ...prev, protractorShopId: e.target.value }))}
+                    placeholder="e.g., shop123"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )}
+
+              {availableUsers.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assign Users to This Location
+                  </label>
+                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-200">
+                    {availableUsers.map((user) => {
+                      const isSelected = newShop.assignUserIds.includes(user._id);
+                      return (
+                        <div
+                          key={user._id}
+                          onClick={() => toggleUserSelection(user._id)}
+                          className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${
+                            isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                              {user.email.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{user.email}</p>
+                              {user.name && <p className="text-xs text-gray-500">{user.name}</p>}
+                            </div>
+                          </div>
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                            isSelected 
+                              ? "bg-blue-600 border-blue-600" 
+                              : "border-gray-300"
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {newShop.assignUserIds.length} user{newShop.assignUserIds.length !== 1 ? "s" : ""} selected
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNewShop}
+                disabled={!newShop.name.trim() || creating}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create Location
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
