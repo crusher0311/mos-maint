@@ -441,12 +441,31 @@ export default function PlatformShopsPage() {
                         onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
                         className="flex items-center gap-1 text-left hover:bg-gray-50 rounded px-1 -mx-1"
                       >
-                        <div className="flex gap-1 flex-wrap">
-                          {shop.integrations.map(int => (
-                            <span key={int} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
-                              {int}
-                            </span>
-                          ))}
+                        <div className="flex gap-1 flex-wrap items-center">
+                          {shop.integrations.map(int => {
+                            const iconMap: Record<string, string> = {
+                              "Protractor": "/protractor-icon.png",
+                              "Tekmetric": "/tekmetric-logo.png",
+                              "CARFAX": "/icons/carfax.png",
+                              "AutoFlow": "/icons/autoflow.png",
+                            };
+                            const icon = iconMap[int];
+                            return icon ? (
+                              <img 
+                                key={int}
+                                src={icon}
+                                alt={int}
+                                title={int}
+                                className="w-6 h-6 rounded object-contain"
+                              />
+                            ) : (
+                              <span key={int} className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                int === "AutoVitals" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"
+                              }`}>
+                                {int}
+                              </span>
+                            );
+                          })}
                         </div>
                         {expandedShop === shop._id ? (
                           <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -677,23 +696,37 @@ export default function PlatformShopsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {shop.integrations.map(int => (
-                        <span 
-                          key={int} 
-                          onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
-                          className={`px-2 py-0.5 text-xs rounded ${
-                            int === "Protractor" ? "bg-purple-100 text-purple-700" :
-                            int === "AutoFlow" ? "bg-blue-100 text-blue-700" :
-                            int === "CARFAX" ? "bg-red-100 text-red-700" :
-                            int === "Tekmetric" ? "bg-green-100 text-green-700" :
-                            int === "AutoVitals" ? "bg-orange-100 text-orange-700" :
-                            "bg-gray-100 text-gray-700"
-                          } ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
-                        >
-                          {int}
-                        </span>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {shop.integrations.map(int => {
+                        const iconMap: Record<string, string> = {
+                          "Protractor": "/protractor-icon.png",
+                          "Tekmetric": "/tekmetric-logo.png",
+                          "CARFAX": "/icons/carfax.png",
+                          "AutoFlow": "/icons/autoflow.png",
+                        };
+                        const icon = iconMap[int];
+                        return icon ? (
+                          <img 
+                            key={int}
+                            src={icon}
+                            alt={int}
+                            title={int}
+                            onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
+                            className={`w-6 h-6 rounded object-contain ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
+                          />
+                        ) : (
+                          <span 
+                            key={int} 
+                            onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
+                            className={`px-2 py-0.5 text-xs rounded ${
+                              int === "AutoVitals" ? "bg-orange-100 text-orange-700" :
+                              "bg-gray-100 text-gray-700"
+                            } ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
+                          >
+                            {int}
+                          </span>
+                        );
+                      })}
                       {shop.integrations.length === 0 && (
                         <span className="text-gray-400 text-sm">None</span>
                       )}
