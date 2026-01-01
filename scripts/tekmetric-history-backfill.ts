@@ -32,26 +32,26 @@ type TekmetricJob = {
   repairOrderId: number;
   name: string;
   authorized: boolean;
-  laborAmount?: number;
-  partsAmount?: number;
-  discountAmount?: number;
-  totalAmount?: number;
-  laborEntries?: Array<{
+  laborTotal?: number;
+  partsTotal?: number;
+  discountTotal?: number;
+  subtotal?: number;
+  laborHours?: number;
+  labor?: Array<{
     id: number;
-    description?: string;
+    name?: string;
     hours?: number;
     rate?: number;
-    amount?: number;
     technicianId?: number;
   }>;
   parts?: Array<{
     id: number;
     partNumber?: string;
+    name?: string;
     description?: string;
     quantity?: number;
     cost?: number;
-    retailPrice?: number;
-    amount?: number;
+    retail?: number;
     brand?: string;
     vendorId?: number;
   }>;
@@ -372,54 +372,66 @@ async function main() {
           for (const job of jobs) {
             const lines: JobIndexEntry["lines"] = [];
             
+            // Tekmetric stores amounts in cents - convert to dollars
+            const laborAmountDollars = (job.laborTotal || 0) / 100;
+            const partsAmountDollars = (job.partsTotal || 0) / 100;
+            const totalAmountDollars = (job.subtotal || 0) / 100;
+            
+            // Get labor hours from job or calculate from labor entries
+            let laborHours = job.laborHours || 0;
+            
             // Add labor entries if available
-            if (job.laborEntries && job.laborEntries.length > 0) {
-              for (const labor of job.laborEntries) {
+            if (job.labor && job.labor.length > 0) {
+              for (const labor of job.labor) {
+                const hours = labor.hours || 0;
+                const rateDollars = (labor.rate || 0) / 100;
                 lines.push({
                   lineType: "labor",
-                  description: labor.description || job.name,
-                  quantity: labor.hours || 1,
-                  unitPrice: labor.rate || 0,
-                  extendedPrice: labor.amount || 0,
+                  description: labor.name || job.name,
+                  quantity: 1,
+                  unitPrice: rateDollars,
+                  extendedPrice: hours * rateDollars,
                 });
               }
+            } else if (laborAmountDollars > 0) {
+              // Estimate labor hours if not provided
+              laborHours = laborHours || Math.round(laborAmountDollars / 150 * 10) / 10;
+              lines.push({
+                lineType: "labor",
+                description: job.name,
+                quantity: 1,
+                unitPrice: laborAmountDollars,
+                extendedPrice: laborAmountDollars,
+              });
             }
             
             // Add parts if available
             if (job.parts && job.parts.length > 0) {
               for (const part of job.parts) {
+                const qty = part.quantity || 1;
+                const retailDollars = (part.retail || part.cost || 0) / 100;
                 lines.push({
                   lineType: "part",
-                  description: part.description || "",
+                  description: part.name || part.description || "",
                   partNumber: part.partNumber,
                   manufacturer: part.brand,
-                  quantity: part.quantity || 1,
-                  unitPrice: part.retailPrice || part.cost || 0,
-                  extendedPrice: part.amount || 0,
+                  quantity: qty,
+                  unitPrice: retailDollars,
+                  extendedPrice: qty * retailDollars,
                 });
               }
+            } else if (partsAmountDollars > 0) {
+              lines.push({
+                lineType: "part",
+                description: "Parts",
+                quantity: 1,
+                unitPrice: partsAmountDollars,
+                extendedPrice: partsAmountDollars,
+              });
             }
             
-            // Tekmetric stores amounts in cents - convert to dollars
-            const laborAmountDollars = (job.laborAmount || 0) / 100;
-            const partsAmountDollars = (job.partsAmount || 0) / 100;
-            const totalAmountDollars = (job.totalAmount || 0) / 100;
-            
-            // Calculate labor hours from labor entries if available
-            let laborHours = 0;
-            if (job.laborEntries && job.laborEntries.length > 0) {
-              laborHours = job.laborEntries.reduce((sum, l) => sum + (l.hours || 0), 0);
-            } else if (laborAmountDollars > 0) {
-              // Estimate labor hours based on ~$150/hr rate
-              laborHours = Math.round(laborAmountDollars / 150 * 10) / 10;
-            }
-            
-            // Convert line amounts to dollars
-            const convertedLines = lines.map(line => ({
-              ...line,
-              unitPrice: line.unitPrice / 100,
-              extendedPrice: line.extendedPrice / 100,
-            }));
+            // Lines are already converted to dollars
+            const convertedLines = lines;
             
             const jobEntry: JobIndexEntry = {
               shopId,
