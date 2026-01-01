@@ -1,0 +1,374 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
+import pLimit from "p-limit";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+const CRON_SECRET = process.env.CRON_SECRET;
+const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
+const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
+const MONTHS_PER_RUN = 1;
+const MAX_SHOPS_PER_RUN = 1;
+
+type TekmetricRepairOrder = {
+  id: number;
+  repairOrderNumber: string;
+  vehicleId?: number;
+  customerId?: number;
+  repairOrderStatus?: { code: string };
+  postedDate?: string;
+  completedDate?: string;
+  updatedDate?: string;
+  milesIn?: number;
+  milesOut?: number;
+};
+
+type TekmetricJob = {
+  id: number;
+  name: string;
+  laborTotal?: number;
+  partsTotal?: number;
+  subtotal?: number;
+  laborHours?: number;
+  labor?: { name: string; hours: number; rate: number }[];
+  parts?: { partNumber: string; name: string; brand?: string; quantity: number; retailCost: number }[];
+};
+
+type TekmetricVehicle = {
+  id: number;
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  engine?: string;
+};
+
+type TekmetricCustomer = {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+};
+
+async function tekmetricRequest<T>(endpoint: string): Promise<{ ok: boolean; data?: T; error?: string }> {
+  if (!TEKMETRIC_API_TOKEN) {
+    return { ok: false, error: "No API token" };
+  }
+  
+  try {
+    const res = await fetch(`${TEKMETRIC_API_BASE}${endpoint}`, {
+      headers: {
+        Authorization: `Bearer ${TEKMETRIC_API_TOKEN}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    
+    return { ok: true, data: await res.json() };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
+  const shops = await db.collection("shops").find({
+    $or: [
+      { "tekmetric.shopId": { $exists: true, $ne: null } },
+      { "tekmetricShopId": { $exists: true, $ne: null } }
+    ]
+  }).toArray();
+
+  const shopsToBackfill: { shopId: number; name: string; tekmetricShopId: number; progressDate: Date | null }[] = [];
+
+  for (const shop of shops) {
+    const shopId = Number(shop.shopId);
+    const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
+    if (!tekmetricShopId) continue;
+    
+    const progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+    
+    if (!progress?.completed) {
+      shopsToBackfill.push({
+        shopId,
+        name: shop.name || shop.locationIdentifier || `Shop ${shopId}`,
+        tekmetricShopId: Number(tekmetricShopId),
+        progressDate: progress?.currentChunkStart ? new Date(progress.currentChunkStart) : null
+      });
+    }
+  }
+
+  shopsToBackfill.sort((a, b) => {
+    if (!a.progressDate && !b.progressDate) return 0;
+    if (!a.progressDate) return -1;
+    if (!b.progressDate) return 1;
+    return a.progressDate.getTime() - b.progressDate.getTime();
+  });
+
+  return shopsToBackfill.map(s => ({ shopId: s.shopId, name: s.name, tekmetricShopId: s.tekmetricShopId }));
+}
+
+async function backfillShopChunk(
+  db: any, 
+  shopId: number, 
+  tekmetricShopId: number
+): Promise<{ jobsIndexed: number; complete: boolean; message: string }> {
+  let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+  
+  const globalEndDate = new Date();
+  globalEndDate.setHours(0, 0, 0, 0);
+  
+  const defaultStart = new Date();
+  defaultStart.setFullYear(defaultStart.getFullYear() - 5);
+  defaultStart.setHours(0, 0, 0, 0);
+  
+  let chunkStart: Date;
+  if (progress?.currentChunkStart) {
+    chunkStart = new Date(progress.currentChunkStart);
+  } else {
+    chunkStart = defaultStart;
+    await db.collection("tekmetric_backfill_progress").updateOne(
+      { shopId },
+      { $set: { shopId, startedAt: new Date(), currentChunkStart: chunkStart, completed: false } },
+      { upsert: true }
+    );
+  }
+
+  const chunkEnd = new Date(chunkStart);
+  chunkEnd.setMonth(chunkEnd.getMonth() + MONTHS_PER_RUN);
+  if (chunkEnd > globalEndDate) {
+    chunkEnd.setTime(globalEndDate.getTime());
+  }
+
+  if (chunkStart >= globalEndDate) {
+    await db.collection("tekmetric_backfill_progress").updateOne(
+      { shopId },
+      { $set: { completed: true, completedAt: new Date() } }
+    );
+    return { jobsIndexed: 0, complete: true, message: "Already complete" };
+  }
+
+  const startStr = chunkStart.toISOString();
+  const endStr = chunkEnd.toISOString();
+
+  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]}`);
+
+  let jobsIndexed = 0;
+  let page = 0;
+  let totalPages = 1;
+  const seenROIds = new Set<number>();
+  const vehicleCache = new Map<number, TekmetricVehicle>();
+  const customerCache = new Map<number, TekmetricCustomer>();
+  const limit = pLimit(5);
+
+  while (page < totalPages && page < 20) {
+    const queryParams = new URLSearchParams({
+      shop: tekmetricShopId.toString(),
+      page: page.toString(),
+      size: "100",
+      updatedDateStart: startStr,
+      updatedDateEnd: endStr,
+      sort: "updatedDate",
+      sortDirection: "DESC",
+    });
+
+    const rosResult = await tekmetricRequest<{ content: TekmetricRepairOrder[]; totalPages: number }>(
+      `/repair-orders?${queryParams}`
+    );
+
+    if (!rosResult.ok || !rosResult.data) {
+      console.error(`[Tekmetric Backfill] Shop ${shopId} page ${page} error:`, rosResult.error);
+      break;
+    }
+
+    totalPages = rosResult.data.totalPages;
+    const ros = rosResult.data.content || [];
+
+    console.log(`[Tekmetric Backfill] Shop ${shopId} page ${page + 1}/${totalPages}: ${ros.length} ROs`);
+
+    const roPromises = ros.map(ro => limit(async () => {
+      if (seenROIds.has(ro.id)) return 0;
+      seenROIds.add(ro.id);
+
+      const statusCode = ro.repairOrderStatus?.code?.toUpperCase() || "";
+      if (!["POSTED", "INVOICED", "COMPLETED"].includes(statusCode)) {
+        return 0;
+      }
+
+      let vehicle: TekmetricVehicle | null = null;
+      if (ro.vehicleId) {
+        if (vehicleCache.has(ro.vehicleId)) {
+          vehicle = vehicleCache.get(ro.vehicleId)!;
+        } else {
+          const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`);
+          if (vehResult.ok && vehResult.data) {
+            vehicle = vehResult.data;
+            vehicleCache.set(ro.vehicleId, vehicle);
+          }
+        }
+      }
+
+      let customer: TekmetricCustomer | null = null;
+      if (ro.customerId) {
+        if (customerCache.has(ro.customerId)) {
+          customer = customerCache.get(ro.customerId)!;
+        } else {
+          const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`);
+          if (custResult.ok && custResult.data) {
+            customer = custResult.data;
+            customerCache.set(ro.customerId, customer);
+          }
+        }
+      }
+
+      const jobsResult = await tekmetricRequest<{ content: TekmetricJob[] }>(
+        `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`
+      );
+      const jobs = jobsResult.data?.content || [];
+
+      if (jobs.length === 0) return 0;
+
+      let indexed = 0;
+      for (const job of jobs) {
+        const laborAmountDollars = (job.laborTotal || 0) / 100;
+        const partsAmountDollars = (job.partsTotal || 0) / 100;
+
+        const entry = {
+          shopId,
+          sourceSystem: "tekmetric",
+          workOrderId: String(ro.id),
+          workOrderNumber: ro.repairOrderNumber,
+          servicePackageId: String(job.id),
+          jobName: job.name,
+          closedAt: ro.postedDate || ro.completedDate || ro.updatedDate,
+          vehicle: vehicle ? {
+            vin: vehicle.vin,
+            year: vehicle.year,
+            make: vehicle.make,
+            model: vehicle.model,
+            engine: vehicle.engine,
+          } : null,
+          customer: customer ? {
+            name: `${customer.firstName || ""} ${customer.lastName || ""}`.trim(),
+            email: customer.email,
+            phone: customer.phone,
+          } : null,
+          totalAmount: (job.subtotal || 0) / 100,
+          laborAmount: laborAmountDollars,
+          partsAmount: partsAmountDollars,
+          laborHours: job.laborHours || 0,
+          lines: [] as any[],
+          indexedAt: new Date(),
+        };
+
+        if (job.parts?.length) {
+          for (const part of job.parts) {
+            entry.lines.push({
+              lineType: "part",
+              partNumber: part.partNumber,
+              description: part.name,
+              manufacturer: part.brand,
+              quantity: part.quantity || 1,
+              unitPrice: (part.retailCost || 0) / 100,
+              extendedPrice: ((part.quantity || 1) * (part.retailCost || 0)) / 100,
+            });
+          }
+        }
+
+        await db.collection("job_index").updateOne(
+          { shopId, workOrderId: String(ro.id), servicePackageId: String(job.id) },
+          { $set: entry },
+          { upsert: true }
+        );
+        indexed++;
+      }
+
+      return indexed;
+    }));
+
+    const results = await Promise.all(roPromises);
+    jobsIndexed += results.reduce((a, b) => a + b, 0);
+
+    page++;
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  const nextChunkStart = chunkEnd;
+  const isComplete = nextChunkStart >= globalEndDate;
+
+  await db.collection("tekmetric_backfill_progress").updateOne(
+    { shopId },
+    {
+      $set: {
+        currentChunkStart: nextChunkStart,
+        lastRunAt: new Date(),
+        completed: isComplete,
+        ...(isComplete ? { completedAt: new Date() } : {}),
+      },
+      $inc: { totalJobsIndexed: jobsIndexed }
+    }
+  );
+
+  return {
+    jobsIndexed,
+    complete: isComplete,
+    message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed`
+  };
+}
+
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
+  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!TEKMETRIC_API_TOKEN) {
+    return NextResponse.json({ error: "TEKMETRIC_API_TOKEN not configured" }, { status: 500 });
+  }
+
+  const db = await getDb();
+  const startTime = Date.now();
+
+  try {
+    const shopsToProcess = await getShopsNeedingBackfill(db);
+
+    if (shopsToProcess.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        message: "All Tekmetric shops have completed backfill",
+        shopsRemaining: 0,
+        duration: `${Date.now() - startTime}ms`
+      });
+    }
+
+    const selectedShops = shopsToProcess.slice(0, MAX_SHOPS_PER_RUN);
+    const results: any[] = [];
+
+    for (const shop of selectedShops) {
+      console.log(`[Tekmetric Backfill] Processing: ${shop.name} (Shop ${shop.shopId})`);
+      const result = await backfillShopChunk(db, shop.shopId, shop.tekmetricShopId);
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        ...result
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      processed: results,
+      shopsRemaining: shopsToProcess.length - selectedShops.length,
+      duration: `${Date.now() - startTime}ms`
+    });
+
+  } catch (err: any) {
+    console.error("[Tekmetric Backfill] Error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
