@@ -33,7 +33,7 @@ export async function GET() {
     
     const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, jobHistoryCounts] = await Promise.all([
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, jobHistoryCounts, jobIndexCounts] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -50,6 +50,10 @@ export async function GET() {
       db.collection("job_history").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("job_index").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray()
     ]);
     
@@ -61,6 +65,12 @@ export async function GET() {
     for (const j of jobHistoryCounts) {
       const key = String(j._id);
       jobHistoryCountMap.set(key, (jobHistoryCountMap.get(key) || 0) + j.count);
+    }
+    
+    const jobIndexCountMap = new Map<string, number>();
+    for (const j of jobIndexCounts) {
+      const key = String(j._id);
+      jobIndexCountMap.set(key, (jobIndexCountMap.get(key) || 0) + j.count);
     }
     
     const vehicleCountMap = new Map<string, number>();
@@ -84,6 +94,7 @@ export async function GET() {
       const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
       const backfill = backfillMap.get(String(shop.shopId));
       const jobHistoryCount = jobHistoryCountMap.get(String(shop.shopId)) || 0;
+      const jobIndexCount = jobIndexCountMap.get(String(shop.shopId)) || 0;
       
       const protractorLocation = shop.protractor?.locations?.[0];
       
@@ -111,8 +122,8 @@ export async function GET() {
         },
         enabledFeatures: shop.enabledFeatures || {},
         backfill: (hasProtractor || hasTekmetric) ? {
-          completed: hasProtractor ? (backfill?.completed || false) : (jobHistoryCount > 0),
-          totalJobsIndexed: hasProtractor ? (backfill?.totalJobsIndexed || jobHistoryCount) : jobHistoryCount,
+          completed: hasProtractor ? (backfill?.completed || false) : (jobIndexCount > 0),
+          totalJobsIndexed: hasProtractor ? (backfill?.totalJobsIndexed || jobHistoryCount) : jobIndexCount,
           currentChunkStart: backfill?.currentChunkStart || null,
           source: hasProtractor ? "protractor" : "tekmetric",
         } : null,
