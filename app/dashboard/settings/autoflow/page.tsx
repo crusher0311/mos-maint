@@ -2,6 +2,7 @@
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import AutoflowForm from "./AutoflowForm";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,15 +15,26 @@ async function getCurrent(shopId: number) {
       projection: {
         autoflowDomain: 1,
         autoflowApiKey: 1,
-        autoflowApiPassword: 1, // ✅ include password
+        autoflowApiPassword: 1,
+        webhookToken: 1,
       },
     }
   );
 
+  let webhookToken = shop?.webhookToken;
+  if (!webhookToken) {
+    webhookToken = crypto.randomBytes(12).toString("hex");
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { webhookToken } }
+    );
+  }
+
   return {
     autoflowDomain: shop?.autoflowDomain || "",
     autoflowApiKey: shop?.autoflowApiKey || "",
-    autoflowApiPassword: shop?.autoflowApiPassword || "", // ✅ pass to form
+    autoflowApiPassword: shop?.autoflowApiPassword || "",
+    webhookToken,
   };
 }
 
