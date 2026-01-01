@@ -227,18 +227,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         </button>
         
         {shopDropdownOpen && hasMultipleShops && (
-          <div className="absolute left-4 right-4 top-full mt-1 bg-mos-blue-dark rounded-lg shadow-lg border border-white/20 z-50 overflow-hidden">
+          <div className="absolute left-4 right-4 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
             {shops.length > 5 && (
-              <div className="p-2 border-b border-white/20">
+              <div className="p-2 border-b border-gray-200">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/70" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                   <input
                     ref={shopSearchRef}
                     type="text"
                     placeholder="Search locations..."
                     value={shopSearch}
                     onChange={(e) => setShopSearch(e.target.value)}
-                    className="w-full bg-white/10 text-white placeholder-white/50 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-white/30 border border-white/20"
+                    className="w-full bg-gray-50 text-gray-900 placeholder-gray-400 rounded-md py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200"
                   />
                 </div>
               </div>
@@ -255,14 +255,14 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                     key={shop.shopId}
                     onClick={() => switchShop(shop.shopId)}
                     disabled={switching}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors ${
                       shop.shopId === currentShopId
-                        ? "text-white bg-white/20"
-                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                        ? "text-blue-600 bg-blue-50 font-medium"
+                        : "text-gray-700 hover:bg-gray-100"
                     }`}
                   >
                     <span className="truncate">{shop.name}</span>
-                    {shop.shopId === currentShopId && <Check className="w-4 h-4 flex-shrink-0" />}
+                    {shop.shopId === currentShopId && <Check className="w-4 h-4 flex-shrink-0 text-blue-600" />}
                   </button>
                 ))}
               {shops.filter((shop) => 
@@ -270,7 +270,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                 shop.name.toLowerCase().includes(shopSearch.toLowerCase()) ||
                 String(shop.shopId).includes(shopSearch)
               ).length === 0 && (
-                <div className="px-3 py-2 text-sm text-white/50 text-center">No locations found</div>
+                <div className="px-3 py-2 text-sm text-gray-500 text-center">No locations found</div>
               )}
             </div>
           </div>
