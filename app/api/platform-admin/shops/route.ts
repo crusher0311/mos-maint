@@ -33,7 +33,7 @@ export async function GET() {
     
     const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, jobHistoryCounts, jobIndexCounts] = await Promise.all([
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -47,6 +47,7 @@ export async function GET() {
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray(),
       db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
+      db.collection("tekmetric_backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
       db.collection("job_history").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -60,6 +61,7 @@ export async function GET() {
     const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
     const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
+    const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shopId), b]));
     
     const jobHistoryCountMap = new Map<string, number>();
     for (const j of jobHistoryCounts) {
@@ -93,6 +95,7 @@ export async function GET() {
       const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
       const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
       const backfill = backfillMap.get(String(shop.shopId));
+      const tekmetricBackfill = tekmetricBackfillMap.get(String(shop.shopId));
       const jobHistoryCount = jobHistoryCountMap.get(String(shop.shopId)) || 0;
       const jobIndexCount = jobIndexCountMap.get(String(shop.shopId)) || 0;
       
@@ -122,9 +125,15 @@ export async function GET() {
         },
         enabledFeatures: shop.enabledFeatures || {},
         backfill: (hasProtractor || hasTekmetric) ? {
-          completed: hasProtractor ? (backfill?.completed || false) : (jobIndexCount > 0),
-          totalJobsIndexed: hasProtractor ? (backfill?.totalJobsIndexed || jobHistoryCount) : jobIndexCount,
-          currentChunkStart: backfill?.currentChunkStart || null,
+          completed: hasProtractor 
+            ? (backfill?.completed || false) 
+            : (tekmetricBackfill?.completed || jobIndexCount > 0),
+          totalJobsIndexed: hasProtractor 
+            ? (backfill?.totalJobsIndexed || jobHistoryCount) 
+            : (tekmetricBackfill?.totalJobsIndexed || jobIndexCount),
+          currentChunkStart: hasProtractor 
+            ? (backfill?.currentChunkStart || null)
+            : (tekmetricBackfill?.currentChunkStart || null),
           source: hasProtractor ? "protractor" : "tekmetric",
         } : null,
         integrationDetails: {
