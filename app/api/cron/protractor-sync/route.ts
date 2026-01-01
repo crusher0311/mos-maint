@@ -5,7 +5,9 @@ import {
   fetchActiveWorkOrders,
   fetchWorkOrderById,
   upsertProtractorWorkOrderSnapshot,
+  upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
+import pLimit from "p-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
       ]
     }).toArray();
 
-    const results: { shopId: number; synced: number; removed: number; staleDeleted?: number; error?: string }[] = [];
+    const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
@@ -49,7 +51,6 @@ export async function GET(req: NextRequest) {
 
         const activeWOs = activeResult.workOrders;
         const activeGuids = new Set(activeWOs.map(wo => wo.ID));
-        const activeWoNumbers = new Set(activeWOs.map(wo => wo.WorkOrderNumber));
         const INVOICED_STAGES = ["Invoiced", "Invoice", "Void", "Closed", "Complete", "Completed"];
         
         const stageCounts: Record<string, number> = {};
@@ -59,12 +60,103 @@ export async function GET(req: NextRequest) {
         }
         console.log(`[Cron] Shop ${shopId} - WorkflowStage counts:`, stageCounts);
 
-        for (const wo of activeWOs) {
-          const vin = (wo as any).VIN || (wo as any).ServiceItem?.VIN;
+        let vehiclesUpdated = 0;
+        const limit = pLimit(3);
+
+        const detailedWOs = await Promise.all(
+          activeWOs.map((wo) =>
+            limit(async () => {
+              try {
+                const detailResult = await fetchWorkOrderById(shopId, wo.ID);
+                if (detailResult.ok && detailResult.workOrder) {
+                  return detailResult.workOrder;
+                }
+              } catch (err) {
+                console.log(`[Cron] Failed to fetch WO ${wo.ID} details`);
+              }
+              return wo;
+            })
+          )
+        );
+
+        for (const wo of detailedWOs) {
           const stage = wo.WorkflowStage || (wo as any).Status || "";
+          const vin = wo.ServiceItem?.VIN?.toUpperCase() || (wo as any).VIN?.toUpperCase();
           
           if (vin) {
             await upsertProtractorWorkOrderSnapshot(shopId, wo);
+            
+            if (wo.ServiceItem) {
+              const vehicle = wo.ServiceItem;
+              await upsertProtractorVehicleSnapshot(shopId, vin, vehicle);
+              
+              const currentOdometer = (wo as any).InUsage ?? vehicle.Usage ?? (wo as any).Odometer ?? vehicle.Odometer;
+              
+              const workOrderSource = {
+                provider: "protractor",
+                workOrderId: String(wo.ID),
+                workOrderNumber: wo.WorkOrderNumber,
+                status: stage || "Open",
+                addedAt: new Date(),
+              };
+
+              const existingVehicle = await db.collection("vehicles").findOne({
+                $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+                vin,
+              });
+
+              if (existingVehicle) {
+                const existingSources = existingVehicle.status?.sources || [];
+                const sourceIndex = existingSources.findIndex(
+                  (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(wo.ID)
+                );
+                
+                let updatedSources;
+                if (sourceIndex >= 0) {
+                  updatedSources = [...existingSources];
+                  updatedSources[sourceIndex] = workOrderSource;
+                } else {
+                  updatedSources = [...existingSources, workOrderSource];
+                }
+
+                await db.collection("vehicles").updateOne(
+                  { _id: existingVehicle._id },
+                  {
+                    $set: {
+                      year: vehicle.Year,
+                      make: vehicle.Make,
+                      model: vehicle.Model,
+                      license: vehicle.LicensePlate,
+                      lastMileage: currentOdometer,
+                      updatedAt: new Date(),
+                      protractorId: vehicle.ID,
+                      "status.active": true,
+                      "status.sources": updatedSources,
+                      "status.updatedAt": new Date(),
+                    },
+                  }
+                );
+              } else {
+                await db.collection("vehicles").insertOne({
+                  shopId: String(shopId),
+                  vin,
+                  year: vehicle.Year,
+                  make: vehicle.Make,
+                  model: vehicle.Model,
+                  license: vehicle.LicensePlate,
+                  lastMileage: currentOdometer,
+                  protractorId: vehicle.ID,
+                  status: {
+                    active: true,
+                    sources: [workOrderSource],
+                    updatedAt: new Date(),
+                  },
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                });
+              }
+              vehiclesUpdated++;
+            }
             
             if (INVOICED_STAGES.some(s => stage.toLowerCase().includes(s.toLowerCase()))) {
               await db.collection("protractor_work_orders").updateMany(
@@ -85,13 +177,6 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Delete stale records that don't have workflowStage (old cache format)
-        const staleResult = await db.collection("protractor_work_orders").deleteMany({
-          shopId: { $in: [String(shopId), Number(shopId)] },
-          workflowStage: { $exists: false }
-        });
-        
-        // Also delete records with null/empty workflowStage that aren't in active list
         const cachedWOs = await db.collection("protractor_work_orders").find({
           shopId: { $in: [String(shopId), Number(shopId)] },
           $or: [
@@ -101,7 +186,7 @@ export async function GET(req: NextRequest) {
           ]
         }).toArray();
 
-        let removedCount = staleResult.deletedCount || 0;
+        let removedCount = 0;
         for (const cached of cachedWOs) {
           const guid = cached.workOrderGuid || cached.workOrderId || cached.data?.ID;
           if (guid && !activeGuids.has(guid)) {
@@ -120,7 +205,7 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        results.push({ shopId, synced: activeWOs.length, removed: removedCount, staleDeleted: staleResult.deletedCount });
+        results.push({ shopId, synced: detailedWOs.length, removed: removedCount, vehiclesUpdated });
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
       }
