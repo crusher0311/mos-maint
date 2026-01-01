@@ -38,6 +38,9 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **v1.7.2 Updates**:
+    *   **Feature Gating Fix**: Fixed critical bug where Platform Admin feature toggles (Part Cross-Ref, Job Lookup, etc.) weren't reflected in the sidebar. The `/api/shop/features` endpoint now uses the unified `featureResolver` system instead of the deprecated `shop_features` collection.
+    *   **Navigation Cleanup**: Removed Reporting, Billing, and Shop Onboarding from sidebar navigation until verified with live production users. Pages still exist but are hidden from menu.
 *   **v1.7.1 Updates**:
     *   **Background Sync on Connect**: Protractor and Tekmetric integrations now use fire-and-forget sync. Users see "Connected! Initial sync started in background." and can navigate away immediately without waiting for sync to complete.
     *   **Maintenance Thresholds KM Support**: The "Due Soon" thresholds page now respects shop distance unit preference, showing km-based presets and inputs for shops using kilometers.
