@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import IntervalsForm from "./IntervalsForm";
+import IntervalsHeader from "./IntervalsHeader";
 import { revalidatePath } from "next/cache";
 import { Settings, Wrench, RotateCcw } from "lucide-react";
 
@@ -115,9 +116,7 @@ export default async function IntervalsPage() {
 
   return (
     <main className="p-6 space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Shop Maintenance Intervals</h1>
-      </div>
+      <IntervalsHeader />
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <div className="flex items-start gap-3">
