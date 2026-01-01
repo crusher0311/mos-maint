@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getEnterpriseForShop } from "@/lib/enterprise";
+import { getEnterpriseByShopId } from "@/lib/enterprise";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   const currentShopId = Number(session.shopId);
-  const enterprise = await getEnterpriseForShop(currentShopId);
+  const enterprise = await getEnterpriseByShopId(currentShopId);
 
   if (!enterprise) {
     return NextResponse.json({ locations: [] });

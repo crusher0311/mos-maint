@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getEnterpriseForShop } from "@/lib/enterprise";
+import { getEnterpriseByShopId } from "@/lib/enterprise";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   const shopId = Number(session.shopId);
-  const enterprise = await getEnterpriseForShop(shopId);
+  const enterprise = await getEnterpriseByShopId(shopId);
 
   if (!enterprise) {
     return NextResponse.json({ error: "Not part of an enterprise" }, { status: 400 });
@@ -43,7 +43,6 @@ export async function GET(req: NextRequest) {
   if (!settingType || settingType === "branding") {
     settings.branding = {
       logo: sourceShop.logo || null,
-      locationIdentifier: sourceShop.locationIdentifier || null,
     };
   }
 
@@ -83,7 +82,7 @@ export async function POST(req: NextRequest) {
   }
 
   const shopId = Number(session.shopId);
-  const enterprise = await getEnterpriseForShop(shopId);
+  const enterprise = await getEnterpriseByShopId(shopId);
 
   if (!enterprise) {
     return NextResponse.json({ error: "Not part of an enterprise" }, { status: 400 });
@@ -111,7 +110,7 @@ export async function POST(req: NextRequest) {
   const updates: Record<string, any> = { updatedAt: new Date() };
 
   if (types.includes("branding")) {
-    if (sourceShop.logo) updates.logo = sourceShop.logo;
+    updates.logo = sourceShop.logo || null;
   }
 
   if (types.includes("maintenance")) {
