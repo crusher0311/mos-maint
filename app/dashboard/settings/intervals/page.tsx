@@ -33,6 +33,7 @@ export type ShopInterval = {
   key: string;
   name: string;
   useShop: boolean;
+  excluded: boolean;
   miles: number | null;
   months: number | null;
   defaultMiles: number | null;
@@ -52,6 +53,7 @@ async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
     key: svc.key,
     name: svc.name,
     useShop: saved[svc.key]?.useShop ?? false,
+    excluded: saved[svc.key]?.excluded ?? false,
     miles: saved[svc.key]?.miles ?? null,
     months: saved[svc.key]?.months ?? null,
     defaultMiles: svc.defaultMiles,
@@ -59,26 +61,47 @@ async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
   }));
 }
 
+async function getShopDistanceUnit(shopId: number): Promise<"miles" | "kilometers"> {
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { "preferences.distanceUnit": 1 } }
+  );
+  return shop?.preferences?.distanceUnit || "miles";
+}
+
 export default async function IntervalsPage() {
   const sess = await requireSession();
   const shopId = Number(sess.shopId);
-  const intervals = await getShopIntervals(shopId);
+  const [intervals, distanceUnit] = await Promise.all([
+    getShopIntervals(shopId),
+    getShopDistanceUnit(shopId)
+  ]);
 
   async function saveIntervals(formData: FormData) {
     "use server";
-    const updates: Record<string, { useShop: boolean; miles: number | null; months: number | null }> = {};
+    const unit = formData.get("distanceUnit") as string || "miles";
+    const updates: Record<string, { useShop: boolean; excluded: boolean; miles: number | null; months: number | null }> = {};
     
     for (const svc of COMMON_SERVICES) {
       const useShop = formData.get(`${svc.key}_useShop`) === "on";
-      const milesRaw = formData.get(`${svc.key}_miles`);
+      const excluded = formData.get(`${svc.key}_excluded`) === "on";
+      const distanceRaw = formData.get(`${svc.key}_distance`);
       const monthsRaw = formData.get(`${svc.key}_months`);
       
-      const miles = milesRaw ? parseInt(String(milesRaw), 10) : null;
+      let distance = distanceRaw ? parseInt(String(distanceRaw), 10) : null;
       const months = monthsRaw ? parseInt(String(monthsRaw), 10) : null;
+      
+      // Convert km to miles for storage (always store in miles internally)
+      let miles: number | null = null;
+      if (distance && distance > 0) {
+        miles = unit === "kilometers" ? Math.round(distance * 0.621371) : distance;
+      }
       
       updates[svc.key] = {
         useShop,
-        miles: miles && miles > 0 ? miles : null,
+        excluded,
+        miles,
         months: months && months > 0 ? months : null,
       };
     }
@@ -133,6 +156,7 @@ export default async function IntervalsPage() {
 
       <IntervalsForm 
         intervals={intervals} 
+        distanceUnit={distanceUnit}
         saveAction={saveIntervals}
         resetAction={resetToDefaults}
       />
