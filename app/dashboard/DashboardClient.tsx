@@ -23,6 +23,7 @@ type DashboardData = {
   pagination?: PaginationInfo;
   user: any;
   smsType?: string;
+  distanceUnit?: "miles" | "kilometers";
 };
 
 const PAGE_SIZE = 100;
@@ -405,7 +406,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   <SortHeader column="ro">RO #</SortHeader>
                   <SortHeader column="status">{data.smsType === 'protractor' ? 'Workflow Stage' : 'Status'}</SortHeader>
                   <SortHeader column="dvi">DVI</SortHeader>
-                  <SortHeader column="mileage">Mileage</SortHeader>
+                  <SortHeader column="mileage">{data.distanceUnit === "kilometers" ? "Odometer (km)" : "Mileage"}</SortHeader>
                   <th className="px-6 py-3 font-medium"></th>
                 </tr>
               </thead>

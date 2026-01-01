@@ -581,6 +581,8 @@ export async function GET(request: NextRequest) {
     } else if (shop?.tekmetric?.configured) {
       smsType = "tekmetric";
     }
+    
+    const distanceUnit = shop?.preferences?.distanceUnit || "miles";
 
     // Add cache-control headers to prevent browser caching
     const response = NextResponse.json({
@@ -598,7 +600,8 @@ export async function GET(request: NextRequest) {
         role: user.role,
         shopId: user.shopId
       },
-      smsType
+      smsType,
+      distanceUnit
     });
     
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
