@@ -367,7 +367,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 <Clock className="w-6 h-6 text-yellow-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">In Progress (this page)</p>
+                <p className="text-sm text-gray-500">No DVI (this page)</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.inProgress}</p>
               </div>
             </div>
