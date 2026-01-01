@@ -149,11 +149,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />
     },
-    {
-      name: "Reporting",
-      href: "/dashboard/reporting",
-      icon: <BarChart3 className="w-5 h-5" />
-    },
+    // Reporting page hidden until we have enough data to verify with live users
+    // {
+    //   name: "Reporting",
+    //   href: "/dashboard/reporting",
+    //   icon: <BarChart3 className="w-5 h-5" />
+    // },
     {
       name: "Part Cross-Ref",
       href: "/dashboard/parts",
@@ -172,7 +173,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       children: [
         { name: "Preferences", href: "/dashboard/settings/preferences" },
         { name: "Shop Branding", href: "/dashboard/settings/branding" },
-        { name: "Billing", href: "/dashboard/settings/billing" },
+        // Billing page hidden until we have enough data to verify with live users
+        // { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
