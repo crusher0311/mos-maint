@@ -19,6 +19,20 @@ export async function POST(req: NextRequest) {
     const autoflowApiKey = String(body?.autoflowApiKey || "").trim();
     const autoflowApiPassword = String(body?.autoflowApiPassword || "").trim();
 
+    // Optional AutoVitals integration
+    const autovitalsWelcomeCode = String(body?.autovitalsWelcomeCode || "").trim();
+    const autovitalsPersonalCode = String(body?.autovitalsPersonalCode || "").trim();
+
+    // Optional Protractor integration
+    const protractorApiKey = String(body?.protractorApiKey || "").trim();
+    const protractorShopId = String(body?.protractorShopId || "").trim();
+
+    // Optional Tekmetric integration
+    const tekmetricShopId = String(body?.tekmetricShopId || "").trim();
+
+    // Optional CARFAX integration
+    const carfaxLocationId = String(body?.carfaxLocationId || "").trim();
+
     // Validate required fields
     if (!shopName || !adminEmail || !adminPassword) {
       return NextResponse.json({ error: "Missing required fields: shopName, adminEmail, adminPassword" }, { status: 400 });
@@ -44,22 +58,60 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const shopId = await getNextShopId();
     
-    const shopDoc = {
+    const shopDoc: Record<string, any> = {
       shopId,
       name: shopName,
       webhookToken,
       createdAt: now,
       updatedAt: now,
-      // Store AutoFlow config if provided
-      ...(autoflowDomain && {
-        autoflow: {
-          domain: autoflowDomain,
-          apiKey: autoflowApiKey,
-          apiPassword: autoflowApiPassword,
-          updatedAt: now
-        }
-      })
     };
+
+    // Store AutoFlow config if provided
+    if (autoflowDomain) {
+      shopDoc.autoflow = {
+        domain: autoflowDomain,
+        apiKey: autoflowApiKey,
+        apiPassword: autoflowApiPassword,
+        updatedAt: now,
+      };
+    }
+
+    // Store AutoVitals config if provided
+    if (autovitalsWelcomeCode) {
+      shopDoc.autovitals = {
+        welcomeCode: autovitalsWelcomeCode,
+        personalCode: autovitalsPersonalCode,
+        updatedAt: now,
+      };
+    }
+
+    // Store Protractor config if provided
+    if (protractorShopId) {
+      shopDoc.protractor = {
+        connectionId: protractorShopId,
+        apiKey: protractorApiKey,
+        updatedAt: now,
+      };
+    }
+
+    // Store Tekmetric config if provided
+    if (tekmetricShopId) {
+      const parsedTekmetricShopId = parseInt(tekmetricShopId, 10);
+      if (!isNaN(parsedTekmetricShopId)) {
+        shopDoc.tekmetric = {
+          shopId: parsedTekmetricShopId,
+          connectedAt: now,
+        };
+      }
+    }
+
+    // Store CARFAX config if provided
+    if (carfaxLocationId) {
+      shopDoc.carfax = {
+        locationId: carfaxLocationId,
+        updatedAt: now,
+      };
+    }
 
     await shops.insertOne(shopDoc);
 
