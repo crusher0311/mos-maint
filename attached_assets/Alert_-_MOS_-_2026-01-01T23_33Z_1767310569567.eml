@@ -1,0 +1,457 @@
+Delivered-To: brandon@myoilsticker.com
+Received: by 2002:a05:7301:129a:b0:2a4:9ce9:f7c6 with SMTP id li26csp530907dyb;
+        Thu, 1 Jan 2026 15:33:28 -0800 (PST)
+X-Google-Smtp-Source: AGHT+IGfiBDYIUZ+89AReGS7IkKvS0EcepsObGIr0N95BjJ50JEdGXRi926SdhUbL+SqFx5rqDr7
+X-Received: by 2002:ac8:7dc6:0:b0:4ee:b4b:a4db with SMTP id d75a77b69052e-4f4abdf1570mr547471451cf.82.1767310408341;
+        Thu, 01 Jan 2026 15:33:28 -0800 (PST)
+ARC-Seal: i=1; a=rsa-sha256; t=1767310408; cv=none;
+        d=google.com; s=arc-20240605;
+        b=O0wBzvL+63QTXlB+aCbYqJ/ibkmuHCdy2E/vy/QYMS9f3DCEzjHbbblxzo4BEoRrw1
+         n7NJZORy49jw0mvIT9GukLwVMZkKERFoWpLNNiJ9ECBLF5oCwOQUBe0nzI86pRZbzqmO
+         TqjIqZcgrMnn8ylFxuzuQVe0/kOE6wimyBkFXvwvFissHm9N9PEdtJ9knrJD/BovDS33
+         OvrzRFcyAITUiByhbn3HOlbzp7oE1HYN4k7RRM/9JOod6mps+xov9tWy6KDgMBzYAEGd
+         L6oh0DoKK3vCwJOjI24ov5C0VbEQ4GWFAuxh/EKyZGyYccfui+DBKTm6/GNdZjARTQbO
+         paAw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=feedback-id:mime-version:subject:message-id:to:reply-to:from:date
+         :dkim-signature:dkim-signature;
+        bh=rduCS43aoo7KlI0iAE5qaRIdcBT/rWj/DBZohsy2iOU=;
+        fh=tZnY8LdEBqpfxacDsdNUKGFJn1ZPMGxCXNt14r5f7jM=;
+        b=iliGCcIXFjJnQfjfBxWF2R5yLDVSIY825vncJz5QqyulgR2p6M2Z0qwlwSWM4BtxJk
+         tPD1XSVT+s473k881mrqR88+EE0KTPgs90Zj2RxjOw7H2JFnw/aZCm8SbaPjVY15f+8F
+         1NwRieuPzXS5SBPV197L92WXMgQiNnjIK4SP6keIhv9GrfRNG7mEoBIbotPLzW6UuW6A
+         KHbCXJBd1WbSWGdZLTYVoOTsHim1ldvcEyA2CiZSrIwOCVZPeGtjlUZeyG2MWLYbkw3a
+         +q5asPf2VE4nOp6ZqY1wOTm6seQDAb5YFA0+XMK1HEI5ePFw+MlNHEdFIK2WyWV/tHEt
+         hvFA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@mongodb.com header.s=lioupvld75vpuqywrj6t5sdvjdvjiike header.b=LLBvMBYr;
+       dkim=pass header.i=@amazonses.com header.s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw header.b=hTW3conA;
+       spf=pass (google.com: domain of 0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@amazonses.com designates 54.240.11.67 as permitted sender) smtp.mailfrom=0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@amazonses.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=mongodb.com
+Return-Path: <0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@amazonses.com>
+Received: from a11-67.smtp-out.amazonses.com (a11-67.smtp-out.amazonses.com. [54.240.11.67])
+        by mx.google.com with ESMTPS id d75a77b69052e-4fae3f7c494si85701981cf.304.2026.01.01.15.33.28
+        for <brandon@myoilsticker.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Thu, 01 Jan 2026 15:33:28 -0800 (PST)
+Received-SPF: pass (google.com: domain of 0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@amazonses.com designates 54.240.11.67 as permitted sender) client-ip=54.240.11.67;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@mongodb.com header.s=lioupvld75vpuqywrj6t5sdvjdvjiike header.b=LLBvMBYr;
+       dkim=pass header.i=@amazonses.com header.s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw header.b=hTW3conA;
+       spf=pass (google.com: domain of 0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@amazonses.com designates 54.240.11.67 as permitted sender) smtp.mailfrom=0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@amazonses.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=mongodb.com
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=lioupvld75vpuqywrj6t5sdvjdvjiike; d=mongodb.com; t=1767310408;
+	h=Date:From:Reply-To:To:Message-ID:Subject:MIME-Version:Content-Type;
+	bh=uIUqt2/q2J6jxdYkMaHg0tdBzSDxUPvEwL7/0/p76Po=;
+	b=LLBvMBYrfIbSQLAeMeQwEq1ltwNvOEicmCpEdx09Jl9N2KO0BbPS/a36q0//Vg/A
+	c6yIPul9LCdSF3Ja0ZUvcHZPDE9E7DNjgtr+DL7MfkWiYqQ8UvNbKiia1aVwOLhuSgZ
+	qHmyrffQO16TRUS2zmo/QwQuFV5iWpxZnsGO5enA=
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple;
+	s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw; d=amazonses.com; t=1767310408;
+	h=Date:From:Reply-To:To:Message-ID:Subject:MIME-Version:Content-Type:Feedback-ID;
+	bh=uIUqt2/q2J6jxdYkMaHg0tdBzSDxUPvEwL7/0/p76Po=;
+	b=hTW3conAsFoxIgFRNzcNEm+cPSXPYgWhb7P8CH85rUJQ/TPdalnUnxtPj9j8nksX
+	FR1OFRIhfL+NiTr0T2wkYGLbYGOIFvWj9X71cH927eZzKXI0xloHLjU6IM3aT3TsGbM
+	5CIAl5UquCABE/g7cOi+fUwqQQDab3b4AZRhVGI8=
+Date: Thu, 1 Jan 2026 23:33:27 +0000
+From: MongoDB Atlas <mongodb-atlas-alerts@mongodb.com>
+Reply-To: MongoDB Atlas <mongodb-atlas-alerts@mongodb.com>
+To: brandon@myoilsticker.com
+Message-ID: <0100019b7be8b8f1-a84d6fb8-a599-4848-bfc7-8f873a0cfab4-000000@email.amazonses.com>
+Subject: Alert - MOS - 2026-01-01T23:33Z
+MIME-Version: 1.0
+Content-Type: multipart/alternative; 
+	boundary="----=_Part_1497346_300300480.1767310407910"
+Feedback-ID: ::1.us-east-1.SQF4pBjWHY2JcNoZz7Je3LrKT+vZTBvBiJRSu0bEyrk=:AmazonSES
+X-SES-Outgoing: 2026.01.01-54.240.11.67
+
+------=_Part_1497346_300300480.1767310407910
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+
+An alert is open for a Atlas project you belong to:
+
+Project Name: MOS
+Organization Name: Brandon&#x27;s Org - 2025-08-26
+Alert: Host has index suggestions 
+Created: 2026/01/01 23:17 GMT
+
+What does this mean?
+The ratio of documents scanned to returned exceeded 8000 at some point over the past 24 hours on ac-ncoxder-shard-00-01.tiixipi.mongodb.net, which typically suggests that un-indexed queries are being run.
+ Analysis took into consideration all existing indexes as of Thu Jan 01 04:51:39 GMT 2026. 
+
+
+Suggested actions:
+* Clients are performing queries that are not covered by indexes.
+* Analysis took into consideration all existing indexes as of Thu Jan 01 04:51:39 GMT 2026. 
+* Data size (number of documents in queried collection) has grown.
+* Query is not well targeted (e.g. indexes are on low-cardinality fields or query is malformed).
+
+
+------=_Part_1497346_300300480.1767310407910
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<meta charset=3D"UTF-8"/>
+<style type=3D"text/css">
+    /* Euclid Circular Regular */
+    @font-face {
+    font-family: 'Euclid Circular A';
+    font-weight: 400, normal;
+    font-style: normal;
+    src:
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Regular-WebX=
+L.woff2') format('woff2'),
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Regular-WebX=
+L.woff') format('woff'),
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Regular-WebX=
+L.ttf') format('truetype');
+    }
+</style>
+    <table width=3D"100%" height=3D"100%" cellpadding=3D"0" cellspacing=3D"=
+0" bgcolor=3D"#f5f6f7">
+        <tr><td height=3D"50"></td></tr>
+        <tr>
+            <td align=3D"center" valign=3D"top">
+                <!-- table lvl 1 -->
+                <table width=3D"600" cellpadding=3D"0" cellspacing=3D"0" bg=
+color=3D"#ffffff" style=3D"border:1px solid #f1f2f5" class=3D"main-content"=
+>
+                    <tr>
+                        <td colspan=3D"3" height=3D"60" bgcolor=3D"#ffffff"=
+ style=3D"padding-left:16px;" align=3D"left">
+                           =20
+                                <img src=3D"https://cloud.mongodb.com/stati=
+c/images/logo-mongodb.png" style=3D"display:block;width:127px;height:32px;"=
+/>
+                           =20
+                        </td>
+                    </tr>
+                    <tr><td colspan=3D"3" height=3D"20"></td></tr>
+                    <tr>
+                        <td width=3D"20"></td>
+                        <td align=3D"left">
+                            <!-- table lvl 2 -->
+                            <table cellpadding=3D"0" cellspacing=3D"0" widt=
+h=3D"100%">
+                                <tr>
+                                    <td colspan=3D"3"><span style=3D"font-f=
+amily:Euclid Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-siz=
+e:12px;color:#5c6c75;letter-spacing:0.4px" class=3D"label">ORGANIZATION</sp=
+an></td>
+                                  </tr>
+                                  <tr>
+                                    <td colspan=3D"3"><a href=3D"https://cl=
+oud.mongodb.com/email/v2/link/69570447c8f9bd663222d0f1/viewOrganizationVari=
+ant?url=3D%2Fv2%23%2Forg%2F68ada3cb56f6213e1cc29f3c%2Fprojects" target=3D"_=
+blank" style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans-serif;fo=
+nt-weight:500;font-size:16px;line-height:28px;color:#016bf8">Brandon&#x27;s=
+ Org - 2025-08-26</a></td>
+                                  </tr>
+                                  <tr><td colspan=3D"3" height=3D"20"></td>=
+</tr>
+                                  <tr>
+                                    <td colspan=3D"3"><span style=3D"font-f=
+amily:Euclid Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-siz=
+e:12px;color:#5c6c75;letter-spacing:0.4px" class=3D"label">PROJECT</span></=
+td>
+                                  </tr>
+                                  <tr>
+                                    <td colspan=3D"3"><a href=3D"https://cl=
+oud.mongodb.com/email/v2/link/69570447c8f9bd663222d0f1/viewProjectVariant?u=
+rl=3D%2Fv2%2F68ada3cc56f6213e1cc29ff8" target=3D"_blank" style=3D"font-fami=
+ly:Euclid Circular A,Helvetica,Arial,sans-serif;font-weight:500;font-size:1=
+6px;line-height:28px;color:#016bf8">MOS</a></td>
+                                  </tr>
+                                  <tr><td colspan=3D"3" height=3D"20"></td>=
+</tr>
+                                  <tr><td colspan=3D"3" height=3D"1" bgcolo=
+r=3D"#e8edeb" style=3D"font-size:1px;line-height:1px;">&nbsp;</td></tr>
+                                <tr><td colspan=3D"3" height=3D"20"></td></=
+tr>
+                                <tr><td colspan=3D"3"><style type=3D"text/c=
+ss">
+    /* Euclid Circular Regular */
+    @font-face {
+    font-family: 'Euclid Circular A';
+    font-weight: 400, normal;
+    font-style: normal;
+    src:
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Regular-WebX=
+L.woff2') format('woff2'),
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Regular-WebX=
+L.woff') format('woff'),
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Regular.ttf'=
+) format('truetype');
+    }
+    /* Euclid Circular Medium */
+    @font-face {
+    font-family: 'Euclid Circular A';
+    font-weight: 500;
+    font-style: normal;
+    src:
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Medium-WebXL=
+.woff2') format('woff2'),
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Medium-WebXL=
+.woff') format('woff'),
+     url('https://static.mongodb.com/com/fonts/EuclidCircularA-Medium.ttf')=
+ format('truetype');
+    }
+</style>
+
+<table width=3D"100%" height=3D"100%" cellpadding=3D"0" cellspacing=3D"0">
+   =20
+        <tr><td style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans=
+-serif;font-weight:400;font-size:16px;" colspan=3D"4">An alert is open for =
+your Atlas project:</td></tr>
+        <tr><td colspan=3D"4" height=3D"10"></td></tr>
+   =20
+    <tr><td colspan=3D"4" height=3D"1" bgcolor=3D"#db3030" style=3D"font-si=
+ze:1px;line-height:1px;">&nbsp;</td></tr>
+    <tr bgcolor=3D"#fff6f6"><td colspan=3D"4" height=3D"20"></td></tr>
+    <tr bgcolor=3D"#fff6f6">
+        <td width=3D"3%"></td>
+        <td width=3D"14%" valign=3D"top"><span style=3D"font-family:Euclid =
+Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;color:=
+#db3030;">ALERT</span></td>
+        <td width=3D"80%">
+            <table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0">
+                <tr><td colspan=3D"2">
+                    <span style=3D"font-family:Euclid Circular A,Helvetica,=
+Arial,sans-serif;font-weight:600;font-size:13px;color:#db3030;">
+                        Host has index suggestions
+                    </span>
+                </td></tr>
+                <tr><td colspan=3D"2" height=3D"15"></td></tr>
+                <tr><td colspan=3D"2"><span style=3D"font-family:Euclid Cir=
+cular A,Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;color:#00=
+1e2b;">Alert Details</span></td></tr>
+                <tr><td colspan=3D"2">
+                    <table width=3D"100%" cellpadding=3D"0" cellspacing=3D"=
+0">
+                    <tr><td colspan=3D"2" height=3D"3"></td></tr>
+                    <tr>
+                        <td width=3D"100"><span style=3D"font-family:Euclid=
+ Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;color=
+:#5c6c75;">CREATED</span></td>
+                        <td><span style=3D"font-family:Euclid Circular A,He=
+lvetica,Arial,sans-serif;font-size:12px;color:#5c6c75;">2026/01/01 23:17 GM=
+T</span></td>
+                    </tr>
+                    <tr><td colspan=3D"2" height=3D"3"></td></tr>
+                    <tr>
+                        <td width=3D"100"><span style=3D"font-family:Euclid=
+ Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;color=
+:#5c6c75;">TYPE</span></td>
+                        <td><span style=3D"font-family:Euclid Circular A,He=
+lvetica,Arial,sans-serif;font-size:12px;color:#5c6c75;">Primary</span></td>
+                    </tr>
+                    <tr><td colspan=3D"2" height=3D"3"></td></tr>
+                    <tr>
+                        <td width=3D"100"><span style=3D"font-family:Euclid=
+ Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;color=
+:#5c6c75;">CLUSTER</span></td>
+                        <td><span style=3D"font-family:Euclid Circular A,He=
+lvetica,Arial,sans-serif;font-size:12px;color:#5c6c75;">mos-maintenance-mvp=
+</span></td>
+                    </tr>
+                    <tr><td colspan=3D"2" height=3D"3"></td></tr>
+                    <tr>
+                        <td width=3D"100"><span style=3D"font-family:Euclid=
+ Circular A,Helvetica,Arial,sans-serif;font-weight:600;font-size:12px;color=
+:#5c6c75;">HOST</span></td>
+                        <td><span style=3D"font-family:Euclid Circular A,He=
+lvetica,Arial,sans-serif;font-size:12px;color:#5c6c75;">ac-ncoxder-shard-00=
+-01.&#x2060;tiixipi.&#x2060;mongodb.&#x2060;net</span></td>
+                    </tr>
+                    </table>
+                </td></tr>
+                <tr><td colspan=3D"2" height=3D"20"></td></tr>
+                <tr>
+                   =20
+                       =20
+                            <!--[if mso]>
+<td style=3D"line-height:0px;font-size:0px;">
+    <v:rect xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:w=3D"urn:schema=
+s-microsoft-com:office:word" href=3D"https://cloud.mongodb.com/email/v2/lin=
+k/69570447c8f9bd663222d0f1/alertResolutionVariant?url&#x3D;%2Fv2%2F68ada3cc=
+56f6213e1cc29ff8%23%2Fmetrics%2FreplicaSet%2F68b8a999c1049a5b1d455d18%2Fadv=
+isor" style=3D"height:37px;v-text-anchor:middle;width:211px;" strokecolor=
+=3D"#00684a" fillcolor=3D"#00684a">
+        <w:anchorlock/>
+        <center style=3D"color:#ffffff;font-family:Helvetica,Arial,sans-ser=
+if;font-size:13px;font-weight:400;">View Performance Advisor</center>
+    </v:rect>
+</td>
+<![endif]-->
+<!--[if !mso]><!-->
+<td width=3D"187">
+    <div style=3D""><a href=3D"https://cloud.mongodb.com/email/v2/link/6957=
+0447c8f9bd663222d0f1/alertResolutionVariant?url&#x3D;%2Fv2%2F68ada3cc56f621=
+3e1cc29ff8%23%2Fmetrics%2FreplicaSet%2F68b8a999c1049a5b1d455d18%2Fadvisor" =
+target=3D"_blank" style=3D"display:inline-block;text-decoration:none;width:=
+187px;max-height:28px;"><div style=3D"font-family:Euclid Circular A,Helveti=
+ca,Arial,sans-serif;width:187px;max-height:28px;text-align:center;padding:4=
+px 0;background-color:#00684a;border:1px solid #00684a;border-radius:6px;di=
+splay:block;color:#ffffff;font-size:13px;font-weight:400;text-decoration:no=
+ne;letter-spacing:normal;">View Performance Advisor</div></a></div>
+</td>
+<!--<![endif]-->
+
+                       =20
+                   =20
+                    <!--[if mso]>
+<td style=3D"line-height:0px;font-size:0px;" colspan=3D"3">
+    <v:rect xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:w=3D"urn:schema=
+s-microsoft-com:office:word" href=3D"https://cloud.mongodb.com/email/v2/lin=
+k/69570447c8f9bd663222d0f1/acknowledgeAlertVariant?url&#x3D;%2Fv2%2F68ada3c=
+c56f6213e1cc29ff8%23%2Falerts%2FopenAlerts%3FacknowledgeAlertId%3D6957008f6=
+3f50b5b141cc5a9" style=3D"height:37px;v-text-anchor:middle;width:166px;" st=
+rokecolor=3D"#889397" fillcolor=3D"#f9fbfa">
+        <w:anchorlock/>
+        <center style=3D"color:#001e2b;font-family:Helvetica,Arial,sans-ser=
+if;font-size:13px;font-weight:400;">Acknowledge Alert</center>
+    </v:rect>
+</td>
+<![endif]-->
+<!--[if !mso]><!-->
+<td colspan=3D"3" width=3D"142">
+    <div style=3D"margin-left:5%;"><a href=3D"https://cloud.mongodb.com/ema=
+il/v2/link/69570447c8f9bd663222d0f1/acknowledgeAlertVariant?url&#x3D;%2Fv2%=
+2F68ada3cc56f6213e1cc29ff8%23%2Falerts%2FopenAlerts%3FacknowledgeAlertId%3D=
+6957008f63f50b5b141cc5a9" target=3D"_blank" style=3D"display:inline-block;t=
+ext-decoration:none;width:142px;max-height:28px;"><div style=3D"font-family=
+:Euclid Circular A,Helvetica,Arial,sans-serif;width:142px;max-height:28px;t=
+ext-align:center;padding:4px 0;background-color:#f9fbfa;border:1px solid #8=
+89397;border-radius:6px;display:block;color:#001e2b;font-size:13px;font-wei=
+ght:400;text-decoration:none;letter-spacing:normal;">Acknowledge Alert</div=
+></a></div>
+</td>
+<!--<![endif]-->
+
+                        </tr>
+            </table>
+        </td>
+        <td width=3D"3%"></td>
+    </tr>
+    <tr><td colspan=3D"4" height=3D"30" bgcolor=3D"#fff6f6"></td></tr>
+    <tr><td colspan=3D"4" height=3D"1" bgcolor=3D"#db3030" style=3D"font-si=
+ze:1px;line-height:1px;">&nbsp;</td></tr>
+    <tr><td colspan=3D"4" height=3D"10"></td></tr>
+    <tr><td colspan=3D"4" height=3D"10"></td></tr>
+    <tr><td style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans-ser=
+if;font-weight:600;font-size:16px;color:#001e2b;" colspan=3D"4">What does t=
+his mean?</td></tr>
+    <tr><td colspan=3D"4" height=3D"8"></td></tr>
+    <tr><td colspan=3D"4">
+        <span style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans-s=
+erif;font-weight:400;font-size:14px;color:#001e2b;"><p style=3D"line-height=
+:28px;">The Performance Advisor in Atlas monitors slow queries and recommen=
+ds indexes to improve query performance.</p>
+
+<p style=3D"line-height:28px;">Performance Advisor=E2=80=99s suggestions ar=
+e based on the query patterns observed over the past 24 hours.</p>
+
+<p style=3D"line-height:28px;">Creating an index helps queries run more eff=
+iciently by scanning fewer documents, leading to improved execution times a=
+nd resource usage.</p>
+</span>
+    </td></tr>
+    <tr><td colspan=3D"4" height=3D"20"></td></tr>
+    <tr><td style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans-ser=
+if;font-weight:600;font-size:16px;color:#001e2b;" colspan=3D"4">Suggested a=
+ctions:</td></tr>
+    <tr><td colspan=3D"4" height=3D"8"></td></tr>
+    <tr><td colspan=3D"4">
+        <span style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans-s=
+erif;font-weight:400;font-size:14px;color:#001e2b;"><ul>
+    <li style=3D"line-height:28px;">Review index suggestions in the Perform=
+ance Advisor</li>
+
+    <li style=3D"line-height:28px;">Test out suggested indexes in developme=
+nt environments</li>
+</ul>
+</span>
+    </td></tr>
+    <tr><td colspan=3D"4" height=3D"20"></td></tr>
+
+    <tr>
+       =20
+           =20
+                <!--[if mso]>
+<td style=3D"line-height:0px;font-size:0px;" colspan=3D"4">
+    <v:rect xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:w=3D"urn:schema=
+s-microsoft-com:office:word" href=3D"https://cloud.mongodb.com/email/v2/lin=
+k/69570447c8f9bd663222d0f1/alertResolutionVariant?url&#x3D;%2Fv2%2F68ada3cc=
+56f6213e1cc29ff8%23%2Fmetrics%2FreplicaSet%2F68b8a999c1049a5b1d455d18%2Fadv=
+isor" style=3D"height:37px;v-text-anchor:middle;width:211px;" strokecolor=
+=3D"#00684a" fillcolor=3D"#00684a">
+        <w:anchorlock/>
+        <center style=3D"color:#ffffff;font-family:Helvetica,Arial,sans-ser=
+if;font-size:13px;font-weight:400;">View Performance Advisor</center>
+    </v:rect>
+</td>
+<![endif]-->
+<!--[if !mso]><!-->
+<td colspan=3D"4" width=3D"187">
+    <div style=3D""><a href=3D"https://cloud.mongodb.com/email/v2/link/6957=
+0447c8f9bd663222d0f1/alertResolutionVariant?url&#x3D;%2Fv2%2F68ada3cc56f621=
+3e1cc29ff8%23%2Fmetrics%2FreplicaSet%2F68b8a999c1049a5b1d455d18%2Fadvisor" =
+target=3D"_blank" style=3D"display:inline-block;text-decoration:none;width:=
+187px;"><div style=3D"font-family:Euclid Circular A,Helvetica,Arial,sans-se=
+rif;width:187px;text-align:center;padding:12px 0;background-color:#00684a;b=
+order:1px solid #00684a;border-radius:6px;display:block;color:#ffffff;font-=
+size:13px;font-weight:400;text-decoration:none;letter-spacing:normal;">View=
+ Performance Advisor</div></a></div>
+</td>
+<!--<![endif]-->
+
+           =20
+       =20
+    </tr>
+
+    <tr><td colspan=3D"4" height=3D"30"></td></tr>
+    <tr><td colspan=3D"4" height=3D"1" bgcolor=3D"#e8edeb" style=3D"font-si=
+ze:1px;line-height:1px;">&nbsp;</td></tr>
+    <tr><td colspan=3D"4" height=3D"20"></td></tr>
+    <tr><td colspan=3D"4"><a href=3D"https://cloud.mongodb.com/email/v2/lin=
+k/69570447c8f9bd663222d0f1/manageProjectAlertsVariant?url=3D%2Fv2%2F68ada3c=
+c56f6213e1cc29ff8%23%2Falerts%2Fmanage" target=3D"_blank" style=3D"font-fam=
+ily:Euclid Circular A,Helvetica,Arial,sans-serif;font-weight:400;font-size:=
+11px;text-decoration:none;color:#016bf8;letter-spacing:0.2px">Manage Alert =
+Settings</a></td></tr>
+    </table>
+</td></tr>
+                                <tr><td colspan=3D"3" height=3D"20"></td></=
+tr>
+                                <tr>
+                                    <td colspan=3D"3" style=3D"text-align: =
+center">
+                                        <span style=3D"font-family:Euclid C=
+ircular A,Helvetica,Arial,sans-serif;font-weight:400;font-size:13px;color:#=
+5c6c75;">This email was sent from MongoDB Inc., 1633 Broadway, NY, NY 10019=
+</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width=3D"20"></td>
+                    </tr>
+                    <tr><td colspan=3D"3" height=3D"20"></td></tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td height=3D"50">
+               =20
+            </td>
+        </tr>
+    </table>
+    <img src=3D"https://cloud.mongodb.com/email/v2/open/69570447c8f9bd66322=
+2d0f1?isActionableAlertEmail&#x3D;true&amp;alertDescriptions&#x3D;Host has =
+index suggestions" width=3D"1" height=3D"1" style=3D"width:1px;height:1px;"=
+ />
+
+------=_Part_1497346_300300480.1767310407910--
