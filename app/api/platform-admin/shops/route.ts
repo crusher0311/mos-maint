@@ -19,10 +19,14 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const [shops, platformSettings] = await Promise.all([
+    const [shops, platformSettings, enterprises] = await Promise.all([
       db.collection("shops").find().toArray(),
-      db.collection("platform_settings").findOne({ key: "trial" })
+      db.collection("platform_settings").findOne({ key: "trial" }),
+      db.collection("enterprise_accounts").find().toArray()
     ]);
+    
+    // Build enterprise lookup map
+    const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
     
     const defaultVinLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
     const shopIds = shops.map(s => s.shopId);
@@ -71,10 +75,16 @@ export async function GET() {
       
       const protractorLocation = shop.protractor?.locations?.[0];
       
+      // Get enterprise info if this shop belongs to one
+      const enterprise = shop.enterpriseId ? enterpriseMap.get(shop.enterpriseId.toString()) : null;
+      
       return {
         _id: shop._id,
         shopId: shop.shopId,
         name: shop.name || `Shop ${shop.shopId}`,
+        locationIdentifier: shop.locationIdentifier || null,
+        enterpriseId: shop.enterpriseId?.toString() || null,
+        enterpriseName: enterprise?.name || null,
         createdAt: shop.createdAt || shop._id.getTimestamp?.() || new Date(),
         userCount: userCountMap.get(String(shop.shopId)) || 0,
         vehicleCount: vehicleCountMap.get(String(shop.shopId)) || 0,

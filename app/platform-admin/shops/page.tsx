@@ -46,6 +46,9 @@ interface Shop {
   _id: string;
   shopId: number | string;
   name: string;
+  locationIdentifier?: string | null;
+  enterpriseId?: string | null;
+  enterpriseName?: string | null;
   createdAt: string;
   userCount: number;
   vehicleCount: number;
@@ -70,6 +73,7 @@ export default function PlatformShopsPage() {
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
   const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
+  const [groupByEnterprise, setGroupByEnterprise] = useState(false);
 
   const accessShop = async (shopId: number | string) => {
     if (impersonating) return;
@@ -220,10 +224,48 @@ export default function PlatformShopsPage() {
     }
   };
 
+  const searchLower = search.toLowerCase();
   const filteredShops = shops.filter(shop => 
-    shop.name?.toLowerCase().includes(search.toLowerCase()) ||
+    shop.name?.toLowerCase().includes(searchLower) ||
+    (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchLower)) ||
+    (shop.enterpriseName && shop.enterpriseName.toLowerCase().includes(searchLower)) ||
     String(shop.shopId).includes(search)
   );
+  
+  // Group shops by enterprise if enabled
+  const groupedShops = groupByEnterprise 
+    ? (() => {
+        const groups: { enterprise: string | null; shops: Shop[] }[] = [];
+        const enterpriseMap = new Map<string | null, Shop[]>();
+        
+        filteredShops.forEach(shop => {
+          const key = shop.enterpriseId || null;
+          if (!enterpriseMap.has(key)) {
+            enterpriseMap.set(key, []);
+          }
+          enterpriseMap.get(key)!.push(shop);
+        });
+        
+        // Sort: enterprises first (alphabetically), then standalone shops
+        const enterpriseKeys = Array.from(enterpriseMap.keys()).sort((a, b) => {
+          if (a === null) return 1;
+          if (b === null) return -1;
+          const nameA = enterpriseMap.get(a)?.[0]?.enterpriseName || '';
+          const nameB = enterpriseMap.get(b)?.[0]?.enterpriseName || '';
+          return nameA.localeCompare(nameB);
+        });
+        
+        enterpriseKeys.forEach(key => {
+          const shopsInGroup = enterpriseMap.get(key)!;
+          groups.push({
+            enterprise: key ? (shopsInGroup[0]?.enterpriseName || `Enterprise ${key}`) : null,
+            shops: shopsInGroup.sort((a, b) => (a.locationIdentifier || a.name).localeCompare(b.locationIdentifier || b.name))
+          });
+        });
+        
+        return groups;
+      })()
+    : null;
 
   if (loading) {
     return (
@@ -251,15 +293,26 @@ export default function PlatformShopsPage() {
         </button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search shops by name or ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        />
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search shops by name, location, or ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap cursor-pointer">
+          <input
+            type="checkbox"
+            checked={groupByEnterprise}
+            onChange={(e) => setGroupByEnterprise(e.target.checked)}
+            className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+          />
+          Group by Enterprise
+        </label>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -284,25 +337,43 @@ export default function PlatformShopsPage() {
                   {search ? "No shops match your search" : "No shops yet"}
                 </td>
               </tr>
-            ) : (
-              filteredShops.flatMap((shop) => [
+            ) : groupByEnterprise && groupedShops ? (
+              groupedShops.flatMap((group, groupIndex) => [
+                <tr key={`group-${groupIndex}`} className="bg-gray-100">
+                  <td colSpan={9} className="px-4 py-2">
+                    <div className="flex items-center gap-2 font-medium text-gray-700">
+                      <Building2 className="w-4 h-4" />
+                      {group.enterprise || "Standalone Shops"}
+                      <span className="text-xs text-gray-500 font-normal">({group.shops.length} location{group.shops.length !== 1 ? 's' : ''})</span>
+                    </div>
+                  </td>
+                </tr>,
+                ...group.shops.flatMap((shop) => [
                 <tr key={`${shop._id}-row`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : "bg-purple-100"}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-purple-100"}`}>
                         {shop.isLocked ? (
                           <Lock className="w-4 h-4 text-red-600" />
                         ) : (
-                          <Building2 className="w-4 h-4 text-purple-600" />
+                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-purple-600"}`} />
                         )}
                       </div>
                       <div>
-                        <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
-                        {shop.isLocked && (
-                          <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
-                        )}
-                        {shop.billing.isPaid && (
-                          <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
+                          )}
+                          {shop.isLocked && (
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
+                          )}
+                          {shop.billing.isPaid && (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
+                          )}
+                        </div>
+                        {shop.enterpriseName && !groupByEnterprise && (
+                          <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
                         )}
                       </div>
                     </div>
@@ -527,6 +598,168 @@ export default function PlatformShopsPage() {
                     </td>
                   </tr>
                 ) : null,
+              ])
+              ])
+            ) : (
+              filteredShops.flatMap((shop) => [
+                <tr key={`${shop._id}-row-flat`} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-purple-100"}`}>
+                        {shop.isLocked ? (
+                          <Lock className="w-4 h-4 text-red-600" />
+                        ) : (
+                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-purple-600"}`} />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
+                          )}
+                          {shop.isLocked && (
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
+                          )}
+                          {shop.billing.isPaid && (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
+                          )}
+                        </div>
+                        {shop.enterpriseName && (
+                          <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-600">{shop.shopId}</td>
+                  <td className="px-4 py-3 text-right text-gray-900">{shop.userCount}</td>
+                  <td className="px-4 py-3 text-right text-gray-900">{shop.vehicleCount}</td>
+                  <td className="px-4 py-3">
+                    {shop.billing.isPaid ? (
+                      <div className="text-center text-green-600 text-sm">Unlimited</div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="text-center">
+                          <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : "text-gray-900"}`}>
+                            {shop.billing.vinViewCount} / {shop.billing.vinLimit}
+                          </div>
+                          <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : "bg-purple-500"}`}
+                              style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-0.5">
+                          <button
+                            onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
+                            title="Add VINs"
+                            className="p-1 text-green-600 hover:bg-green-50 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
+                            title="Set Custom Limit"
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
+                            title="Reset to Default"
+                            className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {shop.integrations.map(int => (
+                        <span 
+                          key={int} 
+                          onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
+                          className={`px-2 py-0.5 text-xs rounded ${
+                            int === "Protractor" ? "bg-purple-100 text-purple-700" :
+                            int === "AutoFlow" ? "bg-blue-100 text-blue-700" :
+                            int === "CARFAX" ? "bg-red-100 text-red-700" :
+                            int === "Tekmetric" ? "bg-green-100 text-green-700" :
+                            int === "AutoVitals" ? "bg-orange-100 text-orange-700" :
+                            "bg-gray-100 text-gray-700"
+                          } ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
+                        >
+                          {int}
+                        </span>
+                      ))}
+                      {shop.integrations.length === 0 && (
+                        <span className="text-gray-400 text-sm">None</span>
+                      )}
+                      {shop.integrationDetails && (
+                        <button
+                          onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
+                          className="p-0.5 text-gray-400 hover:text-gray-600"
+                        >
+                          {expandedShop === shop._id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {shop.backfill ? (
+                      shop.backfill.completed ? (
+                        <div className="flex items-center justify-center gap-1 text-green-600" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed`}>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1 text-orange-600" title={`In progress: ${shop.backfill.currentChunkStart || 'starting'}`}>
+                          <Clock4 className="w-4 h-4 animate-pulse" />
+                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      )
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-sm">
+                    {new Date(shop.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => { 
+                          setSelectedShop(shop); 
+                          setModalAction("manageFeatures");
+                          setBillingEdits({ 
+                            plan: shop.billing.plan || "trial",
+                            status: shop.billing.status || "trial"
+                          });
+                          setFeatureEdits(shop.enabledFeatures || {});
+                          setVinInput(String(shop.billing.vinLimit));
+                        }}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                        title="Manage Features"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => accessShop(shop.shopId)}
+                        disabled={impersonating !== null}
+                        className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {impersonating === shop.shopId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <LogIn className="w-4 h-4" />
+                        )}
+                        Access
+                      </button>
+                    </div>
+                  </td>
+                </tr>,
               ])
             )}
           </tbody>
