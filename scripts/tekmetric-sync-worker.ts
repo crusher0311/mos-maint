@@ -1,4 +1,4 @@
-const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const SYNC_INTERVAL_MS = 10 * 1000; // 10 seconds
 const API_URL = process.env.REPLIT_DEV_DOMAIN 
   ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/tekmetric-sync`
   : 'http://localhost:5000/api/cron/tekmetric-sync';
