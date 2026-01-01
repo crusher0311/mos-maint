@@ -41,12 +41,16 @@ type JobResult = {
   matchBand?: "exact" | "likely" | "possible" | "poor";
   matchBandLabel?: string;
   matchReason: string;
+  isCurrentLocation?: boolean;
+  locationName?: string;
+  locationShopId?: number;
   scoreBreakdown?: {
     powertrain: number;
     makeModel: number;
     year: number;
     constraints: number;
     evidence: number;
+    locationBonus?: number;
   };
 };
 
@@ -235,9 +239,18 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                       </span>
                       <span className="text-xs text-gray-400">{job.matchScore}%</span>
                     </div>
-                    <div className="mt-1 text-sm text-gray-500">
-                      {job.vehicle.year} {job.vehicle.make} {job.vehicle.model}
-                      {job.vehicle.engine && ` | ${job.vehicle.engine}`}
+                    <div className="mt-1 text-sm text-gray-500 flex items-center gap-2">
+                      <span>{job.vehicle.year} {job.vehicle.make} {job.vehicle.model}</span>
+                      {job.vehicle.engine && <span className="text-gray-400">| {job.vehicle.engine}</span>}
+                      {job.locationName && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          job.isCurrentLocation 
+                            ? "bg-blue-100 text-blue-700" 
+                            : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {job.locationName}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1 text-xs text-gray-400">
                       {job.matchReason}

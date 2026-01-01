@@ -102,6 +102,20 @@ export async function GET(req: NextRequest) {
     console.log(`[Jobs Search] Enterprise search: shops ${searchShopIds.join(', ')}`);
   }
   
+  // Build shop lookup map for location names
+  const shopDocs = await db.collection("shops")
+    .find({ shopId: { $in: searchShopIds } })
+    .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+    .toArray();
+  
+  const shopLookup = new Map<number, { name: string; locationIdentifier: string | null }>();
+  for (const s of shopDocs) {
+    shopLookup.set(Number(s.shopId), {
+      name: s.name || `Shop ${s.shopId}`,
+      locationIdentifier: s.locationIdentifier || null,
+    });
+  }
+  
   const matchStage: any = searchShopIds.length === 1 
     ? { shopId: searchShopIds[0] }
     : { shopId: { $in: searchShopIds } };
@@ -271,7 +285,16 @@ export async function GET(req: NextRequest) {
       evidenceScore += 2;
     }
     
-    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore;
+    // Location bonus: prefer jobs from current shop
+    const jobShopId = Number(job.shopId);
+    const isCurrentLocation = jobShopId === shopId;
+    const locationBonus = isCurrentLocation ? 5 : 0;
+    
+    // Get location info for display
+    const shopInfo = shopLookup.get(jobShopId);
+    const locationName = shopInfo?.locationIdentifier || shopInfo?.name || `Shop ${jobShopId}`;
+    
+    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + locationBonus;
     const normalizedScore = Math.max(0, Math.min(100, totalScore));
     const band = getScoreBand(normalizedScore);
     
@@ -282,12 +305,16 @@ export async function GET(req: NextRequest) {
       matchBandLabel: getBandLabel(band),
       matchReason: matchDetails.join(" | ") || "Keyword match",
       gatePass: true,
+      isCurrentLocation,
+      locationName,
+      locationShopId: jobShopId,
       scoreBreakdown: {
         powertrain: powertrainScore,
         makeModel: makeModelScore,
         year: yearScore,
         constraints: constraintScore,
         evidence: evidenceScore,
+        locationBonus,
       },
     };
   });
