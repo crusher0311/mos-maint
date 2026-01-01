@@ -574,7 +574,7 @@ export async function GET(request: NextRequest) {
     const paginatedRows = allRows.slice(startIndex, endIndex);
 
     // Determine which SMS integration is active for this shop
-    const shop = await db.collection("shops").findOne({ shopId: String(user.shopId) });
+    const shop = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
     let smsType = "autoflow"; // default
     if (shop?.protractor?.configured) {
       smsType = "protractor";
