@@ -22,6 +22,7 @@ import pLimit from "p-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -41,9 +42,10 @@ export async function POST(req: NextRequest) {
 
   const db = await getDb();
 
+  // Use 30-day window for manual sync (fast) - background worker handles full history
   const endDate = new Date();
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 365); // Full year of work history
+  startDate.setDate(startDate.getDate() - 30);
 
   const workOrdersResult = await fetchActiveWorkOrders(shopId, {
     startDate: startDate.toISOString().split("T")[0],
