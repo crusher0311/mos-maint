@@ -207,36 +207,30 @@ export async function GET(request: NextRequest) {
 
     const formattedJobs = results.map((job: any) => {
       const sourceType = job.metadata?.sourceType || "protractor";
-      // Tekmetric stores prices in cents, need to convert to dollars
-      const isTekmetric = sourceType === "tekmetric";
-      const priceMultiplier = isTekmetric ? 0.01 : 1;
       
       const lines = job.job?.lines || job.lines || [];
       const rawTotals = job.job?.totals || job.totals || {};
       
-      // Extract labor hours from labor lines
       const laborLines = lines.filter((l: any) => l.lineType === "labor");
       const partLines = lines.filter((l: any) => l.lineType === "part");
       
       const laborHours = laborLines.reduce((sum: number, l: any) => 
         sum + (parseFloat(l.hours) || parseFloat(l.quantity) || 0), 0);
       
-      // Calculate parts amount from line items if stored total is 0
       const calculatedPartsAmount = partLines.reduce((sum: number, l: any) => {
         const qty = l.quantity || 1;
         const price = l.unitPrice || l.extendedPrice || 0;
-        return sum + (qty * price * priceMultiplier);
+        return sum + (qty * price);
       }, 0);
       
-      // Calculate labor amount from line items if stored total is 0
       const calculatedLaborAmount = laborLines.reduce((sum: number, l: any) => {
         const price = l.unitPrice || l.extendedPrice || 0;
-        return sum + (price * priceMultiplier);
+        return sum + price;
       }, 0);
       
-      const partsAmount = rawTotals.partsAmount ? rawTotals.partsAmount * priceMultiplier : calculatedPartsAmount;
-      const laborAmount = rawTotals.laborAmount ? rawTotals.laborAmount * priceMultiplier : calculatedLaborAmount;
-      const totalAmount = rawTotals.totalAmount ? rawTotals.totalAmount * priceMultiplier : (partsAmount + laborAmount);
+      const partsAmount = rawTotals.partsAmount || calculatedPartsAmount;
+      const laborAmount = rawTotals.laborAmount || calculatedLaborAmount;
+      const totalAmount = rawTotals.totalAmount || (partsAmount + laborAmount);
       
       return {
         _id: job._id.toString(),
@@ -254,8 +248,8 @@ export async function GET(request: NextRequest) {
           partNumber: l.partNumber,
           brand: l.manufacturer,
           quantity: l.quantity || 1,
-          cost: (l.cost || 0) * priceMultiplier,
-          retail: (l.unitPrice || l.extendedPrice || 0) * priceMultiplier
+          cost: l.cost || 0,
+          retail: l.unitPrice || l.extendedPrice || 0
         })),
         totals: {
           laborHours: rawTotals.laborHours || laborHours || 0,
