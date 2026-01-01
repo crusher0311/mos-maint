@@ -426,52 +426,109 @@ function highlightCannedJob(serviceName, attempts = 0) {
   }
 }
 
+function formatLastDone(last) {
+  if (!last || (!last.miles && !last.date)) return null;
+  
+  let text = 'Last done';
+  if (last.miles) {
+    text += ` at ${last.miles.toLocaleString()} mi`;
+  }
+  if (last.date) {
+    const date = new Date(last.date);
+    text += ` on ${date.toLocaleDateString()}`;
+  }
+  
+  // Source logo
+  let logo = '';
+  if (last.source === 'external') {
+    // CARFAX logo
+    logo = `<img src="icons/carfax-badge.png" alt="CARFAX" class="source-logo" title="From CARFAX" />`;
+  } else if (last.source === 'shop') {
+    // Shop icon
+    logo = `<span class="source-logo shop-logo" title="From Shop">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+        <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.18l6 3v9.64l-6 3-6-3V7.18l6-3z"/>
+        <path d="M12 6a3 3 0 100 6 3 3 0 000-6z"/>
+      </svg>
+    </span>`;
+  }
+  
+  return { text, logo };
+}
+
+function getOverdueText(item, type) {
+  if (type === 'overdue' && item.milesToGo != null && item.milesToGo < 0) {
+    const overdue = Math.abs(item.milesToGo);
+    return `<span class="overdue-amount">${overdue.toLocaleString()} mi overdue</span>`;
+  }
+  return '';
+}
+
 function createServiceItemHTML(item, type) {
-  // Show intervalText (e.g., "OEM: 7,500 mi / 6mo" or "Shop: 5,000 mi / 3mo")
-  const detail = item.intervalText || 
-                 (item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : 
-                  item.interval ? `Every ${item.interval.toLocaleString()} mi` : '');
   const itemId = `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
-  // Show shop icon for shop-based intervals
+  // Status badge color based on type (recommended = upcoming in display)
+  const badgeClass = type === 'overdue' ? 'badge-overdue' : 
+                     type === 'due-soon' ? 'badge-due-soon' : 'badge-upcoming';
+  const badgeText = type === 'overdue' ? 'OVERDUE' : 
+                    type === 'due-soon' ? 'DUE SOON' : '';
+  
+  // Category badge
+  const categoryBadge = item.category ? 
+    `<span class="category-badge">${escapeHtml(item.category)}</span>` : '';
+  
+  // Interval info (OEM or Shop)
+  const intervalText = item.intervalText || 
+    (item.interval ? `OEM: ${item.interval.toLocaleString()} mi` : '');
   const isShopInterval = item.intervalSource === 'shop';
-  const sourceIcon = isShopInterval ? 
-    `<span class="interval-source shop" title="Shop recommendation">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
-      </svg>
-    </span>` : '';
+  
+  // Due at and overdue info
+  const dueAtText = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : '';
+  const overdueText = getOverdueText(item, type);
+  
+  // Last done info with logo
+  const lastDone = formatLastDone(item.last);
+  const lastDoneHtml = lastDone ? 
+    `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` : '';
   
   return `
-    <li class="service-item">
-      <div class="service-info">
+    <li class="service-item ${type}">
+      <div class="service-header">
         <div class="service-name">${escapeHtml(item.name)}</div>
-        ${detail ? `<div class="service-detail">${sourceIcon}${detail}</div>` : ''}
-      </div>
-      <div class="add-dropdown">
-        <button class="btn-add btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
-          + Add
-        </button>
-        <div id="${itemId}" class="add-dropdown-menu hidden">
-          <button class="add-dropdown-item" data-action="search-history" data-service='${JSON.stringify(item)}'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            Search History
+        <div class="add-dropdown">
+          <button class="btn-add btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
+            + Add
           </button>
-          <button class="add-dropdown-item" data-action="search-canned" data-service='${JSON.stringify(item)}'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-            Search Canned Jobs
-          </button>
-          <button class="add-dropdown-item" data-action="add-generic" data-service='${JSON.stringify(item)}'>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Generic Job
-          </button>
+          <div id="${itemId}" class="add-dropdown-menu hidden">
+            <button class="add-dropdown-item" data-action="search-history" data-service='${JSON.stringify(item)}'>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              Search History
+            </button>
+            <button class="add-dropdown-item" data-action="search-canned" data-service='${JSON.stringify(item)}'>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+              Search Canned Jobs
+            </button>
+            <button class="add-dropdown-item" data-action="add-generic" data-service='${JSON.stringify(item)}'>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Generic Job
+            </button>
+          </div>
         </div>
+      </div>
+      <div class="service-badges">
+        ${categoryBadge}
+        ${badgeText ? `<span class="status-badge ${badgeClass}">${badgeText}</span>` : ''}
+        <span class="interval-badge ${isShopInterval ? 'shop' : 'oem'}">${intervalText}</span>
+      </div>
+      <div class="service-details">
+        ${dueAtText ? `<div class="due-info">${dueAtText}${overdueText ? ' • ' + overdueText : ''}</div>` : ''}
+        ${lastDoneHtml}
       </div>
     </li>
   `;
