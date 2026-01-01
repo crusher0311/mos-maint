@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect } from "react";
 import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock } from "lucide-react";
 
 interface ShopBilling {
@@ -8,6 +8,15 @@ interface ShopBilling {
   isPaid: boolean;
   vinLimit: number;
   vinViewCount: number;
+  status?: string;
+}
+
+interface ShopFeatures {
+  maintenance?: boolean;
+  job_lookup?: boolean;
+  oil_sticker?: boolean;
+  part_xref?: boolean;
+  dvi_tracking?: boolean;
 }
 
 interface IntegrationDetails {
@@ -38,6 +47,7 @@ interface Shop {
   billing: ShopBilling;
   isLocked?: boolean;
   integrationDetails?: IntegrationDetails;
+  enabledFeatures?: ShopFeatures;
 }
 
 export default function PlatformShopsPage() {
@@ -49,8 +59,10 @@ export default function PlatformShopsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [vinInput, setVinInput] = useState("");
-  const [modalAction, setModalAction] = useState<"setLimit" | "addViews" | "resetLimit" | null>(null);
+  const [modalAction, setModalAction] = useState<"setLimit" | "addViews" | "resetLimit" | "manageFeatures" | null>(null);
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
+  const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
+  const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
 
   const accessShop = async (shopId: number | string) => {
     if (impersonating) return;
@@ -121,6 +133,41 @@ export default function PlatformShopsPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const updateShopSettings = async (shopId: number | string, billing?: { plan: string; status: string }, features?: ShopFeatures) => {
+    setActionLoading(`${shopId}-settings`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billing, features }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        loadShops();
+        setSelectedShop(null);
+        setModalAction(null);
+      } else {
+        alert(data.error || "Update failed");
+      }
+    } catch (err) {
+      console.error("Update shop settings error:", err);
+      alert("Update failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const openFeatureModal = (shop: Shop) => {
+    setSelectedShop(shop);
+    setFeatureEdits(shop.enabledFeatures || {});
+    setBillingEdits({ 
+      plan: shop.billing.plan || "trial", 
+      status: shop.billing.status || "trial" 
+    });
+    setVinInput(String(shop.billing.vinLimit || 10));
+    setModalAction("manageFeatures");
   };
 
   const deleteShop = async (shop: Shop) => {
@@ -230,9 +277,8 @@ export default function PlatformShopsPage() {
                 </td>
               </tr>
             ) : (
-              filteredShops.map((shop) => (
-                <Fragment key={shop._id}>
-                <tr className="hover:bg-gray-50">
+              filteredShops.flatMap((shop) => [
+                <tr key={`${shop._id}-row`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : "bg-purple-100"}`}>
@@ -339,6 +385,14 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        onClick={() => openFeatureModal(shop)}
+                        disabled={actionLoading !== null}
+                        title="Manage billing & features"
+                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
                         disabled={actionLoading !== null}
                         title={shop.isLocked ? "Unlock shop" : "Lock shop"}
@@ -383,9 +437,9 @@ export default function PlatformShopsPage() {
                       </button>
                     </div>
                   </td>
-                </tr>
-                {expandedShop === shop._id && shop.integrationDetails && (
-                  <tr className="bg-blue-50">
+                </tr>,
+                expandedShop === shop._id && shop.integrationDetails ? (
+                  <tr key={`${shop._id}-expanded`} className="bg-blue-50">
                     <td colSpan={8} className="px-4 py-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {shop.integrationDetails.protractor && (
@@ -447,9 +501,8 @@ export default function PlatformShopsPage() {
                       </div>
                     </td>
                   </tr>
-                )}
-              </Fragment>
-              ))
+                ) : null,
+              ])
             )}
           </tbody>
         </table>
@@ -459,7 +512,7 @@ export default function PlatformShopsPage() {
         Showing {filteredShops.length} of {shops.length} shops | Default trial limit: {defaultVinLimit} VINs
       </div>
 
-      {selectedShop && modalAction && (
+      {selectedShop && modalAction && modalAction !== "manageFeatures" && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedShop(null); setModalAction(null); }}>
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -520,6 +573,107 @@ export default function PlatformShopsPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                 )}
                 {modalAction === "addViews" ? "Add VINs" : modalAction === "resetLimit" ? "Reset to Default" : "Set Limit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedShop && modalAction === "manageFeatures" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedShop(null); setModalAction(null); }}>
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Manage Shop Settings</h3>
+            <p className="text-sm text-gray-500 mb-4">{selectedShop.name} (ID: {selectedShop.shopId})</p>
+            
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Billing Plan</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Plan</label>
+                    <select
+                      value={billingEdits.plan}
+                      onChange={(e) => setBillingEdits({ ...billingEdits, plan: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                    >
+                      <option value="trial">Trial</option>
+                      <option value="starter">Starter</option>
+                      <option value="professional">Professional</option>
+                      <option value="enterprise">Enterprise</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Status</label>
+                    <select
+                      value={billingEdits.status}
+                      onChange={(e) => setBillingEdits({ ...billingEdits, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                    >
+                      <option value="trial">Trial</option>
+                      <option value="active">Active</option>
+                      <option value="past_due">Past Due</option>
+                      <option value="canceled">Canceled</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs text-gray-500 mb-1">VIN Limit</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={vinInput}
+                    onChange={(e) => setVinInput(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Feature Toggles</h4>
+                <p className="text-xs text-gray-500 mb-3">Override plan defaults. Leave unchecked to use plan defaults.</p>
+                <div className="space-y-2">
+                  {[
+                    { key: "maintenance", label: "Maintenance Tracking", desc: "Track vehicle maintenance schedules" },
+                    { key: "job_lookup", label: "Job Lookup", desc: "Search historical jobs across shop/enterprise" },
+                    { key: "oil_sticker", label: "Oil Sticker", desc: "Generate oil change reminder stickers" },
+                    { key: "part_xref", label: "Part Cross-Reference", desc: "Cross-reference parts across manufacturers" },
+                    { key: "dvi_tracking", label: "DVI Tracking", desc: "Track digital vehicle inspections" },
+                  ].map(feature => (
+                    <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={featureEdits[feature.key as keyof ShopFeatures] === true}
+                        onChange={(e) => setFeatureEdits({ ...featureEdits, [feature.key]: e.target.checked })}
+                        className="mt-0.5 w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900 text-sm">{feature.label}</div>
+                        <div className="text-xs text-gray-500">{feature.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => { setSelectedShop(null); setModalAction(null); }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => updateShopSettings(
+                  selectedShop.shopId, 
+                  { ...billingEdits, vinLimit: Number(vinInput) } as any, 
+                  featureEdits
+                )}
+                disabled={actionLoading !== null}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Changes
               </button>
             </div>
           </div>
