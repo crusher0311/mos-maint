@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -12,14 +13,24 @@ export async function GET() {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { autoflowDomain: 1, autoflowApiKey: 1, autoflowApiPassword: 1 } }
+      { projection: { autoflowDomain: 1, autoflowApiKey: 1, autoflowApiPassword: 1, webhookToken: 1 } }
     );
+
+    let webhookToken = shop?.webhookToken;
+    if (!webhookToken) {
+      webhookToken = crypto.randomBytes(12).toString("hex");
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $set: { webhookToken } }
+      );
+    }
 
     return NextResponse.json({
       autoflowDomain: shop?.autoflowDomain || "",
       autoflowApiKey: shop?.autoflowApiKey || "",
       autoflowApiPassword: shop?.autoflowApiPassword || "",
       configured: Boolean(shop?.autoflowDomain && shop?.autoflowApiKey),
+      webhookToken,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });

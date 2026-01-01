@@ -779,6 +779,27 @@ function AutoflowSection({ status, onUpdate }: { status: { configured: boolean }
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [webhookToken, setWebhookToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (status.configured) {
+      fetch("/api/settings/autoflow")
+        .then(r => r.json())
+        .then(data => setWebhookToken(data.webhookToken || null))
+        .catch(() => {});
+    }
+  }, [status.configured]);
+
+  const webhookUrl = webhookToken ? `https://mos.tools/api/webhooks/autoflow/${webhookToken}` : null;
+
+  const copyWebhookUrl = async () => {
+    if (webhookUrl) {
+      await navigator.clipboard.writeText(webhookUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   async function handleSave() {
     setSaving(true);
@@ -833,6 +854,30 @@ function AutoflowSection({ status, onUpdate }: { status: { configured: boolean }
             <span>Connected to AutoFlow</span>
           </div>
         </div>
+
+        {webhookUrl && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p className="text-xs font-medium text-gray-700 mb-2">Webhook URL</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={webhookUrl}
+                className="flex-1 px-2 py-1.5 text-xs font-mono bg-white border border-gray-300 rounded"
+              />
+              <button
+                type="button"
+                onClick={copyWebhookUrl}
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Paste this into AutoFlow webhook settings
+            </p>
+          </div>
+        )}
         
         {message && (
           <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
