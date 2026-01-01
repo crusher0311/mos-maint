@@ -242,8 +242,15 @@ async function runOnDemandAnalysis(
           intervalMonths,
           intervalText,
           intervalSource, // 'shop' or 'oem'
+          // Legacy fields for backward compatibility
           lastPerformedBy: lastPerformed.source,
           lastPerformedMileage: lastPerformed.mileage,
+          // New nested format for extension UI
+          last: {
+            source: lastPerformed.source, // 'shop', 'external' (CARFAX), or 'unknown'
+            miles: lastPerformed.mileage || null,
+            date: lastPerformed.date ? lastPerformed.date.toISOString() : null
+          },
           milesToGo,
           source: intervalSource === 'shop' ? 'shop' : 'oe',
           status
@@ -509,11 +516,19 @@ export async function GET(request: NextRequest) {
       for (const rec of analysisData.recommendations) {
         const item = {
           name: rec.service || rec.name,
+          category: rec.category || null,
           dueAt: rec.dueMileage,
+          milesToGo: rec.milesToGo,
           interval: rec.interval,
+          intervalMonths: rec.intervalMonths,
           intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} mi`,
           intervalSource: rec.intervalSource || 'oem', // 'shop' or 'oem'
           source: rec.source || "oe",
+          // Legacy fields for backward compatibility
+          lastPerformedBy: rec.lastPerformedBy || rec.last?.source || null,
+          lastPerformedMileage: rec.lastPerformedMileage || rec.last?.miles || null,
+          // New nested format for extension UI
+          last: rec.last || null, // { source: 'shop'|'external'|'unknown', miles, date }
           priority: rec.priority,
           laborHours: rec.laborHours || 1,
           parts: rec.parts || [],

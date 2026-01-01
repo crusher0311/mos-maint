@@ -325,44 +325,133 @@ body {
 
 .service-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
+  flex-direction: column;
+  padding: 12px;
   background: white;
   border: 1px solid var(--gray-200);
-  border-radius: 6px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.service-item.overdue {
+  border-left: 3px solid var(--danger);
+}
+
+.service-item.due-soon {
+  border-left: 3px solid var(--warning);
+}
+
+.service-item.recommended {
+  border-left: 3px solid var(--success);
+}
+
+.service-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
-.service-info {
+.service-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gray-800);
   flex: 1;
 }
 
-.service-name {
-  font-weight: 500;
-  color: var(--gray-800);
+.service-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.service-detail {
+.category-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  border-radius: 10px;
+}
+
+.status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+
+.status-badge.badge-overdue {
+  background: var(--danger);
+  color: white;
+}
+
+.status-badge.badge-due-soon {
+  background: var(--warning);
+  color: white;
+}
+
+.status-badge.badge-upcoming {
+  background: var(--success);
+  color: white;
+}
+
+.interval-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: 10px;
+  color: var(--gray-600);
+}
+
+.interval-badge.shop {
+  background: #DCFCE7;
+  border-color: #86EFAC;
+  color: #166534;
+}
+
+.service-details {
   font-size: 12px;
-  color: var(--gray-500);
-  margin-top: 2px;
+  color: var(--gray-600);
+}
+
+.due-info {
+  margin-bottom: 4px;
+}
+
+.overdue-amount {
+  display: inline-block;
+  background: #FEE2E2;
+  color: var(--danger);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  border: 1px solid #FECACA;
+}
+
+.last-done {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--gray-500);
 }
 
-.interval-source {
+.source-logo {
+  height: 14px;
+  width: auto;
+  vertical-align: middle;
+}
+
+.source-logo.shop-logo {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  color: var(--primary);
 }
 
-.interval-source.shop {
-  color: var(--success);
-}
-
-.interval-source svg {
+.source-logo.shop-logo svg {
   width: 14px;
   height: 14px;
 }
