@@ -297,7 +297,7 @@ export async function runTekmetricHistoryBackfill(
       page++;
       
       await db.collection("shops").updateOne(
-        { shopId: String(shopId) },
+        { shopId: { $in: [shopId, String(shopId)] } },
         { $set: { "tekmetric.jobIndexBackfillLastPage": page } }
       );
       
@@ -309,7 +309,7 @@ export async function runTekmetricHistoryBackfill(
     } catch (err: any) {
       console.error(`[Tekmetric Backfill] Error on page ${page}: ${err.message}`);
       await db.collection("shops").updateOne(
-        { shopId: String(shopId) },
+        { shopId: { $in: [shopId, String(shopId)] } },
         { 
           $set: { 
             "tekmetric.jobIndexBackfillError": err.message,
@@ -323,7 +323,7 @@ export async function runTekmetricHistoryBackfill(
   }
   
   await db.collection("shops").updateOne(
-    { shopId: String(shopId) },
+    { shopId: { $in: [shopId, String(shopId)] } },
     { 
       $set: { "tekmetric.jobIndexBackfillCompleted": new Date() },
       $unset: { 
@@ -362,7 +362,7 @@ export async function checkAndRunBackfillForNewShops(): Promise<void> {
     console.log(`[Tekmetric] New shop ${shopId} detected, starting 5-year backfill...`);
     
     await db.collection("shops").updateOne(
-      { shopId: String(shopId) },
+      { shopId: { $in: [shopId, String(shopId)] } },
       { $set: { "tekmetric.jobIndexBackfillStartedAt": new Date() } }
     );
     
