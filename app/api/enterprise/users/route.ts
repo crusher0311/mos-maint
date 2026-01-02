@@ -34,10 +34,13 @@ export async function GET(req: Request) {
     const shops = await db
       .collection("shops")
       .find({ shopId: { $in: shopIds } })
-      .project({ shopId: 1, name: 1 })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
 
-    const shopMap = new Map(shops.map((s) => [s.shopId, s.name || `Shop ${s.shopId}`]));
+    const shopMap = new Map(shops.map((s) => [s.shopId, { 
+      name: s.name || `Shop ${s.shopId}`, 
+      locationIdentifier: s.locationIdentifier || null 
+    }]));
 
     const users = await db
       .collection("users")
@@ -57,9 +60,11 @@ export async function GET(req: Request) {
           shopAccess: [],
         };
       }
+      const shopInfo = shopMap.get(u.shopId);
       usersByEmail[email].shopAccess.push({
         shopId: u.shopId,
-        shopName: shopMap.get(u.shopId) || `Shop ${u.shopId}`,
+        shopName: shopInfo?.name || `Shop ${u.shopId}`,
+        locationIdentifier: shopInfo?.locationIdentifier || null,
         userId: u._id.toString(),
       });
     }
@@ -76,6 +81,7 @@ export async function GET(req: Request) {
       shops: shops.map((s) => ({
         shopId: s.shopId,
         name: s.name || `Shop ${s.shopId}`,
+        locationIdentifier: s.locationIdentifier || null,
       })),
       users: userList,
     });
