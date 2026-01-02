@@ -8,6 +8,7 @@ import { ArrowLeft, Users, Building2, Check, X, Plus, Loader2, Search } from "lu
 interface ShopAccess {
   shopId: number;
   shopName: string;
+  locationIdentifier?: string | null;
   userId: string;
 }
 
@@ -22,6 +23,7 @@ interface EnterpriseUser {
 interface Shop {
   shopId: number;
   name: string;
+  locationIdentifier?: string | null;
 }
 
 interface Enterprise {
@@ -240,6 +242,9 @@ export default function EnterpriseUsersPage() {
                                 <div className="flex items-center gap-2">
                                   <Building2 className="w-4 h-4 text-gray-400" />
                                   <span className="text-sm font-medium">{shop.name}</span>
+                                  {shop.locationIdentifier && (
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
+                                  )}
                                 </div>
                                 
                                 {isSaving ? (

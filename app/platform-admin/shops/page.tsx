@@ -369,8 +369,16 @@ export default function PlatformShopsPage() {
                           {shop.isLocked && (
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
                           )}
-                          {shop.billing.isPaid && (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
+                          {shop.billing.plan === "demo" ? (
+                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Demo</span>
+                          ) : shop.billing.plan === "enterprise" ? (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
+                          ) : shop.billing.plan === "professional" ? (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Pro</span>
+                          ) : shop.billing.plan === "starter" ? (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Starter</span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Trial</span>
                           )}
                         </div>
                         {shop.enterpriseName && !groupByEnterprise && (
@@ -638,8 +646,16 @@ export default function PlatformShopsPage() {
                           {shop.isLocked && (
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
                           )}
-                          {shop.billing.isPaid && (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
+                          {shop.billing.plan === "demo" ? (
+                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Demo</span>
+                          ) : shop.billing.plan === "enterprise" ? (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
+                          ) : shop.billing.plan === "professional" ? (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Pro</span>
+                          ) : shop.billing.plan === "starter" ? (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Starter</span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Trial</span>
                           )}
                         </div>
                         {shop.enterpriseName && (
