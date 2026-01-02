@@ -40,6 +40,12 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **v1.7.4 Updates**:
+    *   **Reverse-Chronological Backfill**: Redesigned both Protractor and Tekmetric backfill systems to process newest-to-oldest (reverse chronological). Recent jobs are now available within the first run instead of waiting for the full 5-year backfill to complete.
+    *   **Content Hash Change Detection**: Added SHA256 content hashing to job_index entries. During re-indexing, unchanged records are skipped based on hash comparison, significantly reducing database writes and improving efficiency.
+    *   **Automatic Re-processing**: Introduced `logicVersion: 2` field to automatically re-enqueue previously completed shops for reprocessing when backfill logic is upgraded.
+    *   **Labor Hours Bug Fix**: Fixed calculation where 0 hours was incorrectly falling back to quantity. Now uses nullish coalescing (??) to preserve legitimate 0-hour entries.
+    *   **Job Search Regex Escaping**: Fixed 500 errors when searching for special characters like asterisks in Job Lookup.
 *   **v1.7.3 Updates**:
     *   **Visit-Based Billing (VIN+RO Tracking)**: Changed trial limit tracking from unique VINs to unique visits (VIN + RO# combination). Each new repair order for a vehicle now counts as a separate visit toward the trial limit. Same VIN with same RO viewed multiple times only counts once. This applies to both dashboard and Chrome extension.
     *   **Chrome Extension VIN Tracking**: Extension plan views now track against trial limits with the same VIN+RO logic. Shows upgrade prompt when limit reached.
