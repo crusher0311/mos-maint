@@ -755,28 +755,51 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {new Date(shop.createdAt).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => { 
-                          setSelectedShop(shop); 
-                          setModalAction("manageFeatures");
-                          setBillingEdits({ 
-                            plan: shop.billing.plan || "trial",
-                            status: shop.billing.status || "trial"
-                          });
-                          setFeatureEdits(shop.enabledFeatures || {});
-                          setVinInput(String(shop.billing.vinLimit));
-                        }}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                        title="Manage Features"
+                        onClick={() => openFeatureModal(shop)}
+                        disabled={actionLoading !== null}
+                        title="Manage billing & features"
+                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
                       >
                         <Settings className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
+                        disabled={actionLoading !== null}
+                        title={shop.isLocked ? "Unlock shop" : "Lock shop"}
+                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                          shop.isLocked 
+                            ? "text-green-600 hover:bg-green-50" 
+                            : "text-orange-600 hover:bg-orange-50"
+                        }`}
+                      >
+                        {actionLoading === `${shop.shopId}-lock` || actionLoading === `${shop.shopId}-unlock` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : shop.isLocked ? (
+                          <Unlock className="w-4 h-4" />
+                        ) : (
+                          <Lock className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deleteShop(shop)}
+                        disabled={actionLoading !== null}
+                        title="Delete shop permanently"
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading === `${shop.shopId}-delete` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
                         onClick={() => accessShop(shop.shopId)}
-                        disabled={impersonating !== null}
-                        className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
+                        disabled={impersonating !== null || shop.isLocked}
+                        title={shop.isLocked ? "Shop is locked" : "Access this shop"}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {impersonating === shop.shopId ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
