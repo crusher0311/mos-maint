@@ -38,6 +38,74 @@ type CannedJobOption = {
   title: string;
 };
 
+// Normalize service titles to better search terms
+function normalizeServiceTitle(title: string): string {
+  const normalized = title.toLowerCase();
+  
+  // Map common maintenance service phrases to their core search terms
+  const termMappings: [RegExp, string][] = [
+    // Fluid services
+    [/brake\s*fluid|brake\s*system\s*fluid/i, "brake fluid"],
+    [/transmission\s*fluid|trans\s*fluid|atf/i, "transmission fluid"],
+    [/power\s*steering\s*fluid/i, "power steering fluid"],
+    [/coolant|antifreeze|cooling\s*system/i, "coolant"],
+    [/differential\s*fluid/i, "differential fluid"],
+    [/transfer\s*case\s*fluid/i, "transfer case fluid"],
+    
+    // Filters
+    [/engine\s*air\s*filter|air\s*filter(?!\s*cabin)/i, "air filter"],
+    [/cabin\s*(air\s*)?filter|hvac\s*filter|interior\s*filter/i, "cabin filter"],
+    [/oil\s*filter/i, "oil filter"],
+    [/fuel\s*filter/i, "fuel filter"],
+    
+    // Belts
+    [/serpentine\s*belt|drive\s*belt|accessory\s*belt/i, "serpentine belt"],
+    [/timing\s*belt/i, "timing belt"],
+    
+    // Brakes
+    [/brake\s*pad|front\s*brake|rear\s*brake/i, "brake pads"],
+    [/brake\s*rotor/i, "brake rotors"],
+    
+    // Spark plugs and ignition
+    [/spark\s*plug/i, "spark plugs"],
+    [/ignition\s*coil/i, "ignition coil"],
+    
+    // Wipers
+    [/wiper\s*blade/i, "wiper blades"],
+    
+    // Battery
+    [/battery/i, "battery"],
+    
+    // Alignment
+    [/wheel\s*alignment|alignment/i, "alignment"],
+    
+    // Tires
+    [/tire\s*rotation/i, "tire rotation"],
+    
+    // Oil change
+    [/oil\s*change|engine\s*oil|motor\s*oil/i, "oil change"],
+    
+    // Radiator
+    [/radiator\s*cap/i, "radiator cap"],
+    [/radiator\s*hose/i, "radiator hose"],
+    
+    // Locks/hinges
+    [/lubricate.*lock|lock.*lubricate|door.*hinge/i, "lubricate locks hinges"],
+  ];
+  
+  for (const [pattern, replacement] of termMappings) {
+    if (pattern.test(normalized)) {
+      return replacement;
+    }
+  }
+  
+  // Fallback: remove common action words and return the rest
+  return normalized
+    .replace(/^(replace|inspect|check|service|repair|install|perform|flush)\s+/i, "")
+    .replace(/\.$/, "")
+    .trim();
+}
+
 type IntegrationType = "protractor" | "tekmetric";
 
 type Props = {
@@ -93,7 +161,8 @@ export function AddToROWithHistory({
   }, []);
 
   async function fetchHistoricalJobs(searchQuery?: string) {
-    const query = searchQuery ?? serviceTitle;
+    // Use provided search query, or normalize the service title for better results
+    const query = searchQuery ?? normalizeServiceTitle(serviceTitle);
     setStatus("loading");
     setErrorMsg(null);
     setShowDropdown(true);
