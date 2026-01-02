@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
     }).toArray();
 
     const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
+    const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
@@ -62,6 +63,7 @@ export async function GET(req: NextRequest) {
         console.log(`[Cron] Shop ${shopId} - WorkflowStage counts:`, stageCounts);
 
         let vehiclesUpdated = 0;
+        const shopSyncedVins: string[] = [];
         const limit = pLimit(3);
 
         const detailedWOs = await Promise.all(
@@ -171,6 +173,7 @@ export async function GET(req: NextRequest) {
                 });
               }
               vehiclesUpdated++;
+              shopSyncedVins.push(vin);
             }
             
             if (INVOICED_STAGES.some(s => stage.toLowerCase().includes(s.toLowerCase()))) {
@@ -221,6 +224,10 @@ export async function GET(req: NextRequest) {
         }
 
         results.push({ shopId, synced: detailedWOs.length, removed: removedCount, vehiclesUpdated });
+        
+        if (shopSyncedVins.length > 0) {
+          syncedVinsPerShop.push({ shopId, vins: shopSyncedVins });
+        }
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
       }
@@ -228,6 +235,25 @@ export async function GET(req: NextRequest) {
 
     const duration = Date.now() - startTime;
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
+
+    // Fire-and-forget plan pre-generation for synced vehicles
+    if (syncedVinsPerShop.length > 0) {
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : 'http://localhost:5000';
+      
+      for (const { shopId, vins } of syncedVinsPerShop) {
+        fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${CRON_SECRET}`,
+          },
+          body: JSON.stringify({ shopId, vins: vins.slice(0, 10) }),
+        }).catch(err => console.log(`[Cron] Plan pregenerate fire-and-forget failed for shop ${shopId}:`, err.message));
+      }
+      console.log(`[Cron] Triggered plan pre-generation for ${syncedVinsPerShop.length} shops`);
+    }
 
     return NextResponse.json({
       ok: true,

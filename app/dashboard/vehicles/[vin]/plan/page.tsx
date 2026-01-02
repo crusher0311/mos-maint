@@ -26,6 +26,7 @@ import { AddToROButton } from "@/components/ui/AddToROButton";
 import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
+import { getCachedPlan, setCachedPlan } from "@/lib/plan-cache";
 import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
