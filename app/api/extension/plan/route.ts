@@ -338,13 +338,26 @@ export async function GET(request: NextRequest) {
     let shopDoc: any = null;
     
     if (provider === "tekmetric") {
-      const query: any = { "tekmetric.shopId": parseInt(smsShopId) };
+      // Support both nested tekmetric.shopId and legacy tekmetricShopId fields, and handle string/number types
+      const tekShopIdNum = parseInt(smsShopId);
+      const tekShopIdStr = String(smsShopId);
+      const query: any = {
+        $or: [
+          { "tekmetric.shopId": tekShopIdNum },
+          { "tekmetric.shopId": tekShopIdStr },
+          { tekmetricShopId: tekShopIdNum },
+          { tekmetricShopId: tekShopIdStr }
+        ]
+      };
       if (!isPlatformAdmin) {
         query.shopId = { $in: userShopIds };
       }
       shopDoc = await db.collection("shops").findOne(query);
       if (shopDoc) {
         mosShopId = shopDoc.shopId;
+        console.log(`[Extension] Found shop ${mosShopId} for Tekmetric shop ${smsShopId}`);
+      } else {
+        console.log(`[Extension] No shop found for Tekmetric shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
       }
     } else if (provider === "protractor") {
       const query: any = { "protractor.connectionId": smsShopId };
