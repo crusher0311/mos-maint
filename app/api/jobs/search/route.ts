@@ -71,6 +71,10 @@ function getBandLabel(band: ScoreBand): string {
   }
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -148,9 +152,10 @@ export async function GET(req: NextRequest) {
     // If all tokens were stopwords, use original tokens but match ANY
     if (coreTokens.length > 0) {
       // Require ALL core tokens to appear in keywords or title
+      // Escape regex special chars to prevent invalid patterns
       matchStage.$or = [
         { "job.keywords": { $all: coreTokens } },
-        { "job.title": { $regex: coreTokens.map(t => `(?=.*${t})`).join(""), $options: "i" } },
+        { "job.title": { $regex: coreTokens.map(t => `(?=.*${escapeRegex(t)})`).join(""), $options: "i" } },
       ];
     } else if (allTokens.length > 0) {
       // Fallback: if only stopwords, match any token in keywords
@@ -159,11 +164,11 @@ export async function GET(req: NextRequest) {
   }
   
   if (vehicleMake) {
-    matchStage["vehicle.make"] = { $regex: new RegExp(vehicleMake, "i") };
+    matchStage["vehicle.make"] = { $regex: new RegExp(escapeRegex(vehicleMake), "i") };
   }
   
   if (vehicleModel) {
-    matchStage["vehicle.model"] = { $regex: new RegExp(vehicleModel, "i") };
+    matchStage["vehicle.model"] = { $regex: new RegExp(escapeRegex(vehicleModel), "i") };
   }
 
   const pipeline: any[] = [
