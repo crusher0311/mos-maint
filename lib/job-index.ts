@@ -172,8 +172,25 @@ export function extractJobIndexFromWorkOrder(
       for (const line of packageLines) {
         const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
         const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
-        const unitPrice = parseFloat(line.Price || line.UnitPrice || line.unitPrice || "0") || 0;
-        const extendedPrice = parseFloat(line.ExtendedPrice || line.ExtendedTotal || line.Total || line.total || "0") || (quantity * unitPrice);
+        
+        // Handle Protractor's nested PriceSummary structure and flat fields
+        const priceSummary = line.PriceSummary || {};
+        const unitPrice = parseFloat(
+          priceSummary.SellPrice || 
+          line.Price || 
+          line.UnitPrice || 
+          line.unitPrice || 
+          "0"
+        ) || 0;
+        const extendedPrice = parseFloat(
+          priceSummary.SellTotal || 
+          priceSummary.SellSubtotal ||
+          line.ExtendedPrice || 
+          line.ExtendedTotal || 
+          line.Total || 
+          line.total || 
+          "0"
+        ) || (quantity * unitPrice);
         
         lines.push({
           lineType,
@@ -281,8 +298,25 @@ export function extractJobIndexFromCachedWorkOrder(
       for (const line of packageLines) {
         const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
         const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
-        const unitPrice = parseFloat(line.Price || line.UnitPrice || line.unitPrice || "0") || 0;
-        const extendedPrice = parseFloat(line.ExtendedPrice || line.ExtendedTotal || line.Total || line.total || "0") || (quantity * unitPrice);
+        
+        // Handle Protractor's nested PriceSummary structure and flat fields
+        const priceSummary = line.PriceSummary || {};
+        const unitPrice = parseFloat(
+          priceSummary.SellPrice || 
+          line.Price || 
+          line.UnitPrice || 
+          line.unitPrice || 
+          "0"
+        ) || 0;
+        const extendedPrice = parseFloat(
+          priceSummary.SellTotal || 
+          priceSummary.SellSubtotal ||
+          line.ExtendedPrice || 
+          line.ExtendedTotal || 
+          line.Total || 
+          line.total || 
+          "0"
+        ) || (quantity * unitPrice);
         
         lines.push({
           lineType,
