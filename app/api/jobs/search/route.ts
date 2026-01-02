@@ -143,20 +143,22 @@ export async function GET(req: NextRequest) {
     "change", "perform", "complete", "top", "off", "the", "and", "for"
   ]);
   
+  let useTextSearch = false;
+  let textSearchQuery = "";
+  
   if (query) {
     const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     // Core tokens: remove stopwords to get the essential service identifiers
     const coreTokens = allTokens.filter(w => !stopwords.has(w));
     
-    // If we have core tokens, require ALL of them to match in keywords or title
-    // If all tokens were stopwords, use original tokens but match ANY
     if (coreTokens.length > 0) {
-      // Require ALL core tokens to appear in keywords or title
-      // Escape regex special chars to prevent invalid patterns
-      matchStage.$or = [
-        { "job.keywords": { $all: coreTokens } },
-        { "job.title": { $regex: coreTokens.map(t => `(?=.*${escapeRegex(t)})`).join(""), $options: "i" } },
-      ];
+      // Use keywords array match (uses compound index shopId_keywords)
+      // This is fast with the index and more precise than text search
+      matchStage["job.keywords"] = { $all: coreTokens };
+      
+      // Also enable text search as alternative query strategy
+      useTextSearch = true;
+      textSearchQuery = coreTokens.join(" ");
     } else if (allTokens.length > 0) {
       // Fallback: if only stopwords, match any token in keywords
       matchStage["job.keywords"] = { $in: allTokens };
@@ -175,6 +177,15 @@ export async function GET(req: NextRequest) {
     { $match: matchStage },
     { $sort: { performedAt: -1 } },
     { $limit: limit * 5 },
+    { $project: {
+      shopId: 1,
+      vin: 1,
+      vehicle: 1,
+      job: 1,
+      lines: 1,
+      performedAt: 1,
+      workOrderId: 1,
+    }},
   ];
 
   const jobs = await db.collection("job_index").aggregate(pipeline).toArray();
