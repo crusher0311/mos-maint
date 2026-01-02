@@ -170,9 +170,9 @@ export async function GET(req: NextRequest) {
     matchStage["vehicle.make"] = { $regex: new RegExp(escapeRegex(vehicleMake), "i") };
   }
   
-  if (vehicleModel) {
-    matchStage["vehicle.model"] = { $regex: new RegExp(escapeRegex(vehicleModel), "i") };
-  }
+  // NOTE: Model is NOT used as a hard filter - it's used for scoring only.
+  // This allows "oil change on HHR" to find results from other Chevrolet models
+  // (Trax, Cruze, etc.) when no exact HHR jobs exist in history.
 
   const pipeline: any[] = [
     { $match: matchStage },
