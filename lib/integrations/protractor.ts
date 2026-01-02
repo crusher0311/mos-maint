@@ -1694,17 +1694,28 @@ export async function enrichCannedJobsWithDetails(
     );
     
     // Filter and add to results
+    // Shop 35 (Precision Auto Service) uses non-standard codes, skip alphanumeric filter for them
+    const skipAlphanumericFilter = shopId === 35;
+    
     for (const job of batchResults) {
       if (filterEmpty) {
-        // Only keep jobs where code contains BOTH a letter AND a number
-        // Real codes: O8, T15, BG1, SUB4, A200, etc.
-        const code = (job.Code || "").trim();
-        const hasLetter = /[a-zA-Z]/.test(code);
-        const hasNumber = /[0-9]/.test(code);
         const hasContent = job._hasTitle || job._hasLines;
         
-        if (hasLetter && hasNumber && hasContent) {
-          enrichedJobs.push(job);
+        if (skipAlphanumericFilter) {
+          // For Shop 35: only require content (title or lines), no code pattern check
+          if (hasContent) {
+            enrichedJobs.push(job);
+          }
+        } else {
+          // Default: require code with BOTH a letter AND a number
+          // Real codes: O8, T15, BG1, SUB4, A200, etc.
+          const code = (job.Code || "").trim();
+          const hasLetter = /[a-zA-Z]/.test(code);
+          const hasNumber = /[0-9]/.test(code);
+          
+          if (hasLetter && hasNumber && hasContent) {
+            enrichedJobs.push(job);
+          }
         }
       } else {
         enrichedJobs.push(job);
