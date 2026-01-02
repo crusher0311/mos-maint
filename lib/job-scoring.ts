@@ -52,9 +52,10 @@ export function parseEngineString(engine: string): EngineInfo {
   return { cylinders, displacement, aspiration, fuelType };
 }
 
-export function getScoreBand(score: number): ScoreBand {
-  if (score >= 85) return "exact";
-  if (score >= 70) return "likely";
+export function getScoreBand(score: number, yearDiff?: number): ScoreBand {
+  // "Exact" requires high score AND close year match (within 1 year)
+  if (score >= 90 && (yearDiff === undefined || yearDiff <= 1)) return "exact";
+  if (score >= 75) return "likely";
   if (score >= 50) return "possible";
   return "poor";
 }
@@ -62,8 +63,8 @@ export function getScoreBand(score: number): ScoreBand {
 export function getBandLabel(band: ScoreBand): string {
   switch (band) {
     case "exact": return "Exact Fit";
-    case "likely": return "Likely Fit";
-    case "possible": return "Possible Match";
+    case "likely": return "Great Match";
+    case "possible": return "Good Match";
     case "poor": return "Low Match";
   }
 }
@@ -233,7 +234,10 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
   
   const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore;
   const normalizedScore = Math.max(0, Math.min(100, totalScore));
-  const band = getScoreBand(normalizedScore);
+  
+  // Calculate year difference for band determination
+  const yearDiffForBand = (targetYear && jobYear) ? Math.abs(targetYear - jobYear) : undefined;
+  const band = getScoreBand(normalizedScore, yearDiffForBand);
   
   return {
     ...job,

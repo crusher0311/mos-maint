@@ -158,6 +158,36 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
     }).format(amount);
   };
 
+  // Compute totals from line items when job.totals is missing or zero
+  const getJobTotals = (job: any) => {
+    const storedTotal = job.totals?.totalAmount || 0;
+    const storedLabor = job.totals?.laborHours || 0;
+    const storedParts = job.totals?.partsAmount || 0;
+    
+    // If stored totals exist, use them
+    if (storedTotal > 0) {
+      return { totalAmount: storedTotal, laborHours: storedLabor, partsAmount: storedParts };
+    }
+    
+    // Otherwise, compute from line items
+    let totalAmount = 0;
+    let laborHours = 0;
+    let partsAmount = 0;
+    
+    for (const line of job.lines || []) {
+      const lineTotal = line.extendedPrice || (line.unitPrice || 0) * (line.quantity || 1);
+      totalAmount += lineTotal;
+      
+      if (line.lineType === "labor") {
+        laborHours += line.quantity || 0;
+      } else if (line.lineType === "part") {
+        partsAmount += lineTotal;
+      }
+    }
+    
+    return { totalAmount, laborHours, partsAmount };
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
@@ -269,9 +299,9 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                       <Wrench className="w-4 h-4 text-gray-400" />
                       <span className="font-medium text-gray-900">{job.job.title}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${getBandStyle(job.matchBand)}`}>
-                        {job.matchBandLabel || `${job.matchScore}%`}
+                        {job.matchBandLabel}
                       </span>
-                      <span className="text-xs text-gray-400">{job.matchScore}%</span>
+                      <span className="text-sm font-semibold text-blue-600">{job.matchScore}%</span>
                     </div>
                     <div className="mt-1 text-sm text-gray-500 flex items-center gap-2">
                       <span>{job.vehicle.year} {job.vehicle.make} {job.vehicle.model}</span>
@@ -294,7 +324,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(job.totals?.totalAmount || 0)}
+                        {formatCurrency(getJobTotals(job).totalAmount)}
                       </div>
                       <div className="text-xs text-gray-500">
                         {job.lines?.length || 0} line{(job.lines?.length || 0) !== 1 ? "s" : ""}
@@ -316,17 +346,17 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Labor:</span>
-                      <span className="font-medium">{job.totals?.laborHours || 0}h</span>
+                      <span className="font-medium">{getJobTotals(job).laborHours}h</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Package className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Parts:</span>
-                      <span className="font-medium">{formatCurrency(job.totals?.partsAmount || 0)}</span>
+                      <span className="font-medium">{formatCurrency(getJobTotals(job).partsAmount)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Total:</span>
-                      <span className="font-medium">{formatCurrency(job.totals?.totalAmount || 0)}</span>
+                      <span className="font-medium">{formatCurrency(getJobTotals(job).totalAmount)}</span>
                     </div>
                   </div>
 
