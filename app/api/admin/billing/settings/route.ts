@@ -1,4 +1,3 @@
-// app/api/admin/billing/settings/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
@@ -7,7 +6,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
     
-    if (session.role !== "admin") {
+    if (session.role !== "admin" && session.role !== "platform_admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -16,14 +15,27 @@ export async function POST(req: NextRequest) {
 
     const updateData = {
       type: "billing",
-      professionalProductId: body.professionalProductId || "",
-      professionalPriceMonthly: body.professionalPriceMonthly || "",
-      professionalPriceYearly: body.professionalPriceYearly || "",
-      enterpriseProductId: body.enterpriseProductId || "",
-      enterprisePriceMonthly: body.enterprisePriceMonthly || "",
-      enterprisePriceYearly: body.enterprisePriceYearly || "",
-      trialDays: body.trialDays || 14,
-      defaultVinLimit: body.defaultVinLimit || 100,
+      mosProProductId: body.mosProProductId || "",
+      mosProPriceId: body.mosProPriceId || "",
+      mosProPrice: body.mosProPrice ?? 199,
+      mosProIncludedVins: body.mosProIncludedVins ?? 300,
+      vinPack100ProductId: body.vinPack100ProductId || "",
+      vinPack100PriceId: body.vinPack100PriceId || "",
+      vinPack100Price: body.vinPack100Price ?? 39,
+      vinPack250ProductId: body.vinPack250ProductId || "",
+      vinPack250PriceId: body.vinPack250PriceId || "",
+      vinPack250Price: body.vinPack250Price ?? 79,
+      vinPack500ProductId: body.vinPack500ProductId || "",
+      vinPack500PriceId: body.vinPack500PriceId || "",
+      vinPack500Price: body.vinPack500Price ?? 149,
+      onboardingProductId: body.onboardingProductId || "",
+      onboardingPriceId: body.onboardingPriceId || "",
+      onboardingPrice: body.onboardingPrice ?? 495,
+      trialDays: body.trialDays ?? 14,
+      trialVinLimit: body.trialVinLimit ?? 10,
+      defaultVinLimit: body.defaultVinLimit ?? 300,
+      foundingShopPricing: body.foundingShopPricing ?? true,
+      skipTrialBonusVins: body.skipTrialBonusVins ?? 50,
       updatedAt: new Date(),
       updatedBy: session.email,
     };
