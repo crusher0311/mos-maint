@@ -11,6 +11,8 @@ import {
   Car,
   Wrench,
   ClipboardCheck,
+  Mail,
+  ExternalLink,
 } from "lucide-react";
 
 type ShopManagementChoice = "protractor" | "tekmetric" | "standalone" | null;
@@ -459,7 +461,36 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [sendingRequest, setSendingRequest] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleRequestApiAccess() {
+    if (!confirm("This will send an email to Protractor support (support@protractor.com) requesting API access for your shop. The shop owner will be CC'd. Continue?")) {
+      return;
+    }
+    
+    setSendingRequest(true);
+    setMessage(null);
+    
+    try {
+      const res = await fetch("/api/settings/integration-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "protractor" }),
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: data.message || "Request sent!" });
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to send request" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to send request" });
+    } finally {
+      setSendingRequest(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -604,6 +635,20 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
         {saving && <Loader2 className="w-4 h-4 animate-spin" />}
         Connect
       </button>
+      
+      <div className="border-t pt-3 mt-3">
+        <p className="text-xs text-gray-500 mb-2">
+          Need API access? We can email Protractor support on your behalf.
+        </p>
+        <button
+          onClick={handleRequestApiAccess}
+          disabled={sendingRequest}
+          className="w-full px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {sendingRequest ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+          Request API Access
+        </button>
+      </div>
     </div>
   );
 }
@@ -613,7 +658,38 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [sendingInstructions, setSendingInstructions] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const chromeExtensionUrl = "https://chromewebstore.google.com/detail/mos-tools/gkcehigbdlhjacjbgiffnlfhdnghlknd";
+
+  async function handleSendSetupInstructions() {
+    if (!confirm("This will send setup instructions to the shop owner, including how to enable the integration in Tekmetric and install the Chrome extension. Continue?")) {
+      return;
+    }
+    
+    setSendingInstructions(true);
+    setMessage(null);
+    
+    try {
+      const res = await fetch("/api/settings/integration-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "tekmetric" }),
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: data.message || "Instructions sent!" });
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to send instructions" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to send instructions" });
+    } finally {
+      setSendingInstructions(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -712,6 +788,26 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
             className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
           >
             <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <div className="border-t pt-3 space-y-2">
+          <a
+            href={chromeExtensionUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full px-4 py-2 bg-purple-100 text-purple-700 text-sm rounded-lg hover:bg-purple-200 flex items-center justify-center gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Install Chrome Extension
+          </a>
+          <button
+            onClick={handleSendSetupInstructions}
+            disabled={sendingInstructions}
+            className="w-full px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {sendingInstructions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            Email Setup Instructions
           </button>
         </div>
       </div>
