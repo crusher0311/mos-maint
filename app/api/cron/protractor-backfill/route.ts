@@ -199,7 +199,7 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
     return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices` };
   }
 
-  const limit = pLimit(10);
+  const limit = pLimit(5); // Match Protractor's 5 req/sec rate limit
   let loggedSample = false;
   const allJobEntries: any[] = [];
 
