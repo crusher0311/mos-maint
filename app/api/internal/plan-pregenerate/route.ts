@@ -11,13 +11,18 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const INTERNAL_SECRET = process.env.CRON_SECRET || "internal-plan-pregenerate";
+const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   
+  if (!CRON_SECRET) {
+    console.error("[Plan Pregenerate] CRON_SECRET not configured - skipping");
+    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  }
+  
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader || authHeader !== `Bearer ${INTERNAL_SECRET}`) {
+  if (!authHeader || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

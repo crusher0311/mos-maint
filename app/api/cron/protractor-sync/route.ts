@@ -237,7 +237,7 @@ export async function GET(req: NextRequest) {
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
 
     // Fire-and-forget plan pre-generation for synced vehicles
-    if (syncedVinsPerShop.length > 0) {
+    if (syncedVinsPerShop.length > 0 && CRON_SECRET) {
       const baseUrl = process.env.REPLIT_DEV_DOMAIN 
         ? `https://${process.env.REPLIT_DEV_DOMAIN}`
         : 'http://localhost:5000';
