@@ -1,0 +1,31 @@
+Rate Limiting
+Our API enforces rate limits to maintain optimal performance and prevent abuse. The default limit is 600 requests per minute. Sandbox accounts are limited to 300 API calls per minute. To avoid disruptions:
+
+Avoid Burst Traffic: Distribute your requests evenly over time rather than sending large bursts.
+Consequences of Repeated Bursting: Repeatedly exceeding the rate limit may lead to further restrictions on your API usage.
+If you are querying a large amount of data within a short timeframe, the API's response code will indicate that you've exceeded the quota available for your API Key by returning an HTTP status code 429 and an empty body.
+
+Handling 429 errors
+When you hit the rate limit, you will receive a 429 Too Many Requests response. Here’s how to handle it gracefully:
+
+Implement Exponential Backoff: Retry requests with increasing wait times between attempts to prevent overwhelming the server.
+Monitor Your Usage: Keep track of your request rate and adjust your application to stay within the limits.
+Optimize Requests: Cache responses and avoid redundant requests to reduce the load on the API.
+For more advanced handling, consider implementing a token bucket algorithm on the client-side. This method allows you to control the rate of requests by using tokens that are replenished over time.
+
+Exponential Backoff
+Exponential backoff is a common strategy for handling rate limits and network congestion. It works by increasing the wait time between retries after each failed request, up to a maximum limit. This approach helps prevent overwhelming the server with repeated requests.
+
+Here’s how exponential backoff works:
+
+Make a request to the API.
+If the request fails, wait 2 + random_number_milliseconds seconds and retry the request.
+If the request fails, wait 4 + random_number_milliseconds seconds and retry the request.
+If the request fails, wait 8 + random_number_milliseconds seconds and retry the request.
+And so on, up to a maximum_backoff time.
+Continue waiting and retrying up to some maximum number of retries, but do not increase the wait period between retries.
+Where:
+
+The wait time is min(((2^n)+random_number_milliseconds), maximum_backoff), with n incremented by 1 for each iteration (request), and starting with n=1.
+random_number_milliseconds is a random number of milliseconds less than or equal to 1000.
+maximum_backoff is typically 60 seconds.
