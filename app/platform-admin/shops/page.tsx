@@ -483,8 +483,8 @@ export default function PlatformShopsPage() {
                           <span className="text-xs text-green-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs so far (${shop.backfill.source || 'unknown'})`}>
-                          <Clock4 className="w-4 h-4 text-amber-500" />
+                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Currently at: ${shop.backfill.currentChunkStart ? new Date(shop.backfill.currentChunkStart).toLocaleDateString() : 'starting'} (${shop.backfill.source || 'unknown'})`}>
+                          <Clock4 className="w-4 h-4 text-amber-500 animate-pulse" />
                           <span className="text-xs text-amber-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       )
@@ -743,8 +743,8 @@ export default function PlatformShopsPage() {
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1 text-orange-600" title={`In progress: ${shop.backfill.currentChunkStart || 'starting'} (${shop.backfill.source || 'unknown'})`}>
-                          <Clock4 className="w-4 h-4 animate-pulse" />
+                        <div className="flex items-center justify-center gap-1 text-amber-600" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Currently at: ${shop.backfill.currentChunkStart ? new Date(shop.backfill.currentChunkStart).toLocaleDateString() : 'starting'} (${shop.backfill.source || 'unknown'})`}>
+                          <Clock4 className="w-4 h-4 text-amber-500 animate-pulse" />
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       )

@@ -9,8 +9,10 @@ export const maxDuration = 300;
 const CRON_SECRET = process.env.CRON_SECRET;
 const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
 const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
-const MONTHS_PER_RUN = 1;
+const MONTHS_PER_RUN = 3;
 const MAX_SHOPS_PER_RUN = 1;
+const REQUESTS_PER_MINUTE = 600;
+const SAFE_REQUESTS_PER_SECOND = Math.floor(REQUESTS_PER_MINUTE / 60 * 0.8);
 
 type TekmetricRepairOrder = {
   id: number;
@@ -53,28 +55,48 @@ type TekmetricCustomer = {
   phone?: string;
 };
 
-async function tekmetricRequest<T>(endpoint: string): Promise<{ ok: boolean; data?: T; error?: string }> {
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function tekmetricRequest<T>(endpoint: string, retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
   if (!TEKMETRIC_API_TOKEN) {
     return { ok: false, error: "No API token" };
   }
   
-  try {
-    const res = await fetch(`${TEKMETRIC_API_BASE}${endpoint}`, {
-      headers: {
-        Authorization: `Bearer ${TEKMETRIC_API_TOKEN}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-    
-    if (!res.ok) {
-      return { ok: false, error: `HTTP ${res.status}` };
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${TEKMETRIC_API_BASE}${endpoint}`, {
+        headers: {
+          Authorization: `Bearer ${TEKMETRIC_API_TOKEN}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
+      
+      if (res.status === 429) {
+        const backoffMs = Math.min(Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000, 60000);
+        console.log(`[Tekmetric] Rate limited, backing off ${Math.round(backoffMs / 1000)}s (attempt ${attempt + 1})`);
+        await sleep(backoffMs);
+        continue;
+      }
+      
+      if (!res.ok) {
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
+      
+      return { ok: true, data: await res.json() };
+    } catch (err: any) {
+      if (attempt < retries) {
+        const backoffMs = Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000;
+        await sleep(backoffMs);
+        continue;
+      }
+      return { ok: false, error: err.message };
     }
-    
-    return { ok: true, data: await res.json() };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
   }
+  
+  return { ok: false, error: "Max retries exceeded" };
 }
 
 async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
@@ -165,9 +187,9 @@ async function backfillShopChunk(
   const seenROIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
-  const limit = pLimit(5);
+  const limit = pLimit(8);
 
-  while (page < totalPages && page < 20) {
+  while (page < totalPages && page < 50) {
     const queryParams = new URLSearchParams({
       shop: tekmetricShopId.toString(),
       page: page.toString(),
