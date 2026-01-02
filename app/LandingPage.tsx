@@ -1,15 +1,32 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Wrench, Clock, CheckCircle, ArrowRight, Play, Calendar, Quote } from "lucide-react";
+import { Wrench, Clock, CheckCircle, ArrowRight, Calendar, Quote, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
+
+const screenshots = [
+  { src: "/screenshots/dashboard.png", alt: "Vehicle Dashboard", caption: "See all active vehicles at a glance" },
+  { src: "/screenshots/maintenance-plan.png", alt: "Maintenance Plan", caption: "AI-powered maintenance recommendations with history" },
+  { src: "/screenshots/job-history.png", alt: "Job History Lookup", caption: "Find past jobs with parts and pricing instantly" },
+  { src: "/screenshots/oem-data.png", alt: "OEM Data", caption: "Complete OEM maintenance schedules by system" },
+  { src: "/screenshots/carfax-history.png", alt: "CARFAX History", caption: "Full CARFAX service history integration" },
+];
+
+const chromeExtScreenshots = [
+  { src: "/screenshots/chrome-ext-plan.png", alt: "Chrome Extension - Maintenance Plan", caption: "Maintenance plans right inside Tekmetric" },
+  { src: "/screenshots/chrome-ext-job.png", alt: "Chrome Extension - Job Lookup", caption: "Search job history without leaving the RO" },
+];
 
 export default function LandingPage() {
   const [isVisible, setIsVisible] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
 
   useEffect(() => {
     setIsVisible(true);
   }, []);
+
+  const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % screenshots.length);
+  const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + screenshots.length) % screenshots.length);
 
   return (
     <div className="min-h-screen bg-white">
@@ -61,6 +78,39 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Integrations Bar */}
+      <section className="py-8 bg-white border-y border-gray-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <p className="text-center text-sm text-gray-500 mb-6">Works with the tools you already use</p>
+          <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-12">
+            <div className="flex items-center gap-2 text-gray-700">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-blue-600 text-sm">P</span>
+              </div>
+              <span className="font-semibold">Protractor</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-700">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-orange-600 text-sm">T</span>
+              </div>
+              <span className="font-semibold">Tekmetric</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-700">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-green-600 text-sm">C</span>
+              </div>
+              <span className="font-semibold">CARFAX</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-700">
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-purple-600 text-sm">A</span>
+              </div>
+              <span className="font-semibold">AutoFlow</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Problem Section */}
       <section className="py-16 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -103,13 +153,60 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* What You Get Section */}
+      {/* Product Screenshot Showcase */}
       <section className="py-16 bg-gray-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-gray-900 text-center mb-4">See It In Action</h2>
+          <p className="text-center text-gray-600 mb-10">Everything you need, in one place</p>
+          
+          <div className="relative">
+            <div className="overflow-hidden rounded-2xl shadow-2xl border border-gray-200 bg-white">
+              <img 
+                src={screenshots[currentSlide].src} 
+                alt={screenshots[currentSlide].alt}
+                className="w-full h-auto"
+              />
+            </div>
+            
+            <div className="absolute inset-y-0 left-0 flex items-center">
+              <button 
+                onClick={prevSlide}
+                className="p-2 -ml-4 bg-white rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6 text-gray-600" />
+              </button>
+            </div>
+            <div className="absolute inset-y-0 right-0 flex items-center">
+              <button 
+                onClick={nextSlide}
+                className="p-2 -mr-4 bg-white rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <ChevronRight className="w-6 h-6 text-gray-600" />
+              </button>
+            </div>
+          </div>
+
+          <p className="text-center text-gray-700 mt-6 font-medium">{screenshots[currentSlide].caption}</p>
+          
+          <div className="flex justify-center gap-2 mt-4">
+            {screenshots.map((_, i) => (
+              <button 
+                key={i} 
+                onClick={() => setCurrentSlide(i)}
+                className={`w-2.5 h-2.5 rounded-full transition-colors ${i === currentSlide ? 'bg-blue-600' : 'bg-gray-300'}`}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* What You Get Section */}
+      <section className="py-16 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">What You Get</h2>
           
           <div className="space-y-6">
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                   <CheckCircle className="w-5 h-5 text-blue-600" />
@@ -123,7 +220,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                   <CheckCircle className="w-5 h-5 text-blue-600" />
@@ -137,7 +234,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                   <CheckCircle className="w-5 h-5 text-blue-600" />
@@ -150,6 +247,36 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Chrome Extension Section */}
+      <section className="py-16 bg-gray-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-medium mb-4">
+              <span className="font-bold">NEW</span> Tekmetric Chrome Extension
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Works Right Inside Tekmetric</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Our Chrome extension brings maintenance plans and job lookup directly into your Tekmetric workflow — no tab switching required.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-8">
+            {chromeExtScreenshots.map((img, i) => (
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-lg border border-gray-200">
+                <div className="rounded-xl overflow-hidden flex justify-center">
+                  <img 
+                    src={img.src} 
+                    alt={img.alt}
+                    className="h-auto max-h-[500px] w-auto"
+                  />
+                </div>
+                <p className="text-center text-gray-700 mt-4 font-medium">{img.caption}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
