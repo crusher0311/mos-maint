@@ -305,12 +305,20 @@ export async function GET(req: NextRequest) {
       matchDetails.push("Has part numbers");
     }
     
-    const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSincePerformed < 90) {
-      evidenceScore += 4;
-      matchDetails.push("Recent job");
-    } else if (daysSincePerformed < 365) {
-      evidenceScore += 2;
+    // Recency scoring - exponential decay with 180-day half-life (max +10 points)
+    // Recent jobs likely have more up-to-date pricing
+    let recencyScore = 0;
+    if (job.performedAt) {
+      const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
+      // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
+      recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
+      recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
+      
+      if (recencyScore >= 8) {
+        matchDetails.push("Very recent job");
+      } else if (recencyScore >= 5) {
+        matchDetails.push("Recent job");
+      }
     }
     
     // Location bonus: prefer jobs from current shop
@@ -322,7 +330,7 @@ export async function GET(req: NextRequest) {
     const shopInfo = shopLookup.get(jobShopId);
     const locationName = shopInfo?.locationIdentifier || shopInfo?.name || `Shop ${jobShopId}`;
     
-    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + locationBonus;
+    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore + locationBonus;
     const normalizedScore = Math.max(0, Math.min(100, totalScore));
     const band = getScoreBand(normalizedScore);
     
@@ -342,6 +350,7 @@ export async function GET(req: NextRequest) {
         year: yearScore,
         constraints: constraintScore,
         evidence: evidenceScore,
+        recency: recencyScore,
         locationBonus,
       },
     };
