@@ -127,6 +127,7 @@ export async function GET(req: NextRequest) {
     }).toArray();
 
     const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; error?: string }[] = [];
+    const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
     
     await checkAndRunBackfillForNewShops();
 
@@ -140,6 +141,7 @@ export async function GET(req: NextRequest) {
         const activeWOs: TekmetricRepairOrderFull[] = [];
         const vehicleCache = new Map<number, TekmetricVehicle>();
         const customerCache = new Map<number, TekmetricCustomer>();
+        const shopSyncedVins: string[] = [];
         
         let page = 0;
         let hasMore = true;
@@ -193,6 +195,7 @@ export async function GET(req: NextRequest) {
           
           if (vehicle?.vin) {
             await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, []);
+            shopSyncedVins.push(vehicle.vin.toUpperCase());
           }
         }
 
@@ -276,6 +279,11 @@ export async function GET(req: NextRequest) {
           removed: removedCount,
           jobsIndexed: indexedJobsCount
         });
+        
+        if (shopSyncedVins.length > 0) {
+          const uniqueVins = [...new Set(shopSyncedVins)];
+          syncedVinsPerShop.push({ shopId, vins: uniqueVins });
+        }
       } catch (err: any) {
         console.error(`[Tekmetric] Shop ${shopId} sync error:`, err.message);
         results.push({ 
@@ -290,6 +298,25 @@ export async function GET(req: NextRequest) {
 
     const duration = Date.now() - startTime;
     console.log(`[Cron] Tekmetric sync completed in ${duration}ms:`, results);
+
+    // Fire-and-forget plan pre-generation for synced vehicles
+    if (syncedVinsPerShop.length > 0) {
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : 'http://localhost:5000';
+      
+      for (const { shopId, vins } of syncedVinsPerShop) {
+        fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${CRON_SECRET}`,
+          },
+          body: JSON.stringify({ shopId, vins: vins.slice(0, 10) }),
+        }).catch(err => console.log(`[Cron] Plan pregenerate fire-and-forget failed for shop ${shopId}:`, err.message));
+      }
+      console.log(`[Cron] Triggered plan pre-generation for ${syncedVinsPerShop.length} shops`);
+    }
 
     return NextResponse.json({
       ok: true,
