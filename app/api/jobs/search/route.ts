@@ -363,7 +363,15 @@ export async function GET(req: NextRequest) {
   // Lower threshold to 40 to include more results - let user decide relevance
   const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
   
-  eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
+  // Sort by score descending, then by band quality (exact > likely > possible > poor)
+  const bandOrder: Record<string, number> = { exact: 0, likely: 1, possible: 2, poor: 3 };
+  eligibleJobs.sort((a, b) => {
+    if (b.matchScore !== a.matchScore) {
+      return b.matchScore - a.matchScore;
+    }
+    // When scores are equal, prioritize by band (Exact Fit before Great Match)
+    return (bandOrder[a.matchBand] ?? 3) - (bandOrder[b.matchBand] ?? 3);
+  });
 
   const uniqueJobs = new Map<string, typeof eligibleJobs[0]>();
   for (const job of eligibleJobs) {
