@@ -132,8 +132,8 @@ export async function GET() {
             ? (backfill && !backfill.completed)
             : (tekmetricBackfill && !tekmetricBackfill.completed),
           totalJobsIndexed: hasProtractor 
-            ? (backfill?.totalJobsIndexed || jobHistoryCount) 
-            : (tekmetricBackfill?.totalJobsIndexed || jobIndexCount),
+            ? (jobIndexCount || backfill?.totalJobsIndexed || 0) 
+            : (jobIndexCount || tekmetricBackfill?.totalJobsIndexed || 0),
           currentChunkStart: hasProtractor 
             ? (backfill?.currentChunkStart || null)
             : (tekmetricBackfill?.currentChunkStart || null),
