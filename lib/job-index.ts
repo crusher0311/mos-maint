@@ -171,7 +171,9 @@ export function extractJobIndexFromWorkOrder(
         });
         
         if (lineType === "labor") {
-          const hours = parseFloat(line.EstimatedHours || line.Hours || line.Quantity || line.quantity || "0") || quantity;
+          // Check for explicit hours field first, only fallback to quantity if no hours specified
+          const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
+          const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
           laborHours += hours;
           laborAmount += extendedPrice;
         } else if (lineType === "part") {
@@ -278,7 +280,9 @@ export function extractJobIndexFromCachedWorkOrder(
         });
         
         if (lineType === "labor") {
-          const hours = parseFloat(line.EstimatedHours || line.Hours || line.Quantity || line.quantity || "0") || quantity;
+          // Check for explicit hours field first, only fallback to quantity if no hours specified
+          const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
+          const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
           laborHours += hours;
           laborAmount += extendedPrice;
         } else if (lineType === "part") {
