@@ -40,6 +40,9 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **v1.7.5 Updates**:
+    *   **Plan Page Performance Optimization**: Added background cache pre-generation system to eliminate 35-second plan page load times. Sync workers now trigger fire-and-forget cache warming for CARFAX (7-day TTL), DataOne OEM schedules, and Protractor data after syncing vehicles. Pre-generation processes up to 10 VINs per shop per sync cycle without counting against trial VIN limits.
+    *   **Internal Pre-generation API**: New `/api/internal/plan-pregenerate` endpoint secured with CRON_SECRET. Only warms up caches - does NOT call VIN tracking functions, ensuring pre-generation doesn't affect billing.
 *   **v1.7.4 Updates**:
     *   **Reverse-Chronological Backfill**: Redesigned both Protractor and Tekmetric backfill systems to process newest-to-oldest (reverse chronological). Recent jobs are now available within the first run instead of waiting for the full 5-year backfill to complete.
     *   **Content Hash Change Detection**: Added SHA256 content hashing to job_index entries. During re-indexing, unchanged records are skipped based on hash comparison, significantly reducing database writes and improving efficiency.
