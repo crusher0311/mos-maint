@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle, Copy, Mail, AlertCircle } from "lucide-react";
 
 type Me = { ok: true; email: string; role: string; shopId: number };
 
@@ -10,7 +11,10 @@ export default function InvitePage() {
   const [role, setRole] = useState("user");
   const [days, setDays] = useState(7);
   const [inviteUrl, setInviteUrl] = useState("");
+  const [invitedEmail, setInvitedEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
   const [msg, setMsg] = useState("");
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -25,6 +29,9 @@ export default function InvitePage() {
     setBusy(true);
     setMsg("");
     setInviteUrl("");
+    setEmailSent(false);
+    setInvitedEmail("");
+    setCopied(false);
     try {
       const res = await fetch("/api/auth/invite", {
         method: "POST",
@@ -34,9 +41,10 @@ export default function InvitePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed");
       setInviteUrl(data.setupUrl);
-      setMsg("âœ… Invite created");
+      setEmailSent(data.emailSent);
+      setInvitedEmail(data.email);
     } catch (e: any) {
-      setMsg("âŒ " + (e?.message || "Error"));
+      setMsg(e?.message || "Error");
     } finally {
       setBusy(false);
     }
@@ -44,7 +52,10 @@ export default function InvitePage() {
 
   function copy() {
     if (!inviteUrl) return;
-    navigator.clipboard.writeText(inviteUrl).then(() => setMsg("Link copied"));
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   if (!me) {
@@ -100,25 +111,62 @@ export default function InvitePage() {
           />
           <button
             type="submit"
-            className="rounded bg-black text-white px-4 py-2 disabled:opacity-50"
+            className="rounded bg-blue-600 text-white px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
             disabled={busy}
           >
-            {busy ? "Creating..." : "Create invite"}
+            {busy ? "Sending..." : "Create invite"}
           </button>
         </div>
       </form>
 
       {inviteUrl && (
-        <div className="space-y-2">
-          <input className="w-full border rounded p-2" value={inviteUrl} readOnly />
-          <button className="rounded bg-black text-white px-4 py-2" onClick={copy}>
-            Copy Link
-          </button>
+        <div className="space-y-3">
+          {emailSent ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+              <Mail className="w-5 h-5 text-green-600" />
+              <div className="text-sm text-green-800">
+                <span className="font-medium">Invite email sent to {invitedEmail}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
+              <div className="text-sm text-yellow-800">
+                Email could not be sent. Share the link manually.
+              </div>
+            </div>
+          )}
+          
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <p className="text-xs text-gray-500">Backup: Copy and share this link manually</p>
+            <div className="flex gap-2">
+              <input 
+                className="flex-1 border rounded p-2 text-sm bg-white" 
+                value={inviteUrl} 
+                readOnly 
+              />
+              <button 
+                className="rounded bg-gray-200 text-gray-700 px-3 py-2 hover:bg-gray-300 flex items-center gap-1 text-sm"
+                onClick={copy}
+              >
+                {copied ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {msg && <div className="text-sm whitespace-pre-wrap">{msg}</div>}
+      {msg && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{msg}</div>}
     </main>
   );
 }
-
