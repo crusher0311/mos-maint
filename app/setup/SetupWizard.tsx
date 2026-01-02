@@ -124,6 +124,12 @@ export default function SetupWizard() {
         throw new Error(data.error || "Setup failed");
       }
 
+      // If there's a checkout URL (user skipped trial), redirect to Stripe
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed");
