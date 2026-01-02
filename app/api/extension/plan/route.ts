@@ -141,13 +141,20 @@ function getLastPerformedInfo(
 
 type ShopIntervals = Record<string, { useShop: boolean; excluded?: boolean; miles: number | null; months: number | null }>;
 
+interface PrefetchedData {
+  oemResult?: Awaited<ReturnType<typeof getMaintenanceScheduleCached>>;
+  carfaxRecords?: any[] | null;
+  shopWorkOrders?: any[];
+}
+
 async function runOnDemandAnalysis(
   shopId: number, 
   vin: string, 
   mileage: number | null, 
   showInspectItems: boolean = true,
   shopIntervals: ShopIntervals = {},
-  carfaxRecords: any[] | null = null
+  carfaxRecords: any[] | null = null,
+  prefetched?: PrefetchedData
 ) {
   const db = await getDb();
   
@@ -157,21 +164,25 @@ async function runOnDemandAnalysis(
   const SOON_MILES = 3000; // Same as dashboard
   const recommendations: any[] = [];
   
-  // Preload shop work orders ONCE for this vehicle (for performance)
-  let shopWorkOrders: any[] = [];
-  try {
-    shopWorkOrders = await db.collection("tekmetric_work_orders").find({
-      shopId: Number(shopId),
-      vin: vin.toUpperCase()
-    }).sort({ completedDate: -1 }).limit(50).toArray();
-    console.log(`[Extension] Preloaded ${shopWorkOrders.length} work orders for VIN ${vin}`);
-  } catch (e) {
-    console.warn('[Extension] Error preloading shop work orders:', e);
+  // Use prefetched work orders or fetch if not provided
+  let shopWorkOrders: any[] = prefetched?.shopWorkOrders || [];
+  if (!prefetched?.shopWorkOrders) {
+    try {
+      shopWorkOrders = await db.collection("tekmetric_work_orders").find({
+        shopId: Number(shopId),
+        vin: vin.toUpperCase()
+      }).sort({ completedDate: -1 }).limit(50).toArray();
+      console.log(`[Extension] Preloaded ${shopWorkOrders.length} work orders for VIN ${vin}`);
+    } catch (e) {
+      console.warn('[Extension] Error preloading shop work orders:', e);
+    }
+  } else {
+    console.log(`[Extension] Using prefetched ${shopWorkOrders.length} work orders`);
   }
 
-  // Fetch OEM maintenance schedule using the working DataOne API
+  // Use prefetched OEM data or fetch if not provided
   try {
-    const oemResult = await getMaintenanceScheduleCached(vin);
+    const oemResult = prefetched?.oemResult || await getMaintenanceScheduleCached(vin);
     console.log(`[Extension] OEM data: ${oemResult.count} items, source: ${oemResult.source}`);
     
     if (oemResult.ok && oemResult.items?.length > 0) {
@@ -528,25 +539,46 @@ export async function GET(request: NextRequest) {
     
     if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged) {
       try {
-        // Fetch CARFAX service history for determining where services were last performed
+        const startTime = Date.now();
+        
+        // PARALLEL FETCH: Get all external data at once for speed
+        const [carfaxResult, oemResult, shopWorkOrders] = await Promise.all([
+          // CARFAX service history
+          fetchCarfaxWithCache(mosShopId, vin).catch(e => {
+            console.warn('[Extension] CARFAX fetch failed:', e);
+            return { ok: false, serviceRecords: [] };
+          }),
+          // DataOne OEM maintenance schedule
+          getMaintenanceScheduleCached(vin).catch(e => {
+            console.warn('[Extension] OEM fetch failed:', e);
+            return { ok: false, count: 0, items: [], vin, squish: '', source: 'cache' as const };
+          }),
+          // Shop work orders for last-performed lookups
+          db.collection("tekmetric_work_orders").find({
+            shopId: Number(mosShopId),
+            vin: vin.toUpperCase()
+          }).sort({ completedDate: -1 }).limit(50).toArray().catch(e => {
+            console.warn('[Extension] Work orders fetch failed:', e);
+            return [];
+          })
+        ]);
+        
+        console.log(`[Extension] Parallel fetch completed in ${Date.now() - startTime}ms`);
+        
+        // Process CARFAX records
         let carfaxRecords: any[] | null = null;
-        try {
-          const carfaxResult = await fetchCarfaxWithCache(mosShopId, vin);
-          if (carfaxResult.ok && carfaxResult.serviceRecords?.length) {
-            // Sort by date descending (most recent first)
-            carfaxRecords = carfaxResult.serviceRecords.sort((a, b) => {
-              const dateA = a.date ? new Date(a.date).getTime() : 0;
-              const dateB = b.date ? new Date(b.date).getTime() : 0;
-              return dateB - dateA;
-            });
-            console.log(`[Extension] CARFAX: ${carfaxRecords.length} service records`);
-          }
-        } catch (e) {
-          console.warn('[Extension] CARFAX fetch failed (will use OEM intervals):', e);
+        if (carfaxResult.ok && carfaxResult.serviceRecords?.length) {
+          carfaxRecords = carfaxResult.serviceRecords.sort((a: any, b: any) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA;
+          });
+          console.log(`[Extension] CARFAX: ${carfaxRecords.length} service records`);
         }
         
         const recommendations = await runOnDemandAnalysis(
-          mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords
+          mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords,
+          { oemResult, shopWorkOrders }
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
