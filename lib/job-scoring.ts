@@ -87,6 +87,7 @@ export interface ScoredJob {
     year: number;
     constraints: number;
     evidence: number;
+    recency: number;
   };
   [key: string]: any;
 }
@@ -214,17 +215,23 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
     matchDetails.push("Has part numbers");
   }
   
+  // Recency scoring - exponential decay with 180-day half-life (max +10 points)
+  // Recent jobs likely have more up-to-date pricing
+  let recencyScore = 0;
   if (job.performedAt) {
     const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSincePerformed < 90) {
-      evidenceScore += 4;
+    // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
+    recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
+    recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
+    
+    if (recencyScore >= 8) {
+      matchDetails.push("Very recent job");
+    } else if (recencyScore >= 5) {
       matchDetails.push("Recent job");
-    } else if (daysSincePerformed < 365) {
-      evidenceScore += 2;
     }
   }
   
-  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore;
+  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore;
   const normalizedScore = Math.max(0, Math.min(100, totalScore));
   const band = getScoreBand(normalizedScore);
   
@@ -241,6 +248,7 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
       year: yearScore,
       constraints: constraintScore,
       evidence: evidenceScore,
+      recency: recencyScore,
     },
   };
 }
