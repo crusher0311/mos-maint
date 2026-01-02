@@ -64,8 +64,10 @@ export type BillingSettings = {
   onboardingPriceId: string;
   onboardingPrice: number;
   trialDays: number;
+  trialVinLimit: number;
   defaultVinLimit: number;
   foundingShopPricing: boolean;
+  skipTrialBonusVins: number;
 };
 
 const DEFAULT_BILLING_SETTINGS: BillingSettings = {
@@ -86,8 +88,10 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   onboardingPriceId: "",
   onboardingPrice: 495,
   trialDays: 14,
+  trialVinLimit: 10,
   defaultVinLimit: 300,
   foundingShopPricing: true,
+  skipTrialBonusVins: 50,
 };
 
 export async function getBillingSettings(): Promise<BillingSettings> {
@@ -117,8 +121,10 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       onboardingPriceId: settings.onboardingPriceId || "",
       onboardingPrice: settings.onboardingPrice ?? 495,
       trialDays: settings.trialDays ?? 14,
+      trialVinLimit: settings.trialVinLimit ?? 10,
       defaultVinLimit: settings.defaultVinLimit ?? 300,
       foundingShopPricing: settings.foundingShopPricing ?? true,
+      skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
     };
   } catch (error) {
     console.error("Error loading billing settings:", error);
