@@ -1,13 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Gift, Zap, Clock } from "lucide-react";
+
+interface BillingConfig {
+  trialVinLimit: number;
+  skipTrialBonusVins: number;
+  mosProIncludedVins: number;
+  mosProPrice: number;
+}
 
 interface Step1Data {
   shopName: string;
   adminEmail: string;
   adminPassword: string;
   confirmPassword: string;
+  skipTrial: boolean;
 }
 
 interface IntegrationData {
@@ -39,13 +48,31 @@ export default function SetupWizard() {
     adminEmail: "",
     adminPassword: "",
     confirmPassword: "",
+    skipTrial: false,
   });
   const [integrations, setIntegrations] = useState<IntegrationData>({});
   const [expandedIntegration, setExpandedIntegration] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [billingConfig, setBillingConfig] = useState<BillingConfig>({
+    trialVinLimit: 10,
+    skipTrialBonusVins: 50,
+    mosProIncludedVins: 300,
+    mosProPrice: 199,
+  });
   
   const router = useRouter();
+
+  useEffect(() => {
+    fetch("/api/billing/config")
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          setBillingConfig(data.config);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +101,11 @@ export default function SetupWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...step1Data,
+          shopName: step1Data.shopName,
+          adminEmail: step1Data.adminEmail,
+          adminPassword: step1Data.adminPassword,
+          confirmPassword: step1Data.confirmPassword,
+          skipTrial: step1Data.skipTrial,
           autoflowDomain: integrations.autoflow?.domain,
           autoflowApiKey: integrations.autoflow?.apiKey,
           autoflowApiPassword: integrations.autoflow?.apiPassword,
@@ -106,19 +137,91 @@ export default function SetupWizard() {
   };
 
   if (currentStep === 1) {
+    const totalBonusVins = billingConfig.mosProIncludedVins + billingConfig.skipTrialBonusVins;
+    
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
+        <div className="max-w-lg w-full space-y-8">
           <div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
               Setup Your Maintenance System
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
-              Step 1 of 2: Create your shop and admin account
+              Step 1 of 2: Choose your plan and create your account
             </p>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setStep1Data({ ...step1Data, skipTrial: false })}
+              className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                !step1Data.skipTrial
+                  ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+                  : "border-gray-200 bg-white hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-5 h-5 text-blue-600" />
+                <span className="font-semibold text-gray-900">Free Trial</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                Try with {billingConfig.trialVinLimit} VINs free
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                No credit card required
+              </p>
+              {!step1Data.skipTrial && (
+                <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStep1Data({ ...step1Data, skipTrial: true })}
+              className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                step1Data.skipTrial
+                  ? "border-green-500 bg-green-50 ring-2 ring-green-200"
+                  : "border-gray-200 bg-white hover:border-gray-300"
+              }`}
+            >
+              <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Gift className="w-3 h-3" />
+                +{billingConfig.skipTrialBonusVins} Bonus
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="w-5 h-5 text-green-600" />
+                <span className="font-semibold text-gray-900">Subscribe Now</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                Get {totalBonusVins} VINs
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                ${billingConfig.mosProPrice}/month
+              </p>
+              {step1Data.skipTrial && (
+                <div className="absolute top-2 right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </button>
+          </div>
+
+          {step1Data.skipTrial && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+              <p className="text-sm text-green-800">
+                <strong>Great choice!</strong> You'll get {billingConfig.mosProIncludedVins} + {billingConfig.skipTrialBonusVins} = <strong>{totalBonusVins} VINs</strong> when you subscribe after setup.
+              </p>
+            </div>
+          )}
           
-          <form className="mt-8 space-y-6" onSubmit={handleStep1Submit}>
+          <form className="space-y-6" onSubmit={handleStep1Submit}>
             {error && (
               <div className="rounded-md bg-red-50 p-4">
                 <div className="text-sm text-red-700">{error}</div>
