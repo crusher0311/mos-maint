@@ -879,13 +879,27 @@ export default function PlatformShopsPage() {
                     <label className="block text-xs text-gray-500 mb-1">Plan</label>
                     <select
                       value={billingEdits.plan}
-                      onChange={(e) => setBillingEdits({ ...billingEdits, plan: e.target.value })}
+                      onChange={(e) => {
+                        const newPlan = e.target.value;
+                        setBillingEdits({ ...billingEdits, plan: newPlan });
+                        if (newPlan === "demo") {
+                          setVinInput("999999");
+                          setFeatureEdits({
+                            maintenance: true,
+                            job_lookup: true,
+                            oil_sticker: true,
+                            part_xref: true,
+                            dvi_tracking: true,
+                          });
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
                     >
                       <option value="trial">Trial</option>
                       <option value="starter">Starter</option>
                       <option value="professional">Professional</option>
                       <option value="enterprise">Enterprise</option>
+                      <option value="demo">Demo</option>
                     </select>
                   </div>
                   <div>
@@ -899,6 +913,7 @@ export default function PlatformShopsPage() {
                       <option value="active">Active</option>
                       <option value="past_due">Past Due</option>
                       <option value="canceled">Canceled</option>
+                      <option value="demo">Demo</option>
                     </select>
                   </div>
                 </div>
