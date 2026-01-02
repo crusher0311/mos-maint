@@ -294,10 +294,10 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(job.totals.totalAmount)}
+                        {formatCurrency(job.totals?.totalAmount || 0)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {job.lines.length} line{job.lines.length !== 1 ? "s" : ""}
+                        {job.lines?.length || 0} line{(job.lines?.length || 0) !== 1 ? "s" : ""}
                       </div>
                     </div>
 
@@ -316,17 +316,17 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Labor:</span>
-                      <span className="font-medium">{job.totals.laborHours}h</span>
+                      <span className="font-medium">{job.totals?.laborHours || 0}h</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Package className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Parts:</span>
-                      <span className="font-medium">{formatCurrency(job.totals.partsAmount)}</span>
+                      <span className="font-medium">{formatCurrency(job.totals?.partsAmount || 0)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Total:</span>
-                      <span className="font-medium">{formatCurrency(job.totals.totalAmount)}</span>
+                      <span className="font-medium">{formatCurrency(job.totals?.totalAmount || 0)}</span>
                     </div>
                   </div>
 
@@ -342,7 +342,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                       </tr>
                     </thead>
                     <tbody>
-                      {job.lines.map((line, idx) => (
+                      {(job.lines || []).map((line, idx) => (
                         <tr key={idx} className="border-b border-gray-100">
                           <td className="py-2">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
