@@ -1827,9 +1827,9 @@ export async function fetchCannedJobsWithCache(
     };
   }
 
-  // If no enriched cache exists, auto-run deep sync
+  // If no enriched cache exists, return basic list immediately and run enrichment in background
   if (!isEnriched || !hasItems) {
-    console.log(`[Protractor] No enriched cache found for shop ${shopId}, running auto deep sync...`);
+    console.log(`[Protractor] No enriched cache found for shop ${shopId}, fetching basic list...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
@@ -1844,33 +1844,47 @@ export async function fetchCannedJobsWithCache(
       return { ok: false, error: listResult.error };
     }
 
-    // Run enrichment
-    const enrichedJobs = await enrichCannedJobsWithDetails(
-      shopId,
-      listResult.cannedJobs,
-      { filterEmptyTitles: true }
-    );
-
-    // Save enriched cache with "enriched" source marker
+    // Save basic list immediately so page loads fast
     const now = new Date();
     await db.collection("protractor_canned_jobs").updateOne(
       { shopId },
       {
         $set: {
-          items: enrichedJobs,
+          items: listResult.cannedJobs,
           fetchedAt: now,
-          source: "enriched",
+          source: "api",
         },
         $setOnInsert: { createdAt: now },
       },
       { upsert: true }
     );
 
-    console.log(`[Protractor] Auto deep sync complete: ${enrichedJobs.length} enriched jobs saved`);
+    // Run enrichment in background (fire and forget) - don't block the response
+    console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs...`);
+    enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, { filterEmptyTitles: true })
+      .then(async (enrichedJobs) => {
+        const enrichedNow = new Date();
+        await db.collection("protractor_canned_jobs").updateOne(
+          { shopId },
+          {
+            $set: {
+              items: enrichedJobs,
+              fetchedAt: enrichedNow,
+              source: "enriched",
+            },
+          }
+        );
+        console.log(`[Protractor] Background enrichment complete: ${enrichedJobs.length} jobs saved`);
+      })
+      .catch((err) => {
+        console.error(`[Protractor] Background enrichment failed:`, err);
+      });
+
+    // Return basic list immediately
     return {
       ok: true,
-      cannedJobs: normalizeCachedItems(enrichedJobs),
-      source: "enriched",
+      cannedJobs: normalizeCachedItems(listResult.cannedJobs),
+      source: "api",
     };
   }
 
