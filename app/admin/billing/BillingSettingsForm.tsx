@@ -427,14 +427,13 @@ export default function BillingSettingsForm({
             <input
               type="checkbox"
               id="foundingShopPricing"
-                checked={settings.foundingShopPricing}
-                onChange={(e) => setSettings({ ...settings, foundingShopPricing: e.target.checked })}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="foundingShopPricing" className="text-sm font-medium text-gray-700">
-                Founding Shop Pricing Active
-              </label>
-            </div>
+              checked={settings.foundingShopPricing}
+              onChange={(e) => setSettings({ ...settings, foundingShopPricing: e.target.checked })}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="foundingShopPricing" className="text-sm font-medium text-gray-700">
+              Founding Shop Pricing Active
+            </label>
           </div>
         </div>
       </div>
