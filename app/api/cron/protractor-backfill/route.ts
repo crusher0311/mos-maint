@@ -89,7 +89,7 @@ async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name:
     const progress = await db.collection("backfill_progress").findOne({ shopId });
     
     // Include shops that are not completed OR have outdated logic version
-    const needsReprocess = !progress?.completed || progress?.logicVersion !== 2;
+    const needsReprocess = !progress?.completed || progress?.logicVersion !== 3;
     
     if (needsReprocess) {
       shopsToBackfill.push({
@@ -132,7 +132,7 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
   // REVERSE CHRONOLOGICAL: Start from today, work backwards
   let chunkEnd: Date;
   
-  if (progress?.currentChunkEnd && progress?.logicVersion === 2) {
+  if (progress?.currentChunkEnd && progress?.logicVersion === 3) {
     // Continue from where we left off
     chunkEnd = new Date(progress.currentChunkEnd);
   } else {
@@ -146,7 +146,7 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
           startedAt: new Date(), 
           currentChunkEnd: chunkEnd, 
           completed: false,
-          logicVersion: 2 // Mark as using reverse-chronological logic
+          logicVersion: 3 // v3: Fixed Protractor PriceSummary extraction
         },
         $unset: { currentChunkStart: "" } // Remove old field
       },
