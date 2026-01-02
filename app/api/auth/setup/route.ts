@@ -159,9 +159,10 @@ export async function POST(req: NextRequest) {
 
     // If skipping trial, create Stripe checkout session
     let checkoutUrl: string | null = null;
+    console.log("[Setup] Skip trial:", skipTrial, "Price ID:", billingSettings.mosProPriceId ? "configured" : "MISSING");
     if (skipTrial) {
       if (!billingSettings.mosProPriceId) {
-        console.error("[Setup] Skip trial requested but no MOS Pro price ID configured");
+        console.error("[Setup] Skip trial requested but no MOS Pro price ID configured:", JSON.stringify(billingSettings));
         // Fall back to trial mode instead of failing completely
         await shops.updateOne(
           { shopId },
