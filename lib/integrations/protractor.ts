@@ -4,6 +4,45 @@ import { getDb } from "@/lib/mongo";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
+// Rate limiter: 5 requests per second for Protractor API
+const RATE_LIMIT_RPS = 5;
+const RATE_LIMIT_INTERVAL_MS = 1000 / RATE_LIMIT_RPS; // 200ms between requests
+let lastRequestTime = 0;
+const rateLimitQueue: (() => void)[] = [];
+let isProcessingQueue = false;
+
+async function acquireRateLimitSlot(): Promise<void> {
+  return new Promise((resolve) => {
+    rateLimitQueue.push(resolve);
+    processRateLimitQueue();
+  });
+}
+
+function processRateLimitQueue(): void {
+  if (isProcessingQueue || rateLimitQueue.length === 0) return;
+  isProcessingQueue = true;
+  
+  const processNext = () => {
+    if (rateLimitQueue.length === 0) {
+      isProcessingQueue = false;
+      return;
+    }
+    
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    const waitTime = Math.max(0, RATE_LIMIT_INTERVAL_MS - timeSinceLastRequest);
+    
+    setTimeout(() => {
+      lastRequestTime = Date.now();
+      const resolve = rateLimitQueue.shift();
+      if (resolve) resolve();
+      processNext();
+    }, waitTime);
+  };
+  
+  processNext();
+}
+
 export type ProtractorConfig = {
   connectionId: string;
   apiKey: string;
@@ -193,11 +232,15 @@ export async function resolveProtractorConfig(shopId: number | string): Promise<
 export async function protractorFetch<T>(
   endpoint: string,
   config: ProtractorConfig,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retryCount = 0
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
+
+  // Acquire rate limit slot before making request
+  await acquireRateLimitSlot();
 
   const url = `${BASE_URL}${endpoint}`;
   
@@ -214,6 +257,15 @@ export async function protractorFetch<T>(
       },
       cache: "no-store",
     });
+
+    // Handle rate limiting (429) with exponential backoff
+    if (res.status === 429 && retryCount < 3) {
+      const retryAfter = res.headers.get("Retry-After");
+      const waitMs = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retryCount + 1) * 1000;
+      console.log(`[Protractor] Rate limited, retrying in ${waitMs}ms (attempt ${retryCount + 1}/3)`);
+      await new Promise(r => setTimeout(r, waitMs));
+      return protractorFetch<T>(endpoint, config, options, retryCount + 1);
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
