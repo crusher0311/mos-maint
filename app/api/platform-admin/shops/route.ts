@@ -89,8 +89,8 @@ export async function GET() {
       if (shop.carfax?.locationId || shop.carfax?.serviceId || shop.carfaxLocationId) integrations.push("CARFAX");
       if (shop.autovitals?.apiKey || shop.autovitals?.configured || shop.autovitalsApiKey) integrations.push("AutoVitals");
       
-      const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise";
-      const vinLimit = shop.trialVinLimit ?? defaultVinLimit;
+      const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro";
+      const vinLimit = shop.billing?.vinLimit ?? shop.trialVinLimit ?? defaultVinLimit;
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
       const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
       const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
