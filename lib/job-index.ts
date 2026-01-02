@@ -2,6 +2,21 @@
 // Job Lookup / Parts Intelligence - Data Indexing Layer
 
 import { getDb } from "@/lib/mongo";
+import crypto from "crypto";
+
+// Compute a deterministic hash of job entry content for change detection
+export function computeJobHash(entry: JobIndexEntry): string {
+  // Only hash the content that matters for equality (exclude metadata.indexedAt)
+  const hashContent = {
+    workOrderId: entry.workOrderId,
+    servicePackageId: entry.servicePackageId,
+    vehicle: entry.vehicle,
+    job: entry.job,
+    lines: entry.lines,
+    totals: entry.totals,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
+}
 
 export type JobIndexEntry = {
   shopId: number;

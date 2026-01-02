@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,8 +12,7 @@ const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
 const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
 const MONTHS_PER_RUN = 3;
 const MAX_SHOPS_PER_RUN = 1;
-const REQUESTS_PER_MINUTE = 600;
-const SAFE_REQUESTS_PER_SECOND = Math.floor(REQUESTS_PER_MINUTE / 60 * 0.8);
+const YEARS_TO_BACKFILL = 5;
 
 type TekmetricRepairOrder = {
   id: number;
@@ -57,6 +57,21 @@ type TekmetricCustomer = {
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function computeContentHash(entry: any): string {
+  const hashContent = {
+    workOrderId: entry.workOrderId,
+    servicePackageId: entry.servicePackageId,
+    vehicle: entry.vehicle,
+    jobName: entry.jobName,
+    lines: entry.lines,
+    totalAmount: entry.totalAmount,
+    laborAmount: entry.laborAmount,
+    partsAmount: entry.partsAmount,
+    laborHours: entry.laborHours,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
 }
 
 async function tekmetricRequest<T>(endpoint: string, retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
@@ -116,21 +131,25 @@ async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name:
     
     const progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
     
-    if (!progress?.completed) {
+    // Include shops that are not completed OR have outdated logic version
+    const needsReprocess = !progress?.completed || progress?.logicVersion !== 2;
+    
+    if (needsReprocess) {
       shopsToBackfill.push({
         shopId,
         name: shop.name || shop.locationIdentifier || `Shop ${shopId}`,
         tekmetricShopId: Number(tekmetricShopId),
-        progressDate: progress?.currentChunkStart ? new Date(progress.currentChunkStart) : null
+        progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd) : null
       });
     }
   }
 
+  // Prioritize: shops with no progress first, then by most recent cursor
   shopsToBackfill.sort((a, b) => {
     if (!a.progressDate && !b.progressDate) return 0;
     if (!a.progressDate) return -1;
     if (!b.progressDate) return 1;
-    return a.progressDate.getTime() - b.progressDate.getTime();
+    return b.progressDate.getTime() - a.progressDate.getTime();
   });
 
   return shopsToBackfill.map(s => ({ shopId: s.shopId, name: s.name, tekmetricShopId: s.tekmetricShopId }));
@@ -140,48 +159,64 @@ async function backfillShopChunk(
   db: any, 
   shopId: number, 
   tekmetricShopId: number
-): Promise<{ jobsIndexed: number; complete: boolean; message: string }> {
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string }> {
   let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
   
-  const globalEndDate = new Date();
-  globalEndDate.setHours(0, 0, 0, 0);
+  // Calculate date boundaries
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
   
-  const defaultStart = new Date();
-  defaultStart.setFullYear(defaultStart.getFullYear() - 5);
-  defaultStart.setHours(0, 0, 0, 0);
+  const oldestDate = new Date();
+  oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+  oldestDate.setHours(0, 0, 0, 0);
   
-  let chunkStart: Date;
-  if (progress?.currentChunkStart) {
-    chunkStart = new Date(progress.currentChunkStart);
+  // REVERSE CHRONOLOGICAL: Start from today, work backwards
+  let chunkEnd: Date;
+  
+  if (progress?.currentChunkEnd && progress?.logicVersion === 2) {
+    chunkEnd = new Date(progress.currentChunkEnd);
   } else {
-    chunkStart = defaultStart;
+    // Fresh start or upgrading from old logic
+    chunkEnd = new Date(today);
     await db.collection("tekmetric_backfill_progress").updateOne(
       { shopId },
-      { $set: { shopId, startedAt: new Date(), currentChunkStart: chunkStart, completed: false } },
+      { 
+        $set: { 
+          shopId, 
+          startedAt: new Date(), 
+          currentChunkEnd: chunkEnd, 
+          completed: false,
+          logicVersion: 2
+        },
+        $unset: { currentChunkStart: "" }
+      },
       { upsert: true }
     );
   }
 
-  const chunkEnd = new Date(chunkStart);
-  chunkEnd.setMonth(chunkEnd.getMonth() + MONTHS_PER_RUN);
-  if (chunkEnd > globalEndDate) {
-    chunkEnd.setTime(globalEndDate.getTime());
+  // Calculate chunk start (going backwards)
+  const chunkStart = new Date(chunkEnd);
+  chunkStart.setMonth(chunkStart.getMonth() - MONTHS_PER_RUN);
+  if (chunkStart < oldestDate) {
+    chunkStart.setTime(oldestDate.getTime());
   }
 
-  if (chunkStart >= globalEndDate) {
+  // Check if we've reached the oldest date
+  if (chunkEnd <= oldestDate) {
     await db.collection("tekmetric_backfill_progress").updateOne(
       { shopId },
       { $set: { completed: true, completedAt: new Date() } }
     );
-    return { jobsIndexed: 0, complete: true, message: "Already complete" };
+    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete" };
   }
 
   const startStr = chunkStart.toISOString();
   const endStr = chunkEnd.toISOString();
 
-  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]}`);
+  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]} (reverse chronological)`);
 
   let jobsIndexed = 0;
+  let skippedUnchanged = 0;
   let page = 0;
   let totalPages = 1;
   const seenROIds = new Set<number>();
@@ -215,12 +250,12 @@ async function backfillShopChunk(
     console.log(`[Tekmetric Backfill] Shop ${shopId} page ${page + 1}/${totalPages}: ${ros.length} ROs`);
 
     const roPromises = ros.map(ro => limit(async () => {
-      if (seenROIds.has(ro.id)) return 0;
+      if (seenROIds.has(ro.id)) return { indexed: 0, skipped: 0 };
       seenROIds.add(ro.id);
 
       const statusCode = ro.repairOrderStatus?.code?.toUpperCase() || "";
       if (!["POSTED", "INVOICED", "COMPLETED"].includes(statusCode)) {
-        return 0;
+        return { indexed: 0, skipped: 0 };
       }
 
       let vehicle: TekmetricVehicle | null = null;
@@ -254,9 +289,11 @@ async function backfillShopChunk(
       );
       const jobs = jobsResult.data?.content || [];
 
-      if (jobs.length === 0) return 0;
+      if (jobs.length === 0) return { indexed: 0, skipped: 0 };
 
       let indexed = 0;
+      let skipped = 0;
+      
       for (const job of jobs) {
         const laborAmountDollars = (job.laborTotal || 0) / 100;
         const partsAmountDollars = (job.partsTotal || 0) / 100;
@@ -303,32 +340,46 @@ async function backfillShopChunk(
           }
         }
 
+        // Compute content hash for change detection
+        const contentHash = computeContentHash(entry);
+        const filter = { shopId, workOrderId: String(ro.id), servicePackageId: String(job.id) };
+        
+        // Check if record exists with same hash
+        const existing = await db.collection("job_index").findOne(filter);
+        
+        if (existing && existing.contentHash === contentHash) {
+          skipped++;
+          continue;
+        }
+
         await db.collection("job_index").updateOne(
-          { shopId, workOrderId: String(ro.id), servicePackageId: String(job.id) },
-          { $set: entry },
+          filter,
+          { $set: { ...entry, contentHash } },
           { upsert: true }
         );
         indexed++;
       }
 
-      return indexed;
+      return { indexed, skipped };
     }));
 
     const results = await Promise.all(roPromises);
-    jobsIndexed += results.reduce((a, b) => a + b, 0);
+    jobsIndexed += results.reduce((a, b) => a + b.indexed, 0);
+    skippedUnchanged += results.reduce((a, b) => a + b.skipped, 0);
 
     page++;
     await new Promise(r => setTimeout(r, 100));
   }
 
-  const nextChunkStart = chunkEnd;
-  const isComplete = nextChunkStart >= globalEndDate;
+  // Move cursor backwards for next run
+  const nextChunkEnd = chunkStart;
+  const isComplete = nextChunkEnd <= oldestDate;
 
   await db.collection("tekmetric_backfill_progress").updateOne(
     { shopId },
     {
       $set: {
-        currentChunkStart: nextChunkStart,
+        currentChunkEnd: nextChunkEnd,
         lastRunAt: new Date(),
         completed: isComplete,
         ...(isComplete ? { completedAt: new Date() } : {}),
@@ -339,8 +390,9 @@ async function backfillShopChunk(
 
   return {
     jobsIndexed,
+    skipped: skippedUnchanged,
     complete: isComplete,
-    message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed`
+    message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged`
   };
 }
 
