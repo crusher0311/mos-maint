@@ -432,8 +432,7 @@ export default function PlatformShopsPage() {
                           </button>
                         </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
                   <td className="px-4 py-3">
                     {shop.integrations?.length > 0 ? (
                       <button
@@ -653,44 +652,41 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-right text-gray-900">{shop.userCount}</td>
                   <td className="px-4 py-3 text-right text-gray-900">{shop.vehicleCount}</td>
                   <td className="px-4 py-3">
-                    {shop.billing.isPaid ? (
-                      <div className="text-center text-green-600 text-sm">Unlimited</div>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="text-center">
-                          <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : "text-gray-900"}`}>
-                            {shop.billing.vinViewCount} / {shop.billing.vinLimit}
-                          </div>
-                          <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : "bg-purple-500"}`}
-                              style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
-                            />
-                          </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="text-center">
+                        <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : shop.billing.isPaid ? "text-green-600" : "text-gray-900"}`}>
+                          {shop.billing.vinViewCount} / {shop.billing.vinLimit}
+                          {shop.billing.isPaid && <span className="ml-1 text-green-500 text-xs">(Paid)</span>}
                         </div>
-                        <div className="flex gap-0.5">
-                          <button
-                            onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
-                            title="Add VINs"
-                            className="p-1 text-green-600 hover:bg-green-50 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
-                            title="Set Custom Limit"
-                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
-                            title="Reset to Default"
-                            className="p-1 text-orange-600 hover:bg-orange-50 rounded"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </button>
+                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-purple-500"}`}
+                            style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
+                          />
                         </div>
+                      </div>
+                      <div className="flex gap-0.5">
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
+                          title="Add VINs"
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
+                          title="Set Custom Limit"
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
+                          title="Reset to Default"
+                          className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   </td>
