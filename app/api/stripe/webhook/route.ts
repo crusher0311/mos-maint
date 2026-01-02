@@ -41,22 +41,36 @@ export async function POST(req: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const shopId = Number(session.metadata?.shopId);
-        const plan = session.metadata?.plan || "professional";
+        const plan = session.metadata?.plan || "pro";
+        const skippedTrial = session.metadata?.skippedTrial === "true";
+        const bonusVins = Number(session.metadata?.bonusVins) || 0;
         
         if (shopId) {
+          const updateData: Record<string, any> = {
+            "billing.plan": plan,
+            "billing.status": "active",
+            "billing.stripeSubscriptionId": session.subscription,
+            "billing.stripeCustomerId": session.customer,
+            "billing.updatedAt": new Date(),
+            "billing.pendingCheckoutSessionId": null,
+          };
+          
+          // If they skipped trial and got bonus VINs, ensure their VIN limit is set correctly
+          if (skippedTrial) {
+            // Get the billing settings to calculate total VINs
+            const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
+            const baseVins = billingSettings?.mosProIncludedVins || 300;
+            const bonus = billingSettings?.skipTrialBonusVins || 50;
+            updateData["billing.vinLimit"] = baseVins + bonus;
+            updateData["billing.skippedTrialBonus"] = bonus;
+            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus}`);
+          }
+          
           await db.collection("shops").updateOne(
             { shopId },
-            {
-              $set: {
-                "billing.plan": plan,
-                "billing.status": "active",
-                "billing.stripeSubscriptionId": session.subscription,
-                "billing.stripeCustomerId": session.customer,
-                "billing.updatedAt": new Date(),
-              },
-            }
+            { $set: updateData }
           );
-          console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}`);
+          console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skip trial bonus applied)" : ""}`);
         }
         break;
       }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getNextShopId } from "@/lib/ids";
 import { sendEmail, makeWelcomeEmail } from "@/lib/email";
+import { getStripe, getBillingSettings, getBaseUrl } from "@/lib/stripe";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
@@ -14,6 +15,7 @@ export async function POST(req: NextRequest) {
     const shopName = String(body?.shopName || "").trim();
     const adminEmail = String(body?.adminEmail || "").trim().toLowerCase();
     const adminPassword = String(body?.adminPassword || "");
+    const skipTrial = Boolean(body?.skipTrial);
     
     // Optional AutoFlow integration
     const autoflowDomain = String(body?.autoflowDomain || "").trim();
@@ -54,10 +56,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User already exists with this email" }, { status: 409 });
     }
 
-    // Create shop
-    const webhookToken = crypto.randomBytes(12).toString("hex");
+    // Get billing settings
+    const billingSettings = await getBillingSettings();
     const now = new Date();
     const shopId = await getNextShopId();
+    
+    // Create shop
+    const webhookToken = crypto.randomBytes(12).toString("hex");
     
     const shopDoc: Record<string, any> = {
       shopId,
@@ -65,6 +70,13 @@ export async function POST(req: NextRequest) {
       webhookToken,
       createdAt: now,
       updatedAt: now,
+      billing: {
+        status: skipTrial ? "pending_checkout" : "trial",
+        trialStartedAt: skipTrial ? null : now,
+        vinLimit: billingSettings.trialVinLimit,
+        intendedVinLimit: skipTrial ? (billingSettings.mosProIncludedVins + billingSettings.skipTrialBonusVins) : null,
+        skippedTrial: skipTrial,
+      },
     };
 
     // Store AutoFlow config if provided
@@ -145,6 +157,107 @@ export async function POST(req: NextRequest) {
       expiresAt,
     });
 
+    // If skipping trial, create Stripe checkout session
+    let checkoutUrl: string | null = null;
+    if (skipTrial) {
+      if (!billingSettings.mosProPriceId) {
+        console.error("[Setup] Skip trial requested but no MOS Pro price ID configured");
+        // Fall back to trial mode instead of failing completely
+        await shops.updateOne(
+          { shopId },
+          { 
+            $set: { 
+              "billing.status": "trial",
+              "billing.trialStartedAt": now,
+              "billing.skippedTrial": false,
+              "billing.intendedVinLimit": null,
+              updatedAt: new Date(),
+            } 
+          }
+        );
+      } else {
+        try {
+          const stripe = getStripe();
+          const baseUrl = getBaseUrl();
+          
+          // Create Stripe customer
+          const customer = await stripe.customers.create({
+            email: adminEmail,
+            name: shopName,
+            metadata: {
+              shopId: String(shopId),
+              skippedTrial: "true",
+            },
+          });
+
+          // Update shop with Stripe customer ID
+          await shops.updateOne(
+            { shopId },
+            { 
+              $set: { 
+                "billing.stripeCustomerId": customer.id,
+                updatedAt: new Date(),
+              } 
+            }
+          );
+
+          // Create checkout session
+          const session = await stripe.checkout.sessions.create({
+            customer: customer.id,
+            mode: "subscription",
+            line_items: [
+              {
+                price: billingSettings.mosProPriceId,
+                quantity: 1,
+              },
+            ],
+            success_url: `${baseUrl}/dashboard?subscription=success&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${baseUrl}/dashboard?subscription=cancelled`,
+            subscription_data: {
+              metadata: {
+                shopId: String(shopId),
+                skippedTrial: "true",
+                bonusVins: String(billingSettings.skipTrialBonusVins),
+              },
+            },
+            metadata: {
+              shopId: String(shopId),
+              skippedTrial: "true",
+            },
+          });
+
+          checkoutUrl = session.url;
+
+          // Store checkout session ID on shop
+          await shops.updateOne(
+            { shopId },
+            { 
+              $set: { 
+                "billing.pendingCheckoutSessionId": session.id,
+                updatedAt: new Date(),
+              } 
+            }
+          );
+        } catch (stripeErr: any) {
+          console.error("[Setup] Stripe checkout error:", stripeErr);
+          // Fall back to trial mode if Stripe fails
+          await shops.updateOne(
+            { shopId },
+            { 
+              $set: { 
+                "billing.status": "trial",
+                "billing.trialStartedAt": now,
+                "billing.skippedTrial": false,
+                "billing.intendedVinLimit": null,
+                "billing.checkoutError": stripeErr?.message || "Stripe checkout failed",
+                updatedAt: new Date(),
+              } 
+            }
+          );
+        }
+      }
+    }
+
     // Send welcome email (fire-and-forget)
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `https://${req.headers.get("host") || "mos.tools"}`;
     const loginUrl = `${baseUrl}/login`;
@@ -158,10 +271,11 @@ export async function POST(req: NextRequest) {
 
     const res = NextResponse.json({ 
       ok: true, 
-      redirect: "/dashboard", 
+      redirect: checkoutUrl || "/dashboard",
+      checkoutUrl,
       shopId, 
       role: "owner",
-      message: "Setup completed successfully"
+      message: skipTrial ? "Setup completed - redirecting to checkout" : "Setup completed successfully"
     });
     
     res.cookies.set("session_token", sessionId, {
