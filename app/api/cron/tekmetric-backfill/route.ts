@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
+import { createIngestionService } from "@/lib/normalized-ingestion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ type TekmetricRepairOrder = {
   vehicleId?: number;
   customerId?: number;
   repairOrderStatus?: { code: string };
+  createdDate?: string;
   postedDate?: string;
   completedDate?: string;
   updatedDate?: string;
@@ -159,8 +161,23 @@ async function backfillShopChunk(
   db: any, 
   shopId: number, 
   tekmetricShopId: number
-): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string }> {
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
   let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+  
+  const shop = await db.collection("shops").findOne({ shopId });
+  const enterpriseId = shop?.enterpriseId;
+  
+  const ingestionService = createIngestionService(
+    db,
+    'tekmetric',
+    shopId,
+    enterpriseId,
+    { 
+      syncRunId: `tekmetric-backfill-${Date.now()}`,
+      createAuditLog: false,
+      dualWriteToJobIndex: false,
+    }
+  );
   
   // Calculate date boundaries
   const today = new Date();
@@ -207,7 +224,7 @@ async function backfillShopChunk(
       { shopId },
       { $set: { completed: true, completedAt: new Date() } }
     );
-    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete" };
+    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0 };
   }
 
   const startStr = chunkStart.toISOString();
@@ -223,6 +240,7 @@ async function backfillShopChunk(
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
   const limit = pLimit(8);
+  const rosForNormalized: any[] = [];
 
   while (page < totalPages && page < 50) {
     const queryParams = new URLSearchParams({
@@ -250,12 +268,12 @@ async function backfillShopChunk(
     console.log(`[Tekmetric Backfill] Shop ${shopId} page ${page + 1}/${totalPages}: ${ros.length} ROs`);
 
     const roPromises = ros.map(ro => limit(async () => {
-      if (seenROIds.has(ro.id)) return { indexed: 0, skipped: 0 };
+      if (seenROIds.has(ro.id)) return { indexed: 0, skipped: 0, roData: null };
       seenROIds.add(ro.id);
 
       const statusCode = ro.repairOrderStatus?.code?.toUpperCase() || "";
       if (!["POSTED", "INVOICED", "COMPLETED"].includes(statusCode)) {
-        return { indexed: 0, skipped: 0 };
+        return { indexed: 0, skipped: 0, roData: null };
       }
 
       let vehicle: TekmetricVehicle | null = null;
@@ -360,15 +378,58 @@ async function backfillShopChunk(
         indexed++;
       }
 
-      return { indexed, skipped };
+      const roDataForNormalized = {
+        id: ro.id,
+        repairOrderNumber: ro.repairOrderNumber,
+        repairOrderStatus: ro.repairOrderStatus?.code || ro.repairOrderStatus,
+        postedDate: ro.postedDate,
+        completedDate: ro.completedDate,
+        createdDate: ro.createdDate,
+        updatedDate: ro.updatedDate,
+        milesIn: ro.milesIn,
+        milesOut: ro.milesOut,
+        laborSubtotal: jobs.reduce((sum, j) => sum + (j.laborTotal || 0), 0),
+        partsSubtotal: jobs.reduce((sum, j) => sum + (j.partsTotal || 0), 0),
+        total: jobs.reduce((sum, j) => sum + (j.subtotal || 0), 0),
+        vehicle: vehicle,
+        customer: customer,
+        jobs: jobs.map(j => ({
+          id: j.id,
+          name: j.name,
+          laborTotal: (j.laborTotal || 0) / 100,
+          partsTotal: (j.partsTotal || 0) / 100,
+          total: (j.subtotal || 0) / 100,
+          laborHours: j.laborHours || 0,
+          labor: j.labor,
+          parts: j.parts,
+        })),
+      };
+      
+      return { indexed, skipped, roData: roDataForNormalized };
     }));
 
     const results = await Promise.all(roPromises);
     jobsIndexed += results.reduce((a, b) => a + b.indexed, 0);
     skippedUnchanged += results.reduce((a, b) => a + b.skipped, 0);
+    
+    for (const r of results) {
+      if (r.roData) {
+        rosForNormalized.push(r.roData);
+      }
+    }
 
     page++;
     await new Promise(r => setTimeout(r, 100));
+  }
+
+  // Dual-write to normalized collections
+  let normalizedCount = 0;
+  try {
+    const normalizedResult = await ingestionService.ingestWorkOrderBatch(rosForNormalized);
+    normalizedCount = normalizedResult.created + normalizedResult.updated;
+    console.log(`[Tekmetric Backfill] Shop ${shopId}: Normalized ${normalizedCount} work orders (${normalizedResult.created} new, ${normalizedResult.updated} updated, ${normalizedResult.skipped} unchanged)`);
+  } catch (normalizedError) {
+    console.error(`[Tekmetric Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
   // Move cursor backwards for next run
@@ -392,7 +453,8 @@ async function backfillShopChunk(
     jobsIndexed,
     skipped: skippedUnchanged,
     complete: isComplete,
-    message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged`
+    message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged, ${normalizedCount} normalized`,
+    normalizedCount
   };
 }
 
