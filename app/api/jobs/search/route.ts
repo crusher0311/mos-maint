@@ -1,6 +1,7 @@
 // app/api/jobs/search/route.ts
 // Job Lookup / Parts Intelligence - Search API
 // Uses two-stage matching: Hard gates + Weighted scoring
+// Queries both legacy job_index and normalized collections for SMS migration support
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
@@ -74,6 +75,110 @@ function getBandLabel(band: ScoreBand): string {
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function searchNormalizedCollections(
+  db: any,
+  searchShopIds: number[],
+  coreTokens: string[],
+  vehicleMake?: string,
+  limit: number = 50
+): Promise<any[]> {
+  if (coreTokens.length === 0) return [];
+
+  try {
+    const shopMatch = searchShopIds.length === 1 
+      ? { shopId: searchShopIds[0] }
+      : { shopId: { $in: searchShopIds } };
+
+    // Build regex match conditions - each token must match in at least one of the text fields
+    // Using $and to require ALL tokens, with $or to allow matching in any field
+    const tokenConditions = coreTokens.map(t => {
+      const regex = { $regex: new RegExp(escapeRegex(t), 'i') };
+      return {
+        $or: [
+          { title: regex },
+          { description: regex },
+          { cannedJobName: regex },
+        ]
+      };
+    });
+
+    const serviceJobsPipeline: any[] = [
+      {
+        $match: {
+          ...shopMatch,
+          deletedAt: null,
+          $and: tokenConditions
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit * 2 },
+      {
+        $lookup: {
+          from: 'normalized_work_orders',
+          localField: 'workOrderId',
+          foreignField: '_id',
+          as: 'workOrder'
+        }
+      },
+      { $unwind: { path: '$workOrder', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'normalized_vehicles',
+          localField: 'workOrder.vehicleId',
+          foreignField: '_id',
+          as: 'vehicle'
+        }
+      },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
+    ];
+
+    if (vehicleMake) {
+      serviceJobsPipeline.push({
+        $match: { 'vehicle.make': { $regex: new RegExp(escapeRegex(vehicleMake), 'i') } }
+      });
+    }
+
+    serviceJobsPipeline.push({ $limit: limit });
+
+    const normalizedJobs = await db.collection('normalized_service_jobs')
+      .aggregate(serviceJobsPipeline)
+      .toArray();
+
+    return normalizedJobs.map((nj: any) => ({
+      _id: nj._id,
+      shopId: nj.shopId,
+      vin: nj.vehicle?.vin,
+      vehicle: {
+        vin: nj.vehicle?.vin,
+        year: nj.vehicle?.year,
+        make: nj.vehicle?.make,
+        model: nj.vehicle?.model,
+        engine: nj.vehicle?.engine?.description,
+      },
+      job: {
+        title: nj.title,
+        description: nj.description,
+        name: nj.cannedJobName || nj.title,
+        keywords: [],
+      },
+      lines: (nj.lineItems || []).map((li: any) => ({
+        lineType: li.itemType,
+        description: li.description,
+        partNumber: li.partNumber,
+        qty: li.quantity,
+        unitPrice: li.unitPrice,
+        total: li.totalPrice,
+      })),
+      performedAt: nj.workOrder?.completedDate || nj.createdAt,
+      workOrderId: nj.workOrderId,
+      sourceSystem: nj.provenance?.sourceSystem || 'normalized',
+    }));
+  } catch (err) {
+    console.log('[Jobs Search] Normalized search error:', (err as Error).message);
+    return [];
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -189,7 +294,36 @@ export async function GET(req: NextRequest) {
     }},
   ];
 
-  const jobs = await db.collection("job_index").aggregate(pipeline).toArray();
+  // Query both legacy job_index and normalized collections in parallel
+  const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const coreTokensForNormalized = allTokens.filter(w => !stopwords.has(w));
+  
+  const [jobIndexResults, normalizedResults] = await Promise.all([
+    db.collection("job_index").aggregate(pipeline).toArray(),
+    searchNormalizedCollections(db, searchShopIds, coreTokensForNormalized, vehicleMake || undefined, limit * 2)
+  ]);
+  
+  // Merge results from both sources, deduping by workOrderId + job title
+  const seenKeys = new Set<string>();
+  const jobs: any[] = [];
+  
+  for (const job of jobIndexResults) {
+    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-legacy`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      jobs.push({ ...job, dataSource: 'job_index' });
+    }
+  }
+  
+  for (const job of normalizedResults) {
+    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      jobs.push({ ...job, dataSource: 'normalized' });
+    }
+  }
+  
+  console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
   
   const targetEngine = parseEngineString(vehicleEngine || "");
   const targetYear = vehicleYear ? parseInt(vehicleYear) : null;
@@ -394,6 +528,8 @@ export async function GET(req: NextRequest) {
     results,
     stats: {
       totalFound: jobs.length,
+      fromJobIndex: jobIndexResults.length,
+      fromNormalized: normalizedResults.length,
       gatesFailed: gateFailCount,
       belowThreshold: belowThresholdCount,
       returned: results.length,
