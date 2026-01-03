@@ -134,9 +134,9 @@ export async function GET() {
           totalJobsIndexed: hasProtractor 
             ? (jobIndexCount || backfill?.totalJobsIndexed || 0) 
             : (jobIndexCount || tekmetricBackfill?.totalJobsIndexed || 0),
-          currentChunkStart: hasProtractor 
-            ? (backfill?.currentChunkStart || null)
-            : (tekmetricBackfill?.currentChunkStart || null),
+          currentChunkDate: hasProtractor 
+            ? (backfill?.currentChunkEnd || backfill?.currentChunkStart || null)
+            : (tekmetricBackfill?.currentChunkEnd || tekmetricBackfill?.currentChunkStart || null),
           source: hasProtractor ? "protractor" : "tekmetric",
         } : null,
         integrationDetails: {
