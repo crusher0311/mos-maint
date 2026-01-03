@@ -8,6 +8,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
+import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -227,6 +228,29 @@ export async function GET(req: NextRequest) {
         
         if (shopSyncedVins.length > 0) {
           syncedVinsPerShop.push({ shopId, vins: shopSyncedVins });
+        }
+        
+        // Dual-write to normalized collections (pass full work order payloads)
+        try {
+          const workOrdersForNormalized = detailedWOs.filter(wo => wo.ServiceItem?.VIN);
+          
+          if (workOrdersForNormalized.length > 0) {
+            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+            const enterpriseId = shop?.enterpriseId ? Number(shop.enterpriseId) : undefined;
+            
+            const ingestionService = new NormalizedIngestionService(
+              db,
+              'protractor',
+              shopId,
+              enterpriseId,
+              { dualWriteToJobIndex: false }
+            );
+            
+            const result = await ingestionService.ingestWorkOrderBatch(workOrdersForNormalized);
+            console.log(`[Cron] Protractor sync normalized: shop ${shopId}, ${result.created} created, ${result.updated} updated, ${result.skipped} skipped`);
+          }
+        } catch (normErr: any) {
+          console.log(`[Cron] Protractor sync normalized ingestion error for shop ${shopId}:`, normErr.message);
         }
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
