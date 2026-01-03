@@ -7,6 +7,7 @@ import {
   fetchVehicleById,
 } from "@/lib/integrations/protractor";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
+import { createIngestionService } from "@/lib/normalized-ingestion";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -171,11 +172,26 @@ async function backfillShopChunk(
   db: any, 
   shopId: number,
   rateLimiter: ReturnType<typeof pLimit>
-): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number }> {
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number; normalizedCount: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
-    return { jobsIndexed: 0, skipped: 0, complete: false, message: "Not configured", vehiclesFetched: 0 };
+    return { jobsIndexed: 0, skipped: 0, complete: false, message: "Not configured", vehiclesFetched: 0, normalizedCount: 0 };
   }
+  
+  const shop = await db.collection("shops").findOne({ shopId });
+  const enterpriseId = shop?.enterpriseId;
+  
+  const ingestionService = createIngestionService(
+    db,
+    'protractor',
+    shopId,
+    enterpriseId,
+    { 
+      syncRunId: `backfill-${Date.now()}`,
+      createAuditLog: false,
+      dualWriteToJobIndex: false,
+    }
+  );
 
   let progress = await db.collection("backfill_progress").findOne({ shopId });
   
@@ -235,7 +251,7 @@ async function backfillShopChunk(
       { shopId },
       { $set: { completed: true, completedAt: new Date() } }
     );
-    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", vehiclesFetched: 0 };
+    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", vehiclesFetched: 0, normalizedCount: 0 };
   }
 
   const startStr = chunkStart.toISOString().split("T")[0];
@@ -265,12 +281,13 @@ async function backfillShopChunk(
         }
       }
     );
-    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices`, vehiclesFetched: 0 };
+    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices`, vehiclesFetched: 0, normalizedCount: 0 };
   }
 
   let loggedSample = false;
   const allJobEntries: any[] = [];
   const serviceItemIds = new Set<string>();
+  const invoicesForNormalized: any[] = [];
 
   // Process all invoices - rely on adaptive chunk sizing to keep counts manageable
   await Promise.all(
@@ -281,6 +298,7 @@ async function backfillShopChunk(
           if (!detailResult.ok || !detailResult.invoice) return;
 
           const fullInv = detailResult.invoice as any;
+          invoicesForNormalized.push(fullInv);
           
           if (!loggedSample) {
             const sp = fullInv.ServicePackages;
@@ -370,6 +388,16 @@ async function backfillShopChunk(
     await updatePartCrossReferences(allJobEntries);
   }
 
+  // Dual-write to normalized collections (fire and forget for performance)
+  let normalizedCount = 0;
+  try {
+    const normalizedResult = await ingestionService.ingestWorkOrderBatch(invoicesForNormalized);
+    normalizedCount = normalizedResult.created + normalizedResult.updated;
+    console.log(`[Backfill] Shop ${shopId}: Normalized ${normalizedCount} work orders (${normalizedResult.created} new, ${normalizedResult.updated} updated, ${normalizedResult.skipped} unchanged)`);
+  } catch (normalizedError) {
+    console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
+  }
+
   // Always advance the chunk after processing
   const nextChunkEnd = chunkStart;
   const isComplete = nextChunkEnd <= oldestDate;
@@ -392,8 +420,9 @@ async function backfillShopChunk(
     jobsIndexed,
     skipped: skippedUnchanged,
     complete: isComplete,
-    message: `${startStr} to ${endStr}: ${jobsIndexed} jobs, ${vehiclesFetched} vehicles fetched, ${daysToProcess}d chunk`,
-    vehiclesFetched
+    message: `${startStr} to ${endStr}: ${jobsIndexed} jobs, ${vehiclesFetched} vehicles fetched, ${normalizedCount} normalized, ${daysToProcess}d chunk`,
+    vehiclesFetched,
+    normalizedCount
   };
 }
 
