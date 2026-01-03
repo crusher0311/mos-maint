@@ -4,19 +4,19 @@ import {
   resolveProtractorConfig,
   protractorFetch,
   fetchInvoiceById,
+  fetchVehicleById,
 } from "@/lib/integrations/protractor";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";
-import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes max
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const MONTHS_PER_RUN = 1; // Process 1 month at a time
-const MAX_SHOPS_PER_RUN = 1; // Process one shop at a time
+const MAX_SHOPS_PER_RUN = 1; // Process one shop per run, but with smaller chunks
 const YEARS_TO_BACKFILL = 5;
+const MAX_WALL_CLOCK_MS = 240000; // 4 minutes max per invocation
 
 async function fetchInvoicesForDateRange(
   shopId: number,
@@ -88,40 +88,97 @@ async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name:
     const shopId = Number(shop.shopId);
     const progress = await db.collection("backfill_progress").findOne({ shopId });
     
-    // Include shops that are not completed OR have outdated logic version
-    const needsReprocess = !progress?.completed || progress?.logicVersion !== 3;
+    const needsReprocess = !progress?.completed || progress?.logicVersion !== 4;
     
     if (needsReprocess) {
       shopsToBackfill.push({
         shopId,
         name: shop.name || shop.locationIdentifier || `Shop ${shopId}`,
-        // For reverse chronological, prioritize by most recent cursor (null = needs fresh start)
         progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd) : null
       });
     }
   }
 
-  // Prioritize: shops with no progress first, then by most recent cursor (newest data first)
   shopsToBackfill.sort((a, b) => {
     if (!a.progressDate && !b.progressDate) return 0;
-    if (!a.progressDate) return -1; // No progress = priority
+    if (!a.progressDate) return -1;
     if (!b.progressDate) return 1;
-    // Higher date = more recent = priority
     return b.progressDate.getTime() - a.progressDate.getTime();
   });
 
   return shopsToBackfill.map(s => ({ shopId: s.shopId, name: s.name }));
 }
 
-async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string }> {
+async function getOrFetchVehicle(
+  db: any,
+  shopId: number,
+  serviceItemId: string,
+  rateLimiter: ReturnType<typeof pLimit>
+): Promise<{ vin?: string; year?: number; make?: string; model?: string; engine?: string } | null> {
+  if (!serviceItemId) return null;
+  
+  const cached = await db.collection("protractor_service_items").findOne({ 
+    shopId, 
+    serviceItemId 
+  });
+  
+  if (cached) {
+    return {
+      vin: cached.vin,
+      year: cached.year,
+      make: cached.make,
+      model: cached.model,
+      engine: cached.engine,
+    };
+  }
+  
+  const result = await rateLimiter(async () => {
+    return fetchVehicleById(shopId, serviceItemId);
+  });
+  
+  if (result.ok && result.vehicle) {
+    const v = result.vehicle;
+    const vehicleData = {
+      shopId,
+      serviceItemId,
+      vin: v.VIN || null,
+      year: v.Year ? parseInt(String(v.Year)) : null,
+      make: v.Make || null,
+      model: v.Model || null,
+      engine: v.Engine || null,
+      fetchedAt: new Date(),
+    };
+    
+    await db.collection("protractor_service_items").updateOne(
+      { shopId, serviceItemId },
+      { $set: vehicleData },
+      { upsert: true }
+    );
+    
+    return {
+      vin: vehicleData.vin || undefined,
+      year: vehicleData.year || undefined,
+      make: vehicleData.make || undefined,
+      model: vehicleData.model || undefined,
+      engine: vehicleData.engine || undefined,
+    };
+  }
+  
+  return null;
+}
+
+async function backfillShopChunk(
+  db: any, 
+  shopId: number,
+  rateLimiter: ReturnType<typeof pLimit>
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
-    return { jobsIndexed: 0, skipped: 0, complete: false, message: "Not configured" };
+    return { jobsIndexed: 0, skipped: 0, complete: false, message: "Not configured", vehiclesFetched: 0 };
   }
 
   let progress = await db.collection("backfill_progress").findOne({ shopId });
   
-  // Calculate date boundaries
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
@@ -129,14 +186,11 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
   oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
   oldestDate.setHours(0, 0, 0, 0);
   
-  // REVERSE CHRONOLOGICAL: Start from today, work backwards
   let chunkEnd: Date;
   
-  if (progress?.currentChunkEnd && progress?.logicVersion === 3) {
-    // Continue from where we left off
+  if (progress?.currentChunkEnd && progress?.logicVersion === 4) {
     chunkEnd = new Date(progress.currentChunkEnd);
   } else {
-    // Fresh start or upgrading from old logic - begin from today
     chunkEnd = new Date(today);
     await db.collection("backfill_progress").updateOne(
       { shopId },
@@ -146,43 +200,57 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
           startedAt: new Date(), 
           currentChunkEnd: chunkEnd, 
           completed: false,
-          logicVersion: 3 // v3: Fixed Protractor PriceSummary extraction
+          logicVersion: 4
         },
-        $unset: { currentChunkStart: "" } // Remove old field
+        $unset: { currentChunkStart: "" }
       },
       { upsert: true }
     );
   }
 
-  // Calculate chunk start (going backwards)
+  // Adaptive chunk sizing based on last invoice count
+  // If too many invoices, shrink the window; if few, expand it
+  let daysToProcess = 30; // default
+  const lastCount = progress?.lastInvoiceCount;
+  if (lastCount) {
+    if (lastCount > 800) {
+      daysToProcess = 7; // Very busy shop
+    } else if (lastCount > 400) {
+      daysToProcess = 14; // Busy shop
+    } else if (lastCount > 200) {
+      daysToProcess = 21; // Moderate shop
+    } else if (lastCount < 50) {
+      daysToProcess = 60; // Quiet shop
+    }
+  }
+  
   const chunkStart = new Date(chunkEnd);
-  chunkStart.setMonth(chunkStart.getMonth() - MONTHS_PER_RUN);
+  chunkStart.setDate(chunkStart.getDate() - daysToProcess);
   if (chunkStart < oldestDate) {
     chunkStart.setTime(oldestDate.getTime());
   }
 
-  // Check if we've reached the oldest date
   if (chunkEnd <= oldestDate) {
     await db.collection("backfill_progress").updateOne(
       { shopId },
       { $set: { completed: true, completedAt: new Date() } }
     );
-    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete" };
+    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", vehiclesFetched: 0 };
   }
 
   const startStr = chunkStart.toISOString().split("T")[0];
   const endStr = chunkEnd.toISOString().split("T")[0];
 
-  console.log(`[Backfill] Shop ${shopId}: ${startStr} to ${endStr} (reverse chronological)`);
+  console.log(`[Backfill] Shop ${shopId}: ${startStr} to ${endStr} (${daysToProcess} days)`);
 
   let jobsIndexed = 0;
   let skippedUnchanged = 0;
+  let vehiclesFetched = 0;
 
   const invoices = await fetchInvoicesForDateRange(shopId, startStr, endStr);
   console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices`);
 
   if (invoices.length === 0) {
-    // Move cursor backwards for next run
     const nextChunkEnd = chunkStart;
     const isComplete = nextChunkEnd <= oldestDate;
     await db.collection("backfill_progress").updateOne(
@@ -191,21 +259,23 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
         $set: {
           currentChunkEnd: nextChunkEnd,
           lastRunAt: new Date(),
+          lastInvoiceCount: 0,
           completed: isComplete,
           ...(isComplete ? { completedAt: new Date() } : {}),
         }
       }
     );
-    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices` };
+    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices`, vehiclesFetched: 0 };
   }
 
-  const limit = pLimit(5); // Match Protractor's 5 req/sec rate limit
   let loggedSample = false;
   const allJobEntries: any[] = [];
+  const serviceItemIds = new Set<string>();
 
+  // Process all invoices - rely on adaptive chunk sizing to keep counts manageable
   await Promise.all(
     invoices.map((inv: any) =>
-      limit(async () => {
+      rateLimiter(async () => {
         try {
           const detailResult = await fetchInvoiceById(shopId, inv.ID);
           if (!detailResult.ok || !detailResult.invoice) return;
@@ -215,27 +285,64 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
           if (!loggedSample) {
             const sp = fullInv.ServicePackages;
             const spCount = sp?.ItemCollection?.length || (Array.isArray(sp) ? sp.length : 0);
-            console.log(`[Backfill] Shop ${shopId} sample invoice structure:`, {
+            console.log(`[Backfill] Shop ${shopId} sample invoice:`, {
               hasServiceItem: !!fullInv.ServiceItem,
+              hasServiceItemID: !!fullInv.ServiceItemID,
               servicePackagesCount: spCount,
             });
             loggedSample = true;
           }
 
+          if (fullInv.ServiceItemID) {
+            serviceItemIds.add(fullInv.ServiceItemID);
+          }
+
           const jobEntries = extractJobIndexFromWorkOrder(shopId, fullInv, "protractor");
           if (jobEntries.length > 0) {
+            for (const entry of jobEntries) {
+              (entry as any)._serviceItemId = fullInv.ServiceItemID;
+            }
             allJobEntries.push(...jobEntries);
           }
         } catch (err) {
-          // Skip failed invoice fetches
         }
       })
     )
   );
 
-  console.log(`[Backfill] Shop ${shopId}: extracted ${allJobEntries.length} job entries`);
+  console.log(`[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch`);
 
-  // Upsert with change detection using content hash
+  const vehicleCache = new Map<string, any>();
+  const vehicleIdsToFetch = Array.from(serviceItemIds).filter(id => {
+    const entry = allJobEntries.find(e => (e as any)._serviceItemId === id);
+    return entry && (!entry.vehicle?.vin && !entry.vehicle?.year);
+  });
+
+  if (vehicleIdsToFetch.length > 0) {
+    console.log(`[Backfill] Shop ${shopId}: Fetching ${vehicleIdsToFetch.length} vehicles...`);
+    
+    for (const serviceItemId of vehicleIdsToFetch) {
+      const vehicleData = await getOrFetchVehicle(db, shopId, serviceItemId, rateLimiter);
+      if (vehicleData) {
+        vehicleCache.set(serviceItemId, vehicleData);
+        vehiclesFetched++;
+      }
+    }
+  }
+
+  for (const entry of allJobEntries) {
+    const serviceItemId = (entry as any)._serviceItemId;
+    if (serviceItemId && vehicleCache.has(serviceItemId)) {
+      const vehicleData = vehicleCache.get(serviceItemId);
+      entry.vehicle = {
+        ...entry.vehicle,
+        ...vehicleData,
+        serviceItemId,
+      };
+    }
+    delete (entry as any)._serviceItemId;
+  }
+
   for (const entry of allJobEntries) {
     const contentHash = computeJobHash(entry);
     const filter = { 
@@ -244,33 +351,26 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
       servicePackageId: entry.servicePackageId 
     };
     
-    // Check if record exists with same hash (no changes)
     const existing = await db.collection("job_index").findOne(filter);
     
     if (existing && existing.contentHash === contentHash) {
       skippedUnchanged++;
-      continue; // Skip unchanged records
+      continue;
     }
     
-    // Insert or update with new content hash
     await db.collection("job_index").updateOne(
       filter,
-      { $set: { ...entry, contentHash } },
+      { $set: { ...entry, contentHash, sourceSystem: "protractor" } },
       { upsert: true }
     );
     jobsIndexed++;
   }
 
-  // Update part cross-references only for new/changed entries
   if (jobsIndexed > 0) {
-    const changedEntries = allJobEntries.filter(e => {
-      // Simple approach: just update all - the function handles deduplication
-      return true;
-    });
-    await updatePartCrossReferences(changedEntries);
+    await updatePartCrossReferences(allJobEntries);
   }
 
-  // Move cursor backwards for next run
+  // Always advance the chunk after processing
   const nextChunkEnd = chunkStart;
   const isComplete = nextChunkEnd <= oldestDate;
 
@@ -280,18 +380,20 @@ async function backfillShopChunk(db: any, shopId: number): Promise<{ jobsIndexed
       $set: {
         currentChunkEnd: nextChunkEnd,
         lastRunAt: new Date(),
+        lastInvoiceCount: invoices.length,
         completed: isComplete,
         ...(isComplete ? { completedAt: new Date() } : {}),
       },
       $inc: { totalJobsIndexed: jobsIndexed }
     }
   );
-
+  
   return {
     jobsIndexed,
     skipped: skippedUnchanged,
     complete: isComplete,
-    message: `${startStr} to ${endStr}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged`
+    message: `${startStr} to ${endStr}: ${jobsIndexed} jobs, ${vehiclesFetched} vehicles fetched, ${daysToProcess}d chunk`,
+    vehiclesFetched
   };
 }
 
@@ -303,6 +405,7 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
+  const rateLimiter = pLimit(5);
 
   try {
     const shopsToProcess = await getShopsNeedingBackfill(db);
@@ -319,8 +422,13 @@ export async function GET(req: NextRequest) {
     const results: any[] = [];
 
     for (const shop of selectedShops) {
+      if (Date.now() - startTime > MAX_WALL_CLOCK_MS) {
+        console.log(`[Backfill] Wall clock limit reached after ${results.length} shops`);
+        break;
+      }
+
       try {
-        const result = await backfillShopChunk(db, shop.shopId);
+        const result = await backfillShopChunk(db, shop.shopId, rateLimiter);
         results.push({
           shopId: shop.shopId,
           name: shop.name,
@@ -334,7 +442,8 @@ export async function GET(req: NextRequest) {
           jobsIndexed: 0,
           skipped: 0,
           complete: false,
-          message: `Error: ${err.message}`
+          message: `Error: ${err.message}`,
+          vehiclesFetched: 0
         });
       }
     }

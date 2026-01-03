@@ -40,6 +40,12 @@ The application features a modern SaaS-style design with a dark sidebar, light c
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with location badges showing job source, 5-point scoring bonus for current location jobs, and vehicle/engine matching algorithms.
 
 ## Recent Changes (January 2026)
+*   **v1.7.6 Updates**:
+    *   **Adaptive Backfill Chunk Sizing**: Protractor backfill now dynamically adjusts chunk sizes based on invoice count from previous run. Very busy shops (>800 invoices) use 7-day chunks, moderate shops use 14-30 day chunks, quiet shops use 60-day chunks. This prevents timeouts while maintaining full data coverage.
+    *   **Job Search Model Filter Fix**: Vehicle model is no longer a hard filter in job search. Searches now return results from same-make vehicles with scoring bonuses for model matches. Searching "HHR" now returns Trax/Cruze results as fallbacks.
+    *   **Demo Billing Status**: Added "demo" as a recognized billing status with full feature access (maintenance, job_lookup, oil_sticker, part_xref, dvi_tracking). Platform Admin can set shops to demo status for evaluation purposes.
+    *   **Backfill Progress Tooltip Fix**: Platform Admin shops page now shows actual backfill progress date (e.g., "Dec 2024") instead of "starting (protractor)" when hovering over progress bar. Uses `currentChunkEnd` field for accurate display.
+    *   **Vehicle Data in Job Index**: Fixed Protractor backfill to extract year/make/model from ServiceItem in invoice response. 99% of jobs now have vehicle metadata for accurate Job Lookup matching.
 *   **v1.7.5 Updates**:
     *   **Plan Page Performance Optimization**: Added background cache pre-generation system to eliminate 35-second plan page load times. Sync workers now trigger fire-and-forget cache warming for CARFAX (7-day TTL), DataOne OEM schedules, and Protractor data after syncing vehicles. Pre-generation processes up to 10 VINs per shop per sync cycle without counting against trial VIN limits.
     *   **Internal Pre-generation API**: New `/api/internal/plan-pregenerate` endpoint secured with CRON_SECRET. Only warms up caches - does NOT call VIN tracking functions, ensuring pre-generation doesn't affect billing.
