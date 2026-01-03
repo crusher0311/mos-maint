@@ -13,6 +13,7 @@ import {
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
 } from "@/lib/tekmetric-job-index";
+import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -283,6 +284,39 @@ export async function GET(req: NextRequest) {
         if (shopSyncedVins.length > 0) {
           const uniqueVins = [...new Set(shopSyncedVins)];
           syncedVinsPerShop.push({ shopId, vins: uniqueVins });
+        }
+        
+        // Dual-write to normalized collections (enrich ROs with cached vehicle/customer data)
+        try {
+          const workOrdersForNormalized = activeWOs
+            .filter(ro => vehicleCache.has(ro.vehicleId) && vehicleCache.get(ro.vehicleId)?.vin)
+            .map(ro => {
+              const vehicle = vehicleCache.get(ro.vehicleId);
+              const customer = customerCache.get(ro.customerId);
+              return {
+                ...ro,
+                vehicle: vehicle,
+                customer: customer,
+              };
+            });
+          
+          if (workOrdersForNormalized.length > 0) {
+            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+            const enterpriseId = shop?.enterpriseId ? Number(shop.enterpriseId) : undefined;
+            
+            const ingestionService = new NormalizedIngestionService(
+              db,
+              'tekmetric',
+              shopId,
+              enterpriseId,
+              { dualWriteToJobIndex: false }
+            );
+            
+            const result = await ingestionService.ingestWorkOrderBatch(workOrdersForNormalized);
+            console.log(`[Cron] Tekmetric sync normalized: shop ${shopId}, ${result.created} created, ${result.updated} updated, ${result.skipped} skipped`);
+          }
+        } catch (normErr: any) {
+          console.log(`[Cron] Tekmetric sync normalized ingestion error for shop ${shopId}:`, normErr.message);
         }
       } catch (err: any) {
         console.error(`[Tekmetric] Shop ${shopId} sync error:`, err.message);
