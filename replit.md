@@ -45,6 +45,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Modular Feature Architecture**: Supports à la carte feature toggles for specific tools.
 *   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration, providing maintenance plans, job history search, and push-to-RO functionality.
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with prioritization for current location.
+*   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing from shop data, prioritizing vehicle-specific matches.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
