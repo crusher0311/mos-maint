@@ -15,9 +15,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes max
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const MAX_SHOPS_PER_RUN = 1; // Process one shop per run, but with smaller chunks
+const MAX_SHOPS_PER_RUN = 3; // Process multiple shops in parallel for faster backfill
 const YEARS_TO_BACKFILL = 5;
-const MAX_WALL_CLOCK_MS = 240000; // 4 minutes max per invocation
+const MAX_WALL_CLOCK_MS = 280000; // 4.5 minutes max per invocation
 
 async function fetchInvoicesForDateRange(
   shopId: number,
@@ -228,18 +228,18 @@ async function backfillShopChunk(
   }
 
   // Adaptive chunk sizing based on last invoice count
-  // If too many invoices, shrink the window; if few, expand it
-  let daysToProcess = 45; // default (increased for faster backfill)
+  // Aggressive sizing for faster backfill completion
+  let daysToProcess = 60; // default (aggressive for faster backfill)
   const lastCount = progress?.lastInvoiceCount;
   if (lastCount) {
-    if (lastCount > 1000) {
-      daysToProcess = 14; // Very busy shop
-    } else if (lastCount > 600) {
-      daysToProcess = 21; // Busy shop
-    } else if (lastCount > 300) {
-      daysToProcess = 30; // Moderate shop
-    } else if (lastCount < 100) {
-      daysToProcess = 90; // Quiet shop - go much faster
+    if (lastCount > 1500) {
+      daysToProcess = 21; // Very busy shop
+    } else if (lastCount > 800) {
+      daysToProcess = 30; // Busy shop
+    } else if (lastCount > 400) {
+      daysToProcess = 45; // Moderate shop
+    } else if (lastCount < 150) {
+      daysToProcess = 120; // Quiet shop - go much faster
     }
   }
   
