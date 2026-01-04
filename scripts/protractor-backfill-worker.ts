@@ -4,7 +4,7 @@
 
 export {};
 
-const SYNC_INTERVAL_MS = 20 * 1000; // 20 seconds between runs (faster backfill)
+const SYNC_INTERVAL_MS = 10 * 1000; // 10 seconds between runs (maximum speed backfill)
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 10000;
 const RATE_LIMIT_BACKOFF_MS = 120000;
