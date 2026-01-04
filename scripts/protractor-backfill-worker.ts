@@ -2,7 +2,7 @@
 // Runs continuously, processing a chunk every few minutes
 // Usage: npx tsx scripts/protractor-backfill-worker.ts
 
-const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes between runs
+const SYNC_INTERVAL = 60 * 1000; // 1 minute between runs
 const BACKFILL_API_URL = process.env.REPLIT_DEV_DOMAIN
   ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/protractor-backfill`
   : "http://localhost:5000/api/cron/protractor-backfill";
