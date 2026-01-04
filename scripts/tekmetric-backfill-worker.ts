@@ -1,4 +1,4 @@
-const SYNC_INTERVAL = 5 * 60 * 1000;
+const SYNC_INTERVAL = 60 * 1000; // 1 minute between runs
 const BACKFILL_API_URL = process.env.REPLIT_DEV_DOMAIN
   ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/tekmetric-backfill`
   : "http://localhost:5000/api/cron/tekmetric-backfill";

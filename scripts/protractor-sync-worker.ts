@@ -1,4 +1,4 @@
-const SYNC_INTERVAL_MS = 60 * 1000;
+const SYNC_INTERVAL_MS = 10 * 1000; // 10 seconds
 const API_URL = process.env.REPLIT_DEV_DOMAIN 
   ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/protractor-sync`
   : 'http://localhost:5000/api/cron/protractor-sync';
