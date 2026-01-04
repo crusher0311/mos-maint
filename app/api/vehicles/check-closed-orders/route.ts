@@ -5,7 +5,14 @@ import { getTekmetricWorkOrderWithMileage } from "@/lib/tekmetric";
 
 export async function POST(request: NextRequest) {
   try {
-    const { shopId } = await request.json();
+    let shopId: string | number | undefined;
+    
+    try {
+      const body = await request.json();
+      shopId = body?.shopId;
+    } catch {
+      return NextResponse.json({ error: "Invalid or empty request body" }, { status: 400 });
+    }
     
     if (!shopId) {
       return NextResponse.json({ error: "shopId required" }, { status: 400 });
