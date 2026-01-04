@@ -309,7 +309,7 @@ export async function GET(req: NextRequest) {
               'tekmetric',
               shopId,
               enterpriseId,
-              { dualWriteToJobIndex: false }
+              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true }
             );
             
             const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);

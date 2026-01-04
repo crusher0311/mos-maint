@@ -190,6 +190,7 @@ async function backfillShopChunk(
       syncRunId: `backfill-${Date.now()}`,
       createAuditLog: false,
       dualWriteToJobIndex: false,
+      dualWriteToRepairPatterns: true,
     }
   );
 

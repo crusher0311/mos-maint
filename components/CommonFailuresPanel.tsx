@@ -32,6 +32,7 @@ interface CommonFailuresResult {
   failures: MatchedFailure[];
   cached: boolean;
   mileageBucket: number;
+  dataSource?: "shop_patterns" | "ai" | "hybrid" | "defaults";
 }
 
 interface CommonFailuresPanelProps {
@@ -159,9 +160,26 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
     <div className="space-y-4">
       <div className="flex items-center justify-between text-sm text-gray-500 pb-2 border-b">
         <span>@ {result.vehicle.mileage.toLocaleString()} miles</span>
-        {result.cached && (
-          <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">Cached</span>
-        )}
+        <div className="flex items-center gap-2">
+          {result.dataSource === "shop_patterns" && (
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+              Your Data
+            </span>
+          )}
+          {result.dataSource === "hybrid" && (
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+              Mixed
+            </span>
+          )}
+          {result.dataSource === "ai" && (
+            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+              AI
+            </span>
+          )}
+          {result.cached && (
+            <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">Cached</span>
+          )}
+        </div>
       </div>
 
       {result.failures.length === 0 ? (

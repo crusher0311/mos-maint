@@ -243,7 +243,7 @@ export async function GET(req: NextRequest) {
               'protractor',
               shopId,
               enterpriseId,
-              { dualWriteToJobIndex: false }
+              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true }
             );
             
             const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);

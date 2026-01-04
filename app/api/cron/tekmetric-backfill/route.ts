@@ -176,6 +176,7 @@ async function backfillShopChunk(
       syncRunId: `tekmetric-backfill-${Date.now()}`,
       createAuditLog: false,
       dualWriteToJobIndex: false,
+      dualWriteToRepairPatterns: true,
     }
   );
   
