@@ -29,6 +29,7 @@ import {
   createSoftDelete,
   INormalizedAdapter,
 } from './normalized-adapters';
+import { updateRepairPattern } from './repair-patterns';
 
 // =============================================================================
 // TYPES
@@ -57,6 +58,7 @@ export interface IngestionOptions {
   forceUpdate?: boolean;
   createAuditLog?: boolean;
   dualWriteToJobIndex?: boolean;
+  dualWriteToRepairPatterns?: boolean;
 }
 
 // =============================================================================
@@ -422,6 +424,10 @@ export class NormalizedIngestionService {
           await this.writeToJobIndex(sourceData, serviceJobs);
         }
         
+        if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
+          await this.writeToRepairPatterns(sourceData, serviceJobs);
+        }
+        
         if (this.options.createAuditLog) {
           await this.createAuditEntry('work_order', existing._id, 'update', mapped);
         }
@@ -483,6 +489,10 @@ export class NormalizedIngestionService {
       
       if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
         await this.writeToJobIndex(sourceData, serviceJobs);
+      }
+      
+      if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
+        await this.writeToRepairPatterns(sourceData, serviceJobs);
       }
       
       if (this.options.createAuditLog) {
@@ -1175,6 +1185,63 @@ export class NormalizedIngestionService {
           ...jobIndexEntry,
           createdAt: new Date(),
         });
+      }
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // DUAL WRITE TO REPAIR PATTERNS (for shop pattern learning)
+  // ---------------------------------------------------------------------------
+  
+  private async writeToRepairPatterns(sourceData: any, serviceJobs: Partial<NormalizedServiceJob>[]): Promise<void> {
+    const vehicle = this.adapter.extractVehicleFromWorkOrder(sourceData);
+    
+    // Skip if missing required vehicle info
+    if (!vehicle?.year || !vehicle?.make || !vehicle?.model) {
+      return;
+    }
+    
+    // Get mileage from work order
+    const mileage = sourceData.MileageIn || sourceData.MileageOut || 
+                    sourceData.mileageIn || sourceData.mileageOut ||
+                    sourceData.odometerIn || sourceData.odometerOut;
+    
+    if (!mileage || mileage < 1000) {
+      return; // Skip if no valid mileage
+    }
+    
+    const closedDate = sourceData.ClosedDate || sourceData.InvoiceDate || 
+                       sourceData.postedDate || sourceData.completedDate;
+    const performedDate = closedDate ? new Date(closedDate) : new Date();
+    
+    for (const job of serviceJobs) {
+      if (!job.title || job.title.length < 3) continue;
+      
+      // Skip diagnostic or inspection-only jobs
+      const lowerTitle = job.title.toLowerCase();
+      if (lowerTitle.includes('diagnostic') || lowerTitle.includes('inspection only')) {
+        continue;
+      }
+      
+      try {
+        await updateRepairPattern({
+          shopId: this.shopId,
+          enterpriseId: this.enterpriseId,
+          year: vehicle.year,
+          make: vehicle.make,
+          model: vehicle.model,
+          mileage,
+          jobTitle: job.title,
+          laborAmount: job.laborTotal || 0,
+          partsAmount: job.partsTotal || 0,
+          totalAmount: job.total || 0,
+          laborHours: job.laborHoursBilled || job.laborHoursActual || 0,
+          vin: vehicle.vin,
+          performedDate,
+        });
+      } catch (err) {
+        // Log but don't fail the main ingestion
+        console.error('Failed to update repair pattern:', err);
       }
     }
   }
