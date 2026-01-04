@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 import { getSession, sessionCookieOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { logAdminAction } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 
@@ -60,13 +61,16 @@ export async function POST(req: Request) {
       isImpersonation: true,
     });
 
-    await db.collection("audit_logs").insertOne({
-      type: "impersonation",
+    const headerStore = await headers();
+    await logAdminAction({
+      action: "impersonation",
       adminEmail: session.email,
       targetShopId: shopId,
       targetShopName: shop.name,
       targetUserEmail: targetUser.email,
-      createdAt: new Date(),
+      ipAddress: headerStore.get("x-forwarded-for") || headerStore.get("x-real-ip") || undefined,
+      userAgent: headerStore.get("user-agent") || undefined,
+      details: { sessionExpiry: expiresAt }
     });
 
     const store = await cookies();

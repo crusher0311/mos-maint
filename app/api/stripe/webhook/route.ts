@@ -6,6 +6,38 @@ import Stripe from "stripe";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function logWebhookEvent(
+  db: any,
+  event: Stripe.Event,
+  status: "received" | "processed" | "failed",
+  error?: string
+) {
+  try {
+    await db.collection("stripe_webhook_events").updateOne(
+      { eventId: event.id },
+      {
+        $set: {
+          eventId: event.id,
+          type: event.type,
+          status,
+          error: error || null,
+          processedAt: status !== "received" ? new Date() : null,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+          payload: event.data.object,
+          retryCount: 0
+        },
+        $inc: status === "failed" ? { retryCount: 1 } : {}
+      },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error("[Stripe Webhook] Failed to log event:", err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -35,6 +67,18 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
+  
+  const existingEvent = await db.collection("stripe_webhook_events").findOne({
+    eventId: event.id,
+    status: "processed"
+  });
+  
+  if (existingEvent) {
+    console.log(`[Stripe Webhook] Event ${event.id} already processed, skipping`);
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+  
+  await logWebhookEvent(db, event, "received");
 
   try {
     switch (event.type) {
@@ -179,9 +223,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await logWebhookEvent(db, event, "processed");
     return NextResponse.json({ received: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Webhook processing error:", error);
+    await logWebhookEvent(db, event, "failed", error.message);
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }
