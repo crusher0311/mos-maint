@@ -229,17 +229,17 @@ async function backfillShopChunk(
 
   // Adaptive chunk sizing based on last invoice count
   // If too many invoices, shrink the window; if few, expand it
-  let daysToProcess = 30; // default
+  let daysToProcess = 45; // default (increased for faster backfill)
   const lastCount = progress?.lastInvoiceCount;
   if (lastCount) {
-    if (lastCount > 800) {
-      daysToProcess = 7; // Very busy shop
-    } else if (lastCount > 400) {
-      daysToProcess = 14; // Busy shop
-    } else if (lastCount > 200) {
-      daysToProcess = 21; // Moderate shop
-    } else if (lastCount < 50) {
-      daysToProcess = 60; // Quiet shop
+    if (lastCount > 1000) {
+      daysToProcess = 14; // Very busy shop
+    } else if (lastCount > 600) {
+      daysToProcess = 21; // Busy shop
+    } else if (lastCount > 300) {
+      daysToProcess = 30; // Moderate shop
+    } else if (lastCount < 100) {
+      daysToProcess = 90; // Quiet shop - go much faster
     }
   }
   
