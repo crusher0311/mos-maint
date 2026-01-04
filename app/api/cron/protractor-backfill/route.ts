@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes max
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const MAX_SHOPS_PER_RUN = 3; // Process multiple shops in parallel for faster backfill
+const MAX_SHOPS_PER_RUN = 5; // Process all shops in parallel for maximum speed
 const YEARS_TO_BACKFILL = 5;
 const MAX_WALL_CLOCK_MS = 280000; // 4.5 minutes max per invocation
 
