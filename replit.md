@@ -21,7 +21,10 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Data Model**: Supports `enterprise_accounts` with `shopIds` and `shops` having `enterpriseId`.
 *   **Authentication & Authorization**: Role-based access (`owner`, `admin`, `manager`, `user`, `viewer`) with bcrypt password hashing and token-based setup.
 *   **VIN-Based Billing**: Tracks "active" vehicles for billing, with trial limits and platform admin controls.
-*   **Stripe Billing Integration**: Manages checkout sessions, webhook processing for subscriptions, and a billing portal.
+*   **Stripe Billing Integration**: Manages checkout sessions, webhook processing for subscriptions, and a billing portal. Includes webhook event logging, idempotency checking, and dead-letter queue for failed events (`stripe_webhook_events` collection).
+*   **Admin Audit Logging**: Comprehensive logging of admin actions (impersonation, unlocks, settings changes) with IP/user-agent tracking via `lib/audit-log.ts` and `/api/admin/audit-logs` endpoint.
+*   **Sync Worker Health Monitoring**: Adaptive backoff (10s-120s based on failures), health metrics every 10 cycles via `lib/sync-metrics.ts`, and sync status dashboard at `/api/admin/sync-health`.
+*   **Chrome Extension Version API**: `/api/extension/version` endpoint for client-side update enforcement (min version 1.3.0, current 1.3.1).
 *   **Distance Unit Preferences**: Shops can choose between miles or kilometers.
 *   **SMS Adapter Architecture**: An `ISMSAdapter` interface provides abstraction for shop management systems (e.g., Protractor, Tekmetric).
 *   **Normalized Data Layer (v1.9.2)**: SMS-agnostic data schema with provenance tracking, enabling shops to retain complete historical data when switching SMS systems. Key features:
