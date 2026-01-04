@@ -54,7 +54,8 @@ async function runBackfill(): Promise<void> {
       console.log(`[${timestamp}] Backfill result:`, JSON.stringify(data, null, 2));
 
       if (data.shopsRemaining === 0) {
-        console.log(`[${timestamp}] All shops backfilled! Worker can be stopped.`);
+        console.log(`[${timestamp}] All Protractor shops backfilled! Exiting worker.`);
+        process.exit(0);
       }
       
       consecutiveFailures = 0;
