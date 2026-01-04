@@ -376,17 +376,37 @@ export class ProtractorAdapter implements INormalizedAdapter {
   }
   
   extractCustomerFromWorkOrder(sourceData: any): Partial<NormalizedCustomer> | null {
-    const c = sourceData.Customer;
+    // Protractor uses "Contact" instead of "Customer"
+    const c = sourceData.Customer || sourceData.Contact;
     if (!c) return null;
     
-    const firstName = cleanString(c.FirstName);
-    const lastName = cleanString(c.LastName);
+    // Handle Protractor's Name object vs flat FirstName/LastName
+    let firstName: string | undefined;
+    let lastName: string | undefined;
+    let fullName: string | undefined;
+    
+    if (c.Name && typeof c.Name === 'object') {
+      // Protractor structure: Contact.Name.First, Contact.Name.Last
+      firstName = cleanString(c.Name.First);
+      lastName = cleanString(c.Name.Last);
+    } else if (c.Name && typeof c.Name === 'string') {
+      // Protractor sometimes uses FileAs or Name as full name string
+      fullName = cleanString(c.Name);
+    } else {
+      firstName = cleanString(c.FirstName);
+      lastName = cleanString(c.LastName);
+    }
+    
+    // Try FileAs as fallback for full name
+    if (!fullName && !firstName && !lastName) {
+      fullName = cleanString(c.FileAs);
+    }
     
     return {
       firstName,
       lastName,
-      fullName: [firstName, lastName].filter(Boolean).join(' '),
-      companyName: cleanString(c.CompanyName),
+      fullName: fullName || [firstName, lastName].filter(Boolean).join(' ') || undefined,
+      companyName: cleanString(c.CompanyName || c.Company),
     };
   }
   
