@@ -391,9 +391,9 @@ async function backfillShopChunk(
   // Dual-write to normalized collections (fire and forget for performance)
   let normalizedCount = 0;
   try {
-    const normalizedResult = await ingestionService.ingestWorkOrderBatch(invoicesForNormalized);
-    normalizedCount = normalizedResult.created + normalizedResult.updated;
-    console.log(`[Backfill] Shop ${shopId}: Normalized ${normalizedCount} work orders (${normalizedResult.created} new, ${normalizedResult.updated} updated, ${normalizedResult.skipped} unchanged)`);
+    const normalizedResult = await ingestionService.ingestWorkOrderBatchWithAllEntities(invoicesForNormalized);
+    normalizedCount = normalizedResult.workOrders.created + normalizedResult.workOrders.updated;
+    console.log(`[Backfill] Shop ${shopId}: Normalized ${normalizedCount} WOs (${normalizedResult.workOrders.created} new), payments: ${normalizedResult.payments.created}, inspections: ${normalizedResult.inspections.created}, recs: ${normalizedResult.recommendations.created}`);
   } catch (normalizedError) {
     console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
