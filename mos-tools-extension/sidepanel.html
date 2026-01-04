@@ -83,8 +83,9 @@
       <!-- Tab navigation -->
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="plan">Plan</button>
-        <button class="tab-btn" data-tab="lookup">Job Lookup</button>
-        <button class="tab-btn" data-tab="canned">Canned Jobs</button>
+        <button class="tab-btn" data-tab="failures">Failures</button>
+        <button class="tab-btn" data-tab="lookup">Lookup</button>
+        <button class="tab-btn" data-tab="canned">Canned</button>
       </nav>
 
       <!-- Tab content -->
@@ -111,6 +112,21 @@
               <h3 class="section-title section-recommended">→ Upcoming</h3>
               <ul id="recommended-list" class="service-list"></ul>
             </section>
+          </div>
+        </div>
+
+        <!-- Common Failures tab -->
+        <div id="tab-failures" class="tab-panel hidden">
+          <div id="failures-loading" class="panel-loading hidden">
+            <div class="spinner-small"></div>
+            <span>Analyzing common failures...</span>
+          </div>
+          <div id="failures-empty" class="panel-empty">
+            <p>Navigate to a vehicle to see common failures based on your shop's history.</p>
+          </div>
+          <div id="failures-content" class="hidden">
+            <div id="failures-source" class="failures-source-badge"></div>
+            <ul id="failures-list" class="failures-list"></ul>
           </div>
         </div>
 

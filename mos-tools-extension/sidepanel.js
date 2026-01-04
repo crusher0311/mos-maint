@@ -5,6 +5,7 @@ let isAuthenticated = false;
 let currentContext = null;
 let currentTab = 'plan';
 let cannedJobSource = 'sms';
+let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 
 // ==================== DOM ELEMENTS ====================
 const elements = {
@@ -56,7 +57,14 @@ const elements = {
   cannedTabBtns: document.querySelectorAll('.canned-tab-btn'),
   cannedLoading: document.getElementById('canned-loading'),
   cannedEmpty: document.getElementById('canned-empty'),
-  cannedList: document.getElementById('canned-list')
+  cannedList: document.getElementById('canned-list'),
+  
+  // Common Failures
+  failuresLoading: document.getElementById('failures-loading'),
+  failuresEmpty: document.getElementById('failures-empty'),
+  failuresContent: document.getElementById('failures-content'),
+  failuresSource: document.getElementById('failures-source'),
+  failuresList: document.getElementById('failures-list')
 };
 
 // ==================== INITIALIZATION ====================
@@ -150,6 +158,8 @@ function switchTab(tab) {
   // Load tab data
   if (tab === 'plan' && currentContext) {
     loadPlan();
+  } else if (tab === 'failures' && currentContext) {
+    loadCommonFailures();
   } else if (tab === 'canned' && currentContext) {
     loadCannedJobs();
   }
@@ -179,9 +189,11 @@ function updateContext(context) {
       elements.mileageDisplay.classList.add('hidden');
     }
     
-    // Load plan data
+    // Load tab data
     if (currentTab === 'plan') {
       loadPlan();
+    } else if (currentTab === 'failures') {
+      loadCommonFailures();
     } else if (currentTab === 'canned') {
       loadCannedJobs();
     }
@@ -532,6 +544,149 @@ function createServiceItemHTML(item, type) {
       </div>
     </li>
   `;
+}
+
+// ==================== COMMON FAILURES ====================
+async function loadCommonFailures() {
+  if (!currentContext || !currentContext.vehicle) {
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresContent.classList.add('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'Navigate to a vehicle to see common failures.';
+    return;
+  }
+  
+  const { year, make, model, engine } = currentContext.vehicle;
+  const mileage = currentContext.mileage;
+  
+  if (!year || !make || !model || !mileage) {
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresContent.classList.add('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'Vehicle year, make, model, and mileage are required.';
+    return;
+  }
+  
+  elements.failuresLoading.classList.remove('hidden');
+  elements.failuresEmpty.classList.add('hidden');
+  elements.failuresContent.classList.add('hidden');
+  
+  try {
+    const params = new URLSearchParams({
+      year: String(year),
+      make: make,
+      model: model,
+      mileage: String(mileage),
+      enterprise: 'true'
+    });
+    if (engine) params.set('engine', engine);
+    
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/vehicle/common-failures?${params}`
+    });
+    
+    if (result.error) throw new Error(result.error);
+    
+    renderCommonFailures(result);
+  } catch (err) {
+    console.error('[MOS] Error loading common failures:', err);
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = err.message || 'Failed to load common failures.';
+  }
+}
+
+function renderCommonFailures(data) {
+  elements.failuresLoading.classList.add('hidden');
+  
+  const failures = data.failures || [];
+  
+  if (failures.length === 0) {
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'No common failures found for this vehicle at this mileage.';
+    return;
+  }
+  
+  elements.failuresContent.classList.remove('hidden');
+  
+  // Source badge
+  const source = data.source || 'shop';
+  let sourceClass, sourceText;
+  if (source === 'shop') {
+    sourceClass = 'source-shop';
+    sourceText = '📊 Based on Your Shop Data';
+  } else if (source === 'ai') {
+    sourceClass = 'source-ai';
+    sourceText = '🤖 AI Predictions';
+  } else {
+    sourceClass = 'source-mixed';
+    sourceText = '📊 Mixed: Shop + AI Data';
+  }
+  
+  elements.failuresSource.className = `failures-source-badge ${sourceClass}`;
+  elements.failuresSource.textContent = sourceText;
+  
+  // Clear previous failure data and render new items
+  failuresDataMap.clear();
+  elements.failuresList.innerHTML = failures.map((failure, index) => {
+    const failureId = `failure-${index}`;
+    failuresDataMap.set(failureId, failure);
+    return createFailureItemHTML(failure, failureId);
+  }).join('');
+  
+  // Setup add button handlers
+  setupFailureHandlers();
+}
+
+function createFailureItemHTML(failure, failureId) {
+  const confidenceClass = failure.confidence === 'high' ? 'confidence-high' : 
+                          failure.confidence === 'medium' ? 'confidence-medium' : 'confidence-low';
+  const confidenceText = failure.confidence === 'high' ? 'High Confidence' : 
+                         failure.confidence === 'medium' ? 'Medium' : 'Low';
+  
+  const occurrences = failure.occurrences || 0;
+  const avgTotal = failure.avgTotal || 0;
+  const avgHours = failure.avgHours || 0;
+  const mileageBucket = failure.mileageBucket ? `${failure.mileageBucket}k-${failure.mileageBucket + 5}k mi` : '';
+  
+  return `
+    <li class="failure-item">
+      <div class="failure-header">
+        <div class="failure-title">${escapeHtml(failure.jobTitle || failure.title)}</div>
+        <button class="btn-add btn-add-failure" data-failure-id="${failureId}">
+          + Add
+        </button>
+      </div>
+      <div class="failure-badges">
+        <span class="confidence-badge ${confidenceClass}">${confidenceText}</span>
+        ${occurrences > 0 ? `<span class="occurrence-badge">${occurrences} times</span>` : ''}
+        ${mileageBucket ? `<span class="mileage-badge">${mileageBucket}</span>` : ''}
+      </div>
+      <div class="failure-details">
+        ${avgTotal > 0 ? `<div class="failure-stat"><span class="failure-stat-label">Avg Cost:</span> <span class="failure-stat-value">$${avgTotal.toFixed(0)}</span></div>` : ''}
+        ${avgHours > 0 ? `<div class="failure-stat"><span class="failure-stat-label">Avg Hours:</span> <span class="failure-stat-value">${avgHours.toFixed(1)}h</span></div>` : ''}
+      </div>
+    </li>
+  `;
+}
+
+function setupFailureHandlers() {
+  document.querySelectorAll('.btn-add-failure').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      // Lookup failure from Map by ID (avoids JSON in HTML attributes)
+      const failureId = btn.dataset.failureId;
+      const failure = failuresDataMap.get(failureId);
+      if (!failure) {
+        console.error('[MOS] Failure not found:', failureId);
+        return;
+      }
+      // Search for this job in history
+      switchTab('lookup');
+      elements.jobSearch.value = failure.jobTitle || failure.title;
+      await handleJobSearch();
+    });
+  });
 }
 
 // ==================== JOB LOOKUP ====================
