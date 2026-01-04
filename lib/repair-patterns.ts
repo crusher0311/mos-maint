@@ -108,10 +108,10 @@ export async function updateRepairPattern(params: {
       avgParts: 0,
       avgTotal: 0,
       avgHours: 0,
-      vinsSeen: [],
     },
   };
 
+  // $addToSet creates the array if it doesn't exist, so we don't need $setOnInsert for vinsSeen
   if (params.vin) {
     updateDoc.$addToSet = { vinsSeen: params.vin };
   }
