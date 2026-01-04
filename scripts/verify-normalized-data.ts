@@ -157,7 +157,16 @@ async function checkReferentialIntegrity(db: Db): Promise<IntegrityCheckResult> 
   const missingCustomerRefs = missingCustomerRefsAgg[0]?.count || 0;
   
   let duplicateSourceIds = 0;
-  for (const coll of ['normalized_vehicles', 'normalized_customers', 'normalized_work_orders', 'normalized_service_jobs']) {
+  const allCollections = [
+    'normalized_vehicles', 
+    'normalized_customers', 
+    'normalized_work_orders', 
+    'normalized_service_jobs',
+    'normalized_payments',
+    'normalized_inspections',
+    'normalized_recommendations'
+  ];
+  for (const coll of allCollections) {
     duplicateSourceIds += await checkDuplicateSourceIds(db, coll);
   }
   
@@ -213,6 +222,9 @@ async function main() {
     'normalized_customers',
     'normalized_work_orders',
     'normalized_service_jobs',
+    'normalized_payments',
+    'normalized_inspections',
+    'normalized_recommendations',
   ];
   
   console.log('=== Collection Statistics ===\n');

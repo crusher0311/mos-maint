@@ -36,6 +36,9 @@ import {
   PaymentMethod,
   PaymentStatus,
   DistanceUnit,
+  InspectionStatus,
+  InspectionFinding,
+  RecommendationStatus,
 } from './normalized-schema';
 import { createHash } from 'crypto';
 
@@ -51,10 +54,16 @@ export interface INormalizedAdapter {
   mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedWorkOrder>;
   mapServiceJob(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedServiceJob>;
   mapLineItem(shopId: number, workOrderId: string, serviceJobId: string, sourceData: any): Partial<NormalizedLineItem>;
+  mapPayment(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedPayment>;
+  mapInspection(shopId: number, workOrderId: string, vehicleId: string, sourceData: any): Partial<NormalizedInspection>;
+  mapRecommendation(shopId: number, vehicleId: string, sourceData: any): Partial<NormalizedRecommendation>;
   
   extractVehicleFromWorkOrder(sourceData: any): Partial<NormalizedVehicle> | null;
   extractCustomerFromWorkOrder(sourceData: any): Partial<NormalizedCustomer> | null;
   extractServiceJobsFromWorkOrder(sourceData: any): Partial<NormalizedServiceJob>[];
+  extractPaymentsFromWorkOrder(sourceData: any): any[];
+  extractInspectionsFromWorkOrder(sourceData: any): any[];
+  extractRecommendationsFromWorkOrder(sourceData: any): any[];
   
   getSourceIds(sourceData: any): SourceId[];
 }
@@ -399,6 +408,173 @@ export class ProtractorAdapter implements INormalizedAdapter {
     }));
   }
   
+  extractPaymentsFromWorkOrder(sourceData: any): any[] {
+    const payments = sourceData.Payments?.ItemCollection || sourceData.Payments || [];
+    return Array.isArray(payments) ? payments : [];
+  }
+  
+  extractInspectionsFromWorkOrder(sourceData: any): any[] {
+    const inspections = sourceData.Inspections?.ItemCollection || sourceData.Inspections || [];
+    return Array.isArray(inspections) ? inspections : [];
+  }
+  
+  extractRecommendationsFromWorkOrder(sourceData: any): any[] {
+    const recommendations = sourceData.Recommendations?.ItemCollection || 
+                           sourceData.DeferredServices?.ItemCollection ||
+                           sourceData.DeclinedServices ||
+                           [];
+    return Array.isArray(recommendations) ? recommendations : [];
+  }
+  
+  mapPayment(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedPayment> {
+    const p = sourceData;
+    return {
+      shopId,
+      workOrderId,
+      paymentNumber: cleanString(p.ID || p.PaymentNumber),
+      status: this.mapPaymentStatus(p.Status),
+      method: this.mapPaymentMethod(p.PaymentMethod || p.Method),
+      amount: parseNumber(p.Amount) || 0,
+      tipAmount: parseNumber(p.TipAmount),
+      processedAt: parseDate(p.PaymentDate || p.ProcessedAt),
+      cardBrand: cleanString(p.CardType || p.CardBrand),
+      cardLast4: cleanString(p.CardLast4 || p.Last4),
+      checkNumber: cleanString(p.CheckNumber),
+      authorizationCode: cleanString(p.AuthCode),
+      transactionId: cleanString(p.TransactionID || p.TransactionId),
+      notes: cleanString(p.Notes),
+      customFields: {},
+    };
+  }
+  
+  mapInspection(shopId: number, workOrderId: string, vehicleId: string, sourceData: any): Partial<NormalizedInspection> {
+    const i = sourceData;
+    return {
+      shopId,
+      workOrderId,
+      vehicleId,
+      inspectionType: 'multi_point',
+      templateName: cleanString(i.TemplateName || i.Name),
+      status: this.mapInspectionStatus(i.Status),
+      technicianName: cleanString(i.TechnicianName || i.Technician),
+      startedAt: parseDate(i.StartedAt || i.StartDate),
+      completedAt: parseDate(i.CompletedAt || i.EndDate),
+      overallCondition: this.mapInspectionFinding(i.OverallCondition),
+      summary: cleanString(i.Summary || i.Notes),
+      sections: [],
+      mediaItems: [],
+      recommendations: [],
+      customFields: {},
+    };
+  }
+  
+  mapRecommendation(shopId: number, vehicleId: string, sourceData: any): Partial<NormalizedRecommendation> {
+    const r = sourceData;
+    return {
+      shopId,
+      vehicleId,
+      status: this.mapRecommendationStatus(r.Status),
+      statusHistory: [],
+      title: cleanString(r.Name || r.Description || r.ServiceName) || 'Unknown Recommendation',
+      description: cleanString(r.Description || r.Notes),
+      urgency: this.mapUrgency(r.Urgency || r.Priority),
+      priority: parseNumber(r.Priority) || 3,
+      estimatedCost: parseNumber(r.EstimatedCost || r.Price),
+      estimatedHours: parseNumber(r.EstimatedHours || r.Hours),
+      dateDeclined: parseDate(r.DeclinedDate),
+      declineReason: cleanString(r.DeclineReason),
+      followUpSent: false,
+      mediaIds: [],
+      notes: cleanString(r.Notes),
+      customFields: {},
+    };
+  }
+  
+  private mapPaymentStatus(status: string): PaymentStatus {
+    const statusMap: Record<string, PaymentStatus> = {
+      'Paid': 'paid',
+      'Pending': 'pending',
+      'Authorized': 'authorized',
+      'Refunded': 'refunded',
+      'Voided': 'voided',
+      'Failed': 'failed',
+    };
+    return statusMap[status] || 'paid';
+  }
+  
+  private mapPaymentMethod(method: string): PaymentMethod {
+    const methodMap: Record<string, PaymentMethod> = {
+      'Cash': 'cash',
+      'Check': 'check',
+      'CreditCard': 'credit_card',
+      'Credit Card': 'credit_card',
+      'DebitCard': 'debit_card',
+      'Debit Card': 'debit_card',
+      'Financing': 'financing',
+      'Fleet': 'fleet_account',
+      'AR': 'ar_account',
+      'Account': 'ar_account',
+    };
+    return methodMap[method] || 'other';
+  }
+  
+  private mapInspectionStatus(status: string): InspectionStatus {
+    const statusMap: Record<string, InspectionStatus> = {
+      'NotStarted': 'not_started',
+      'InProgress': 'in_progress',
+      'Completed': 'completed',
+      'Reviewed': 'reviewed',
+      'Sent': 'sent_to_customer',
+    };
+    return statusMap[status] || 'completed';
+  }
+  
+  private mapInspectionFinding(finding: string): InspectionFinding {
+    const findingMap: Record<string, InspectionFinding> = {
+      'Pass': 'pass',
+      'Good': 'pass',
+      'Fair': 'fair',
+      'Caution': 'caution',
+      'Warning': 'caution',
+      'Immediate': 'immediate_attention',
+      'Safety': 'safety_concern',
+    };
+    return findingMap[finding] || 'not_inspected';
+  }
+  
+  private mapRecommendationStatus(status: string): RecommendationStatus {
+    const statusMap: Record<string, RecommendationStatus> = {
+      'Recommended': 'recommended',
+      'Presented': 'presented',
+      'Authorized': 'authorized',
+      'Declined': 'declined',
+      'Deferred': 'deferred',
+      'Scheduled': 'scheduled',
+      'Completed': 'completed',
+    };
+    return statusMap[status] || 'declined';
+  }
+  
+  private mapUrgency(urgency: string | number): 'immediate' | 'soon' | 'next_visit' | 'monitor' | 'informational' {
+    if (typeof urgency === 'number') {
+      if (urgency >= 5) return 'immediate';
+      if (urgency >= 4) return 'soon';
+      if (urgency >= 3) return 'next_visit';
+      if (urgency >= 2) return 'monitor';
+      return 'informational';
+    }
+    const urgencyMap: Record<string, 'immediate' | 'soon' | 'next_visit' | 'monitor' | 'informational'> = {
+      'Immediate': 'immediate',
+      'Critical': 'immediate',
+      'Soon': 'soon',
+      'Warning': 'soon',
+      'NextVisit': 'next_visit',
+      'Monitor': 'monitor',
+      'Info': 'informational',
+    };
+    return urgencyMap[urgency] || 'next_visit';
+  }
+  
   private mapProtractorStatus(stage: string): WorkOrderStatus {
     const stageMap: Record<string, WorkOrderStatus> = {
       'Unassigned': 'draft',
@@ -720,6 +896,186 @@ export class TekmetricAdapter implements INormalizedAdapter {
       laborTotal: parseNumber(job.laborTotal),
       partsTotal: parseNumber(job.partsTotal),
     }));
+  }
+  
+  extractPaymentsFromWorkOrder(sourceData: any): any[] {
+    const payments = sourceData.payments || [];
+    return Array.isArray(payments) ? payments : [];
+  }
+  
+  extractInspectionsFromWorkOrder(sourceData: any): any[] {
+    const inspections = sourceData.inspections || [];
+    return Array.isArray(inspections) ? inspections : [];
+  }
+  
+  extractRecommendationsFromWorkOrder(sourceData: any): any[] {
+    const jobs = sourceData.jobs || [];
+    const recommendations: any[] = [];
+    
+    if (Array.isArray(jobs)) {
+      for (const job of jobs) {
+        if (job.authorized === false && job.name) {
+          recommendations.push({
+            ...job,
+            status: 'declined',
+          });
+        }
+      }
+    }
+    
+    return recommendations;
+  }
+  
+  mapPayment(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedPayment> {
+    const p = sourceData;
+    return {
+      shopId,
+      workOrderId,
+      paymentNumber: cleanString(p.id),
+      status: this.mapPaymentStatus(p.status),
+      method: this.mapPaymentMethod(p.paymentType || p.method),
+      amount: parseNumber(p.amount) || 0,
+      tipAmount: parseNumber(p.tipAmount),
+      processedAt: parseDate(p.paymentDate || p.createdDate),
+      cardBrand: cleanString(p.cardBrand),
+      cardLast4: cleanString(p.cardLastFour || p.last4),
+      checkNumber: cleanString(p.checkNumber),
+      authorizationCode: cleanString(p.authorizationCode),
+      transactionId: cleanString(p.transactionId),
+      notes: cleanString(p.notes),
+      customFields: {},
+    };
+  }
+  
+  mapInspection(shopId: number, workOrderId: string, vehicleId: string, sourceData: any): Partial<NormalizedInspection> {
+    const i = sourceData;
+    return {
+      shopId,
+      workOrderId,
+      vehicleId,
+      inspectionType: 'multi_point',
+      templateName: cleanString(i.templateName || i.name),
+      status: this.mapInspectionStatus(i.status),
+      technicianName: cleanString(i.technicianName),
+      startedAt: parseDate(i.startedAt),
+      completedAt: parseDate(i.completedAt),
+      overallCondition: this.mapInspectionFinding(i.overallCondition),
+      summary: cleanString(i.summary),
+      sections: [],
+      mediaItems: [],
+      recommendations: [],
+      customFields: {},
+    };
+  }
+  
+  mapRecommendation(shopId: number, vehicleId: string, sourceData: any): Partial<NormalizedRecommendation> {
+    const r = sourceData;
+    return {
+      shopId,
+      vehicleId,
+      status: this.mapRecommendationStatus(r.status || (r.authorized === false ? 'declined' : 'recommended')),
+      statusHistory: [],
+      title: cleanString(r.name || r.description) || 'Unknown Recommendation',
+      description: cleanString(r.description || r.note),
+      urgency: this.mapUrgency(r.urgency),
+      priority: parseNumber(r.priority) || 3,
+      estimatedCost: parseNumber(r.total || r.estimatedCost),
+      estimatedHours: parseNumber(r.estimatedHours || r.billedHours),
+      dateDeclined: parseDate(r.declinedDate),
+      declineReason: cleanString(r.declineReason),
+      followUpSent: false,
+      mediaIds: [],
+      notes: cleanString(r.note),
+      customFields: {},
+    };
+  }
+  
+  private mapPaymentStatus(status: string): PaymentStatus {
+    const statusMap: Record<string, PaymentStatus> = {
+      'paid': 'paid',
+      'pending': 'pending',
+      'authorized': 'authorized',
+      'refunded': 'refunded',
+      'voided': 'voided',
+      'failed': 'failed',
+    };
+    return statusMap[String(status).toLowerCase()] || 'paid';
+  }
+  
+  private mapPaymentMethod(method: string): PaymentMethod {
+    const methodMap: Record<string, PaymentMethod> = {
+      'cash': 'cash',
+      'check': 'check',
+      'credit': 'credit_card',
+      'credit_card': 'credit_card',
+      'creditCard': 'credit_card',
+      'debit': 'debit_card',
+      'debit_card': 'debit_card',
+      'debitCard': 'debit_card',
+      'financing': 'financing',
+      'fleet': 'fleet_account',
+      'ar': 'ar_account',
+      'account': 'ar_account',
+    };
+    return methodMap[String(method).toLowerCase()] || 'other';
+  }
+  
+  private mapInspectionStatus(status: string): InspectionStatus {
+    const statusMap: Record<string, InspectionStatus> = {
+      'not_started': 'not_started',
+      'in_progress': 'in_progress',
+      'completed': 'completed',
+      'reviewed': 'reviewed',
+      'sent': 'sent_to_customer',
+    };
+    return statusMap[String(status).toLowerCase()] || 'completed';
+  }
+  
+  private mapInspectionFinding(finding: string): InspectionFinding {
+    const findingMap: Record<string, InspectionFinding> = {
+      'pass': 'pass',
+      'good': 'pass',
+      'fair': 'fair',
+      'caution': 'caution',
+      'warning': 'caution',
+      'immediate': 'immediate_attention',
+      'safety': 'safety_concern',
+    };
+    return findingMap[String(finding).toLowerCase()] || 'not_inspected';
+  }
+  
+  private mapRecommendationStatus(status: string): RecommendationStatus {
+    const statusMap: Record<string, RecommendationStatus> = {
+      'recommended': 'recommended',
+      'presented': 'presented',
+      'authorized': 'authorized',
+      'declined': 'declined',
+      'deferred': 'deferred',
+      'scheduled': 'scheduled',
+      'completed': 'completed',
+    };
+    return statusMap[String(status).toLowerCase()] || 'declined';
+  }
+  
+  private mapUrgency(urgency: string | number | undefined): 'immediate' | 'soon' | 'next_visit' | 'monitor' | 'informational' {
+    if (!urgency) return 'next_visit';
+    if (typeof urgency === 'number') {
+      if (urgency >= 5) return 'immediate';
+      if (urgency >= 4) return 'soon';
+      if (urgency >= 3) return 'next_visit';
+      if (urgency >= 2) return 'monitor';
+      return 'informational';
+    }
+    const urgencyMap: Record<string, 'immediate' | 'soon' | 'next_visit' | 'monitor' | 'informational'> = {
+      'immediate': 'immediate',
+      'critical': 'immediate',
+      'soon': 'soon',
+      'warning': 'soon',
+      'next_visit': 'next_visit',
+      'monitor': 'monitor',
+      'info': 'informational',
+    };
+    return urgencyMap[String(urgency).toLowerCase()] || 'next_visit';
   }
   
   private mapTekmetricStatus(status: string): WorkOrderStatus {

@@ -13,6 +13,9 @@ import {
   NormalizedWorkOrder,
   NormalizedServiceJob,
   NormalizedLineItem,
+  NormalizedPayment,
+  NormalizedInspection,
+  NormalizedRecommendation,
   Provenance,
   SoftDelete,
   AuditEntry,
@@ -624,6 +627,379 @@ export class NormalizedIngestionService {
   }
   
   // ---------------------------------------------------------------------------
+  // PAYMENT INGESTION
+  // ---------------------------------------------------------------------------
+  
+  async ingestPayment(workOrderId: string, sourceData: any): Promise<IngestionResult> {
+    try {
+      const mapped = this.adapter.mapPayment(this.shopId, workOrderId, sourceData);
+      
+      const collection = this.db.collection<NormalizedPayment>(NORMALIZED_COLLECTIONS.payments);
+      
+      const sourceId = sourceData.ID || sourceData.id || sourceData.paymentId;
+      if (!sourceId) {
+        return {
+          success: false,
+          entityType: 'payment',
+          action: 'error',
+          message: 'Payment has no ID',
+        };
+      }
+      
+      const existingQuery = {
+        workOrderId,
+        'provenance.sourceIds.idValue': String(sourceId),
+      };
+      
+      const existing = await collection.findOne(existingQuery);
+      
+      const contentHash = generateContentHash(mapped);
+      
+      if (existing) {
+        if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+          return {
+            success: true,
+            entityType: 'payment',
+            entityId: existing._id,
+            action: 'skipped',
+            message: 'Content unchanged',
+            contentHash,
+          };
+        }
+        
+        await collection.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              ...mapped,
+              updatedAt: new Date(),
+              version: existing.version + 1,
+            },
+          }
+        );
+        
+        return {
+          success: true,
+          entityType: 'payment',
+          entityId: existing._id,
+          action: 'updated',
+          contentHash,
+        };
+      }
+      
+      const newId = generateEntityId();
+      const now = new Date();
+      const sourceIds = [{
+        system: this.adapter.sourceSystem,
+        idType: 'payment_id',
+        idValue: String(sourceId),
+        isPrimary: true,
+      }];
+      
+      const newPayment: NormalizedPayment = {
+        _id: newId,
+        ...mapped,
+        shopId: this.shopId,
+        enterpriseId: this.enterpriseId,
+        workOrderId,
+        provenance: createProvenance(this.adapter.sourceSystem, sourceIds, contentHash, this.options.syncRunId),
+        softDelete: createSoftDelete(),
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+        status: mapped.status || 'paid',
+        method: mapped.method || 'other',
+        amount: mapped.amount || 0,
+        customFields: {},
+      } as NormalizedPayment;
+      
+      await collection.insertOne(newPayment);
+      
+      return {
+        success: true,
+        entityType: 'payment',
+        entityId: newId,
+        action: 'created',
+        contentHash,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityType: 'payment',
+        action: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // INSPECTION INGESTION
+  // ---------------------------------------------------------------------------
+  
+  async ingestInspection(workOrderId: string, vehicleId: string, sourceData: any): Promise<IngestionResult> {
+    try {
+      const mapped = this.adapter.mapInspection(this.shopId, workOrderId, vehicleId, sourceData);
+      
+      const collection = this.db.collection<NormalizedInspection>(NORMALIZED_COLLECTIONS.inspections);
+      
+      const sourceId = sourceData.ID || sourceData.id || sourceData.inspectionId;
+      if (!sourceId) {
+        return {
+          success: false,
+          entityType: 'inspection',
+          action: 'error',
+          message: 'Inspection has no ID',
+        };
+      }
+      
+      const existingQuery = {
+        workOrderId,
+        'provenance.sourceIds.idValue': String(sourceId),
+      };
+      
+      const existing = await collection.findOne(existingQuery);
+      
+      const contentHash = generateContentHash(mapped);
+      
+      if (existing) {
+        if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+          return {
+            success: true,
+            entityType: 'inspection',
+            entityId: existing._id,
+            action: 'skipped',
+            message: 'Content unchanged',
+            contentHash,
+          };
+        }
+        
+        await collection.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              ...mapped,
+              updatedAt: new Date(),
+              version: existing.version + 1,
+            },
+          }
+        );
+        
+        return {
+          success: true,
+          entityType: 'inspection',
+          entityId: existing._id,
+          action: 'updated',
+          contentHash,
+        };
+      }
+      
+      const newId = generateEntityId();
+      const now = new Date();
+      const sourceIds = [{
+        system: this.adapter.sourceSystem,
+        idType: 'inspection_id',
+        idValue: String(sourceId),
+        isPrimary: true,
+      }];
+      
+      const newInspection: NormalizedInspection = {
+        _id: newId,
+        ...mapped,
+        shopId: this.shopId,
+        enterpriseId: this.enterpriseId,
+        workOrderId,
+        vehicleId,
+        provenance: createProvenance(this.adapter.sourceSystem, sourceIds, contentHash, this.options.syncRunId),
+        softDelete: createSoftDelete(),
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+        inspectionType: mapped.inspectionType || 'multi_point',
+        status: mapped.status || 'completed',
+        sections: [],
+        mediaItems: [],
+        recommendations: [],
+        customFields: {},
+      } as NormalizedInspection;
+      
+      await collection.insertOne(newInspection);
+      
+      return {
+        success: true,
+        entityType: 'inspection',
+        entityId: newId,
+        action: 'created',
+        contentHash,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityType: 'inspection',
+        action: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // RECOMMENDATION INGESTION
+  // ---------------------------------------------------------------------------
+  
+  async ingestRecommendation(vehicleId: string, sourceData: any, originWorkOrderId?: string): Promise<IngestionResult> {
+    try {
+      const mapped = this.adapter.mapRecommendation(this.shopId, vehicleId, sourceData);
+      
+      const collection = this.db.collection<NormalizedRecommendation>(NORMALIZED_COLLECTIONS.recommendations);
+      
+      const sourceId = sourceData.ID || sourceData.id || sourceData.recommendationId || 
+                       `${originWorkOrderId}-${mapped.title}`;
+      
+      const existingQuery = {
+        vehicleId,
+        'provenance.sourceIds.idValue': String(sourceId),
+      };
+      
+      const existing = await collection.findOne(existingQuery);
+      
+      const contentHash = generateContentHash(mapped);
+      
+      if (existing) {
+        if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+          return {
+            success: true,
+            entityType: 'recommendation',
+            entityId: existing._id,
+            action: 'skipped',
+            message: 'Content unchanged',
+            contentHash,
+          };
+        }
+        
+        await collection.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              ...mapped,
+              updatedAt: new Date(),
+              version: existing.version + 1,
+            },
+          }
+        );
+        
+        return {
+          success: true,
+          entityType: 'recommendation',
+          entityId: existing._id,
+          action: 'updated',
+          contentHash,
+        };
+      }
+      
+      const newId = generateEntityId();
+      const now = new Date();
+      const sourceIds = [{
+        system: this.adapter.sourceSystem,
+        idType: 'recommendation_id',
+        idValue: String(sourceId),
+        isPrimary: true,
+      }];
+      
+      const newRecommendation: NormalizedRecommendation = {
+        _id: newId,
+        ...mapped,
+        shopId: this.shopId,
+        enterpriseId: this.enterpriseId,
+        vehicleId,
+        originWorkOrderId,
+        provenance: createProvenance(this.adapter.sourceSystem, sourceIds, contentHash, this.options.syncRunId),
+        softDelete: createSoftDelete(),
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+        status: mapped.status || 'declined',
+        statusHistory: [],
+        title: mapped.title || 'Unknown Recommendation',
+        urgency: mapped.urgency || 'next_visit',
+        priority: mapped.priority || 3,
+        followUpSent: false,
+        mediaIds: [],
+        customFields: {},
+      } as NormalizedRecommendation;
+      
+      await collection.insertOne(newRecommendation);
+      
+      return {
+        success: true,
+        entityType: 'recommendation',
+        entityId: newId,
+        action: 'created',
+        contentHash,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityType: 'recommendation',
+        action: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // INGEST ALL ENTITIES FROM WORK ORDER
+  // ---------------------------------------------------------------------------
+  
+  async ingestWorkOrderWithAllEntities(sourceData: any): Promise<{
+    workOrder: IngestionResult;
+    payments: IngestionResult[];
+    inspections: IngestionResult[];
+    recommendations: IngestionResult[];
+  }> {
+    const workOrderResult = await this.ingestWorkOrder(sourceData);
+    
+    const payments: IngestionResult[] = [];
+    const inspections: IngestionResult[] = [];
+    const recommendations: IngestionResult[] = [];
+    
+    if (workOrderResult.success && workOrderResult.entityId) {
+      const workOrderId = workOrderResult.entityId;
+      
+      const vehicleData = this.adapter.extractVehicleFromWorkOrder(sourceData);
+      const vehicleQuery: any = { shopId: this.shopId };
+      if (vehicleData?.vin) {
+        vehicleQuery.vin = vehicleData.vin;
+      }
+      const vehicleDoc = await this.db.collection(NORMALIZED_COLLECTIONS.vehicles).findOne(vehicleQuery);
+      const vehicleId = vehicleDoc?._id ? String(vehicleDoc._id) : '';
+      
+      const paymentData = this.adapter.extractPaymentsFromWorkOrder(sourceData);
+      for (const payment of paymentData) {
+        const result = await this.ingestPayment(workOrderId, payment);
+        payments.push(result);
+      }
+      
+      const inspectionData = this.adapter.extractInspectionsFromWorkOrder(sourceData);
+      for (const inspection of inspectionData) {
+        const result = await this.ingestInspection(workOrderId, vehicleId, inspection);
+        inspections.push(result);
+      }
+      
+      const recommendationData = this.adapter.extractRecommendationsFromWorkOrder(sourceData);
+      for (const rec of recommendationData) {
+        const result = await this.ingestRecommendation(vehicleId, rec, workOrderId);
+        recommendations.push(result);
+      }
+    }
+    
+    return {
+      workOrder: workOrderResult,
+      payments,
+      inspections,
+      recommendations,
+    };
+  }
+  
+  // ---------------------------------------------------------------------------
   // BATCH INGESTION
   // ---------------------------------------------------------------------------
   
@@ -650,6 +1026,87 @@ export class NormalizedIngestionService {
       skipped,
       errors,
       results,
+    };
+  }
+  
+  async ingestWorkOrderBatchWithAllEntities(workOrders: any[]): Promise<{
+    workOrders: IngestionBatchResult;
+    payments: { created: number; updated: number; skipped: number; errors: number };
+    inspections: { created: number; updated: number; skipped: number; errors: number };
+    recommendations: { created: number; updated: number; skipped: number; errors: number };
+  }> {
+    const workOrderResults: IngestionResult[] = [];
+    let woCreated = 0, woUpdated = 0, woSkipped = 0, woErrors = 0;
+    let payCreated = 0, payUpdated = 0, paySkipped = 0, payErrors = 0;
+    let inspCreated = 0, inspUpdated = 0, inspSkipped = 0, inspErrors = 0;
+    let recCreated = 0, recUpdated = 0, recSkipped = 0, recErrors = 0;
+    
+    for (const wo of workOrders) {
+      const result = await this.ingestWorkOrderWithAllEntities(wo);
+      workOrderResults.push(result.workOrder);
+      
+      switch (result.workOrder.action) {
+        case 'created': woCreated++; break;
+        case 'updated': woUpdated++; break;
+        case 'skipped': woSkipped++; break;
+        case 'error': woErrors++; break;
+      }
+      
+      for (const pay of result.payments) {
+        switch (pay.action) {
+          case 'created': payCreated++; break;
+          case 'updated': payUpdated++; break;
+          case 'skipped': paySkipped++; break;
+          case 'error': payErrors++; break;
+        }
+      }
+      
+      for (const insp of result.inspections) {
+        switch (insp.action) {
+          case 'created': inspCreated++; break;
+          case 'updated': inspUpdated++; break;
+          case 'skipped': inspSkipped++; break;
+          case 'error': inspErrors++; break;
+        }
+      }
+      
+      for (const rec of result.recommendations) {
+        switch (rec.action) {
+          case 'created': recCreated++; break;
+          case 'updated': recUpdated++; break;
+          case 'skipped': recSkipped++; break;
+          case 'error': recErrors++; break;
+        }
+      }
+    }
+    
+    return {
+      workOrders: {
+        total: workOrders.length,
+        created: woCreated,
+        updated: woUpdated,
+        skipped: woSkipped,
+        errors: woErrors,
+        results: workOrderResults,
+      },
+      payments: {
+        created: payCreated,
+        updated: payUpdated,
+        skipped: paySkipped,
+        errors: payErrors,
+      },
+      inspections: {
+        created: inspCreated,
+        updated: inspUpdated,
+        skipped: inspSkipped,
+        errors: inspErrors,
+      },
+      recommendations: {
+        created: recCreated,
+        updated: recUpdated,
+        skipped: recSkipped,
+        errors: recErrors,
+      },
     };
   }
   

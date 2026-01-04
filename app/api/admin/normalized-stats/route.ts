@@ -24,6 +24,9 @@ export async function GET(req: NextRequest) {
     'normalized_customers',
     'normalized_work_orders',
     'normalized_service_jobs',
+    'normalized_payments',
+    'normalized_inspections',
+    'normalized_recommendations',
   ];
 
   const stats: Record<string, any> = {};

@@ -425,9 +425,9 @@ async function backfillShopChunk(
   // Dual-write to normalized collections
   let normalizedCount = 0;
   try {
-    const normalizedResult = await ingestionService.ingestWorkOrderBatch(rosForNormalized);
-    normalizedCount = normalizedResult.created + normalizedResult.updated;
-    console.log(`[Tekmetric Backfill] Shop ${shopId}: Normalized ${normalizedCount} work orders (${normalizedResult.created} new, ${normalizedResult.updated} updated, ${normalizedResult.skipped} unchanged)`);
+    const normalizedResult = await ingestionService.ingestWorkOrderBatchWithAllEntities(rosForNormalized);
+    normalizedCount = normalizedResult.workOrders.created + normalizedResult.workOrders.updated;
+    console.log(`[Tekmetric Backfill] Shop ${shopId}: Normalized ${normalizedCount} WOs (${normalizedResult.workOrders.created} new), payments: ${normalizedResult.payments.created}, inspections: ${normalizedResult.inspections.created}, recs: ${normalizedResult.recommendations.created}`);
   } catch (normalizedError) {
     console.error(`[Tekmetric Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }

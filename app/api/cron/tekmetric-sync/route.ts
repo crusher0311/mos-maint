@@ -312,8 +312,8 @@ export async function GET(req: NextRequest) {
               { dualWriteToJobIndex: false }
             );
             
-            const result = await ingestionService.ingestWorkOrderBatch(workOrdersForNormalized);
-            console.log(`[Cron] Tekmetric sync normalized: shop ${shopId}, ${result.created} created, ${result.updated} updated, ${result.skipped} skipped`);
+            const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);
+            console.log(`[Cron] Tekmetric sync normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, payments: ${result.payments.created}, inspections: ${result.inspections.created}, recommendations: ${result.recommendations.created}`);
           }
         } catch (normErr: any) {
           console.log(`[Cron] Tekmetric sync normalized ingestion error for shop ${shopId}:`, normErr.message);
