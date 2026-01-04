@@ -44,7 +44,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution tracking, enterprise-wide job search, and settings replication.
 *   **Platform Admin Panel**: Internal MOS staff panel for platform statistics, shop management, user directory, and OpenAI API usage tracking.
 *   **Modular Feature Architecture**: Supports à la carte feature toggles for specific tools.
-*   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration, providing maintenance plans, job history search, and push-to-RO functionality.
+*   **MOS Tools Chrome Extension (v1.3.0)**: A side panel extension for Tekmetric integration with 4 tabs: Plan (maintenance recommendations), Failures (Common Failures Advisor based on shop data), Lookup (job history search), and Canned Jobs. Supports push-to-RO functionality.
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with prioritization for current location.
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing from shop data, prioritizing vehicle-specific matches.
 *   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach. Features:
