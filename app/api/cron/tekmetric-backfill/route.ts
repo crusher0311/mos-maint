@@ -404,6 +404,7 @@ async function backfillShopChunk(
           labor: j.labor,
           parts: j.parts,
         })),
+        rawPayload: { repairOrder: ro, vehicle, customer, jobs },
       };
       
       return { indexed, skipped, roData: roDataForNormalized };
