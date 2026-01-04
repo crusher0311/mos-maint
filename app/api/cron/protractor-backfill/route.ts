@@ -74,13 +74,15 @@ async function fetchInvoicesForDateRange(
 }
 
 async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string }[]> {
+  // Only fetch shops that don't have the completion flag set
   const shops = await db.collection("shops").find({
     $or: [
       { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
       { "protractorApiKey": { $exists: true, $nin: [null, ""] } },
       { "protractor.connectionId": { $exists: true, $nin: [null, ""] } },
       { "protractorConnectionId": { $exists: true, $nin: [null, ""] } }
-    ]
+    ],
+    protractorBackfillComplete: { $ne: true }
   }).toArray();
 
   const shopsToBackfill: { shopId: number; name: string; progressDate: Date | null }[] = [];
@@ -416,6 +418,15 @@ async function backfillShopChunk(
       $inc: { totalJobsIndexed: jobsIndexed }
     }
   );
+
+  // Set shop-level completion flag when backfill is done
+  if (isComplete) {
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
+    );
+    console.log(`[Backfill] Shop ${shopId}: Marked protractorBackfillComplete=true`);
+  }
   
   return {
     jobsIndexed,
@@ -443,7 +454,8 @@ export async function GET(req: NextRequest) {
     if (shopsToProcess.length === 0) {
       return NextResponse.json({
         ok: true,
-        message: "All shops have completed backfill",
+        message: "All Protractor shops have completed backfill",
+        shopsRemaining: 0,
         duration: `${Date.now() - startTime}ms`
       });
     }
@@ -483,7 +495,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       duration: `${Date.now() - startTime}ms`,
-      results
+      results,
+      shopsRemaining: shopsToProcess.length - selectedShops.length
     });
   } catch (error: any) {
     console.error("[Backfill] Fatal error:", error);

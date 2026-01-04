@@ -117,11 +117,13 @@ async function tekmetricRequest<T>(endpoint: string, retries = 3): Promise<{ ok:
 }
 
 async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
+  // Only fetch shops that don't have the completion flag set
   const shops = await db.collection("shops").find({
     $or: [
       { "tekmetric.shopId": { $exists: true, $ne: null } },
       { "tekmetricShopId": { $exists: true, $ne: null } }
-    ]
+    ],
+    tekmetricBackfillComplete: { $ne: true }
   }).toArray();
 
   const shopsToBackfill: { shopId: number; name: string; tekmetricShopId: number; progressDate: Date | null }[] = [];
@@ -450,6 +452,15 @@ async function backfillShopChunk(
       $inc: { totalJobsIndexed: jobsIndexed }
     }
   );
+
+  // Set shop-level completion flag when backfill is done
+  if (isComplete) {
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { tekmetricBackfillComplete: true, tekmetricBackfillCompletedAt: new Date() } }
+    );
+    console.log(`[Tekmetric Backfill] Shop ${shopId}: Marked tekmetricBackfillComplete=true`);
+  }
 
   return {
     jobsIndexed,
