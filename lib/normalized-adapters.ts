@@ -397,15 +397,52 @@ export class ProtractorAdapter implements INormalizedAdapter {
     
     if (!Array.isArray(servicePackages)) return [];
     
-    return servicePackages.map((sp: any, index: number) => ({
-      sequence: index,
-      title: cleanString(sp.Name || sp.Description) || 'Unknown Service',
-      description: cleanString(sp.Description),
-      laborHoursBilled: parseNumber(sp.Hours) ?? parseNumber(sp.Quantity),
-      total: parseNumber(sp.Total),
-      laborTotal: parseNumber(sp.LaborTotal || sp.Labor),
-      partsTotal: parseNumber(sp.PartsTotal || sp.Parts),
-    }));
+    return servicePackages.map((sp: any, index: number) => {
+      // Extract title from ServicePackageHeader (Protractor structure)
+      const title = cleanString(
+        sp.ServicePackageHeader?.Title || 
+        sp.Name || 
+        sp.Description || 
+        sp.Title
+      ) || 'Unknown Service';
+      
+      const description = cleanString(
+        sp.ServicePackageHeader?.Description || 
+        sp.Description
+      );
+      
+      // Calculate totals from ServicePackageLines if not provided directly
+      const lines = sp.ServicePackageLines?.ItemCollection || sp.ServicePackageLines || [];
+      let laborTotal = 0;
+      let partsTotal = 0;
+      let totalAmount = 0;
+      let laborHours = 0;
+      
+      if (Array.isArray(lines)) {
+        for (const line of lines) {
+          const lineType = String(line.Type || '').toLowerCase();
+          const lineTotal = parseNumber(line.ExtendedTotal || line.Total) || 0;
+          totalAmount += lineTotal;
+          
+          if (lineType === 'labor' || lineType.includes('labor')) {
+            laborTotal += lineTotal;
+            laborHours += parseNumber(line.Quantity) || 0;
+          } else if (lineType === 'material' || lineType === 'part' || lineType.includes('part')) {
+            partsTotal += lineTotal;
+          }
+        }
+      }
+      
+      return {
+        sequence: index,
+        title,
+        description,
+        laborHoursBilled: parseNumber(sp.Hours) || parseNumber(sp.Quantity) || laborHours || undefined,
+        total: parseNumber(sp.Total) || totalAmount || undefined,
+        laborTotal: parseNumber(sp.LaborTotal || sp.Labor) || laborTotal || undefined,
+        partsTotal: parseNumber(sp.PartsTotal || sp.Parts) || partsTotal || undefined,
+      };
+    });
   }
   
   extractPaymentsFromWorkOrder(sourceData: any): any[] {
