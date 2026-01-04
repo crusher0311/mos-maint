@@ -6,6 +6,8 @@ let currentContext = null;
 let currentTab = 'plan';
 let cannedJobSource = 'sms';
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
+let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
+let lookupJobsDataMap = new Map(); // Store lookup job objects by ID to avoid JSON in HTML
 
 // ==================== DOM ELEMENTS ====================
 const elements = {
@@ -735,8 +737,14 @@ function renderJobResults(jobs) {
     return;
   }
   
+  // Clear previous data and build new list with Map storage
+  lookupJobsDataMap.clear();
   elements.lookupResults.classList.remove('hidden');
-  elements.lookupResults.innerHTML = jobs.map(job => createJobItemHTML(job)).join('');
+  elements.lookupResults.innerHTML = jobs.map((job, index) => {
+    const jobId = `lookup-${index}`;
+    lookupJobsDataMap.set(jobId, job);
+    return createJobItemHTML(job, jobId);
+  }).join('');
   
   // Add toggle and action handlers
   setupJobItemHandlers();
@@ -751,7 +759,7 @@ function getBandStyle(band) {
   }
 }
 
-function createJobItemHTML(job) {
+function createJobItemHTML(job, lookupId) {
   const vehicle = job.vehicle ? 
     `${job.vehicle.year || ''} ${job.vehicle.make || ''} ${job.vehicle.model || ''}`.trim() : '';
   const engine = job.vehicle?.engine ? ` | ${job.vehicle.engine}` : '';
@@ -817,7 +825,7 @@ function createJobItemHTML(job) {
         ` : ''}
         <div class="job-footer">
           <div class="job-meta">WO #${job.workOrderNumber || 'N/A'}</div>
-          <button class="btn-add btn-add-job" data-job='${JSON.stringify(job)}'>
+          <button class="btn-add btn-add-job" data-lookup-id="${lookupId}">
             + Add to RO
           </button>
         </div>
@@ -837,8 +845,13 @@ function setupJobItemHandlers() {
   document.querySelectorAll('.btn-add-job').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const job = JSON.parse(btn.dataset.job);
-      handleAddJob(job);
+      const lookupId = btn.dataset.lookupId;
+      const job = lookupJobsDataMap.get(lookupId);
+      if (job) {
+        handleAddJob(job);
+      } else {
+        console.error('[MOS] Lookup job not found:', lookupId);
+      }
     });
   });
 }
@@ -906,24 +919,35 @@ function renderCannedJobs(jobs) {
     return;
   }
   
+  // Clear previous data and build new list with Map storage
+  cannedJobsDataMap.clear();
   elements.cannedList.classList.remove('hidden');
-  elements.cannedList.innerHTML = jobs.map(job => `
-    <li class="job-item">
-      <div class="job-header" style="cursor: default;">
-        <div>
-          <div class="job-title">${escapeHtml(job.name)}</div>
-          ${job.description ? `<div class="job-meta">${escapeHtml(job.description)}</div>` : ''}
+  elements.cannedList.innerHTML = jobs.map((job, index) => {
+    const cannedId = `canned-${index}`;
+    cannedJobsDataMap.set(cannedId, job);
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escapeHtml(job.name)}</div>
+            ${job.description ? `<div class="job-meta">${escapeHtml(job.description)}</div>` : ''}
+          </div>
+          <button class="btn-add btn-add-canned" data-canned-id="${cannedId}">+ Add</button>
         </div>
-        <button class="btn-add" data-canned='${JSON.stringify(job)}'>+ Add</button>
-      </div>
-    </li>
-  `).join('');
+      </li>
+    `;
+  }).join('');
   
-  // Add click handlers
-  document.querySelectorAll('.btn-add[data-canned]').forEach(btn => {
+  // Add click handlers using Map lookup
+  document.querySelectorAll('.btn-add-canned').forEach(btn => {
     btn.addEventListener('click', () => {
-      const job = JSON.parse(btn.dataset.canned);
-      handleAddCannedJob(job);
+      const cannedId = btn.dataset.cannedId;
+      const job = cannedJobsDataMap.get(cannedId);
+      if (job) {
+        handleAddCannedJob(job);
+      } else {
+        console.error('[MOS] Canned job not found:', cannedId);
+      }
     });
   });
 }
