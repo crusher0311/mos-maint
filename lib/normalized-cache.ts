@@ -115,6 +115,7 @@ export const CACHE_KEYS = {
   VEHICLE_JOBS: 'vehicle_jobs',
   SEARCH_RESULTS: 'search_results',
   ENTERPRISE_SHOPS: 'enterprise_shops',
+  JOB_AUTOCOMPLETE: 'job_autocomplete',
 } as const;
 
 export const CACHE_TTL = {
