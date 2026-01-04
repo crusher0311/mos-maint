@@ -46,7 +46,13 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration, providing maintenance plans, job history search, and push-to-RO functionality.
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations with prioritization for current location.
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing from shop data, prioritizing vehicle-specific matches.
-*   **Common Failures Advisor**: AI-powered prediction of common repairs by vehicle/powertrain/mileage, matched to shop historical pricing with fuzzy job matching and 5k-mile bucket caching.
+*   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach. Features:
+    - Pre-computed `shop_repair_patterns` collection with aggregated repair data by year/make/model/mileage bucket
+    - Pattern updates during sync/backfill via `dualWriteToRepairPatterns` option
+    - Enterprise aggregation pools patterns across multiple shop locations
+    - Only calls AI when shop has fewer than 3 qualifying patterns (2+ occurrences each)
+    - Shows data source badge: "Your Data" (shop patterns), "Mixed" (hybrid), or "AI"
+    - Setup scripts: `scripts/setup-repair-patterns-indexes.ts`, `scripts/backfill-repair-patterns.ts`
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
