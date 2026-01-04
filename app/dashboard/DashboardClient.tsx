@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
+import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
@@ -95,6 +96,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     model?: string;
     engine?: string;
     workOrderId?: string;
+    displayName?: string;
+  } | null>(null);
+  const [commonFailuresVehicle, setCommonFailuresVehicle] = useState<{
+    vin: string;
+    year?: number;
+    make?: string;
+    model?: string;
+    engine?: string;
+    mileage?: number;
     displayName?: string;
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -516,6 +526,37 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           >
                             <Wrench className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => {
+                              let year = r.vehicle?.year;
+                              let make = r.vehicle?.make;
+                              let model = r.vehicle?.model;
+                              
+                              if (!year && !make && !model && r.displayVehicle) {
+                                const vehicleStr = r.displayVehicle || "";
+                                const yearMatch = vehicleStr.match(/^(\d{4})/);
+                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                                const parts = afterYear.split(" ").filter(Boolean);
+                                make = parts[0] || undefined;
+                                model = parts.slice(1).join(" ") || undefined;
+                              }
+                              
+                              setCommonFailuresVehicle({
+                                vin,
+                                year,
+                                make,
+                                model,
+                                engine: r.vehicle?.engine || r.engine || undefined,
+                                mileage: r.displayMiles,
+                                displayName: r.displayName,
+                              });
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Common Failures"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -637,6 +678,41 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 workOrderGuid={jobLookupVehicle.workOrderId}
                 onJobAdded={() => {
                   refreshData();
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {commonFailuresVehicle && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                  Common Failures
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {commonFailuresVehicle.displayName} - {commonFailuresVehicle.year} {commonFailuresVehicle.make} {commonFailuresVehicle.model}
+                </p>
+              </div>
+              <button
+                onClick={() => setCommonFailuresVehicle(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <CommonFailuresPanel
+                vehicle={{
+                  year: commonFailuresVehicle.year,
+                  make: commonFailuresVehicle.make,
+                  model: commonFailuresVehicle.model,
+                  engine: commonFailuresVehicle.engine,
+                  mileage: commonFailuresVehicle.mileage,
                 }}
               />
             </div>
