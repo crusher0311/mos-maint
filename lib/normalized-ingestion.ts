@@ -96,6 +96,18 @@ export class NormalizedIngestionService {
   }
   
   // ---------------------------------------------------------------------------
+  // HELPER: Sanitize raw payload for MongoDB storage
+  // ---------------------------------------------------------------------------
+  
+  private sanitizeRawPayload(data: any): any {
+    try {
+      return JSON.parse(JSON.stringify(data));
+    } catch {
+      return { error: 'Failed to serialize raw payload', timestamp: new Date().toISOString() };
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
   // VEHICLE INGESTION
   // ---------------------------------------------------------------------------
   
@@ -416,6 +428,7 @@ export class NormalizedIngestionService {
               provenance: updatedProvenance,
               updatedAt: new Date(),
               version: existing.version + 1,
+              rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
             },
           }
         );
@@ -483,6 +496,7 @@ export class NormalizedIngestionService {
         isComeback: false,
         tags: [],
         customFields: {},
+        rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
       } as NormalizedWorkOrder;
       
       await collection.insertOne(newWorkOrder);

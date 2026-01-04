@@ -24,7 +24,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Stripe Billing Integration**: Manages checkout sessions, webhook processing for subscriptions, and a billing portal.
 *   **Distance Unit Preferences**: Shops can choose between miles or kilometers.
 *   **SMS Adapter Architecture**: An `ISMSAdapter` interface provides abstraction for shop management systems (e.g., Protractor, Tekmetric).
-*   **Normalized Data Layer (v1.9.1)**: SMS-agnostic data schema with provenance tracking, enabling shops to retain complete historical data when switching SMS systems. Key features:
+*   **Normalized Data Layer (v1.9.2)**: SMS-agnostic data schema with provenance tracking, enabling shops to retain complete historical data when switching SMS systems. Key features:
     - 7 normalized collections (vehicles, customers, work_orders, service_jobs, payments, inspections, recommendations)
     - Bidirectional adapters for Protractor and Tekmetric
     - Dual-write ingestion in backfill and sync workers with `ingestWorkOrderBatchWithAllEntities()` method
@@ -33,6 +33,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     - MongoDB indexes optimized for query patterns via `scripts/setup-normalized-indexes.ts`
     - In-memory query cache (`lib/normalized-cache.ts`) with TTL and LRU eviction
     - Verification tooling: `scripts/verify-normalized-data.ts` and `/api/admin/normalized-stats`
+    - **Raw payload preservation (v1.9.2)**: Complete API responses stored in `rawPayload` field for data recovery, future features, and debugging
 
 **Feature Specifications:**
 *   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
