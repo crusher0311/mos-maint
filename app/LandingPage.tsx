@@ -33,16 +33,16 @@ export default function LandingPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center gap-3">
-              <img src="/icon.png" alt="MOS.Tools" className="w-10 h-10 rounded-xl" />
-              <span className="text-xl font-bold text-gray-900">MOS.Tools</span>
+          <div className="flex justify-between items-center py-3 sm:py-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <img src="/icon.png" alt="MOS.Tools" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl" />
+              <span className="text-lg sm:text-xl font-bold text-gray-900">MOS.Tools</span>
             </div>
-            <div className="flex items-center gap-4">
-              <Link href="/login" className="px-4 py-2 text-gray-600 hover:text-gray-900 font-medium transition-colors">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Link href="/login" className="hidden sm:block px-4 py-2 text-gray-600 hover:text-gray-900 font-medium transition-colors">
                 Sign In
               </Link>
-              <Link href="/setup" className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+              <Link href="/setup" className="px-3 py-2 sm:px-5 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm sm:text-base">
                 Start MOS Pro
               </Link>
             </div>
@@ -53,82 +53,82 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative">
         <div className="absolute inset-0 bg-gradient-to-b from-blue-50 to-white"></div>
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20">
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-14 sm:pt-16 sm:pb-20">
           <div className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-tight mb-4">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 leading-tight mb-3 sm:mb-4">
               Maintenance Intelligence<br />
               <span className="text-blue-600">For Your Shop</span>
             </h1>
-            <p className="text-sm text-blue-600 font-medium mb-2">The only tool that works with Protractor — plus Tekmetric & more</p>
+            <p className="text-xs sm:text-sm text-blue-600 font-medium mb-2">The only tool that works with Protractor — plus Tekmetric & more</p>
             
-            <p className="text-xl sm:text-2xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-2">
               Stop digging. Start knowing what cars need — instantly.
             </p>
 
             <Link 
               href="/setup" 
-              className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/25"
+              className="inline-flex items-center gap-2 px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 text-white rounded-xl text-base sm:text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/25"
             >
               Start MOS Pro — $199/mo
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
-            <p className="text-sm text-gray-500 mt-3">300 VINs included</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-3">300 VINs included</p>
           </div>
         </div>
       </section>
 
       {/* Integrations Bar */}
-      <section className="py-8 bg-white border-y border-gray-100">
+      <section className="py-6 sm:py-8 bg-white border-y border-gray-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-gray-500 mb-6">Works with the tools you already use</p>
-          <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-12">
-            <div className="flex items-center gap-2 text-gray-700">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-blue-600 text-sm">P</span>
+          <p className="text-center text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">Works with the tools you already use</p>
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap justify-center items-center gap-4 sm:gap-8 md:gap-12">
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-blue-600 text-xs sm:text-sm">P</span>
               </div>
-              <span className="font-semibold">Protractor</span>
+              <span className="font-semibold text-sm sm:text-base">Protractor</span>
             </div>
-            <div className="flex items-center gap-2 text-gray-700">
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-orange-600 text-sm">T</span>
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-orange-600 text-xs sm:text-sm">T</span>
               </div>
-              <span className="font-semibold">Tekmetric</span>
+              <span className="font-semibold text-sm sm:text-base">Tekmetric</span>
             </div>
-            <div className="flex items-center gap-2 text-gray-700">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-green-600 text-sm">C</span>
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-green-600 text-xs sm:text-sm">C</span>
               </div>
-              <span className="font-semibold">CARFAX</span>
+              <span className="font-semibold text-sm sm:text-base">CARFAX</span>
             </div>
-            <div className="flex items-center gap-2 text-gray-700">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-purple-600 text-sm">A</span>
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-purple-600 text-xs sm:text-sm">A</span>
               </div>
-              <span className="font-semibold">AutoFlow</span>
+              <span className="font-semibold text-sm sm:text-base">AutoFlow</span>
             </div>
           </div>
         </div>
       </section>
 
       {/* Problem Section */}
-      <section className="py-16 bg-white">
+      <section className="py-10 sm:py-16 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gray-50 rounded-2xl p-8 sm:p-12 border border-gray-200">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-red-600" />
+          <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-5 sm:p-8 md:p-12 border border-gray-200">
+            <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4 mb-5 sm:mb-6">
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg sm:rounded-xl flex items-center justify-center">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">The Real Problem</h2>
-                <p className="text-lg text-gray-700 leading-relaxed">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">The Real Problem</h2>
+                <p className="text-base sm:text-lg text-gray-700 leading-relaxed">
                   Service Advisors spend <span className="font-semibold text-gray-900">10–15 minutes per RO</span> flipping between Protractor, job history, maintenance guides, and parts catalogs — because nothing ties it together contextually.
                 </p>
               </div>
             </div>
             
-            <div className="bg-white rounded-xl p-6 border border-gray-200">
-              <p className="text-sm text-gray-500 mb-3">Quick math owners get instantly:</p>
-              <div className="grid sm:grid-cols-3 gap-4 text-center">
+            <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-gray-200">
+              <p className="text-xs sm:text-sm text-gray-500 mb-3">Quick math owners get instantly:</p>
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
                 <div>
                   <div className="text-2xl font-bold text-gray-900">20 ROs/day</div>
                   <div className="text-sm text-gray-500">× 10 min each</div>
@@ -442,27 +442,27 @@ export default function LandingPage() {
       </section>
 
       {/* Demo CTA Section */}
-      <section className="py-16 bg-white">
+      <section className="py-10 sm:py-16 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">
             Still unsure?
           </h2>
-          <p className="text-xl text-gray-600 mb-8">
-            Book a 10-min demo — and see how MOS.Tools can save advisor time today.
+          <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8">
+            Book a 10-min demo — see how MOS.Tools saves advisor time.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             <Link 
               href="/setup" 
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/25"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 text-white rounded-xl text-base sm:text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/25"
             >
               Start MOS Pro — $199/mo
-              <ArrowRight className="w-5 h-5" />
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
             <a 
               href="mailto:support@mos.tools?subject=Demo Request"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 border-2 border-gray-200 text-gray-700 rounded-xl text-lg font-semibold hover:border-gray-300 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 sm:px-8 sm:py-4 border-2 border-gray-200 text-gray-700 rounded-xl text-base sm:text-lg font-semibold hover:border-gray-300 hover:bg-gray-50 transition-colors"
             >
-              <Calendar className="w-5 h-5" />
+              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
               Schedule a Demo
             </a>
           </div>
@@ -470,30 +470,28 @@ export default function LandingPage() {
       </section>
 
       {/* Why Section */}
-      <section className="py-12 bg-gray-50 border-t border-gray-200">
+      <section className="py-8 sm:py-12 bg-gray-50 border-t border-gray-200">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gray-600 text-lg leading-relaxed">
-            We built this because shops told us this was the #1 pain point.<br />
+          <p className="text-gray-600 text-base sm:text-lg leading-relaxed">
+            We built this because shops told us this was the #1 pain point.<br className="hidden sm:block" />
             It works with the tools you already use. No fluff — just real time savings.
           </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-10">
+      <footer className="bg-white border-t border-gray-200 py-6 sm:py-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Wrench className="w-5 h-5 text-white" />
-              </div>
+          <div className="flex flex-col items-center gap-4 sm:gap-6 md:flex-row md:justify-between">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <img src="/icon.png" alt="MOS.Tools" className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg" />
               <span className="font-bold text-gray-900">MOS.Tools</span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-gray-600">
+            <div className="flex items-center gap-4 sm:gap-6 text-sm text-gray-600">
               <Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy Policy</Link>
               <a href="mailto:support@mos.tools" className="hover:text-gray-900 transition-colors">Support</a>
             </div>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-gray-500">
               &copy; {new Date().getFullYear()} MOS.Tools. All rights reserved.
             </p>
           </div>

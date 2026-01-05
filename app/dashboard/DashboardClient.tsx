@@ -286,32 +286,33 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Car className="w-6 h-6 text-gray-600" />
-            <h1 className="text-xl font-semibold text-gray-900">Vehicles</h1>
-            <span className="text-sm text-gray-500">({pagination.totalCount} total)</span>
+      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Car className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600 flex-shrink-0" />
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Vehicles</h1>
+            <span className="text-xs sm:text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={handleToggleArchived}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                 showArchived 
                   ? 'bg-gray-800 text-white hover:bg-gray-700' 
                   : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
               }`}
             >
-              <Archive className="w-4 h-4" />
-              {showArchived ? "Showing Archived" : "Show Archived"}
+              <Archive className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">{showArchived ? "Showing Archived" : "Show Archived"}</span>
+              <span className="sm:hidden">{showArchived ? "Archived" : "Archive"}</span>
             </button>
             <button
               onClick={refreshData}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? "Refreshing..." : "Refresh"}
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
             <div className="flex items-center gap-2">
               <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
@@ -346,40 +347,40 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Car className="w-6 h-6 text-blue-600" />
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <Car className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Vehicles</p>
-                <p className="text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">DVI Complete (this page)</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">Total Vehicles</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-yellow-600" />
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-500">No DVI (this page)</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.inProgress}</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">DVI Complete (this page)</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">No DVI (this page)</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.inProgress}</p>
               </div>
             </div>
           </div>
