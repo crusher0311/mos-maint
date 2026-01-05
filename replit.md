@@ -60,41 +60,53 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     - Setup scripts: `scripts/setup-repair-patterns-indexes.ts`, `scripts/backfill-repair-patterns.ts`
     - **Type convention (Jan 2026)**: enterpriseId uses MongoDB ObjectId in database - use `toObjectId()` from `lib/object-id-utils.ts` for all queries/writes
 
-## Pending Integration: My Oil Sticker (To Discuss)
-**Status**: Planning phase - awaiting Chrome extension and admin panel uploads
+## My Oil Sticker Integration
+
+**Status**: Phase 1 Complete (Jan 2026) - Self-hosted APIs implemented
 
 **Context**: ~290 shops using standalone My Oil Sticker product. Goal is to migrate them to MOS dashboard as a separately-billable feature toggle.
 
-**My Oil Sticker Features**:
-- VIN photo extraction (Gemini AI)
-- CARFAX mileage prediction/interpolation
-- Dynamic QR codes for appointment links
-- Sticker printing (HTML-to-image), sizes: 2x2", 2x2.5", 2x3", 2x3.5"
-- Shop customization: logos, phone, tagline, colors, miles/km
+**Phase 1 - Self-Hosted APIs (COMPLETE)**:
+Replaced paid third-party APIs with free self-hosted solutions:
 
-**Tech Stack**: Express.js backend, Next.js/Chakra UI frontend, MongoDB, Stripe
+| Original (Paid) | Replacement (Free) | Status |
+|-----------------|-------------------|--------|
+| HoverCode API | `qrcode` npm package | DONE |
+| HCTI API | `node-html-to-image` | DONE |
 
-**Migration Requirements**:
-- Preserve all existing shop settings (logos, colors, preferences)
-- Maintain Chrome extension compatibility
-- Seamless user experience - "nothing changed"
-- Feature flag in platform-admin for billing
+**API Endpoints**:
+- `GET /api/sticker/redirect/[shopId]` - Dynamic QR redirect to shop appointment URL (tracks scans)
+- `GET /api/sticker/qr?size=200&format=png` - QR code image for shop
+- `POST /api/sticker/qr` - QR code as data URL (for embedding)
+- `POST /api/sticker/generate` - Generate sticker PNG (sizes: 2x2", 2x2.5", 2x3", 2x3.5")
+- `GET/PUT/DELETE /api/sticker/settings` - Manage shop sticker configuration
 
-**Cost-Saving Alternatives (Jan 2026 Discussion)**:
-Replace paid third-party APIs with free self-hosted solutions:
+**Sticker Configuration Schema** (stored in `shops.stickerConfig`):
+```typescript
+{
+  enabled: boolean,
+  logo: string,          // URL to shop logo
+  phone: string,         // Shop phone number
+  tagline: string,       // Custom tagline
+  primaryColor: string,  // Hex color
+  backgroundColor: string,
+  defaultSize: string,   // "2x2" | "2x2.5" | "2x3" | "2x3.5"
+  appointmentUrl: string,// Override redirect URL
+  useKilometers: boolean // false = miles
+}
+```
 
-| Current (Paid) | Replacement (Free) | Implementation |
-|----------------|-------------------|----------------|
-| HoverCode API (dynamic QR codes) | `qrcode` npm package | Self-hosted redirect endpoint `/api/sticker/redirect/[shopId]` makes QR codes "dynamic" - update destination in our DB, printed QR still works |
-| HCTI API (HTML-to-image) | `node-html-to-image` or Puppeteer | Self-hosted headless Chrome renders HTML templates to PNG (code partially exists in PrintController.js lines 60-84) |
+**Environment Variables**:
+- `NEXT_PUBLIC_BASE_URL` - Required for QR code generation (set in development)
 
-**Benefits**: No per-use fees, no third-party dependencies, full control over functionality.
+**Utility Functions**:
+- `lib/sticker-utils.ts`: `getBaseUrl()`, `getStickerRedirectUrl(shopId)`
 
-**Files to review** (uploaded to /tmp/uploaded-tool/):
-- Back-End-main/ - Express API
-- Front-End-main/ - Next.js dashboard
-- Chrome extension (pending upload)
-- Admin panel (pending upload)
+**Pending Phases**:
+- Phase 2: Dashboard UI (sticker preview, settings page)
+- Phase 3: Chrome extension merge (sticker tab in MOS Tools)
+- Phase 4: Billing integration (feature toggle in platform-admin)
+- Phase 5: Migration script (import existing shop settings)
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
