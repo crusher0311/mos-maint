@@ -149,16 +149,71 @@ export async function updateRepairPatternBatch(jobs: Array<{
   vin?: string;
   performedDate: Date;
 }>): Promise<number> {
-  let updated = 0;
-  for (const job of jobs) {
-    try {
-      await updateRepairPattern(job);
-      updated++;
-    } catch (err) {
-      console.error("Failed to update repair pattern:", err);
+  if (jobs.length === 0) return 0;
+  
+  const collection = await getRepairPatternsCollection();
+  const now = new Date();
+  
+  const bulkOps = jobs.map(params => {
+    const mileageBucket = getMileageBucket(params.mileage);
+    const jobTitleNormalized = normalizeJobTitle(params.jobTitle);
+    
+    const filter = {
+      shopId: params.shopId,
+      year: params.year,
+      make: params.make.toUpperCase(),
+      model: params.model.toUpperCase(),
+      mileageBucket,
+      jobTitleNormalized,
+    };
+    
+    const updateDoc: any = {
+      $set: {
+        jobTitle: params.jobTitle,
+        enterpriseId: toObjectId(params.enterpriseId),
+        updatedAt: now,
+      },
+      $inc: {
+        occurrences: 1,
+        totalLabor: params.laborAmount || 0,
+        totalParts: params.partsAmount || 0,
+        totalAmount: params.totalAmount || 0,
+      },
+      $max: {
+        lastPerformed: params.performedDate,
+      },
+      $min: {
+        firstPerformed: params.performedDate,
+      },
+      $setOnInsert: {
+        createdAt: now,
+        avgLabor: 0,
+        avgParts: 0,
+        avgTotal: 0,
+        avgHours: 0,
+      },
+    };
+    
+    if (params.vin) {
+      updateDoc.$addToSet = { vinsSeen: params.vin };
     }
+    
+    return {
+      updateOne: {
+        filter,
+        update: updateDoc,
+        upsert: true,
+      },
+    };
+  });
+  
+  try {
+    const result = await collection.bulkWrite(bulkOps, { ordered: false });
+    return result.upsertedCount + result.modifiedCount;
+  } catch (err) {
+    console.error("Bulk write error:", err);
+    return 0;
   }
-  return updated;
 }
 
 export async function getShopPatterns(params: {
