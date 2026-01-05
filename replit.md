@@ -25,6 +25,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Admin Audit Logging**: Comprehensive logging of admin actions (impersonation, unlocks, settings changes) with IP/user-agent tracking via `lib/audit-log.ts` and `/api/admin/audit-logs` endpoint.
 *   **Sync Worker Health Monitoring**: Adaptive backoff (10s-120s based on failures), health metrics every 10 cycles via `lib/sync-metrics.ts`, and sync status dashboard at `/api/admin/sync-health`.
 *   **Chrome Extension Version API**: `/api/extension/version` endpoint for client-side update enforcement (min version 1.3.0, current 1.3.1).
+*   **E2E Testing with Auth Bypass**: Automated testing infrastructure via `lib/test-auth.ts` with HMAC-signed tokens. Run tests with `npm run test:e2e`. Requires `E2E_TEST_SECRET` environment variable (16+ chars). Test utilities in `tests/e2e/`.
 *   **Distance Unit Preferences**: Shops can choose between miles or kilometers.
 *   **SMS Adapter Architecture**: An `ISMSAdapter` interface provides abstraction for shop management systems (e.g., Protractor, Tekmetric).
 *   **Normalized Data Layer (v1.9.2)**: SMS-agnostic data schema with provenance tracking, enabling shops to retain complete historical data when switching SMS systems. Key features:
