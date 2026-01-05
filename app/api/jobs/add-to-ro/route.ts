@@ -8,6 +8,7 @@ import {
   fetchWorkOrderById,
   protractorFetch 
 } from "@/lib/integrations/protractor";
+import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { workOrderGuid, job } = body as { workOrderGuid: string; job: JobPayload };
+  const { workOrderGuid, job, source, vehicle } = body as { 
+    workOrderGuid: string; 
+    job: JobPayload;
+    source?: "plan" | "failures" | "lookup" | "canned" | "autocomplete";
+    vehicle?: { vin?: string; year?: number; make?: string; model?: string };
+  };
 
   if (!workOrderGuid) {
     return NextResponse.json({ error: "Work order GUID is required" }, { status: 400 });
@@ -191,6 +197,25 @@ export async function POST(req: NextRequest) {
                           addedPackage?.ServicePackageLines?.length || 0;
   
   console.log(`[Jobs Add to RO] Success: Added "${job.title}" with ${linesInResponse} lines to WO ${workOrderGuid}`);
+
+  const totalAmount = job.lines.reduce((sum, line) => sum + (line.extendedPrice || 0), 0);
+  const laborAmount = job.lines.filter(l => l.lineType === "labor").reduce((sum, l) => sum + (l.extendedPrice || 0), 0);
+  const partsAmount = job.lines.filter(l => l.lineType === "part").reduce((sum, l) => sum + (l.extendedPrice || 0), 0);
+
+  trackPushToRO({
+    shopId,
+    userId: session.email,
+    vin: vehicle?.vin,
+    vehicleYear: vehicle?.year,
+    vehicleMake: vehicle?.make,
+    vehicleModel: vehicle?.model,
+    jobTitle: job.title,
+    jobSource: source || "lookup",
+    repairOrderId: workOrderGuid,
+    laborAmount,
+    partsAmount,
+    totalAmount,
+  }).catch(err => console.error("[Jobs Add to RO] Analytics tracking failed:", err));
 
   return NextResponse.json({
     ok: true,
