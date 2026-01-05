@@ -3,7 +3,8 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import nodeHtmlToImage from "node-html-to-image";
-import QRCode from "qrcode";
+import { QRCodeCanvas } from "@loskir/styled-qr-code-node";
+import path from "path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -195,10 +196,43 @@ export async function POST(req: NextRequest) {
     let qrDataUrl: string | null = null;
     if (includeQR) {
       const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-      qrDataUrl = await QRCode.toDataURL(redirectUrl, {
-        width: 80,
-        margin: 0,
-      });
+      const logoPath = path.join(process.cwd(), "public", "sticker-qr-logo.svg");
+      const fs = await import("fs");
+      
+      const qrConfig: any = {
+        width: 100,
+        height: 100,
+        data: redirectUrl,
+        margin: 2,
+        dotsOptions: {
+          color: "#000000",
+          type: "rounded",
+        },
+        cornersSquareOptions: {
+          color: "#000000",
+          type: "extra-rounded",
+        },
+        cornersDotOptions: {
+          color: "#000000",
+          type: "dot",
+        },
+        qrOptions: {
+          errorCorrectionLevel: "H",
+        },
+      };
+
+      if (fs.existsSync(logoPath)) {
+        qrConfig.image = logoPath;
+        qrConfig.imageOptions = {
+          hideBackgroundDots: true,
+          imageSize: 0.35,
+          margin: 2,
+        };
+      }
+
+      const qrCode = new QRCodeCanvas(qrConfig);
+      const qrBuffer = await qrCode.toBuffer("png");
+      qrDataUrl = `data:image/png;base64,${qrBuffer.toString("base64")}`;
     }
 
     const html = generateStickerHtml(config, body, qrDataUrl, dimensions);
