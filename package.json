@@ -9,6 +9,7 @@
     "lint": "eslint",
     "vercel-build": "next build",
     "test:e2e": "tsx tests/e2e/example.test.ts",
+    "test:e2e:full": "tsx tests/e2e/full-suite.test.ts",
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
     "migrate:shopid": "tsx scripts/migrate-shopid-to-numbers.ts",
     "setup:dev": "cp .env.template .env.local && echo 'Please edit .env.local with your configuration'",
