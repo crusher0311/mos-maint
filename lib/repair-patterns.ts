@@ -1,5 +1,6 @@
 import { getDb } from "./mongo";
 import { Collection, ObjectId } from "mongodb";
+import { toObjectId } from "./object-id-utils";
 
 export interface RepairPattern {
   _id?: ObjectId;
@@ -87,7 +88,7 @@ export async function updateRepairPattern(params: {
   const updateDoc: any = {
     $set: {
       jobTitle: params.jobTitle,
-      enterpriseId: params.enterpriseId ? new ObjectId(params.enterpriseId) : undefined,
+      enterpriseId: toObjectId(params.enterpriseId),
       updatedAt: now,
     },
     $inc: {
@@ -177,7 +178,7 @@ export async function getShopPatterns(params: {
   const buckets = [mileageBucket - 5, mileageBucket, mileageBucket + 5].filter(b => b >= 0);
 
   const shopFilter: any = params.includeEnterprise && params.enterpriseId
-    ? { enterpriseId: new ObjectId(params.enterpriseId) }
+    ? { enterpriseId: toObjectId(params.enterpriseId) }
     : { shopId: params.shopId };
 
   const patterns = await collection.find({
@@ -222,7 +223,7 @@ export async function getEnterprisePatterns(params: {
   const pipeline = [
     {
       $match: {
-        enterpriseId: new ObjectId(params.enterpriseId),
+        enterpriseId: toObjectId(params.enterpriseId),
         year: params.year,
         make: params.make.toUpperCase(),
         model: params.model.toUpperCase(),
