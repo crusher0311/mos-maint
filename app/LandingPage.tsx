@@ -61,7 +61,7 @@ export default function LandingPage() {
               Maintenance Intelligence<br />
               <span className="text-blue-600">For Your Shop</span>
             </h1>
-            <p className="text-sm text-blue-600 font-medium mb-2">The only tool that works with Protractor — plus Tekmetric, CARFAX & more</p>
+            <p className="text-sm text-blue-600 font-medium mb-2">The only tool that works with Protractor — plus Tekmetric & more</p>
             
             <p className="text-xl sm:text-2xl text-gray-600 mb-8 max-w-2xl mx-auto">
               Stop digging. Start knowing what cars need — instantly.
