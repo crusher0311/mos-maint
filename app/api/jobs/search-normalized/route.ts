@@ -239,11 +239,11 @@ export async function GET(req: NextRequest) {
     
     if (!cachedEnterpriseShops) {
       const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
-      const enterpriseId = shop?.enterpriseId ? Number(shop.enterpriseId) : undefined;
+      const enterpriseId = shop?.enterpriseId as string | undefined;
       
       if (enterpriseId) {
         const enterpriseShops = await db.collection("shops")
-          .find({ enterpriseId: String(enterpriseId) })
+          .find({ enterpriseId })
           .toArray();
         cachedEnterpriseShops = enterpriseShops.map(s => Number(s.shopId));
         cache.set(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey, cachedEnterpriseShops, CACHE_TTL.LONG);
