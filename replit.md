@@ -54,10 +54,11 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach. Features:
     - Pre-computed `shop_repair_patterns` collection with aggregated repair data by year/make/model/mileage bucket
     - Pattern updates during sync/backfill via `dualWriteToRepairPatterns` option
-    - Enterprise aggregation pools patterns across multiple shop locations
+    - Enterprise aggregation pools patterns across multiple shop locations (uses MongoDB ObjectId for enterpriseId)
     - Only calls AI when shop has fewer than 3 qualifying patterns (2+ occurrences each)
     - Shows data source badge: "Your Data" (shop patterns), "Mixed" (hybrid), or "AI"
     - Setup scripts: `scripts/setup-repair-patterns-indexes.ts`, `scripts/backfill-repair-patterns.ts`
+    - **Type note (Jan 2026)**: enterpriseId uses MongoDB ObjectId type throughout - queries must use `new ObjectId(stringId)` to match
 
 ## Pending Integration: My Oil Sticker (To Discuss)
 **Status**: Planning phase - awaiting Chrome extension and admin panel uploads
