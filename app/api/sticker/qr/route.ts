@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { QRCodeCanvas } from "@loskir/styled-qr-code-node";
+import QRCode from "qrcode";
+import { createCanvas, loadImage } from "canvas";
 import { getSession } from "@/lib/auth";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import path from "path";
+import fs from "fs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.svg");
+const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.png");
 
 interface QROptions {
   size?: number;
-  format?: "png" | "svg";
-  dotStyle?: "rounded" | "dots" | "classy" | "classy-rounded" | "square" | "extra-rounded";
-  cornerStyle?: "square" | "dot" | "extra-rounded";
   color?: string;
   backgroundColor?: string;
   includeLogo?: boolean;
@@ -25,56 +24,53 @@ async function generateStyledQR(
 ): Promise<Buffer> {
   const {
     size = 300,
-    dotStyle = "rounded",
-    cornerStyle = "extra-rounded",
     color = "#000000",
     backgroundColor = "#ffffff",
     includeLogo = true,
   } = options;
 
-  const qrConfig: any = {
-    width: size,
-    height: size,
-    data: url,
-    margin: 10,
-    dotsOptions: {
-      color: color,
-      type: dotStyle,
-    },
-    backgroundOptions: {
-      color: backgroundColor,
-    },
-    cornersSquareOptions: {
-      color: color,
-      type: cornerStyle,
-    },
-    cornersDotOptions: {
-      color: color,
-      type: "dot",
-    },
-    qrOptions: {
-      errorCorrectionLevel: "H",
-    },
-  };
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext("2d");
 
-  if (includeLogo) {
+  ctx.fillStyle = backgroundColor;
+  ctx.fillRect(0, 0, size, size);
+
+  const qrDataUrl = await QRCode.toDataURL(url, {
+    width: size,
+    margin: 1,
+    color: { dark: color, light: backgroundColor },
+    errorCorrectionLevel: "H",
+  });
+
+  const qrImage = await loadImage(qrDataUrl);
+  ctx.drawImage(qrImage, 0, 0, size, size);
+
+  if (includeLogo && fs.existsSync(DEFAULT_LOGO_PATH)) {
     try {
-      const fs = await import("fs");
-      if (fs.existsSync(DEFAULT_LOGO_PATH)) {
-        qrConfig.image = DEFAULT_LOGO_PATH;
-        qrConfig.imageOptions = {
-          hideBackgroundDots: true,
-          imageSize: 0.4,
-          margin: 5,
-        };
-      }
-    } catch {
-      // Logo not found, continue without it
+      const logo = await loadImage(DEFAULT_LOGO_PATH);
+      const logoSize = size * 0.25;
+      const logoX = (size - logoSize) / 2;
+      const logoY = (size - logoSize) / 2;
+
+      const padding = logoSize * 0.15;
+      ctx.fillStyle = backgroundColor;
+      ctx.beginPath();
+      ctx.roundRect(
+        logoX - padding,
+        logoY - padding,
+        logoSize + padding * 2,
+        logoSize + padding * 2,
+        8
+      );
+      ctx.fill();
+
+      ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+    } catch (err) {
+      console.error("[Sticker QR] Logo loading failed:", err);
     }
   }
 
-  const qrCode = new QRCodeCanvas(qrConfig);
-  return await qrCode.toBuffer("png");
+  return canvas.toBuffer("image/png");
 }
 
 export async function GET(req: NextRequest) {
@@ -90,7 +86,6 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const size = parseInt(searchParams.get("size") || "300", 10);
-  const dotStyle = (searchParams.get("dotStyle") || "rounded") as QROptions["dotStyle"];
   const color = searchParams.get("color") || "#000000";
   const backgroundColor = searchParams.get("backgroundColor") || "#ffffff";
   const includeLogo = searchParams.get("includeLogo") !== "false";
@@ -100,7 +95,6 @@ export async function GET(req: NextRequest) {
 
     const pngBuffer = await generateStyledQR(redirectUrl, {
       size,
-      dotStyle,
       color,
       backgroundColor,
       includeLogo,
@@ -134,7 +128,6 @@ export async function POST(req: NextRequest) {
     const {
       customUrl,
       size = 300,
-      dotStyle = "rounded",
       color = "#000000",
       backgroundColor = "#ffffff",
       includeLogo = true,
@@ -144,7 +137,6 @@ export async function POST(req: NextRequest) {
 
     const pngBuffer = await generateStyledQR(redirectUrl, {
       size,
-      dotStyle,
       color,
       backgroundColor,
       includeLogo,
