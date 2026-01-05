@@ -49,9 +49,9 @@ import { createHash } from 'crypto';
 export interface INormalizedAdapter {
   sourceSystem: SourceSystem;
   
-  mapVehicle(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedVehicle>;
-  mapCustomer(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedCustomer>;
-  mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedWorkOrder>;
+  mapVehicle(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedVehicle>;
+  mapCustomer(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedCustomer>;
+  mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedWorkOrder>;
   mapServiceJob(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedServiceJob>;
   mapLineItem(shopId: number, workOrderId: string, serviceJobId: string, sourceData: any): Partial<NormalizedLineItem>;
   mapPayment(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedPayment>;
@@ -168,7 +168,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
     return ids;
   }
   
-  mapVehicle(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedVehicle> {
+  mapVehicle(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedVehicle> {
     const si = sourceData.ServiceItem || sourceData;
     
     return {
@@ -196,7 +196,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
     };
   }
   
-  mapCustomer(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedCustomer> {
+  mapCustomer(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedCustomer> {
     const c = sourceData.Customer || sourceData;
     
     const firstName = cleanString(c.FirstName);
@@ -226,7 +226,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
     };
   }
   
-  mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedWorkOrder> {
+  mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedWorkOrder> {
     const inv = sourceData;
     const vehicle = this.extractVehicleFromWorkOrder(inv);
     const customer = this.extractCustomerFromWorkOrder(inv);
@@ -722,7 +722,7 @@ export class TekmetricAdapter implements INormalizedAdapter {
     return ids;
   }
   
-  mapVehicle(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedVehicle> {
+  mapVehicle(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedVehicle> {
     const v = sourceData.vehicle || sourceData;
     
     return {
@@ -752,7 +752,7 @@ export class TekmetricAdapter implements INormalizedAdapter {
     };
   }
   
-  mapCustomer(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedCustomer> {
+  mapCustomer(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedCustomer> {
     const c = sourceData.customer || sourceData;
     
     const firstName = cleanString(c.firstName);
@@ -781,7 +781,7 @@ export class TekmetricAdapter implements INormalizedAdapter {
     };
   }
   
-  mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: number): Partial<NormalizedWorkOrder> {
+  mapWorkOrder(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedWorkOrder> {
     const ro = sourceData;
     const vehicle = this.extractVehicleFromWorkOrder(ro);
     const customer = this.extractCustomerFromWorkOrder(ro);

@@ -69,14 +69,14 @@ export class NormalizedIngestionService {
   private db: Db;
   private adapter: INormalizedAdapter;
   private shopId: number;
-  private enterpriseId?: number;
+  private enterpriseId?: string;
   private options: IngestionOptions;
   
   constructor(
     db: Db,
     sourceSystem: SourceSystem,
     shopId: number,
-    enterpriseId?: number,
+    enterpriseId?: string,
     options: IngestionOptions = {}
   ) {
     const adapter = getAdapter(sourceSystem);
@@ -1323,7 +1323,7 @@ export function createIngestionService(
   db: Db,
   sourceSystem: SourceSystem,
   shopId: number,
-  enterpriseId?: number,
+  enterpriseId?: string,
   options?: IngestionOptions
 ): NormalizedIngestionService {
   return new NormalizedIngestionService(db, sourceSystem, shopId, enterpriseId, options);
