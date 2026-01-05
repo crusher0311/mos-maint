@@ -16,7 +16,6 @@
     "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\""
   },
   "dependencies": {
-    "@loskir/styled-qr-code-node": "^1.5.2",
     "@types/archiver": "^7.0.0",
     "@types/qrcode": "^1.5.6",
     "archiver": "^7.0.1",

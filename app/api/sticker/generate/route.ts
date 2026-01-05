@@ -3,8 +3,10 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import nodeHtmlToImage from "node-html-to-image";
-import { QRCodeCanvas } from "@loskir/styled-qr-code-node";
+import QRCode from "qrcode";
+import { createCanvas, loadImage } from "canvas";
 import path from "path";
+import fs from "fs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -196,43 +198,44 @@ export async function POST(req: NextRequest) {
     let qrDataUrl: string | null = null;
     if (includeQR) {
       const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-      const logoPath = path.join(process.cwd(), "public", "sticker-qr-logo.svg");
-      const fs = await import("fs");
-      
-      const qrConfig: any = {
-        width: 100,
-        height: 100,
-        data: redirectUrl,
-        margin: 2,
-        dotsOptions: {
-          color: "#000000",
-          type: "rounded",
-        },
-        cornersSquareOptions: {
-          color: "#000000",
-          type: "extra-rounded",
-        },
-        cornersDotOptions: {
-          color: "#000000",
-          type: "dot",
-        },
-        qrOptions: {
-          errorCorrectionLevel: "H",
-        },
-      };
+      const logoPath = path.join(process.cwd(), "public", "sticker-qr-logo.png");
+      const qrSize = 100;
+
+      const canvas = createCanvas(qrSize, qrSize);
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, qrSize, qrSize);
+
+      const baseQr = await QRCode.toDataURL(redirectUrl, {
+        width: qrSize,
+        margin: 1,
+        color: { dark: "#000000", light: "#ffffff" },
+        errorCorrectionLevel: "H",
+      });
+
+      const qrImage = await loadImage(baseQr);
+      ctx.drawImage(qrImage, 0, 0, qrSize, qrSize);
 
       if (fs.existsSync(logoPath)) {
-        qrConfig.image = logoPath;
-        qrConfig.imageOptions = {
-          hideBackgroundDots: true,
-          imageSize: 0.35,
-          margin: 2,
-        };
+        try {
+          const logo = await loadImage(logoPath);
+          const logoSize = qrSize * 0.25;
+          const logoX = (qrSize - logoSize) / 2;
+          const logoY = (qrSize - logoSize) / 2;
+          const padding = logoSize * 0.15;
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.roundRect(logoX - padding, logoY - padding, logoSize + padding * 2, logoSize + padding * 2, 4);
+          ctx.fill();
+          ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+        } catch (err) {
+          console.error("[Sticker Generate] Logo loading failed:", err);
+        }
       }
 
-      const qrCode = new QRCodeCanvas(qrConfig);
-      const qrBuffer = await qrCode.toBuffer("png");
-      qrDataUrl = `data:image/png;base64,${qrBuffer.toString("base64")}`;
+      const buffer = canvas.toBuffer("image/png");
+      qrDataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
     }
 
     const html = generateStickerHtml(config, body, qrDataUrl, dimensions);
