@@ -76,10 +76,19 @@ Replaced paid third-party APIs with free self-hosted solutions:
 
 **API Endpoints**:
 - `GET /api/sticker/redirect/[shopId]` - Dynamic QR redirect to shop appointment URL (tracks scans)
-- `GET /api/sticker/qr?size=200&format=png` - QR code image for shop
-- `POST /api/sticker/qr` - QR code as data URL (for embedding)
+- `GET /api/sticker/qr?size=300&dotStyle=rounded&color=%23000000` - Styled QR code with logo overlay
+- `POST /api/sticker/qr` - Styled QR code as data URL (for embedding)
 - `POST /api/sticker/generate` - Generate sticker PNG (sizes: 2x2", 2x2.5", 2x3", 2x3.5")
 - `GET/PUT/DELETE /api/sticker/settings` - Manage shop sticker configuration
+
+**Styled QR Code Options** (GET params or POST body):
+- `size` - Pixel dimensions (default: 300)
+- `dotStyle` - "rounded" | "dots" | "classy" | "classy-rounded" | "square" | "extra-rounded"
+- `color` - Hex color for QR dots (default: #000000)
+- `backgroundColor` - Hex background color (default: #ffffff)
+- `includeLogo` - Include center logo overlay (default: true)
+
+**Default Logo**: `public/sticker-qr-logo.svg` - Calendar+wrench icon matching HoverCode style
 
 **Sticker Configuration Schema** (stored in `shops.stickerConfig`):
 ```typescript
