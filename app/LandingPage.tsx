@@ -59,8 +59,9 @@ export default function LandingPage() {
           <div className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-tight mb-4">
               Maintenance Intelligence<br />
-              <span className="text-blue-600">Built for Protractor Shops</span>
+              <span className="text-blue-600">For Your Shop</span>
             </h1>
+            <p className="text-sm text-blue-600 font-medium mb-2">The only tool that works with Protractor — plus Tekmetric, CARFAX & more</p>
             
             <p className="text-xl sm:text-2xl text-gray-600 mb-8 max-w-2xl mx-auto">
               Stop digging. Start knowing what cars need — instantly.
