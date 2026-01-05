@@ -68,8 +68,8 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 **My Oil Sticker Features**:
 - VIN photo extraction (Gemini AI)
 - CARFAX mileage prediction/interpolation
-- Dynamic QR codes for appointment links (HoverCode API)
-- Sticker printing (HTML-to-image via HCTI API), sizes: 2x2", 2x2.5", 2x3", 2x3.5"
+- Dynamic QR codes for appointment links
+- Sticker printing (HTML-to-image), sizes: 2x2", 2x2.5", 2x3", 2x3.5"
 - Shop customization: logos, phone, tagline, colors, miles/km
 
 **Tech Stack**: Express.js backend, Next.js/Chakra UI frontend, MongoDB, Stripe
@@ -79,6 +79,16 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 - Maintain Chrome extension compatibility
 - Seamless user experience - "nothing changed"
 - Feature flag in platform-admin for billing
+
+**Cost-Saving Alternatives (Jan 2026 Discussion)**:
+Replace paid third-party APIs with free self-hosted solutions:
+
+| Current (Paid) | Replacement (Free) | Implementation |
+|----------------|-------------------|----------------|
+| HoverCode API (dynamic QR codes) | `qrcode` npm package | Self-hosted redirect endpoint `/api/sticker/redirect/[shopId]` makes QR codes "dynamic" - update destination in our DB, printed QR still works |
+| HCTI API (HTML-to-image) | `node-html-to-image` or Puppeteer | Self-hosted headless Chrome renders HTML templates to PNG (code partially exists in PrintController.js lines 60-84) |
+
+**Benefits**: No per-use fees, no third-party dependencies, full control over functionality.
 
 **Files to review** (uploaded to /tmp/uploaded-tool/):
 - Back-End-main/ - Express API
