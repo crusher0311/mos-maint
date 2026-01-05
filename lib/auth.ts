@@ -1,9 +1,9 @@
 // lib/auth.ts
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/mongo";
-import { ENV } from "@/lib/env";
+import { getTestAuthFromHeaders, isTestAuthEnabled } from "@/lib/test-auth";
 
 export const SESSION_COOKIE = "session_token";
 
@@ -13,9 +13,26 @@ export type SessionInfo = {
   email: string;
   role: string;
   isPlatformAdmin?: boolean;
+  isTestAuth?: boolean;
 };
 
 export async function getSession(): Promise<SessionInfo | null> {
+  // E2E Test Auth Bypass - check header first
+  if (isTestAuthEnabled()) {
+    const hdrs = await headers();
+    const testAuth = getTestAuthFromHeaders(hdrs);
+    if (testAuth) {
+      return {
+        token: "e2e-test-auth",
+        shopId: testAuth.shopId,
+        email: testAuth.email,
+        role: testAuth.role,
+        isPlatformAdmin: testAuth.isPlatformAdmin,
+        isTestAuth: true,
+      };
+    }
+  }
+
   // ✅ Next.js 15: await cookies()
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;

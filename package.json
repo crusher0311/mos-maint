@@ -8,6 +8,7 @@
     "start": "next start -p ${PORT:-5000} -H 0.0.0.0",
     "lint": "eslint",
     "vercel-build": "next build",
+    "test:e2e": "tsx tests/e2e/example.test.ts",
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
     "migrate:shopid": "tsx scripts/migrate-shopid-to-numbers.ts",
     "setup:dev": "cp .env.template .env.local && echo 'Please edit .env.local with your configuration'",
