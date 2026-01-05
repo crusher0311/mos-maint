@@ -157,10 +157,10 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between text-sm text-gray-500 pb-2 border-b">
-        <span>@ {result.vehicle.mileage.toLocaleString()} miles</span>
-        <div className="flex items-center gap-2">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 pb-2 border-b">
+        <span>@ {result.vehicle.mileage.toLocaleString()} mi</span>
+        <div className="flex items-center gap-1 sm:gap-2">
           {result.dataSource === "shop_patterns" && (
             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
               Your Data
@@ -190,26 +190,26 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
         result.failures.map((failure, index) => (
           <div
             key={`${failure.repair}-${index}`}
-            className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+            className="bg-gray-50 rounded-lg p-3 sm:p-4 border border-gray-200"
           >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="font-medium text-gray-900">{failure.repair}</h3>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2 mb-2">
+              <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                <h3 className="font-medium text-gray-900 text-sm sm:text-base">{failure.repair}</h3>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getUrgencyColor(
+                  className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium border ${getUrgencyColor(
                     failure.urgency
                   )}`}
                 >
                   {failure.urgency.charAt(0).toUpperCase() + failure.urgency.slice(1)}
                 </span>
               </div>
-              <div className="text-right text-sm">
-                <div className="text-gray-500">Typical</div>
-                <div className="font-medium text-gray-900">{failure.estimatedCostRange}</div>
+              <div className="text-left sm:text-right text-xs sm:text-sm">
+                <span className="text-gray-500 sm:block">Typical: </span>
+                <span className="font-medium text-gray-900">{failure.estimatedCostRange}</span>
               </div>
             </div>
 
-            <p className="text-sm text-gray-600 mb-2">{failure.description}</p>
+            <p className="text-xs sm:text-sm text-gray-600 mb-2">{failure.description}</p>
 
             <div className="text-xs text-gray-500 mb-2">
               Range: {failure.typicalMileageRange}
