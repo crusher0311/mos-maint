@@ -59,6 +59,32 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     - Shows data source badge: "Your Data" (shop patterns), "Mixed" (hybrid), or "AI"
     - Setup scripts: `scripts/setup-repair-patterns-indexes.ts`, `scripts/backfill-repair-patterns.ts`
 
+## Pending Integration: My Oil Sticker (To Discuss)
+**Status**: Planning phase - awaiting Chrome extension and admin panel uploads
+
+**Context**: ~290 shops using standalone My Oil Sticker product. Goal is to migrate them to MOS dashboard as a separately-billable feature toggle.
+
+**My Oil Sticker Features**:
+- VIN photo extraction (Gemini AI)
+- CARFAX mileage prediction/interpolation
+- Dynamic QR codes for appointment links (HoverCode API)
+- Sticker printing (HTML-to-image via HCTI API), sizes: 2x2", 2x2.5", 2x3", 2x3.5"
+- Shop customization: logos, phone, tagline, colors, miles/km
+
+**Tech Stack**: Express.js backend, Next.js/Chakra UI frontend, MongoDB, Stripe
+
+**Migration Requirements**:
+- Preserve all existing shop settings (logos, colors, preferences)
+- Maintain Chrome extension compatibility
+- Seamless user experience - "nothing changed"
+- Feature flag in platform-admin for billing
+
+**Files to review** (uploaded to /tmp/uploaded-tool/):
+- Back-End-main/ - Express API
+- Front-End-main/ - Next.js dashboard
+- Chrome extension (pending upload)
+- Admin panel (pending upload)
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
