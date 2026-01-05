@@ -236,7 +236,7 @@ export async function GET(req: NextRequest) {
           
           if (workOrdersForNormalized.length > 0) {
             const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
-            const enterpriseId = shop?.enterpriseId ? Number(shop.enterpriseId) : undefined;
+            const enterpriseId = shop?.enterpriseId as string | undefined;
             
             const ingestionService = new NormalizedIngestionService(
               db,
