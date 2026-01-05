@@ -43,7 +43,7 @@ export interface PatternMatch {
 const COLLECTION_NAME = "shop_repair_patterns";
 
 function getMileageBucket(mileage: number): number {
-  return Math.floor(mileage / 5000) * 5;
+  return Math.floor(mileage / 5000) * 5000;
 }
 
 function normalizeJobTitle(title: string): string {
@@ -230,7 +230,7 @@ export async function getShopPatterns(params: {
   const mileageBucket = getMileageBucket(params.mileage);
   
   // Search current bucket and adjacent buckets (±1 bucket = ±5k miles)
-  const buckets = [mileageBucket - 5, mileageBucket, mileageBucket + 5].filter(b => b >= 0);
+  const buckets = [mileageBucket - 5000, mileageBucket, mileageBucket + 5000].filter(b => b >= 0);
 
   const shopFilter: any = params.includeEnterprise && params.enterpriseId
     ? { enterpriseId: toObjectId(params.enterpriseId) }
@@ -272,7 +272,7 @@ export async function getEnterprisePatterns(params: {
 }): Promise<PatternMatch[]> {
   const collection = await getRepairPatternsCollection();
   const mileageBucket = getMileageBucket(params.mileage);
-  const buckets = [mileageBucket - 5, mileageBucket, mileageBucket + 5].filter(b => b >= 0);
+  const buckets = [mileageBucket - 5000, mileageBucket, mileageBucket + 5000].filter(b => b >= 0);
 
   // Aggregate across all enterprise shops
   const pipeline = [
