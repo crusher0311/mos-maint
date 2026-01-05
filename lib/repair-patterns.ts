@@ -87,7 +87,7 @@ export async function updateRepairPattern(params: {
   const updateDoc: any = {
     $set: {
       jobTitle: params.jobTitle,
-      enterpriseId: params.enterpriseId,
+      enterpriseId: params.enterpriseId ? new ObjectId(params.enterpriseId) : undefined,
       updatedAt: now,
     },
     $inc: {
@@ -177,7 +177,7 @@ export async function getShopPatterns(params: {
   const buckets = [mileageBucket - 5, mileageBucket, mileageBucket + 5].filter(b => b >= 0);
 
   const shopFilter: any = params.includeEnterprise && params.enterpriseId
-    ? { enterpriseId: params.enterpriseId }
+    ? { enterpriseId: new ObjectId(params.enterpriseId) }
     : { shopId: params.shopId };
 
   const patterns = await collection.find({
@@ -222,7 +222,7 @@ export async function getEnterprisePatterns(params: {
   const pipeline = [
     {
       $match: {
-        enterpriseId: params.enterpriseId,
+        enterpriseId: new ObjectId(params.enterpriseId),
         year: params.year,
         make: params.make.toUpperCase(),
         model: params.model.toUpperCase(),
