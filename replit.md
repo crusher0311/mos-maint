@@ -58,7 +58,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     - Only calls AI when shop has fewer than 3 qualifying patterns (2+ occurrences each)
     - Shows data source badge: "Your Data" (shop patterns), "Mixed" (hybrid), or "AI"
     - Setup scripts: `scripts/setup-repair-patterns-indexes.ts`, `scripts/backfill-repair-patterns.ts`
-    - **Type note (Jan 2026)**: enterpriseId uses MongoDB ObjectId type throughout - queries must use `new ObjectId(stringId)` to match
+    - **Type convention (Jan 2026)**: enterpriseId uses MongoDB ObjectId in database - use `toObjectId()` from `lib/object-id-utils.ts` for all queries/writes
 
 ## Pending Integration: My Oil Sticker (To Discuss)
 **Status**: Planning phase - awaiting Chrome extension and admin panel uploads
