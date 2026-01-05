@@ -141,11 +141,11 @@ export async function getCommonFailures(
   
   // Step 1: Check shop's own repair patterns first
   let shopPatterns: PatternMatch[] = [];
-  let enterpriseId: number | undefined;
+  let enterpriseId: string | undefined;
   
   if (shopIds.length > 0) {
     const shop = await db.collection("shops").findOne({ shopId: String(shopIds[0]) });
-    enterpriseId = shop?.enterpriseId ? Number(shop.enterpriseId) : undefined;
+    enterpriseId = shop?.enterpriseId || undefined;
     
     if (enterpriseId && shopIds.length > 1) {
       // Enterprise: aggregate patterns across all locations

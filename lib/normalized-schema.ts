@@ -334,7 +334,7 @@ export interface SoftDelete {
 
 export interface BaseEntity {
   _id: string;
-  enterpriseId?: number;
+  enterpriseId?: string; // MongoDB ObjectId string
   shopId: number;
   locationId?: string;
   provenance: Provenance;

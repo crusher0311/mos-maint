@@ -4,7 +4,7 @@ import { Collection, ObjectId } from "mongodb";
 export interface RepairPattern {
   _id?: ObjectId;
   shopId: number;
-  enterpriseId?: number;
+  enterpriseId?: string; // MongoDB ObjectId string
   year: number;
   make: string;
   model: string;
@@ -56,7 +56,7 @@ export async function getRepairPatternsCollection(): Promise<Collection<RepairPa
 
 export async function updateRepairPattern(params: {
   shopId: number;
-  enterpriseId?: number;
+  enterpriseId?: string;
   year: number;
   make: string;
   model: string;
@@ -135,7 +135,7 @@ export async function updateRepairPattern(params: {
 
 export async function updateRepairPatternBatch(jobs: Array<{
   shopId: number;
-  enterpriseId?: number;
+  enterpriseId?: string;
   year: number;
   make: string;
   model: string;
@@ -162,7 +162,7 @@ export async function updateRepairPatternBatch(jobs: Array<{
 
 export async function getShopPatterns(params: {
   shopId: number;
-  enterpriseId?: number;
+  enterpriseId?: string;
   year: number;
   make: string;
   model: string;
@@ -207,7 +207,7 @@ export async function getShopPatterns(params: {
 }
 
 export async function getEnterprisePatterns(params: {
-  enterpriseId: number;
+  enterpriseId: string;
   year: number;
   make: string;
   model: string;
