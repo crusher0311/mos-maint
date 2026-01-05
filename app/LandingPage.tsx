@@ -247,6 +247,37 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Common Failures Advisor</h3>
+                  <p className="text-gray-600">
+                    Predict common repairs using <span className="font-semibold text-green-700">your own shop data</span> — not generic AI guesses. See what 2018 Accords with 80k miles actually need based on your repair history.
+                  </p>
+                  <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                    🏷️ "Your Data" Badge
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Smart Job Autocomplete</h3>
+                  <p className="text-gray-600">
+                    As-you-type suggestions with historical labor hours and pricing from your shop. Prioritizes vehicle-specific matches.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -281,8 +312,55 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Enterprise Section */}
+      <section className="py-16 bg-white border-t border-gray-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-medium mb-4">
+              Multi-Location Support
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Built for Enterprise</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Running multiple locations? MOS.Tools gives you enterprise-wide visibility with location-specific control.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-purple-50 rounded-xl p-6 border border-purple-100 text-center">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Cross-Location Search</h3>
+              <p className="text-sm text-gray-600">Find jobs across all your shops. See which location did the work.</p>
+            </div>
+            
+            <div className="bg-purple-50 rounded-xl p-6 border border-purple-100 text-center">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Pooled Repair Data</h3>
+              <p className="text-sm text-gray-600">Common Failures draws from all locations — more data, better predictions.</p>
+            </div>
+            
+            <div className="bg-purple-50 rounded-xl p-6 border border-purple-100 text-center">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Switch SMS Anytime</h3>
+              <p className="text-sm text-gray-600">Move from Protractor to Tekmetric? Your complete job history stays with you.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pricing Section */}
-      <section className="py-16 bg-white">
+      <section className="py-16 bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-4">Simple Pricing</h2>
           <p className="text-center text-gray-600 mb-12">No long contracts — cancel anytime</p>
