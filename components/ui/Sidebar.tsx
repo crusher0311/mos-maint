@@ -23,7 +23,8 @@ import {
   Check,
   BarChart3,
   LogOut,
-  RefreshCw
+  RefreshCw,
+  X
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -53,9 +54,10 @@ interface SidebarProps {
   currentShopId?: number;
   enterpriseId?: string | null;
   enabledFeatures?: string[];
+  onClose?: () => void;
 }
 
-export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"] }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
@@ -198,6 +200,15 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
 
   return (
     <aside className="w-64 min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
+      {/* Mobile close button */}
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="lg:hidden absolute top-3 right-3 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg z-10"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
       <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
