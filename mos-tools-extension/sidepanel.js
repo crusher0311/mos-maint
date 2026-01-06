@@ -1088,9 +1088,16 @@ let stickerConfig = null;
 
 async function loadStickerConfig() {
   try {
+    // Build endpoint with shop context if available
+    let endpoint = '/api/extension/sticker';
+    if (currentContext && currentContext.shopId) {
+      const provider = currentContext.provider || 'tekmetric';
+      endpoint += `?shopId=${currentContext.shopId}&provider=${provider}`;
+    }
+    
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: '/api/extension/sticker'
+      endpoint
     });
     
     if (result.error) {
@@ -1148,6 +1155,12 @@ async function handleStickerPrint() {
       intervalType,
       unit
     };
+    
+    // Add shop context if available
+    if (currentContext && currentContext.shopId) {
+      body.smsShopId = currentContext.shopId;
+      body.provider = currentContext.provider || 'tekmetric';
+    }
     
     if (intervalType === 'custom') {
       body.customMonths = parseInt(elements.customMonths.value, 10) || 6;

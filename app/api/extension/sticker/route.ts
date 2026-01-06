@@ -334,6 +334,57 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
+async function resolveMosShopId(
+  db: any,
+  authResult: any,
+  smsShopId?: string | null,
+  provider?: string | null
+): Promise<{ mosShopId: number | null; shop: any }> {
+  const isPlatformAdmin = authResult.user?.role === "platform_admin";
+  const userShopIds = [
+    ...(authResult.user?.shopId ? [Number(authResult.user.shopId)] : []),
+    ...(authResult.user?.shopIds || []).map((id: any) => Number(id)),
+  ];
+
+  if (smsShopId && provider === "tekmetric") {
+    const tekShopIdNum = parseInt(smsShopId);
+    const tekShopIdStr = String(smsShopId);
+    const query: any = {
+      $or: [
+        { "tekmetric.shopId": tekShopIdNum },
+        { "tekmetric.shopId": tekShopIdStr },
+        { tekmetricShopId: tekShopIdNum },
+        { tekmetricShopId: tekShopIdStr },
+      ],
+    };
+    if (!isPlatformAdmin) {
+      query.shopId = { $in: userShopIds };
+    }
+    const shop = await db.collection("shops").findOne(query);
+    if (shop) {
+      console.log(`[Extension Sticker] Found MOS shop ${shop.shopId} for Tekmetric shop ${smsShopId}`);
+      return { mosShopId: shop.shopId, shop };
+    }
+  } else if (smsShopId && provider === "protractor") {
+    const query: any = { "protractor.connectionId": smsShopId };
+    if (!isPlatformAdmin) {
+      query.shopId = { $in: userShopIds };
+    }
+    const shop = await db.collection("shops").findOne(query);
+    if (shop) {
+      return { mosShopId: shop.shopId, shop };
+    }
+  }
+
+  // Fallback to user's primary shop
+  if (authResult.user?.shopId) {
+    const shop = await db.collection("shops").findOne({ shopId: Number(authResult.user.shopId) });
+    return { mosShopId: shop?.shopId || null, shop };
+  }
+
+  return { mosShopId: null, shop: null };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const authResult = await validateExtensionToken(request);
@@ -344,9 +395,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const shopId = Number(authResult.user.shopId);
+    const searchParams = request.nextUrl.searchParams;
+    const smsShopId = searchParams.get("shopId");
+    const provider = searchParams.get("provider") || "tekmetric";
+
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const { mosShopId, shop } = await resolveMosShopId(db, authResult, smsShopId, provider);
 
     if (!shop) {
       return NextResponse.json(
@@ -391,7 +445,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const shopId = Number(authResult.user.shopId);
     const body = await request.json();
     const {
       currentMileage,
@@ -399,6 +452,8 @@ export async function POST(request: NextRequest) {
       customMileage,
       customMonths,
       unit = "mi",
+      smsShopId,
+      provider = "tekmetric",
     } = body;
 
     if (!currentMileage || currentMileage <= 0) {
@@ -409,7 +464,7 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const { mosShopId, shop } = await resolveMosShopId(db, authResult, smsShopId, provider);
 
     if (!shop) {
       return NextResponse.json(
@@ -455,7 +510,7 @@ export async function POST(request: NextRequest) {
     const configWithLogo = { ...stickerConfig, logo: logoDataUrl || undefined };
 
     let qrDataUrl: string | null = null;
-    const redirectUrl = stickerConfig.appointmentUrl || getStickerRedirectUrl(shopId);
+    const redirectUrl = stickerConfig.appointmentUrl || getStickerRedirectUrl(mosShopId!);
     const qrColor = stickerConfig.colors?.primary || "#1976d2";
 
     if (stickerConfig.hovercodeQRId) {
@@ -486,7 +541,7 @@ export async function POST(request: NextRequest) {
     });
 
     await db.collection("sticker_generations").insertOne({
-      shopId,
+      shopId: mosShopId,
       generatedAt: new Date(),
       generatedBy: authResult.user.email,
       source: "extension",
