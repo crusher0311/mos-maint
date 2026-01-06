@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge } from "lucide-react";
+import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge, ImageIcon } from "lucide-react";
 
 interface StickerConfig {
   enabled: boolean;
@@ -243,7 +243,7 @@ export default function StickerSettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <div className="flex items-center gap-2">
                     <Palette className="w-4 h-4" />
-                    QR Code Color
+                    Accent Color
                   </div>
                 </label>
                 <div className="flex items-center gap-2">
@@ -261,7 +261,7 @@ export default function StickerSettingsPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Color of the QR code dots (background is always white for scanability)
+                  Color for QR code, date, and mileage on the sticker
                 </p>
               </div>
             </div>
@@ -274,6 +274,35 @@ export default function StickerSettingsPage() {
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" />
+                    Shop Logo URL
+                  </div>
+                </label>
+                <input
+                  type="url"
+                  value={config.logo}
+                  onChange={(e) => setConfig({ ...config, logo: e.target.value })}
+                  placeholder="https://your-site.com/logo.png"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {config.logo && (
+                  <div className="mt-2 p-2 bg-gray-50 rounded-lg">
+                    <img 
+                      src={config.logo} 
+                      alt="Shop logo preview" 
+                      className="max-h-16 mx-auto object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Your shop logo will appear at the top of the sticker. Use a URL to your logo image.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <div className="flex items-center gap-2">

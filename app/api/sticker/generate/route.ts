@@ -49,21 +49,29 @@ function generateStickerHtml(
   qrDataUrl: string | null,
   dimensions: { width: number; height: number }
 ): string {
-  const primary = config.colors?.primary || "#1976d2";
-  const textColor = config.colors?.text || "#ffffff";
-  const distanceUnit = config.useKilometers ? "km" : "mi";
+  const accentColor = config.colors?.primary || "#cc0000";
+  const distanceUnit = config.useKilometers ? "kilometers" : "miles";
 
   const formattedDate = data.nextServiceDate
     ? new Date(data.nextServiceDate).toLocaleDateString("en-US", {
-        month: "short",
+        month: "numeric",
         day: "numeric",
-        year: "2-digit",
+        year: "numeric",
       })
     : "";
 
   const formattedMileage = data.nextServiceMileage
     ? data.nextServiceMileage.toLocaleString()
     : "";
+
+  const scaleFactor = dimensions.width / 200;
+  const logoHeight = Math.round(50 * scaleFactor);
+  const phoneSize = Math.round(14 * scaleFactor);
+  const taglineSize = Math.round(11 * scaleFactor);
+  const labelSize = Math.round(12 * scaleFactor);
+  const valueSize = Math.round(14 * scaleFactor);
+  const qrSize = Math.round(70 * scaleFactor);
+  const padding = Math.round(10 * scaleFactor);
 
   return `
 <!DOCTYPE html>
@@ -74,95 +82,94 @@ function generateStickerHtml(
     body {
       width: ${dimensions.width}px;
       height: ${dimensions.height}px;
-      font-family: Arial, sans-serif;
-      background: ${primary};
-      color: ${textColor};
+      font-family: Arial, Helvetica, sans-serif;
+      background: #ffffff;
+      color: #000000;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between;
-      padding: 8px;
+      padding: ${padding}px;
     }
     .header {
       text-align: center;
       width: 100%;
+      margin-bottom: ${padding}px;
     }
     .logo {
-      max-width: 60px;
-      max-height: 30px;
-      margin-bottom: 4px;
+      max-width: 90%;
+      max-height: ${logoHeight}px;
+      object-fit: contain;
     }
-    .tagline {
-      font-size: 8px;
-      opacity: 0.9;
-    }
-    .service-info {
+    .contact {
       text-align: center;
-      width: 100%;
-    }
-    .label {
-      font-size: 7px;
-      text-transform: uppercase;
-      opacity: 0.8;
-      margin-bottom: 2px;
-    }
-    .value {
-      font-size: 14px;
-      font-weight: bold;
-      margin-bottom: 6px;
-    }
-    .vehicle {
-      font-size: 8px;
-      opacity: 0.9;
-    }
-    .footer {
-      text-align: center;
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .qr-code {
-      width: 40px;
-      height: 40px;
-      background: white;
-      padding: 2px;
-      border-radius: 4px;
-    }
-    .qr-code img {
-      width: 100%;
-      height: 100%;
+      margin-bottom: ${padding}px;
     }
     .phone {
-      font-size: 10px;
+      font-size: ${phoneSize}px;
+      font-weight: bold;
+      color: #000000;
+    }
+    .tagline {
+      font-size: ${taglineSize}px;
+      font-style: italic;
+      color: #333333;
+      margin-top: 2px;
+    }
+    .bottom-section {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: auto;
+      gap: ${padding}px;
+    }
+    .qr-code {
+      flex-shrink: 0;
+    }
+    .qr-code img {
+      width: ${qrSize}px;
+      height: ${qrSize}px;
+    }
+    .service-info {
+      text-align: right;
+      flex-grow: 1;
+    }
+    .service-label {
+      font-size: ${labelSize}px;
+      color: #000000;
+      margin-bottom: 4px;
+    }
+    .service-date {
+      font-size: ${valueSize}px;
+      font-style: italic;
+      color: ${accentColor};
+      font-weight: bold;
+    }
+    .service-mileage {
+      font-size: ${valueSize}px;
+      font-style: italic;
+      color: ${accentColor};
       font-weight: bold;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    ${config.logo ? `<img src="${config.logo}" class="logo" alt="Logo" />` : ""}
+    ${config.logo ? `<img src="${config.logo}" class="logo" alt="Shop Logo" />` : ""}
+  </div>
+  
+  <div class="contact">
+    ${config.phone ? `<div class="phone">${config.phone}</div>` : ""}
     ${config.tagline ? `<div class="tagline">${config.tagline}</div>` : ""}
   </div>
   
-  <div class="service-info">
-    ${formattedDate ? `
-      <div class="label">Next Service</div>
-      <div class="value">${formattedDate}</div>
-    ` : ""}
-    ${formattedMileage ? `
-      <div class="label">Or at</div>
-      <div class="value">${formattedMileage} ${distanceUnit}</div>
-    ` : ""}
-    ${data.vehicleYear && data.vehicleMake ? `
-      <div class="vehicle">${data.vehicleYear} ${data.vehicleMake} ${data.vehicleModel || ""}</div>
-    ` : ""}
-  </div>
-  
-  <div class="footer">
-    ${qrDataUrl ? `<div class="qr-code"><img src="${qrDataUrl}" alt="QR" /></div>` : ""}
-    ${config.phone ? `<div class="phone">${config.phone}</div>` : ""}
+  <div class="bottom-section">
+    ${qrDataUrl ? `<div class="qr-code"><img src="${qrDataUrl}" alt="Scan to Schedule" /></div>` : ""}
+    <div class="service-info">
+      <div class="service-label">Next Oil Service</div>
+      ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
+      ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
+    </div>
   </div>
 </body>
 </html>
