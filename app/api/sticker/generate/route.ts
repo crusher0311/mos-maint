@@ -172,8 +172,7 @@ async function generateStyledQRForSticker(
 
   const outputCanvas = createCanvas(size, size);
   const outputCtx = outputCanvas.getContext("2d");
-  (outputCtx as any).imageSmoothingEnabled = true;
-  (outputCtx as any).imageSmoothingQuality = "high";
+  (outputCtx as any).imageSmoothingEnabled = false;
   outputCtx.drawImage(canvas, 0, 0, size, size);
 
   return outputCanvas.toBuffer("image/png");
@@ -266,13 +265,13 @@ function generateStickerHtml(
   const serviceLabelFontStyle = config.fontStyles?.serviceLabel || { bold: false, italic: false, size: 12 };
   const serviceValueFontStyle = config.fontStyles?.serviceValue || { bold: true, italic: true, size: 14 };
   
-  const phoneSize = Math.round((phoneFontStyle.size || 14) * scaleFactor);
-  const taglineSize = Math.round((taglineFontStyle.size || 11) * scaleFactor);
-  const taglineLine2Size = Math.round((taglineLine2FontStyle.size || 11) * scaleFactor);
-  const labelSize = Math.round((serviceLabelFontStyle.size || 12) * scaleFactor);
-  const valueSize = Math.round((serviceValueFontStyle.size || 14) * scaleFactor);
+  const phoneSize = Math.min(Math.round((phoneFontStyle.size || 14) * scaleFactor), 42);
+  const taglineSize = Math.min(Math.round((taglineFontStyle.size || 11) * scaleFactor), 33);
+  const taglineLine2Size = Math.min(Math.round((taglineLine2FontStyle.size || 11) * scaleFactor), 33);
+  const labelSize = Math.min(Math.round((serviceLabelFontStyle.size || 12) * scaleFactor), 22);
+  const valueSize = Math.min(Math.round((serviceValueFontStyle.size || 14) * scaleFactor), 26);
   const qrSize = Math.round(80 * scaleFactor);
-  const padding = Math.round(10 * scaleFactor);
+  const padding = Math.round(6 * scaleFactor);
 
   return `
 <!DOCTYPE html>
@@ -353,18 +352,21 @@ function generateStickerHtml(
       font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
       margin-bottom: 4px;
+      white-space: nowrap;
     }
     .service-date {
       font-size: ${valueSize}px;
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
+      white-space: nowrap;
     }
     .service-mileage {
       font-size: ${valueSize}px;
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
+      white-space: nowrap;
     }
     .service-centered {
       text-align: center;
