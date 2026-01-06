@@ -8,6 +8,7 @@ interface StickerConfig {
   logo: string;
   phone: string;
   tagline: string;
+  serviceLabel: string;
   colors: {
     primary: string;
     secondary: string;
@@ -32,8 +33,9 @@ const DEFAULT_CONFIG: StickerConfig = {
   logo: "",
   phone: "",
   tagline: "Schedule Service",
+  serviceLabel: "Next Oil Service",
   colors: {
-    primary: "#000000",
+    primary: "#cc0000",
     secondary: "#1976d2",
     text: "#ffffff",
   },
@@ -74,6 +76,7 @@ export default function StickerSettingsPage() {
             logo: data.config.logo ?? DEFAULT_CONFIG.logo,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
             tagline: data.config.tagline ?? DEFAULT_CONFIG.tagline,
+            serviceLabel: data.config.serviceLabel ?? DEFAULT_CONFIG.serviceLabel,
             colors: {
               primary: data.config.colors?.primary ?? DEFAULT_CONFIG.colors.primary,
               secondary: data.config.colors?.secondary ?? DEFAULT_CONFIG.colors.secondary,
@@ -120,6 +123,7 @@ export default function StickerSettingsPage() {
           logo: config.logo,
           phone: config.phone,
           tagline: config.tagline,
+          serviceLabel: config.serviceLabel,
           colors: config.colors,
           defaultSize: config.defaultSize,
           appointmentUrl: config.appointmentUrl,
@@ -332,7 +336,24 @@ export default function StickerSettingsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Appears below the QR code (max 30 characters)
+                  Appears below your phone number
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Service Label
+                </label>
+                <input
+                  type="text"
+                  value={config.serviceLabel}
+                  onChange={(e) => setConfig({ ...config, serviceLabel: e.target.value })}
+                  placeholder="Next Oil Service"
+                  maxLength={25}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Label above the date/mileage (e.g., &quot;Next Oil Service&quot;, &quot;Service Due&quot;)
                 </p>
               </div>
 

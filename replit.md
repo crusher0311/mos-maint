@@ -97,6 +97,7 @@ Replaced paid third-party APIs with free self-hosted solutions:
   logo: string,          // URL to shop logo
   phone: string,         // Shop phone number
   tagline: string,       // Custom tagline
+  serviceLabel: string,  // Label text (e.g., "Next Oil Service", "Service Due")
   colors: {
     primary: string,     // Hex color for QR code dots
     secondary: string,   // Accent color

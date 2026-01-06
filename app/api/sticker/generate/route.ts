@@ -15,6 +15,7 @@ interface StickerConfig {
   logo?: string;
   phone?: string;
   tagline?: string;
+  serviceLabel?: string;
   colors?: {
     primary?: string;
     secondary?: string;
@@ -166,7 +167,7 @@ function generateStickerHtml(
   <div class="bottom-section">
     ${qrDataUrl ? `<div class="qr-code"><img src="${qrDataUrl}" alt="Scan to Schedule" /></div>` : ""}
     <div class="service-info">
-      <div class="service-label">Next Oil Service</div>
+      <div class="service-label">${config.serviceLabel || "Next Oil Service"}</div>
       ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
       ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
     </div>
