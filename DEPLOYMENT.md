@@ -1,6 +1,17 @@
 # Deployment Guide
 
-This guide covers deploying MOS Maintenance MVP to any hosting platform.
+This guide covers deploying MOS Maintenance MVP to Replit, Render, or other hosting platforms.
+
+---
+
+## Platform Overview
+
+| Platform | Best For | Background Workers | Complexity |
+|----------|----------|-------------------|------------|
+| **Replit** | Development, testing | Separate workflows | Low |
+| **Render** | Production | Combined script or cron jobs | Medium |
+| **Vercel** | Frontend-focused | External cron service needed | Medium |
+| **VPS** | Full control | PM2 or systemd | High |
 
 ---
 
@@ -54,11 +65,115 @@ The app supports two OpenAI modes:
 
 ## Deployment Options
 
-### Option 1: Vercel (Recommended)
+### Option 1: Replit (Development & Testing)
+
+Replit is ideal for development, testing, and demos. The app runs with separate workflows for the web server and background sync workers.
+
+#### Workflows Configuration
+
+The app uses these Replit workflows:
+
+| Workflow | Command | Purpose |
+|----------|---------|---------|
+| **MOS Maintenance MVP** | `npm run dev` | Main Next.js web server |
+| **Tekmetric Sync Worker** | `npx tsx scripts/tekmetric-sync-worker.ts` | Polls Tekmetric API for active ROs |
+| **Protractor Sync Worker** | `npx tsx scripts/protractor-sync-worker.ts` | Syncs Protractor shop data |
+| **Protractor Backfill Worker** | `npx tsx scripts/protractor-backfill-worker.ts` | Historical data backfill |
+
+#### Starting the App
+
+1. **Start the main workflow**: Click "Run" or start "MOS Maintenance MVP"
+2. **Start sync workers** (optional): Start "Tekmetric Sync Worker" if you need real-time RO polling
+
+#### When You DON'T Need Sync Workers
+
+You can skip running sync workers if:
+- **Webhooks are configured**: Tekmetric sends real-time updates to `/api/webhooks/tekmetric`
+- **Testing only**: You're just testing the UI or sticker generation
+- **Manual sync**: Users can click "Sync Now" in Settings → Integrations
+
+#### Replit Environment Variables
+
+Replit auto-provides some variables. Add these in the Secrets tab:
+```
+MONGODB_USERNAME=your_username
+MONGODB_PASSWORD=your_password
+TEKMETRIC_API_TOKEN=your_token
+HOVERCODE_API_TOKEN=your_token
+HOVERCODE_WORKSPACE_ID=your_workspace
+STRIPE_SECRET_KEY=your_stripe_key
+```
+
+**Note**: `AI_INTEGRATIONS_OPENAI_API_KEY` is auto-provided by Replit's OpenAI integration.
+
+---
+
+### Option 2: Render (Production)
+
+Render is recommended for production deployments. You have two options for handling background sync:
+
+#### Option A: Combined Script (Simplest)
+
+Run everything in one process using the combined start script:
+
+1. **Create Web Service**
+   - Go to [render.com](https://render.com)
+   - Click "New" → "Web Service"
+   - Connect your GitHub repository
+
+2. **Configure Settings**
+   - **Name**: `mos-maintenance`
+   - **Runtime**: Node
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `node scripts/start-with-workers.js`
+   - **Instance Type**: Starter or higher
+
+3. **Add Environment Variables**
+   ```
+   NODE_ENV=production
+   PRODUCTION_URL=https://your-app.onrender.com
+   MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/db
+   MONGODB_DB=mos-maintenance-mvp
+   SESSION_SECRET=your-32-character-secret-here
+   OPENAI_API_KEY=sk-your-openai-key
+   TEKMETRIC_API_TOKEN=your-token
+   ```
+
+4. **Deploy** - Render will build and deploy automatically
+
+#### Option B: Webhooks Only (No Workers)
+
+If Tekmetric is configured to send webhooks, you don't need background workers:
+
+1. **Start Command**: `npm start` (just the Next.js app)
+2. **Configure Tekmetric webhooks** to point to:
+   - `https://your-app.onrender.com/api/webhooks/tekmetric`
+
+3. **Optional Cron Job** for periodic full sync:
+   - Create a Render Cron Job
+   - Schedule: `*/5 * * * *` (every 5 minutes)
+   - Command: `curl -X GET https://your-app.onrender.com/api/cron/tekmetric-sync`
+
+#### Option C: Separate Background Worker
+
+For better reliability, run workers as a separate Render service:
+
+1. **Web Service** (main app)
+   - Start Command: `npm start`
+
+2. **Background Worker** (sync)
+   - Type: Background Worker
+   - Start Command: `npx tsx scripts/tekmetric-sync-worker.ts`
+   - Add `PRODUCTION_URL=https://your-web-service.onrender.com`
+
+---
+
+### Option 3: Vercel
+
+Vercel works well for the web app but requires an external service for background workers.
 
 1. **Connect Repository**
    ```bash
-   # Push to GitHub first
    git push origin main
    ```
 
@@ -70,45 +185,17 @@ The app supports two OpenAI modes:
 3. **Configure Environment Variables**
    - Go to Project Settings → Environment Variables
    - Add all required variables from the table above
-   - Set for "Production" environment
 
-4. **Deploy**
-   - Vercel auto-deploys on every push to main
+4. **Background Sync Options**
+   - **Vercel Cron**: Use `vercel.json` to schedule `/api/cron/tekmetric-sync`
+   - **External Cron**: Use services like cron-job.org to call the sync endpoint
+   - **Webhooks Only**: Rely on Tekmetric webhooks for real-time updates
 
-### Option 2: Render
+5. **Deploy** - Vercel auto-deploys on every push to main
 
-1. **Create Web Service**
-   - Go to [render.com](https://render.com)
-   - Click "New" → "Web Service"
-   - Connect your GitHub repository
+---
 
-2. **Configure Settings**
-   - **Name**: `mos-maintenance`
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-   - **Instance Type**: Starter or higher
-
-3. **Add Environment Variables**
-   In the "Environment" section, add:
-   ```
-   NODE_ENV=production
-   MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/db
-   MONGODB_DB=mos-maintenance-mvp
-   SESSION_SECRET=your-32-character-secret-here
-   OPENAI_API_KEY=sk-your-openai-key
-   ```
-
-4. **Deploy**
-   - Click "Create Web Service"
-   - Render will build and deploy automatically
-   - Auto-deploys on every push to your connected branch
-
-5. **Custom Domain (Optional)**
-   - Go to Settings → Custom Domains
-   - Add your domain and configure DNS
-
-### Option 3: VPS / Self-Hosted
+### Option 4: VPS / Self-Hosted
 
 1. **Prerequisites**
    ```bash
@@ -228,14 +315,25 @@ npx tsx scripts/add-indexes.ts
 
 ---
 
-## Replit vs Self-Hosted Differences
+## Platform Comparison
 
-| Feature | Replit | Self-Hosted |
-|---------|--------|-------------|
-| OpenAI | Uses AI_INTEGRATIONS_* (auto) | Use your own OPENAI_API_KEY |
-| Port | 5000 (required) | 3000 (default) or custom |
-| HTTPS | Auto-managed | Configure reverse proxy (nginx) |
-| Database | MongoDB Atlas | MongoDB Atlas or self-hosted |
+| Feature | Replit | Render | Vercel | VPS |
+|---------|--------|--------|--------|-----|
+| **OpenAI** | Auto (AI_INTEGRATIONS_*) | Your own key | Your own key | Your own key |
+| **Port** | 5000 (required) | Any (default 3000) | Auto | Any |
+| **HTTPS** | Auto | Auto | Auto | Configure nginx |
+| **Background Workers** | Separate workflows | Combined script or cron | External cron | PM2/systemd |
+| **Webhooks** | Supported | Supported | Supported | Supported |
+| **Best For** | Development | Production | Frontend-heavy | Full control |
+
+### Background Sync Options Summary
+
+| Method | Pros | Cons |
+|--------|------|------|
+| **Webhooks Only** | Real-time, no workers needed | Requires Tekmetric webhook setup |
+| **Polling Workers** | Works without webhook config | Uses resources continuously |
+| **Cron Jobs** | Simple, periodic sync | May miss updates between syncs |
+| **Combined Script** | Easy single-process deploy | All eggs in one basket |
 
 ---
 
