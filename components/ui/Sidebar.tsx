@@ -32,7 +32,8 @@ interface NavChild {
   name: string;
   href: string;
   featureId?: string;
-  children?: { name: string; href: string; featureId?: string }[];
+  isModal?: boolean;
+  children?: { name: string; href: string; featureId?: string; isModal?: boolean }[];
 }
 
 interface NavItem {
@@ -62,6 +63,7 @@ interface SidebarProps {
   enterpriseId?: string | null;
   enabledFeatures?: string[];
   onClose?: () => void;
+  onQuickStickerClick?: () => void;
 }
 
 function getInitialExpandedSections(pathname: string | null): Set<string> {
@@ -77,7 +79,7 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   return sections;
 }
 
-export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose, onQuickStickerClick }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => getInitialExpandedSections(pathname));
@@ -215,7 +217,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           href: "/dashboard/settings/preferences",
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
-            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
+            { name: "Quick Sticker", href: "#quick-sticker", featureId: "oil_sticker", isModal: true }
           ]
         },
         // Billing page hidden until we have enough data to verify with live users
@@ -426,16 +429,29 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                                 <ul className="mt-1 ml-3 space-y-1 border-l border-white/15 pl-3">
                                   {child.children.map((grandchild) => (
                                     <li key={grandchild.name}>
-                                      <Link
-                                        href={grandchild.href}
-                                        className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                                          isActive(grandchild.href)
-                                            ? "bg-white/20 text-white font-medium"
-                                            : "text-white/60 hover:bg-white/10 hover:text-white"
-                                        }`}
-                                      >
-                                        {grandchild.name}
-                                      </Link>
+                                      {grandchild.isModal ? (
+                                        <button
+                                          onClick={() => {
+                                            if (grandchild.href === "#quick-sticker" && onQuickStickerClick) {
+                                              onQuickStickerClick();
+                                            }
+                                          }}
+                                          className="w-full text-left block px-3 py-1.5 rounded-lg text-sm transition-colors text-white/60 hover:bg-white/10 hover:text-white"
+                                        >
+                                          {grandchild.name}
+                                        </button>
+                                      ) : (
+                                        <Link
+                                          href={grandchild.href}
+                                          className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                            isActive(grandchild.href)
+                                              ? "bg-white/20 text-white font-medium"
+                                              : "text-white/60 hover:bg-white/10 hover:text-white"
+                                          }`}
+                                        >
+                                          {grandchild.name}
+                                        </Link>
+                                      )}
                                     </li>
                                   ))}
                                 </ul>
