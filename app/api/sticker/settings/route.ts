@@ -23,6 +23,7 @@ interface StickerConfig {
   phone?: string;
   tagline?: string;
   serviceLabel?: string;
+  showQRCode?: boolean;
   colors?: {
     primary?: string;
     secondary?: string;
@@ -115,6 +116,7 @@ export async function PUT(req: NextRequest) {
       "phone",
       "tagline",
       "serviceLabel",
+      "showQRCode",
       "colors",
       "defaultSize",
       "appointmentUrl",
