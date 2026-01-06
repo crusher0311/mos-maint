@@ -183,41 +183,34 @@ function injectPrintButton() {
     return;
   }
   
-  // Create the MOS Print button - icon-only style to match Tekmetric's UI
+  // Create the MOS Print button using the custom image
   const button = document.createElement('button');
   button.id = 'mos-print-button';
   button.title = 'MOS Oil Sticker\nLeft-click: Print | Right-click: Customize';
   button.type = 'button';
-  button.innerHTML = `
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <polyline points="6 9 6 2 18 2 18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <rect x="6" y="14" width="12" height="8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  `;
+  
+  const imgUrl = chrome.runtime.getURL('icons/mos-print-button.png');
+  button.innerHTML = `<img src="${imgUrl}" alt="MOS Print" style="height: 28px; display: block;" />`;
   
   Object.assign(button.style, {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    padding: '0',
-    backgroundColor: '#EA580C',
-    color: 'white',
+    padding: '2px',
+    backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
     marginLeft: '4px',
-    transition: 'background-color 0.2s'
+    transition: 'opacity 0.2s'
   });
   
   button.addEventListener('mouseenter', () => {
-    button.style.backgroundColor = '#C2410C';
+    button.style.opacity = '0.8';
   });
   
   button.addEventListener('mouseleave', () => {
-    button.style.backgroundColor = '#EA580C';
+    button.style.opacity = '1';
   });
   
   // Left-click: Immediate print
