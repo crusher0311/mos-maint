@@ -25,6 +25,11 @@ interface StickerConfig {
     primary: string;
     secondary: string;
     text: string;
+    background: string;
+    phoneColor: string;
+    taglineColor: string;
+    serviceLabelColor: string;
+    serviceValueColor: string;
   };
   defaultSize: string;
   appointmentUrl: string;
@@ -63,6 +68,11 @@ const DEFAULT_CONFIG: StickerConfig = {
     primary: "#cc0000",
     secondary: "#1976d2",
     text: "#ffffff",
+    background: "#ffffff",
+    phoneColor: "#000000",
+    taglineColor: "#333333",
+    serviceLabelColor: "#666666",
+    serviceValueColor: "#cc0000",
   },
   defaultSize: "2x2.5",
   appointmentUrl: "",
@@ -107,6 +117,11 @@ export default function StickerSettingsPage() {
               primary: data.config.colors?.primary ?? DEFAULT_CONFIG.colors.primary,
               secondary: data.config.colors?.secondary ?? DEFAULT_CONFIG.colors.secondary,
               text: data.config.colors?.text ?? DEFAULT_CONFIG.colors.text,
+              background: data.config.colors?.background ?? DEFAULT_CONFIG.colors.background,
+              phoneColor: data.config.colors?.phoneColor ?? DEFAULT_CONFIG.colors.phoneColor,
+              taglineColor: data.config.colors?.taglineColor ?? DEFAULT_CONFIG.colors.taglineColor,
+              serviceLabelColor: data.config.colors?.serviceLabelColor ?? DEFAULT_CONFIG.colors.serviceLabelColor,
+              serviceValueColor: data.config.colors?.serviceValueColor ?? DEFAULT_CONFIG.colors.serviceValueColor,
             },
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
@@ -364,7 +379,7 @@ export default function StickerSettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <div className="flex items-center gap-2">
                     <Palette className="w-4 h-4" />
-                    Accent Color
+                    QR Code Color
                   </div>
                 </label>
                 <div className="flex items-center gap-2">
@@ -381,9 +396,105 @@ export default function StickerSettingsPage() {
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Color for QR code, date, and mileage on the sticker
-                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Palette className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Sticker Theme</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Background</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.background}
+                    onChange={(e) => updateColor("background", e.target.value)}
+                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.background}
+                    onChange={(e) => updateColor("background", e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.phoneColor}
+                    onChange={(e) => updateColor("phoneColor", e.target.value)}
+                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.phoneColor}
+                    onChange={(e) => updateColor("phoneColor", e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tagline Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.taglineColor}
+                    onChange={(e) => updateColor("taglineColor", e.target.value)}
+                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.taglineColor}
+                    onChange={(e) => updateColor("taglineColor", e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Label Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.serviceLabelColor}
+                    onChange={(e) => updateColor("serviceLabelColor", e.target.value)}
+                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.serviceLabelColor}
+                    onChange={(e) => updateColor("serviceLabelColor", e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date/Mileage Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.serviceValueColor}
+                    onChange={(e) => updateColor("serviceValueColor", e.target.value)}
+                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.serviceValueColor}
+                    onChange={(e) => updateColor("serviceValueColor", e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -603,9 +714,9 @@ export default function StickerSettingsPage() {
             <h2 className="font-semibold text-gray-900 mb-4">Sticker Preview</h2>
             <div className="flex justify-center p-4 bg-gray-100 rounded-lg">
               <div 
-                className="bg-white rounded shadow-md overflow-hidden"
+                className="rounded shadow-md overflow-hidden"
                 style={{ 
-                  width: config.defaultSize === "2x2" ? "200px" : "200px",
+                  width: "200px",
                   height: config.defaultSize === "2x2" ? "200px" : 
                           config.defaultSize === "2x2.5" ? "250px" : 
                           config.defaultSize === "2x3" ? "300px" : "350px",
@@ -613,14 +724,15 @@ export default function StickerSettingsPage() {
                   display: "flex",
                   flexDirection: "column",
                   fontFamily: "Arial, sans-serif",
+                  backgroundColor: config.colors.background,
                 }}
               >
-                <div className="text-center mb-2" style={{ minHeight: config.logo ? "50px" : "0" }}>
+                <div className="text-center mb-2" style={{ minHeight: config.logo ? "80px" : "0" }}>
                   {config.logo && (
                     <img 
                       src={config.logo}
                       alt="Shop Logo"
-                      className="max-h-[50px] max-w-[90%] mx-auto object-contain"
+                      style={{ maxHeight: "80px", maxWidth: "90%", marginLeft: "auto", marginRight: "auto", objectFit: "contain" }}
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                   )}
@@ -628,10 +740,10 @@ export default function StickerSettingsPage() {
                 
                 <div className="text-center mb-2">
                   {config.phone && (
-                    <div className="text-sm font-bold text-black">{config.phone}</div>
+                    <div className="text-sm font-bold" style={{ color: config.colors.phoneColor }}>{config.phone}</div>
                   )}
                   {config.tagline && (
-                    <div className="text-xs italic text-gray-600">{config.tagline}</div>
+                    <div className="text-xs italic" style={{ color: config.colors.taglineColor }}>{config.tagline}</div>
                   )}
                 </div>
                 
@@ -650,10 +762,10 @@ export default function StickerSettingsPage() {
                     )}
                   </div>
                   <div className="text-right flex-grow">
-                    <div className="text-xs text-black mb-1">{config.serviceLabel || "Next Oil Service"}</div>
+                    <div className="text-xs mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
                     <div 
                       className="text-sm font-bold italic"
-                      style={{ color: config.colors.primary }}
+                      style={{ color: config.colors.serviceValueColor }}
                     >
                       {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
                         month: "numeric",
@@ -663,7 +775,7 @@ export default function StickerSettingsPage() {
                     </div>
                     <div 
                       className="text-sm font-bold italic"
-                      style={{ color: config.colors.primary }}
+                      style={{ color: config.colors.serviceValueColor }}
                     >
                       {(65000).toLocaleString()} {config.useKilometers ? "kilometers" : "miles"}
                     </div>

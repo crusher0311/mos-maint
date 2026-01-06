@@ -78,6 +78,11 @@ interface StickerConfig {
     primary?: string;
     secondary?: string;
     text?: string;
+    background?: string;
+    phoneColor?: string;
+    taglineColor?: string;
+    serviceLabelColor?: string;
+    serviceValueColor?: string;
   };
   appointmentUrl?: string;
   useKilometers?: boolean;
@@ -108,7 +113,11 @@ function generateStickerHtml(
   qrDataUrl: string | null,
   dimensions: { width: number; height: number }
 ): string {
-  const accentColor = config.colors?.primary || "#cc0000";
+  const backgroundColor = config.colors?.background || "#ffffff";
+  const phoneColor = config.colors?.phoneColor || "#000000";
+  const taglineColor = config.colors?.taglineColor || "#333333";
+  const serviceLabelColor = config.colors?.serviceLabelColor || "#666666";
+  const serviceValueColor = config.colors?.serviceValueColor || config.colors?.primary || "#cc0000";
   const distanceUnit = config.useKilometers ? "kilometers" : "miles";
 
   const formattedDate = data.nextServiceDate
@@ -124,7 +133,7 @@ function generateStickerHtml(
     : "";
 
   const scaleFactor = dimensions.width / 200;
-  const logoHeight = Math.round(50 * scaleFactor);
+  const logoHeight = Math.round(80 * scaleFactor);
   const phoneSize = Math.round(14 * scaleFactor);
   const taglineSize = Math.round(11 * scaleFactor);
   const labelSize = Math.round(12 * scaleFactor);
@@ -142,7 +151,7 @@ function generateStickerHtml(
       width: ${dimensions.width}px;
       height: ${dimensions.height}px;
       font-family: Arial, Helvetica, sans-serif;
-      background: #ffffff;
+      background: ${backgroundColor};
       color: #000000;
       display: flex;
       flex-direction: column;
@@ -166,12 +175,12 @@ function generateStickerHtml(
     .phone {
       font-size: ${phoneSize}px;
       font-weight: bold;
-      color: #000000;
+      color: ${phoneColor};
     }
     .tagline {
       font-size: ${taglineSize}px;
       font-style: italic;
-      color: #333333;
+      color: ${taglineColor};
       margin-top: 2px;
     }
     .bottom-section {
@@ -195,19 +204,19 @@ function generateStickerHtml(
     }
     .service-label {
       font-size: ${labelSize}px;
-      color: #000000;
+      color: ${serviceLabelColor};
       margin-bottom: 4px;
     }
     .service-date {
       font-size: ${valueSize}px;
       font-style: italic;
-      color: ${accentColor};
+      color: ${serviceValueColor};
       font-weight: bold;
     }
     .service-mileage {
       font-size: ${valueSize}px;
       font-style: italic;
-      color: ${accentColor};
+      color: ${serviceValueColor};
       font-weight: bold;
     }
   </style>
