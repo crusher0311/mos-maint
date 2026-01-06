@@ -357,9 +357,12 @@ function generateStickerHtml(
     .service-info {
       text-align: center;
       flex-grow: 1;
+      flex-shrink: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
+      overflow: hidden;
     }
     .service-label {
       font-size: ${labelSize}px;
@@ -367,21 +370,18 @@ function generateStickerHtml(
       font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
       margin-bottom: 4px;
-      white-space: nowrap;
     }
     .service-date {
       font-size: ${valueSize}px;
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
-      white-space: nowrap;
     }
     .service-mileage {
       font-size: ${valueSize}px;
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
-      white-space: nowrap;
     }
     .service-centered {
       text-align: center;
