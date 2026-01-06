@@ -237,6 +237,7 @@ interface StickerRequest {
   nextServiceDate?: string;
   size?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
   includeQR?: boolean;
+  previewConfig?: StickerConfig;
 }
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -459,7 +460,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const config: StickerConfig = shop.stickerConfig || {};
+    const dbConfig: StickerConfig = shop.stickerConfig || {};
+    const config: StickerConfig = body.previewConfig ? { ...dbConfig, ...body.previewConfig } : dbConfig;
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
     let logoDataUrl: string | null = null;

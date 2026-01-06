@@ -158,6 +158,16 @@ export default function StickerSettingsPage() {
           nextServiceDate: sampleDate,
           size: config.defaultSize,
           includeQR: config.showQRCode,
+          previewConfig: {
+            logo: config.logo,
+            phone: config.phone,
+            tagline: config.tagline,
+            taglineLine2: config.taglineLine2,
+            serviceLabel: config.serviceLabel,
+            fontStyles: config.fontStyles,
+            colors: config.colors,
+            useKilometers: config.useKilometers,
+          },
         }),
       });
       
