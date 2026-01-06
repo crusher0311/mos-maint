@@ -444,10 +444,13 @@ export default function StickerSettingsPage() {
               <Palette className="w-5 h-5 text-blue-600" />
               <h2 className="font-semibold text-gray-900">Sticker Theme</h2>
             </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Customize colors and font styling for each element of your sticker.
+            </p>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Background</label>
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-900 mb-2">Background Color</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -464,77 +467,87 @@ export default function StickerSettingsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.phoneColor}
-                    onChange={(e) => updateColor("phoneColor", e.target.value)}
-                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.phoneColor}
-                    onChange={(e) => updateColor("phoneColor", e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tagline Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.taglineColor}
-                    onChange={(e) => updateColor("taglineColor", e.target.value)}
-                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.taglineColor}
-                    onChange={(e) => updateColor("taglineColor", e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Label Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.serviceLabelColor}
-                    onChange={(e) => updateColor("serviceLabelColor", e.target.value)}
-                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.serviceLabelColor}
-                    onChange={(e) => updateColor("serviceLabelColor", e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date/Mileage Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.serviceValueColor}
-                    onChange={(e) => updateColor("serviceValueColor", e.target.value)}
-                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.serviceValueColor}
-                    onChange={(e) => updateColor("serviceValueColor", e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                </div>
-              </div>
+              {[
+                { key: "phone", label: "Phone", colorKey: "phoneColor" as const },
+                { key: "tagline", label: "Tagline (Line 1)", colorKey: "taglineColor" as const },
+                { key: "taglineLine2", label: "Line 2", colorKey: "taglineColor" as const },
+                { key: "serviceLabel", label: "Service Label", colorKey: "serviceLabelColor" as const },
+                { key: "serviceValue", label: "Date/Mileage", colorKey: "serviceValueColor" as const },
+              ].map((item) => {
+                const style = config.fontStyles[item.key as keyof typeof config.fontStyles];
+                const colorValue = config.colors[item.colorKey];
+                return (
+                  <div key={item.key} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-gray-900 text-sm">{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={colorValue}
+                          onChange={(e) => updateColor(item.colorKey, e.target.value)}
+                          className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={colorValue}
+                          onChange={(e) => updateColor(item.colorKey, e.target.value)}
+                          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <label className="text-xs text-gray-600">Size:</label>
+                        <input
+                          type="number"
+                          value={style.size}
+                          onChange={(e) => setConfig({
+                            ...config,
+                            fontStyles: {
+                              ...config.fontStyles,
+                              [item.key]: { ...style, size: Number(e.target.value) || 12 }
+                            }
+                          })}
+                          className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                          min={8}
+                          max={24}
+                        />
+                        <span className="text-xs text-gray-500">px</span>
+                      </div>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={style.bold}
+                          onChange={(e) => setConfig({
+                            ...config,
+                            fontStyles: {
+                              ...config.fontStyles,
+                              [item.key]: { ...style, bold: e.target.checked }
+                            }
+                          })}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-bold text-gray-700">B</span>
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={style.italic}
+                          onChange={(e) => setConfig({
+                            ...config,
+                            fontStyles: {
+                              ...config.fontStyles,
+                              [item.key]: { ...style, italic: e.target.checked }
+                            }
+                          })}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-xs italic text-gray-700">I</span>
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -709,85 +722,6 @@ export default function StickerSettingsPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Type className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">Text Styling</h2>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Customize font size, bold, and italic for each text element.
-            </p>
-
-            <div className="space-y-4">
-              {[
-                { key: "phone", label: "Phone" },
-                { key: "tagline", label: "Tagline" },
-                { key: "taglineLine2", label: "Line 2" },
-                { key: "serviceLabel", label: "Service Label" },
-                { key: "serviceValue", label: "Date/Mileage" },
-              ].map((item) => {
-                const style = config.fontStyles[item.key as keyof typeof config.fontStyles];
-                return (
-                  <div key={item.key} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900 text-sm">{item.label}</span>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <label className="text-xs text-gray-600">Size:</label>
-                          <input
-                            type="number"
-                            value={style.size}
-                            onChange={(e) => setConfig({
-                              ...config,
-                              fontStyles: {
-                                ...config.fontStyles,
-                                [item.key]: { ...style, size: Number(e.target.value) || 12 }
-                              }
-                            })}
-                            className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                            min={8}
-                            max={24}
-                          />
-                          <span className="text-xs text-gray-500">px</span>
-                        </div>
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={style.bold}
-                            onChange={(e) => setConfig({
-                              ...config,
-                              fontStyles: {
-                                ...config.fontStyles,
-                                [item.key]: { ...style, bold: e.target.checked }
-                              }
-                            })}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-xs font-bold text-gray-700">B</span>
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={style.italic}
-                            onChange={(e) => setConfig({
-                              ...config,
-                              fontStyles: {
-                                ...config.fontStyles,
-                                [item.key]: { ...style, italic: e.target.checked }
-                              }
-                            })}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-xs italic text-gray-700">I</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
               <Calendar className="w-5 h-5 text-blue-600" />
               <h2 className="font-semibold text-gray-900">Service Intervals by Oil Type</h2>
             </div>
@@ -913,7 +847,7 @@ export default function StickerSettingsPage() {
                 </div>
                 
                 {config.showQRCode ? (
-                  <div className="flex items-start justify-between gap-2 mt-1">
+                  <div className="flex items-center justify-between gap-2 mt-1">
                     <div className="flex-shrink-0">
                       {qrUrl ? (
                         <img 
@@ -927,7 +861,7 @@ export default function StickerSettingsPage() {
                         </div>
                       )}
                     </div>
-                    <div className="text-center flex-grow">
+                    <div className="text-center flex-grow flex flex-col justify-center">
                       <div style={{ 
                         fontSize: `${config.fontStyles.serviceLabel.size}px`,
                         fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
