@@ -412,9 +412,9 @@ export async function GET(request: NextRequest) {
     }
 
     const stickerConfig: StickerConfig = shop.stickerConfig || {};
-    const hasOilStickerFeature = (shop.features || []).includes("oil_sticker");
+    const hasOilStickerFeature = shop.enabledFeatures?.oil_sticker === true;
 
-    console.log(`[Extension Sticker] Shop ${mosShopId}: hasOilStickerFeature=${hasOilStickerFeature}`);
+    console.log(`[Extension Sticker] Shop ${mosShopId}: hasOilStickerFeature=${hasOilStickerFeature}, enabledFeatures=${JSON.stringify(shop.enabledFeatures)}`);
 
     return NextResponse.json({
       enabled: hasOilStickerFeature,
