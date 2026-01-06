@@ -57,13 +57,46 @@ function detectContext() {
       }
     }
 
-    // Look for mileage
-    const mileageElements = document.querySelectorAll('[data-testid*="mileage"], [data-testid*="miles"]');
+    // Look for mileage - multiple strategies
+    // Strategy 1: Look for data-testid elements
+    const mileageElements = document.querySelectorAll('[data-testid*="mileage"], [data-testid*="miles"], [data-testid*="odometer"]');
     for (const el of mileageElements) {
       const mileageMatch = el.textContent.match(/[\d,]+/);
       if (mileageMatch) {
         context.mileage = parseInt(mileageMatch[0].replace(/,/g, ''));
         break;
+      }
+    }
+    
+    // Strategy 2: Look for "In:" or "Out:" mileage pattern in the header
+    if (!context.mileage) {
+      const headerArea = document.querySelector('[class*="Header"]') || 
+                        document.querySelector('[class*="header"]') ||
+                        document.querySelector('header') ||
+                        document.body;
+      const headerText = headerArea?.textContent || '';
+      // Match patterns like "In: 40,238" or "Out: 40,238"
+      const inOutMatch = headerText.match(/(?:In|Out):\s*([\d,]+)/i);
+      if (inOutMatch) {
+        context.mileage = parseInt(inOutMatch[1].replace(/,/g, ''));
+      }
+    }
+    
+    // Strategy 3: Look for any element containing mileage-like numbers near "In" or "Out" text
+    if (!context.mileage) {
+      const allElements = document.querySelectorAll('span, div, p');
+      for (const el of allElements) {
+        const text = el.textContent?.trim() || '';
+        if (/^(In|Out):?\s*[\d,]+$/i.test(text)) {
+          const match = text.match(/[\d,]+/);
+          if (match) {
+            const value = parseInt(match[0].replace(/,/g, ''));
+            if (value > 1000 && value < 1000000) { // Reasonable mileage range
+              context.mileage = value;
+              break;
+            }
+          }
+        }
       }
     }
 

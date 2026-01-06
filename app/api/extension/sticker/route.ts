@@ -402,6 +402,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const { mosShopId, shop } = await resolveMosShopId(db, authResult, smsShopId, provider);
 
+    console.log(`[Extension Sticker] GET: smsShopId=${smsShopId}, provider=${provider}, mosShopId=${mosShopId}, features=${JSON.stringify(shop?.features || [])}`);
+
     if (!shop) {
       return NextResponse.json(
         { error: "Shop not found" },
@@ -411,6 +413,8 @@ export async function GET(request: NextRequest) {
 
     const stickerConfig: StickerConfig = shop.stickerConfig || {};
     const hasOilStickerFeature = (shop.features || []).includes("oil_sticker");
+
+    console.log(`[Extension Sticker] Shop ${mosShopId}: hasOilStickerFeature=${hasOilStickerFeature}`);
 
     return NextResponse.json({
       enabled: hasOilStickerFeature,
