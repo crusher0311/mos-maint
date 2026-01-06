@@ -179,8 +179,13 @@ export async function POST(req: NextRequest) {
     const results: Array<{ shopId: string; hovercodeId: string; status: string }> = [];
 
     for (const { shopId, hovercodeId } of mappings) {
+      // Try both string and number versions of shopId
+      const shopIdVariants = [shopId, Number(shopId), String(shopId)];
+      
       if (dryRun) {
-        const shop = await db.collection("shops").findOne({ shopId });
+        const shop = await db.collection("shops").findOne({ 
+          shopId: { $in: shopIdVariants } 
+        });
         results.push({
           shopId,
           hovercodeId,
@@ -188,7 +193,7 @@ export async function POST(req: NextRequest) {
         });
       } else {
         const result = await db.collection("shops").updateOne(
-          { shopId },
+          { shopId: { $in: shopIdVariants } },
           { $set: { "stickerConfig.hovercodeQRId": hovercodeId } }
         );
         results.push({
