@@ -35,6 +35,12 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Predictive date calculation uses CARFAX `milesPerDay` and "shortest interval wins" logic.
     *   Logo upload flow with presigned URLs and proxy serving.
     *   Chrome Extension API for fetching sticker config and generating stickers as base64 data URLs for printing.
+    *   Sticker generation tracking for billing with monthly/total counts in platform-admin.
+*   **Tekmetric Sync**:
+    *   Background sync worker polls Tekmetric API for active ROs.
+    *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
+    *   Shop ID validation on signup prevents invalid configurations.
+    *   Adaptive backoff and retry logic for API reliability.
 
 **Feature Specifications:**
 *   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
