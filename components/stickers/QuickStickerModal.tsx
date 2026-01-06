@@ -144,32 +144,46 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       }
 
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Print Sticker</title>
-            <style>
-              @page { margin: 0; }
-              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-              img { max-width: 100%; height: auto; }
-              @media print {
-                body { margin: 0; }
-                img { page-break-inside: avoid; }
-              }
-            </style>
-          </head>
-          <body>
-            <img src="${url}" onload="window.print(); window.close();" />
-          </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        
+        const printWindow = window.open("", "_blank", "width=600,height=800");
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { margin: 0.5in; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                  display: flex; 
+                  justify-content: center; 
+                  align-items: flex-start;
+                  padding: 20px;
+                }
+                img { 
+                  max-width: 100%; 
+                  height: auto;
+                }
+                @media print {
+                  body { padding: 0; }
+                  img { page-break-inside: avoid; }
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${dataUrl}" onload="setTimeout(function() { window.print(); }, 100);" />
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+      };
+      reader.readAsDataURL(blob);
 
       onClose();
     } catch (err) {
