@@ -15,22 +15,39 @@ const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 
 async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> {
-  if (!HOVERCODE_API_TOKEN) return null;
+  if (!HOVERCODE_API_TOKEN) {
+    console.error("[Sticker QR] No API token configured");
+    return null;
+  }
   
   try {
-    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
+    const url = `${HOVERCODE_API_BASE}/${hovercodeId}/`;
+    console.log(`[Sticker QR] Fetching HoverCode QR from: ${url}`);
+    
+    const response = await fetch(url, {
       headers: { Authorization: `Token ${HOVERCODE_API_TOKEN}` },
     });
     
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`[Sticker QR] HoverCode API error: ${response.status}`);
+      return null;
+    }
     
     const data = await response.json();
+    console.log(`[Sticker QR] HoverCode response keys:`, Object.keys(data));
+    
     if (data.png) {
+      console.log(`[Sticker QR] Fetching PNG from: ${data.png}`);
       const imageRes = await fetch(data.png);
       if (imageRes.ok) {
         const arrayBuffer = await imageRes.arrayBuffer();
+        console.log(`[Sticker QR] Got PNG buffer, size: ${arrayBuffer.byteLength}`);
         return Buffer.from(arrayBuffer);
+      } else {
+        console.error(`[Sticker QR] PNG fetch failed: ${imageRes.status}`);
       }
+    } else {
+      console.error(`[Sticker QR] No png field in response`);
     }
     return null;
   } catch (error) {
