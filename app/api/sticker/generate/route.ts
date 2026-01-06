@@ -4,9 +4,6 @@ import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import nodeHtmlToImage from "node-html-to-image";
 import QRCode from "qrcode";
-import { createCanvas, loadImage } from "canvas";
-import path from "path";
-import fs from "fs";
 import { Storage } from "@google-cloud/storage";
 
 export const runtime = "nodejs";
@@ -68,114 +65,73 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
   }
 }
 
-const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.png");
+const HOVERCODE_API_URL = "https://hovercode.com/api/v2/hovercode/create/";
+const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
+const HOVERCODE_WORKSPACE_ID = process.env.HOVERCODE_WORKSPACE_ID;
 
-function drawRoundedRect(ctx: any, x: number, y: number, width: number, height: number, radius: number) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + width - r, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-  ctx.lineTo(x + width, y + height - r);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-  ctx.lineTo(x + r, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+async function generateHovercodeQR(
+  url: string,
+  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string } = {}
+): Promise<string | null> {
+  const { size = 300, color = "#1976d2", backgroundColor = "#ffffff", displayName } = options;
+
+  if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
+    console.error("[Sticker Generate] HoverCode credentials not configured");
+    return null;
+  }
+
+  try {
+    const response = await fetch(HOVERCODE_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace: HOVERCODE_WORKSPACE_ID,
+        qr_data: url,
+        dynamic: true,
+        display_name: displayName || "Oil Sticker QR",
+        primary_color: color,
+        background_color: backgroundColor,
+        pattern: "Squares",
+        eye_style: "Rounded",
+        size: size,
+        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+        generate_png: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Sticker Generate] HoverCode API error:", response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (data.png) {
+      return data.png;
+    } else if (data.svg) {
+      const svgBase64 = Buffer.from(data.svg).toString("base64");
+      return `data:image/svg+xml;base64,${svgBase64}`;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("[Sticker Generate] HoverCode API failed:", error);
+    return null;
+  }
 }
 
-async function generateStyledQRForSticker(
-  url: string,
-  options: { size?: number; color?: string; backgroundColor?: string } = {}
-): Promise<Buffer> {
-  const { size = 240, color = "#1976d2", backgroundColor = "#ffffff" } = options;
-  const scale = 4;
-  const scaledSize = size * scale;
-
-  const qrMatrix = await QRCode.create(url, { errorCorrectionLevel: "H" });
-  const modules = qrMatrix.modules;
-  const moduleCount = modules.size;
-
-  const margin = 4;
-  const moduleSize = scaledSize / (moduleCount + margin * 2);
-  const actualSize = moduleSize * (moduleCount + margin * 2);
-  const offset = moduleSize * margin;
-
-  const canvas = createCanvas(actualSize, actualSize);
-  const ctx = canvas.getContext("2d");
-
-  ctx.fillStyle = backgroundColor;
-  ctx.fillRect(0, 0, actualSize, actualSize);
-  ctx.fillStyle = color;
-
-  const dotPadding = moduleSize * 0.18;
-  const dotSize = moduleSize - dotPadding * 2;
-  const cornerRadius = dotSize * 0.2;
-
-  for (let row = 0; row < moduleCount; row++) {
-    for (let col = 0; col < moduleCount; col++) {
-      if (modules.get(row, col)) {
-        const x = offset + col * moduleSize + dotPadding;
-        const y = offset + row * moduleSize + dotPadding;
-        const isFinderPattern = (row < 7 && col < 7) || (row < 7 && col >= moduleCount - 7) || (row >= moduleCount - 7 && col < 7);
-        if (!isFinderPattern) {
-          drawRoundedRect(ctx, x, y, dotSize, dotSize, cornerRadius);
-          ctx.fill();
-        }
-      }
-    }
-  }
-
-  const finderSize = 7 * moduleSize;
-  const finderPositions = [
-    { x: offset, y: offset },
-    { x: offset + (moduleCount - 7) * moduleSize, y: offset },
-    { x: offset, y: offset + (moduleCount - 7) * moduleSize },
-  ];
-
-  ctx.fillStyle = backgroundColor;
-  for (const pos of finderPositions) {
-    ctx.fillRect(pos.x, pos.y, finderSize, finderSize);
-  }
-
-  ctx.fillStyle = color;
-  for (const pos of finderPositions) {
-    drawRoundedRect(ctx, pos.x, pos.y, finderSize, finderSize, moduleSize);
-    ctx.fill();
-    ctx.fillStyle = backgroundColor;
-    const inner1 = moduleSize;
-    drawRoundedRect(ctx, pos.x + inner1, pos.y + inner1, finderSize - inner1 * 2, finderSize - inner1 * 2, moduleSize * 0.6);
-    ctx.fill();
-    ctx.fillStyle = color;
-    const inner2 = moduleSize * 2;
-    drawRoundedRect(ctx, pos.x + inner2, pos.y + inner2, finderSize - inner2 * 2, finderSize - inner2 * 2, moduleSize * 0.4);
-    ctx.fill();
-  }
-
-  if (fs.existsSync(DEFAULT_LOGO_PATH)) {
-    try {
-      const logo = await loadImage(DEFAULT_LOGO_PATH);
-      const logoSize = actualSize * 0.22;
-      const logoX = (actualSize - logoSize) / 2;
-      const logoY = (actualSize - logoSize) / 2;
-      const padding = logoSize * 0.12;
-      ctx.fillStyle = backgroundColor;
-      ctx.beginPath();
-      ctx.arc(actualSize / 2, actualSize / 2, logoSize / 2 + padding, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
-    } catch (err) {
-      console.error("[Sticker Generate] QR logo failed:", err);
-    }
-  }
-
-  const outputCanvas = createCanvas(size, size);
-  const outputCtx = outputCanvas.getContext("2d");
-  (outputCtx as any).imageSmoothingEnabled = false;
-  outputCtx.drawImage(canvas, 0, 0, size, size);
-
-  return outputCanvas.toBuffer("image/png");
+async function fallbackQRGeneration(url: string, color: string = "#1976d2"): Promise<string> {
+  const qrDataUrl = await QRCode.toDataURL(url, {
+    width: 300,
+    margin: 2,
+    color: { dark: color, light: "#ffffff" },
+    errorCorrectionLevel: "H",
+  });
+  return qrDataUrl;
 }
 
 interface FontStyle {
@@ -449,8 +405,22 @@ export async function POST(req: NextRequest) {
     if (includeQR) {
       const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
       const qrColor = config.colors?.primary || "#1976d2";
-      const qrBuffer = await generateStyledQRForSticker(redirectUrl, { size: 240, color: qrColor });
-      qrDataUrl = `data:image/png;base64,${qrBuffer.toString("base64")}`;
+      const qrBgColor = config.colors?.background || "#ffffff";
+      const shopName = shop.name || `Shop ${shopId}`;
+      
+      const hovercodeUrl = await generateHovercodeQR(redirectUrl, {
+        size: 300,
+        color: qrColor,
+        backgroundColor: qrBgColor,
+        displayName: `${shopName} - Oil Sticker`,
+      });
+      
+      if (hovercodeUrl) {
+        qrDataUrl = hovercodeUrl;
+      } else {
+        console.log("[Sticker Generate] HoverCode failed, using fallback QR");
+        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+      }
     }
 
     const html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
