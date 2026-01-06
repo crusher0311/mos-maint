@@ -149,7 +149,22 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        const printWindow = window.open("", "_blank", "width=600,height=800");
+        const sizeWidthInches: Record<string, string> = {
+          "2x2": "1.97in",
+          "2x2.5": "1.97in",
+          "2x3": "1.97in",
+          "2x3.5": "1.97in",
+        };
+        const sizeHeightInches: Record<string, string> = {
+          "2x2": "1.97in",
+          "2x2.5": "2.46in",
+          "2x3": "2.96in",
+          "2x3.5": "3.45in",
+        };
+        const imgWidth = sizeWidthInches[stickerSize] || "1.97in";
+        const imgHeight = sizeHeightInches[stickerSize] || "2.46in";
+        
+        const printWindow = window.open("", "_blank", "width=400,height=500");
         if (printWindow) {
           printWindow.document.write(`
             <!DOCTYPE html>
@@ -157,21 +172,22 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             <head>
               <title>Print Sticker</title>
               <style>
-                @page { margin: 0.5in; }
+                @page { margin: 0; size: auto; }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { 
-                  display: flex; 
-                  justify-content: center; 
-                  align-items: flex-start;
-                  padding: 20px;
+                html, body { 
+                  width: 100%;
+                  height: 100%;
+                }
+                body {
+                  padding: 0.25in;
                 }
                 img { 
-                  max-width: 100%; 
-                  height: auto;
+                  width: ${imgWidth};
+                  height: ${imgHeight};
+                  display: block;
                 }
                 @media print {
                   body { padding: 0; }
-                  img { page-break-inside: avoid; }
                 }
               </style>
             </head>
