@@ -283,10 +283,15 @@ function generateStickerHtml(
   const phoneSize = Math.round((phoneFontStyle.size || 14) * scaleFactor);
   const taglineSize = Math.round((taglineFontStyle.size || 11) * scaleFactor);
   const taglineLine2Size = Math.round((taglineLine2FontStyle.size || 11) * scaleFactor);
-  const labelSize = Math.round((serviceLabelFontStyle.size || 12) * scaleFactor);
-  const valueSize = Math.round((serviceValueFontStyle.size || 14) * scaleFactor);
   const qrSize = Math.round(80 * scaleFactor);
   const padding = Math.round(10 * scaleFactor);
+  
+  const labelSizeRaw = Math.round((serviceLabelFontStyle.size || 12) * scaleFactor);
+  const valueSizeRaw = Math.round((serviceValueFontStyle.size || 14) * scaleFactor);
+  const maxLabelSize = Math.round(22 * scaleFactor);
+  const maxValueSize = Math.round(28 * scaleFactor);
+  const labelSize = Math.min(labelSizeRaw, maxLabelSize);
+  const valueSize = Math.min(valueSizeRaw, maxValueSize);
 
   return `
 <!DOCTYPE html>
@@ -370,18 +375,21 @@ function generateStickerHtml(
       font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
       margin-bottom: 4px;
+      white-space: nowrap;
     }
     .service-date {
       font-size: ${valueSize}px;
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
+      white-space: nowrap;
     }
     .service-mileage {
       font-size: ${valueSize}px;
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
+      white-space: nowrap;
     }
     .service-centered {
       text-align: center;
