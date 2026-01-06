@@ -59,6 +59,8 @@ interface Shop {
   integrationDetails?: IntegrationDetails;
   enabledFeatures?: ShopFeatures;
   backfill?: BackfillStatus | null;
+  stickerCount?: number;
+  stickerCountThisMonth?: number;
 }
 
 export default function PlatformShopsPage() {
@@ -325,6 +327,7 @@ export default function PlatformShopsPage() {
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Users</th>
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Vehicles</th>
               <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">VIN Usage</th>
+              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Stickers</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Integrations</th>
               <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Backfill</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
@@ -441,6 +444,13 @@ export default function PlatformShopsPage() {
                         </div>
                       </div>
                     </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="text-sm">
+                      <span className="font-medium text-gray-900">{shop.stickerCountThisMonth || 0}</span>
+                      <span className="text-gray-400 text-xs ml-1">/ {shop.stickerCount || 0}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">this month / total</div>
+                  </td>
                   <td className="px-4 py-3">
                     {shop.integrations?.length > 0 ? (
                       <button
@@ -705,6 +715,13 @@ export default function PlatformShopsPage() {
                         </button>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="text-sm">
+                      <span className="font-medium text-gray-900">{shop.stickerCountThisMonth || 0}</span>
+                      <span className="text-gray-400 text-xs ml-1">/ {shop.stickerCount || 0}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">this month / total</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1">
