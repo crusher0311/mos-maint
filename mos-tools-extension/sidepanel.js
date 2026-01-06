@@ -1212,57 +1212,55 @@ async function handleStickerPrint() {
 }
 
 function printStickerImage(sticker) {
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = 'none';
-  document.body.appendChild(iframe);
+  console.log('[MOS] Opening print window for sticker');
   
-  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-  if (iframeDoc) {
-    iframeDoc.open();
-    iframeDoc.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Print Sticker</title>
-        <style>
-          @page { margin: 0; size: auto; }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { width: 100%; height: 100%; }
-          img { 
-            width: ${sticker.widthInches};
-            height: ${sticker.heightInches};
-            display: block;
-          }
-        </style>
-      </head>
-      <body>
-        <img id="sticker" src="${sticker.dataUrl}" />
-      </body>
-      </html>
-    `);
-    iframeDoc.close();
+  // Create a popup window for printing (works better than iframe in sidepanel context)
+  const printWindow = window.open('', '_blank', 'width=400,height=500');
+  if (!printWindow) {
+    console.error('[MOS] Failed to open print window - popup blocked?');
+    showNotification('Please allow popups to print', 'error');
+    return;
+  }
+  
+  printWindow.document.open();
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Print Sticker</title>
+      <style>
+        @page { margin: 0; size: auto; }
+        @media print { @page { margin: 0; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        img { 
+          width: ${sticker.widthInches};
+          height: ${sticker.heightInches};
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <img id="sticker" src="${sticker.dataUrl}" />
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  
+  const img = printWindow.document.getElementById('sticker');
+  if (img) {
+    const doPrint = () => {
+      console.log('[MOS] Triggering print dialog');
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 100);
+    };
     
-    const img = iframeDoc.getElementById('sticker');
-    if (img) {
-      const doPrint = () => {
-        setTimeout(() => {
-          iframe.contentWindow.print();
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 1000);
-        }, 100);
-      };
-      
-      if (img.complete) {
-        doPrint();
-      } else {
-        img.onload = doPrint;
-      }
+    if (img.complete) {
+      doPrint();
+    } else {
+      img.onload = doPrint;
     }
   }
 }
