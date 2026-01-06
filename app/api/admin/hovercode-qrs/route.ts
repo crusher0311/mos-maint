@@ -57,8 +57,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (session.role !== "platform_admin" && session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json({ error: "Forbidden - platform admin access required" }, { status: 403 });
   }
 
   const apiToken = process.env.HOVERCODE_API_TOKEN;
@@ -157,8 +157,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (session.role !== "platform_admin" && session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json({ error: "Forbidden - platform admin access required" }, { status: 403 });
   }
 
   try {
