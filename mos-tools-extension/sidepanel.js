@@ -1212,9 +1212,24 @@ async function handleStickerPrint() {
 }
 
 function printStickerImage(sticker) {
-  console.log('[MOS] Opening print window for sticker');
+  console.log('[MOS] Sending sticker to content script for printing');
   
-  // Create a popup window for printing (works better than iframe in sidepanel context)
+  // Send to content script via background - content script can print from the actual page
+  chrome.runtime.sendMessage({
+    action: 'PRINT_STICKER_VIA_CONTENT',
+    sticker: sticker
+  }, (response) => {
+    if (response?.success) {
+      console.log('[MOS] Print initiated via content script');
+    } else {
+      console.log('[MOS] Content script print failed, falling back to window.open');
+      printStickerViaWindow(sticker);
+    }
+  });
+}
+
+function printStickerViaWindow(sticker) {
+  // Fallback: Open a popup window for printing
   const printWindow = window.open('', '_blank', 'width=400,height=500');
   if (!printWindow) {
     console.error('[MOS] Failed to open print window - popup blocked?');
@@ -1250,7 +1265,7 @@ function printStickerImage(sticker) {
   const img = printWindow.document.getElementById('sticker');
   if (img) {
     const doPrint = () => {
-      console.log('[MOS] Triggering print dialog');
+      console.log('[MOS] Triggering print dialog via window');
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();

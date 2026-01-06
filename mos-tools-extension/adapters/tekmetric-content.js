@@ -147,6 +147,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true });
     return false;
   }
+
+  // Handle print request from side panel
+  if (message.action === "PRINT_STICKER_FROM_PANEL") {
+    console.log("[MOS Tools] Printing sticker from side panel");
+    if (message.sticker) {
+      printStickerFromContentScript(message.sticker);
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'No sticker data' });
+    }
+    return false;
+  }
 });
 
 // ==================== MOS PRINT BUTTON ====================
