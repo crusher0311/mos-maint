@@ -45,6 +45,7 @@ interface StickerConfig {
     background: string;
     phoneColor: string;
     taglineColor: string;
+    taglineLine2Color: string;
     serviceLabelColor: string;
     serviceValueColor: string;
   };
@@ -101,6 +102,7 @@ const DEFAULT_CONFIG: StickerConfig = {
     background: "#ffffff",
     phoneColor: "#000000",
     taglineColor: "#333333",
+    taglineLine2Color: "#333333",
     serviceLabelColor: "#666666",
     serviceValueColor: "#cc0000",
   },
@@ -216,6 +218,7 @@ export default function StickerSettingsPage() {
               background: data.config.colors?.background ?? DEFAULT_CONFIG.colors.background,
               phoneColor: data.config.colors?.phoneColor ?? DEFAULT_CONFIG.colors.phoneColor,
               taglineColor: data.config.colors?.taglineColor ?? DEFAULT_CONFIG.colors.taglineColor,
+              taglineLine2Color: data.config.colors?.taglineLine2Color ?? DEFAULT_CONFIG.colors.taglineLine2Color,
               serviceLabelColor: data.config.colors?.serviceLabelColor ?? DEFAULT_CONFIG.colors.serviceLabelColor,
               serviceValueColor: data.config.colors?.serviceValueColor ?? DEFAULT_CONFIG.colors.serviceValueColor,
             },
@@ -676,7 +679,7 @@ export default function StickerSettingsPage() {
               {[
                 { key: "phone", label: "Phone", colorKey: "phoneColor" as const },
                 { key: "tagline", label: "Tagline", colorKey: "taglineColor" as const },
-                { key: "taglineLine2", label: "Line 2", colorKey: "taglineColor" as const },
+                { key: "taglineLine2", label: "Line 2", colorKey: "taglineLine2Color" as const },
                 { key: "serviceLabel", label: "Label", colorKey: "serviceLabelColor" as const },
                 { key: "serviceValue", label: "Date/Mileage", colorKey: "serviceValueColor" as const },
               ].map((item) => {
