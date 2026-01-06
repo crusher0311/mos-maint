@@ -454,6 +454,7 @@ export async function POST(request: NextRequest) {
       unit = "mi",
       smsShopId,
       provider = "tekmetric",
+      tagline,
     } = body;
 
     if (!currentMileage || currentMileage <= 0) {
@@ -507,7 +508,11 @@ export async function POST(request: NextRequest) {
     if (stickerConfig.logo || stickerConfig.logoObjectPath) {
       logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath);
     }
-    const configWithLogo = { ...stickerConfig, logo: logoDataUrl || undefined };
+    const configWithLogo = { 
+      ...stickerConfig, 
+      logo: logoDataUrl || undefined,
+      ...(tagline ? { tagline } : {}),
+    };
 
     let qrDataUrl: string | null = null;
     const redirectUrl = stickerConfig.appointmentUrl || getStickerRedirectUrl(mosShopId!);
