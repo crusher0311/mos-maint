@@ -35,9 +35,19 @@ export async function POST(
         return NextResponse.json({ error: "Invalid limit value" }, { status: 400 });
       }
 
+      // Check current value first
+      const currentShop = await db.collection("shops").findOne(shopQuery);
+      console.log(`[VIN Limit] Shop ${shopId} current state:`, JSON.stringify({
+        found: !!currentShop,
+        billingVinLimit: currentShop?.billing?.vinLimit,
+        trialVinLimit: currentShop?.trialVinLimit,
+        newLimit: limit
+      }));
+
+      // Update billing.vinLimit (takes precedence in display) AND trialVinLimit for consistency
       const result = await db.collection("shops").updateOne(
         shopQuery,
-        { $set: { trialVinLimit: limit } }
+        { $set: { "billing.vinLimit": limit, trialVinLimit: limit } }
       );
 
       console.log(`[VIN Limit] Set limit for shopId ${shopId}: matched=${result.matchedCount}, modified=${result.modifiedCount}`);
@@ -52,7 +62,7 @@ export async function POST(
     if (action === "resetLimit") {
       const result = await db.collection("shops").updateOne(
         shopQuery,
-        { $unset: { trialVinLimit: "" } }
+        { $unset: { trialVinLimit: "", "billing.vinLimit": "" } }
       );
 
       if (result.matchedCount === 0) {
@@ -86,16 +96,18 @@ export async function POST(
       
       const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
       const defaultLimit = platformSettings?.vinLimit ?? 10;
-      const currentLimit = shop?.trialVinLimit ?? defaultLimit;
+      // Read from billing.vinLimit first (takes precedence), then trialVinLimit
+      const currentLimit = shop?.billing?.vinLimit ?? shop?.trialVinLimit ?? defaultLimit;
 
+      const newLimit = currentLimit + addAmount;
       await db.collection("shops").updateOne(
         shopQuery,
-        { $set: { trialVinLimit: currentLimit + addAmount } }
+        { $set: { "billing.vinLimit": newLimit, trialVinLimit: newLimit } }
       );
 
       return NextResponse.json({ 
         ok: true, 
-        message: `Added ${addAmount} VINs (new limit: ${currentLimit + addAmount})` 
+        message: `Added ${addAmount} VINs (new limit: ${newLimit})` 
       });
     }
 
