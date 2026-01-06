@@ -26,31 +26,46 @@ export async function POST(
     const { action, value } = await req.json();
     const db = await getDb();
 
+    // Try to find shop by numeric or string shopId
+    const shopQuery = { $or: [{ shopId: shopId }, { shopId: String(shopId) }] };
+
     if (action === "setLimit") {
       const limit = Number(value);
       if (isNaN(limit) || limit < 0) {
         return NextResponse.json({ error: "Invalid limit value" }, { status: 400 });
       }
 
-      await db.collection("shops").updateOne(
-        { shopId },
+      const result = await db.collection("shops").updateOne(
+        shopQuery,
         { $set: { trialVinLimit: limit } }
       );
+
+      console.log(`[VIN Limit] Set limit for shopId ${shopId}: matched=${result.matchedCount}, modified=${result.modifiedCount}`);
+
+      if (result.matchedCount === 0) {
+        return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+      }
 
       return NextResponse.json({ ok: true, message: `VIN limit set to ${limit}` });
     }
 
     if (action === "resetLimit") {
-      await db.collection("shops").updateOne(
-        { shopId },
+      const result = await db.collection("shops").updateOne(
+        shopQuery,
         { $unset: { trialVinLimit: "" } }
       );
+
+      if (result.matchedCount === 0) {
+        return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+      }
 
       return NextResponse.json({ ok: true, message: "VIN limit reset to default" });
     }
 
     if (action === "resetViews") {
-      const result = await db.collection("viewed_vins").deleteMany({ shopId });
+      const result = await db.collection("viewed_vins").deleteMany({ 
+        $or: [{ shopId: shopId }, { shopId: String(shopId) }] 
+      });
 
       return NextResponse.json({ 
         ok: true, 
@@ -64,13 +79,17 @@ export async function POST(
         return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
       }
 
-      const shop = await db.collection("shops").findOne({ shopId });
+      const shop = await db.collection("shops").findOne(shopQuery);
+      if (!shop) {
+        return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+      }
+      
       const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
       const defaultLimit = platformSettings?.vinLimit ?? 10;
       const currentLimit = shop?.trialVinLimit ?? defaultLimit;
 
       await db.collection("shops").updateOne(
-        { shopId },
+        shopQuery,
         { $set: { trialVinLimit: currentLimit + addAmount } }
       );
 

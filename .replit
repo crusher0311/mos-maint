@@ -81,8 +81,8 @@ channel = "stable-25_05"
 packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["npm", "run", "start"]
+deploymentTarget = "vm"
+run = ["bash", "-c", "npm run start & sleep 10 && npx tsx scripts/tekmetric-sync-worker.ts & npx tsx scripts/protractor-sync-worker.ts & wait"]
 build = ["npm", "run", "build"]
 
 [userenv]
