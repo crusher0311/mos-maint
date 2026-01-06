@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2 } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
@@ -108,6 +108,110 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     displayName?: string;
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [printingSticker, setPrintingSticker] = useState<string | null>(null);
+
+  const handleQuickPrintSticker = async (vin: string, currentMileage: number | null) => {
+    if (!currentMileage) {
+      alert("Mileage is required to print a sticker");
+      return;
+    }
+    
+    setPrintingSticker(vin);
+    try {
+      // Fetch shop sticker settings to get interval preferences
+      let intervalMileage = 5000;
+      let intervalMonths = 3;
+      
+      try {
+        const settingsRes = await fetch('/api/sticker/settings');
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          const intervals = settingsData.config?.intervals;
+          // Use synthetic oil as default interval (most common)
+          if (intervals?.synthetic) {
+            intervalMileage = intervals.synthetic.mileage || 5000;
+            intervalMonths = intervals.synthetic.months || 3;
+          } else if (intervals?.conventional) {
+            intervalMileage = intervals.conventional.mileage || 3000;
+            intervalMonths = intervals.conventional.months || 3;
+          }
+        }
+      } catch (e) {
+        console.log('Using default intervals');
+      }
+      
+      // Calculate next service date based on shop interval
+      const nextDate = new Date();
+      nextDate.setMonth(nextDate.getMonth() + intervalMonths);
+      const nextServiceDate = nextDate.toISOString().split('T')[0];
+      
+      // Calculate next service mileage based on shop interval
+      const nextServiceMileage = currentMileage + intervalMileage;
+      
+      // Generate the sticker image
+      const response = await fetch('/api/sticker/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vin,
+          currentMileage,
+          nextServiceMileage,
+          nextServiceDate,
+          size: '2x2.5',
+          includeQR: true,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate sticker');
+      }
+      
+      // Get the image blob
+      const blob = await response.blob();
+      const imageUrl = URL.createObjectURL(blob);
+      
+      // Open print window
+      const printWindow = window.open('', '_blank', 'width=400,height=500');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Print Sticker</title>
+            <style>
+              body { 
+                margin: 0; 
+                padding: 20px;
+                display: flex; 
+                justify-content: center; 
+                align-items: center;
+                min-height: 100vh;
+                font-family: Arial, sans-serif;
+              }
+              img { max-width: 100%; height: auto; }
+              @media print {
+                body { padding: 0; }
+                .no-print { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div>
+              <img src="${imageUrl}" alt="Oil Change Sticker" onload="window.print(); window.close();" />
+            </div>
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    } catch (error) {
+      console.error('Failed to print sticker:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
+    } finally {
+      setPrintingSticker(null);
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -557,6 +661,22 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                             title="Common Failures"
                           >
                             <AlertTriangle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleQuickPrintSticker(vin, r.displayMiles)}
+                            disabled={printingSticker === vin || !r.displayMiles}
+                            className={`p-1.5 rounded transition-colors ${
+                              !r.displayMiles 
+                                ? "text-gray-300 cursor-not-allowed" 
+                                : "text-gray-400 hover:text-green-600 hover:bg-green-50"
+                            }`}
+                            title={r.displayMiles ? "Quick Print Oil Sticker" : "Mileage required for sticker"}
+                          >
+                            {printingSticker === vin ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Printer className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </td>
