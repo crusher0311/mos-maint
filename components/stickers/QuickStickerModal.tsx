@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, Download, Printer } from "lucide-react";
+import { X, Loader2, Printer } from "lucide-react";
 
 interface IntervalConfig {
   mileage: number;
@@ -30,11 +30,12 @@ const INTERVAL_OPTIONS = [
   { key: "custom", label: "Custom" },
 ] as const;
 
-const STICKER_SIZES = [
-  { value: "2x2", label: "2\" x 2\"" },
-  { value: "2x2.5", label: "2\" x 2.5\"" },
-  { value: "2x3", label: "2\" x 3\"" },
-  { value: "2x3.5", label: "2\" x 3.5\"" },
+type UnitType = "mi" | "km" | "hrs";
+
+const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
+  { value: "mi", label: "Miles" },
+  { value: "km", label: "Kilometers" },
+  { value: "hrs", label: "Hours" },
 ];
 
 interface QuickStickerModalProps {
@@ -50,7 +51,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   const [customMonths, setCustomMonths] = useState<number>(6);
   const [customMileage, setCustomMileage] = useState<string>("5000");
   const [stickerSize, setStickerSize] = useState<string>("2x2.5");
-  const [useKilometers, setUseKilometers] = useState(false);
+  const [unit, setUnit] = useState<UnitType>("mi");
   const [roundMileage, setRoundMileage] = useState(true);
   const [intervals, setIntervals] = useState<IntervalsConfig>(DEFAULT_INTERVALS);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       if (res.ok) {
         const data = await res.json();
         if (data.config) {
-          setUseKilometers(data.config.useKilometers ?? false);
+          setUnit(data.config.useKilometers ? "km" : "mi");
           setRoundMileage(data.config.roundMileage ?? true);
           setStickerSize(data.config.defaultSize ?? "2x2.5");
           if (data.config.intervals) {
@@ -112,9 +113,9 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     return { nextServiceMileage, nextServiceDate };
   }
 
-  async function handleGenerate() {
+  async function handlePrint() {
     if (!currentMileage || parseInt(currentMileage.replace(/,/g, ""), 10) <= 0) {
-      setError("Please enter a valid current mileage");
+      setError("Please enter a valid current reading");
       return;
     }
 
@@ -133,6 +134,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           nextServiceMileage,
           nextServiceDate,
           includeQR: true,
+          useKilometers: unit === "km",
+          useHours: unit === "hrs",
         }),
       });
 
@@ -143,13 +146,30 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
 
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `quick-sticker-${stickerSize}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Print Sticker</title>
+            <style>
+              @page { margin: 0; }
+              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+              img { max-width: 100%; height: auto; }
+              @media print {
+                body { margin: 0; }
+                img { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${url}" onload="window.print(); window.close();" />
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
 
       onClose();
     } catch (err) {
@@ -168,7 +188,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
 
   if (!isOpen) return null;
 
-  const distanceLabel = useKilometers ? "km" : "mi";
+  const unitLabel = unit === "hrs" ? "hrs" : unit;
+  const readingLabel = unit === "hrs" ? "Hours" : unit === "km" ? "Kilometers" : "Mileage";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -193,19 +214,32 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Current {useKilometers ? "Kilometers" : "Mileage"}
+                  Current {readingLabel}
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={currentMileage}
-                    onChange={(e) => setCurrentMileage(formatMileageInput(e.target.value))}
-                    placeholder={`e.g. 125,000`}
-                    className="w-full px-4 py-2 pr-12 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                    {distanceLabel}
-                  </span>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={currentMileage}
+                      onChange={(e) => setCurrentMileage(formatMileageInput(e.target.value))}
+                      placeholder={`e.g. 125,000`}
+                      className="w-full px-4 py-2 pr-12 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      {unitLabel}
+                    </span>
+                  </div>
+                  <select
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value as UnitType)}
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
+                  >
+                    {UNIT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -222,7 +256,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                     <option key={opt.key} value={opt.key}>
                       {opt.label}
                       {opt.key !== "custom" && intervals[opt.key as keyof IntervalsConfig] && (
-                        ` (${intervals[opt.key as keyof IntervalsConfig].mileage.toLocaleString()} ${distanceLabel} / ${intervals[opt.key as keyof IntervalsConfig].months} mo)`
+                        ` (${intervals[opt.key as keyof IntervalsConfig].mileage.toLocaleString()} ${unitLabel} / ${intervals[opt.key as keyof IntervalsConfig].months} mo)`
                       )}
                     </option>
                   ))}
@@ -258,7 +292,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {useKilometers ? "Kilometers" : "Miles"} Until Service
+                      {readingLabel} Until Service
                     </label>
                     <div className="relative">
                       <input
@@ -269,29 +303,12 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                         className="w-full px-4 py-2 pr-12 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                        {distanceLabel}
+                        {unitLabel}
                       </span>
                     </div>
                   </div>
                 </div>
               )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sticker Size
-                </label>
-                <select
-                  value={stickerSize}
-                  onChange={(e) => setStickerSize(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                >
-                  {STICKER_SIZES.map((size) => (
-                    <option key={size.value} value={size.value}>
-                      {size.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
               {error && (
                 <p className="text-sm text-red-600">{error}</p>
@@ -308,7 +325,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             Cancel
           </button>
           <button
-            onClick={handleGenerate}
+            onClick={handlePrint}
             disabled={generating || loading || !currentMileage}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
@@ -319,8 +336,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
               </>
             ) : (
               <>
-                <Download className="w-4 h-4" />
-                Download Sticker
+                <Printer className="w-4 h-4" />
+                Print Now
               </>
             )}
           </button>
