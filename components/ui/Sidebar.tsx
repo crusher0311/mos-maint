@@ -178,7 +178,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Integrations", href: "/dashboard/settings/integrations" },
-        { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "stickers" }
+        { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
       ]
     }
   ];

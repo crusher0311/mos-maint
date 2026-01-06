@@ -118,7 +118,7 @@ Replaced paid third-party APIs with free self-hosted solutions:
 - Sticker settings page at `/dashboard/settings/stickers`
 - Live QR code preview with color customization
 - Sticker download for all sizes (2x2", 2x2.5", 2x3", 2x3.5")
-- Feature-gated sidebar navigation (`featureId: "stickers"`)
+- Feature-gated sidebar navigation (`featureId: "oil_sticker"`)
 
 **Pending Phases**:
 - Phase 3: Chrome extension merge (sticker tab in MOS Tools)
