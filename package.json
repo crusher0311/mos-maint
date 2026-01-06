@@ -16,9 +16,14 @@
     "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\""
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
     "@types/archiver": "^7.0.0",
     "@types/jsdom": "^27.0.0",
     "@types/qrcode": "^1.5.6",
+    "@uppy/aws-s3": "^5.1.0",
+    "@uppy/core": "^5.2.0",
+    "@uppy/dashboard": "^5.1.0",
+    "@uppy/react": "^5.1.1",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
     "canvas": "^3.2.0",
@@ -28,6 +33,7 @@
     "express": "^5.1.0",
     "fast-csv": "^5.0.5",
     "framer-motion": "^12.23.12",
+    "google-auth-library": "^10.5.0",
     "jsdom": "^27.4.0",
     "lucide-react": "^0.541.0",
     "mongodb": "^6.19.0",

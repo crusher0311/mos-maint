@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge, ImageIcon } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge, ImageIcon, Upload } from "lucide-react";
 
 interface IntervalConfig {
   mileage: number;
@@ -74,8 +74,10 @@ export default function StickerSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [config, setConfig] = useState<StickerConfig>(DEFAULT_CONFIG);
 
@@ -235,6 +237,75 @@ export default function StickerSettingsPage() {
     });
   }
 
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setMessage({ type: "error", text: "Please select an image file" });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: "error", text: "File size must be under 5MB" });
+      return;
+    }
+
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      const urlRes = await fetch("/api/sticker/upload-logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          contentType: file.type,
+        }),
+      });
+
+      if (!urlRes.ok) {
+        const err = await urlRes.json();
+        throw new Error(err.error || "Failed to get upload URL");
+      }
+
+      const { uploadURL, publicURL, objectPath } = await urlRes.json();
+
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Failed to upload file");
+      }
+
+      const finalizeRes = await fetch("/api/sticker/finalize-logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectPath, publicURL }),
+      });
+
+      if (!finalizeRes.ok) {
+        const err = await finalizeRes.json();
+        throw new Error(err.error || "Failed to finalize upload");
+      }
+
+      const { logoUrl } = await finalizeRes.json();
+      setConfig({ ...config, logo: logoUrl });
+      setMessage({ type: "success", text: "Logo uploaded successfully!" });
+    } catch (err) {
+      console.error("Logo upload error:", err);
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Upload failed" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[300px]">
@@ -328,29 +399,53 @@ export default function StickerSettingsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <div className="flex items-center gap-2">
                     <ImageIcon className="w-4 h-4" />
-                    Shop Logo URL
+                    Shop Logo
                   </div>
                 </label>
-                <input
-                  type="url"
-                  value={config.logo}
-                  onChange={(e) => setConfig({ ...config, logo: e.target.value })}
-                  placeholder="https://your-site.com/logo.png"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                {config.logo && (
-                  <div className="mt-2 p-2 bg-gray-50 rounded-lg">
-                    <img 
-                      src={config.logo} 
-                      alt="Shop logo preview" 
-                      className="max-h-16 mx-auto object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={config.logo}
+                      onChange={(e) => setConfig({ ...config, logo: e.target.value })}
+                      placeholder="https://your-site.com/logo.png"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {uploading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      {uploading ? "Uploading..." : "Upload"}
+                    </button>
                   </div>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Your shop logo will appear at the top of the sticker. Use a URL to your logo image.
-                </p>
+                  {config.logo && (
+                    <div className="p-2 bg-gray-50 rounded-lg">
+                      <img 
+                        src={config.logo} 
+                        alt="Shop logo preview" 
+                        className="max-h-16 mx-auto object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    Upload an image or paste a URL. Your logo will appear at the top of the sticker.
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -505,22 +600,79 @@ export default function StickerSettingsPage() {
 
         <div className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">QR Code Preview</h2>
-            <div className="flex justify-center p-4 bg-gray-50 rounded-lg">
-              {qrUrl ? (
-                <img 
-                  src={qrUrl} 
-                  alt="QR Code Preview" 
-                  className="w-48 h-48 rounded-lg shadow-sm"
-                />
-              ) : (
-                <div className="w-48 h-48 bg-gray-200 rounded-lg flex items-center justify-center">
-                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <h2 className="font-semibold text-gray-900 mb-4">Sticker Preview</h2>
+            <div className="flex justify-center p-4 bg-gray-100 rounded-lg">
+              <div 
+                className="bg-white rounded shadow-md overflow-hidden"
+                style={{ 
+                  width: config.defaultSize === "2x2" ? "200px" : "200px",
+                  height: config.defaultSize === "2x2" ? "200px" : 
+                          config.defaultSize === "2x2.5" ? "250px" : 
+                          config.defaultSize === "2x3" ? "300px" : "350px",
+                  padding: "10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  fontFamily: "Arial, sans-serif",
+                }}
+              >
+                <div className="text-center mb-2" style={{ minHeight: config.logo ? "50px" : "0" }}>
+                  {config.logo && (
+                    <img 
+                      src={config.logo}
+                      alt="Shop Logo"
+                      className="max-h-[50px] max-w-[90%] mx-auto object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
                 </div>
-              )}
+                
+                <div className="text-center mb-2">
+                  {config.phone && (
+                    <div className="text-sm font-bold text-black">{config.phone}</div>
+                  )}
+                  {config.tagline && (
+                    <div className="text-xs italic text-gray-600">{config.tagline}</div>
+                  )}
+                </div>
+                
+                <div className="flex items-start justify-between gap-2 mt-auto">
+                  <div className="flex-shrink-0">
+                    {qrUrl ? (
+                      <img 
+                        src={qrUrl} 
+                        alt="QR Code" 
+                        className="w-[70px] h-[70px]"
+                      />
+                    ) : (
+                      <div className="w-[70px] h-[70px] bg-gray-200 rounded flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right flex-grow">
+                    <div className="text-xs text-black mb-1">{config.serviceLabel || "Next Oil Service"}</div>
+                    <div 
+                      className="text-sm font-bold italic"
+                      style={{ color: config.colors.primary }}
+                    >
+                      {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+                        month: "numeric",
+                        day: "numeric", 
+                        year: "numeric"
+                      })}
+                    </div>
+                    <div 
+                      className="text-sm font-bold italic"
+                      style={{ color: config.colors.primary }}
+                    >
+                      {(65000).toLocaleString()} {config.useKilometers ? "kilometers" : "miles"}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <p className="text-sm text-gray-500 text-center mt-3">
-              Customers scan this to schedule an appointment
+              Live preview with sample date/mileage values
             </p>
           </div>
 
