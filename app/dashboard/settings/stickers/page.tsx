@@ -727,12 +727,12 @@ export default function StickerSettingsPage() {
                   backgroundColor: config.colors.background,
                 }}
               >
-                <div className="text-center mb-2" style={{ minHeight: config.logo ? "80px" : "0" }}>
+                <div className="text-center">
                   {config.logo && (
                     <img 
                       src={config.logo}
                       alt="Shop Logo"
-                      style={{ maxHeight: "80px", maxWidth: "90%", marginLeft: "auto", marginRight: "auto", objectFit: "contain" }}
+                      style={{ maxHeight: "60px", maxWidth: "90%", marginLeft: "auto", marginRight: "auto", objectFit: "contain" }}
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                   )}
