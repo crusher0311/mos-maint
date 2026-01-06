@@ -47,6 +47,7 @@ interface StickerConfig {
     background?: string;
     phoneColor?: string;
     taglineColor?: string;
+    taglineLine2Color?: string;
     serviceLabelColor?: string;
     serviceValueColor?: string;
   };

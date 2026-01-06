@@ -219,6 +219,7 @@ interface StickerConfig {
     background?: string;
     phoneColor?: string;
     taglineColor?: string;
+    taglineLine2Color?: string;
     serviceLabelColor?: string;
     serviceValueColor?: string;
   };
@@ -257,6 +258,7 @@ function generateStickerHtml(
   const backgroundColor = config.colors?.background || "#ffffff";
   const phoneColor = config.colors?.phoneColor || "#000000";
   const taglineColor = config.colors?.taglineColor || "#333333";
+  const taglineLine2Color = config.colors?.taglineLine2Color || config.colors?.taglineColor || "#333333";
   const serviceLabelColor = config.colors?.serviceLabelColor || "#666666";
   const serviceValueColor = config.colors?.serviceValueColor || config.colors?.primary || "#cc0000";
   const distanceUnit = config.useKilometers ? "km" : "miles";
@@ -348,7 +350,7 @@ function generateStickerHtml(
       font-size: ${taglineLine2Size}px;
       font-weight: ${taglineLine2FontStyle.bold ? "bold" : "normal"};
       font-style: ${taglineLine2FontStyle.italic ? "italic" : "normal"};
-      color: ${taglineColor};
+      color: ${taglineLine2Color};
     }
     .bottom-section {
       display: flex;
