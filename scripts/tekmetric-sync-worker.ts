@@ -16,11 +16,8 @@ function getApiUrl(): string {
   if (process.env.PRODUCTION_URL) {
     return `${process.env.PRODUCTION_URL}/api/cron/tekmetric-sync`;
   }
-  // Replit dev domain
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/tekmetric-sync`;
-  }
-  // Local development - use PORT env var or default to 5000
+  // In Replit, always use localhost to avoid external network issues
+  // The server runs on port 5000 in the same environment
   const port = process.env.PORT || 5000;
   return `http://localhost:${port}/api/cron/tekmetric-sync`;
 }
