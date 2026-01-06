@@ -78,6 +78,7 @@ const elements = {
   customIntervalFields: document.getElementById('custom-interval-fields'),
   customMonths: document.getElementById('custom-months'),
   customMileage: document.getElementById('custom-mileage'),
+  stickerTagline: document.getElementById('sticker-tagline'),
   stickerPrintBtn: document.getElementById('sticker-print-btn'),
   stickerError: document.getElementById('sticker-error')
 };
@@ -151,6 +152,12 @@ function setupEventListeners() {
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
       updateContext(message.context);
+    }
+    if (message.action === 'SWITCH_TO_STICKER_TAB') {
+      if (message.context) {
+        updateContext(message.context);
+      }
+      switchTab('sticker');
     }
   });
 }
@@ -1160,6 +1167,12 @@ async function handleStickerPrint() {
     if (currentContext && currentContext.shopId) {
       body.smsShopId = currentContext.shopId;
       body.provider = currentContext.provider || 'tekmetric';
+    }
+    
+    // Add optional tagline
+    const tagline = elements.stickerTagline?.value?.trim();
+    if (tagline) {
+      body.tagline = tagline;
     }
     
     if (intervalType === 'custom') {

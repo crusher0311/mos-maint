@@ -116,6 +116,262 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// ==================== MOS PRINT BUTTON ====================
+let printButtonInjected = false;
+
+function injectPrintButton() {
+  if (printButtonInjected) return;
+  
+  const context = detectContext();
+  if (!context.roId) return;
+  
+  // Find a suitable location to inject the button
+  // Look for the vehicle info section or action buttons area
+  const targetSelectors = [
+    '[data-testid="ro-header-actions"]',
+    '.ro-header-actions',
+    '[class*="RepairOrderHeader"] [class*="actions"]',
+    '[class*="header-actions"]'
+  ];
+  
+  let targetContainer = null;
+  for (const selector of targetSelectors) {
+    targetContainer = document.querySelector(selector);
+    if (targetContainer) break;
+  }
+  
+  // Fallback: look for print/action buttons near the RO header
+  if (!targetContainer) {
+    const headerButtons = document.querySelectorAll('button');
+    for (const btn of headerButtons) {
+      if (btn.textContent.includes('Print') || btn.closest('[class*="header"]')) {
+        targetContainer = btn.parentElement;
+        break;
+      }
+    }
+  }
+  
+  if (!targetContainer) {
+    console.log('[MOS Tools] Could not find target container for print button');
+    return;
+  }
+  
+  // Check if button already exists
+  if (document.getElementById('mos-print-button')) {
+    printButtonInjected = true;
+    return;
+  }
+  
+  // Create the MOS Print button
+  const button = document.createElement('button');
+  button.id = 'mos-print-button';
+  button.title = 'Left-click: Print sticker | Right-click: Customize';
+  button.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19 7V4H5V7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 12H5V20H19V12Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5 12V9C5 7.89543 5.89543 7 7 7H17C18.1046 7 19 7.89543 19 9V12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>MOS</span>
+  `;
+  
+  Object.assign(button.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 16px',
+    backgroundColor: '#EA580C',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    fontFamily: 'system-ui, sans-serif',
+    cursor: 'pointer',
+    marginLeft: '8px',
+    transition: 'background-color 0.2s'
+  });
+  
+  button.addEventListener('mouseenter', () => {
+    button.style.backgroundColor = '#C2410C';
+  });
+  
+  button.addEventListener('mouseleave', () => {
+    button.style.backgroundColor = '#EA580C';
+  });
+  
+  // Left-click: Immediate print
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleImmediatePrint();
+  });
+  
+  // Right-click: Open side panel to sticker tab
+  button.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openStickerPanel();
+  });
+  
+  targetContainer.appendChild(button);
+  printButtonInjected = true;
+  console.log('[MOS Tools] Print button injected');
+}
+
+function handleImmediatePrint() {
+  const context = detectContext();
+  if (!context.roId || !context.shopId) {
+    showToast('No repair order detected', 'error');
+    return;
+  }
+  
+  showToast('Generating sticker...', 'info');
+  
+  // Send message to background to generate and print sticker
+  chrome.runtime.sendMessage({
+    action: 'PRINT_STICKER_IMMEDIATE',
+    context: {
+      ...context,
+      vehicle: getVehicleDetails()
+    }
+  }, (response) => {
+    if (response && response.success) {
+      // Print via iframe
+      printStickerFromContentScript(response.sticker);
+    } else {
+      showToast(response?.error || 'Failed to generate sticker', 'error');
+    }
+  });
+}
+
+function getVehicleDetails() {
+  const details = {
+    make: null,
+    model: null,
+    year: null,
+    engine: null,
+    fuelType: null
+  };
+  
+  try {
+    // Try to get vehicle info from the page
+    const vehicleSection = document.querySelector('[class*="Vehicle"]') || 
+                          document.querySelector('[data-testid*="vehicle"]');
+    
+    if (vehicleSection) {
+      const text = vehicleSection.textContent;
+      
+      // Parse year make model
+      const vehicleMatch = text.match(/(\d{4})\s+(\w+)\s+([^\n]+)/);
+      if (vehicleMatch) {
+        details.year = parseInt(vehicleMatch[1]);
+        details.make = vehicleMatch[2];
+        details.model = vehicleMatch[3].trim();
+      }
+      
+      // Look for engine info
+      const engineMatch = text.match(/(\d\.\d)L|(\d\.\d)\s*[LV]\d|Turbo|Diesel|Hybrid/i);
+      if (engineMatch) {
+        details.engine = engineMatch[0];
+      }
+      
+      // Check for diesel
+      if (/diesel/i.test(text)) {
+        details.fuelType = 'diesel';
+      }
+    }
+    
+    // Also check the right sidebar for more details
+    const sidebar = document.querySelector('[class*="sidebar"]') || 
+                   document.querySelector('[class*="Sidebar"]');
+    if (sidebar) {
+      const sidebarText = sidebar.textContent;
+      if (/diesel/i.test(sidebarText)) {
+        details.fuelType = 'diesel';
+      }
+      
+      // Look for transmission type (often indicates Euro spec)
+      if (/euro|european/i.test(sidebarText)) {
+        details.fuelType = 'euro';
+      }
+    }
+  } catch (err) {
+    console.log('[MOS Tools] Error getting vehicle details:', err);
+  }
+  
+  return details;
+}
+
+function openStickerPanel() {
+  // Message background to open side panel to sticker tab
+  chrome.runtime.sendMessage({
+    action: 'OPEN_STICKER_PANEL',
+    context: detectContext()
+  });
+}
+
+function printStickerFromContentScript(sticker) {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
+  document.body.appendChild(iframe);
+  
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Print Sticker</title>
+      <style>
+        @page { margin: 0; size: auto; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        img { 
+          width: ${sticker.widthInches};
+          height: ${sticker.heightInches};
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <img id="sticker" src="${sticker.dataUrl}" />
+    </body>
+    </html>
+  `);
+  doc.close();
+  
+  const img = doc.getElementById('sticker');
+  const doPrint = () => {
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => iframe.remove(), 1000);
+      showToast('Sticker printed!', 'success');
+    }, 100);
+  };
+  
+  if (img.complete) {
+    doPrint();
+  } else {
+    img.onload = doPrint;
+  }
+}
+
+function checkAndInjectButton() {
+  const context = detectContext();
+  if (context.roId && !printButtonInjected) {
+    // Delay to ensure page is fully loaded
+    setTimeout(injectPrintButton, 1000);
+  } else if (!context.roId) {
+    // Remove button if we navigated away from RO
+    const existingButton = document.getElementById('mos-print-button');
+    if (existingButton) {
+      existingButton.remove();
+      printButtonInjected = false;
+    }
+  }
+}
+
 // ==================== UI HELPERS ====================
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
@@ -171,18 +427,30 @@ function showToast(message, type = 'info') {
 function init() {
   // Initial context check
   updateContext();
+  
+  // Try to inject print button
+  checkAndInjectButton();
 
   // Check for context changes on URL changes (SPA navigation)
   let lastUrl = window.location.href;
   contextCheckInterval = setInterval(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
+      printButtonInjected = false; // Reset on navigation
       updateContext();
+      checkAndInjectButton();
     }
   }, 500);
+  
+  // Also periodically try to inject button (for dynamic page loads)
+  setInterval(checkAndInjectButton, 2000);
 
   // Also listen for popstate (browser back/forward)
-  window.addEventListener('popstate', updateContext);
+  window.addEventListener('popstate', () => {
+    printButtonInjected = false;
+    updateContext();
+    checkAndInjectButton();
+  });
 }
 
 // Wait for page to be ready

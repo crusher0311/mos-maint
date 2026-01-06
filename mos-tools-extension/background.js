@@ -181,6 +181,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return false;
   }
+
+  // -------------------- Sticker Printing --------------------
+  if (message.action === "PRINT_STICKER_IMMEDIATE") {
+    handleImmediateStickerPrint(message.context, sender.tab?.id)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === "OPEN_STICKER_PANEL") {
+    // Open side panel and notify it to switch to sticker tab
+    if (sender.tab?.id) {
+      chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
+        // Give panel time to load, then tell it to switch to sticker tab
+        setTimeout(() => {
+          chrome.runtime.sendMessage({ 
+            action: 'SWITCH_TO_STICKER_TAB',
+            context: message.context
+          }).catch(() => {});
+        }, 500);
+      }).catch(err => console.error('[MOS] Failed to open side panel:', err));
+    }
+    sendResponse({ success: true });
+    return false;
+  }
 });
 
 // ==================== MOS API FUNCTIONS ====================
@@ -398,6 +423,82 @@ async function createTekmetricJob(shopId, roId, jobData) {
     console.error("[Tekmetric] Error creating job:", err);
     return { success: false, error: err.message };
   }
+}
+
+// ==================== STICKER PRINTING ====================
+const EURO_MAKES = ['bmw', 'mercedes', 'mercedes-benz', 'audi', 'volkswagen', 'vw', 'porsche', 'mini', 'volvo', 'land rover', 'jaguar', 'alfa romeo', 'fiat', 'maserati', 'ferrari', 'lamborghini', 'bentley', 'rolls-royce', 'aston martin', 'mclaren'];
+
+function detectOilType(vehicle) {
+  if (!vehicle) return 'synthetic';
+  
+  const make = (vehicle.make || '').toLowerCase();
+  const fuelType = (vehicle.fuelType || '').toLowerCase();
+  const engine = (vehicle.engine || '').toLowerCase();
+  
+  // Check for diesel
+  if (fuelType === 'diesel' || engine.includes('diesel') || engine.includes('tdi') || engine.includes('duramax') || engine.includes('powerstroke') || engine.includes('cummins')) {
+    return 'diesel';
+  }
+  
+  // Check for European vehicles
+  if (EURO_MAKES.includes(make)) {
+    return 'euro';
+  }
+  
+  // Default to synthetic for modern vehicles
+  return 'synthetic';
+}
+
+async function handleImmediateStickerPrint(context, tabId) {
+  if (!mosApiToken) {
+    throw new Error("Not authenticated with MOS. Please login first.");
+  }
+  
+  if (!context || !context.shopId) {
+    throw new Error("No shop context available");
+  }
+  
+  const mileage = context.mileage;
+  if (!mileage || mileage <= 0) {
+    throw new Error("Could not detect vehicle mileage. Use right-click to customize.");
+  }
+  
+  // Auto-detect oil type
+  const intervalType = detectOilType(context.vehicle);
+  console.log(`[MOS] Auto-detected oil type: ${intervalType} for ${context.vehicle?.make || 'unknown'}`);
+  
+  // Call the sticker API
+  const response = await fetch(`${mosApiUrl}/api/extension/sticker`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${mosApiToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      currentMileage: mileage,
+      intervalType,
+      unit: 'mi',
+      smsShopId: context.shopId,
+      provider: context.provider || 'tekmetric'
+    })
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Sticker generation failed: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (!data.success || !data.sticker) {
+    throw new Error("Failed to generate sticker");
+  }
+  
+  return {
+    success: true,
+    sticker: data.sticker,
+    oilType: intervalType
+  };
 }
 
 console.log("[MOS Tools] Background service worker loaded");
