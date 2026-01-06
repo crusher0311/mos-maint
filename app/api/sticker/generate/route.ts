@@ -356,7 +356,7 @@ function generateStickerHtml(
       justify-content: space-between;
       width: 100%;
       margin-top: ${Math.round(5 * scaleFactor)}px;
-      gap: ${padding}px;
+      gap: ${Math.round(5 * scaleFactor)}px;
     }
     .qr-code {
       flex-shrink: 0;
