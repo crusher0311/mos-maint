@@ -164,9 +164,19 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         const imgWidth = sizeWidthInches[stickerSize] || "1.97in";
         const imgHeight = sizeHeightInches[stickerSize] || "2.46in";
         
-        const printWindow = window.open("", "_blank", "width=400,height=500");
-        if (printWindow) {
-          printWindow.document.write(`
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "none";
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
             <!DOCTYPE html>
             <html>
             <head>
@@ -178,25 +188,39 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   width: 100%;
                   height: 100%;
                 }
-                body {
-                  padding: 0.25in;
-                }
                 img { 
                   width: ${imgWidth};
                   height: ${imgHeight};
                   display: block;
                 }
-                @media print {
-                  body { padding: 0; }
-                }
               </style>
             </head>
             <body>
-              <img src="${dataUrl}" onload="setTimeout(function() { window.print(); }, 100);" />
+              <img id="sticker" src="${dataUrl}" />
             </body>
             </html>
           `);
-          printWindow.document.close();
+          iframeDoc.close();
+          
+          const img = iframeDoc.getElementById("sticker") as HTMLImageElement;
+          if (img) {
+            img.onload = () => {
+              setTimeout(() => {
+                iframe.contentWindow?.print();
+                setTimeout(() => {
+                  document.body.removeChild(iframe);
+                }, 1000);
+              }, 100);
+            };
+            if (img.complete) {
+              setTimeout(() => {
+                iframe.contentWindow?.print();
+                setTimeout(() => {
+                  document.body.removeChild(iframe);
+                }, 1000);
+              }, 100);
+            }
+          }
         }
       };
       reader.readAsDataURL(blob);
