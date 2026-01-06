@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { createCanvas, loadImage } from "canvas";
 import { getSession } from "@/lib/auth";
+import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import path from "path";
 import fs from "fs";
@@ -10,6 +11,33 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.png");
+const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
+const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
+
+async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> {
+  if (!HOVERCODE_API_TOKEN) return null;
+  
+  try {
+    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
+      headers: { Authorization: `Token ${HOVERCODE_API_TOKEN}` },
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (data.png) {
+      const imageRes = await fetch(data.png);
+      if (imageRes.ok) {
+        const arrayBuffer = await imageRes.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("[Sticker QR] HoverCode fetch failed:", error);
+    return null;
+  }
+}
 
 interface QROptions {
   size?: number;
@@ -180,6 +208,26 @@ export async function GET(req: NextRequest) {
   const includeLogo = searchParams.get("includeLogo") !== "false";
 
   try {
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId: { $in: [shopId, String(shopId)] } },
+      { projection: { "stickerConfig.hovercodeQRId": 1 } }
+    );
+    
+    const hovercodeQRId = shop?.stickerConfig?.hovercodeQRId;
+    
+    if (hovercodeQRId) {
+      const hovercodeImage = await getHovercodeQRImage(hovercodeQRId);
+      if (hovercodeImage) {
+        return new NextResponse(new Uint8Array(hovercodeImage), {
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "no-cache",
+          },
+        });
+      }
+    }
+
     const redirectUrl = getStickerRedirectUrl(shopId);
 
     const pngBuffer = await generateStyledQR(redirectUrl, {
