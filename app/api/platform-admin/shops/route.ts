@@ -150,6 +150,7 @@ export async function GET() {
         },
         stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
         stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
+        stickerConfig: shop.stickerConfig || {},
         enabledFeatures: shop.enabledFeatures || {},
         backfill: (hasProtractor || hasTekmetric) ? {
           completed: hasProtractor 
