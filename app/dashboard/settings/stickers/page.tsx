@@ -29,6 +29,8 @@ interface StickerConfig {
   taglineLine2: string;
   serviceLabel: string;
   showQRCode: boolean;
+  roundMileage: boolean;
+  usePredictiveDate: boolean;
   fontStyles: {
     phone: FontStyle;
     tagline: FontStyle;
@@ -89,6 +91,8 @@ const DEFAULT_CONFIG: StickerConfig = {
   taglineLine2: "",
   serviceLabel: "Next Oil Service",
   showQRCode: true,
+  roundMileage: true,
+  usePredictiveDate: false,
   fontStyles: DEFAULT_FONT_STYLES,
   colors: {
     primary: "#cc0000",
@@ -141,6 +145,8 @@ export default function StickerSettingsPage() {
             taglineLine2: data.config.taglineLine2 ?? DEFAULT_CONFIG.taglineLine2,
             serviceLabel: data.config.serviceLabel ?? DEFAULT_CONFIG.serviceLabel,
             showQRCode: data.config.showQRCode ?? DEFAULT_CONFIG.showQRCode,
+            roundMileage: data.config.roundMileage ?? DEFAULT_CONFIG.roundMileage,
+            usePredictiveDate: data.config.usePredictiveDate ?? DEFAULT_CONFIG.usePredictiveDate,
             fontStyles: {
               phone: data.config.fontStyles?.phone ?? DEFAULT_FONT_STYLES.phone,
               tagline: data.config.fontStyles?.tagline ?? DEFAULT_FONT_STYLES.tagline,
@@ -716,6 +722,37 @@ export default function StickerSettingsPage() {
                 <label htmlFor="showQRCode" className="text-sm text-gray-700">
                   Include QR code for appointment scheduling
                 </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="roundMileage"
+                  checked={config.roundMileage}
+                  onChange={(e) => setConfig({ ...config, roundMileage: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="roundMileage" className="text-sm text-gray-700">
+                  Round mileage to nearest 100 {config.useKilometers ? "km" : "miles"}
+                </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="usePredictiveDate"
+                  checked={config.usePredictiveDate}
+                  onChange={(e) => setConfig({ ...config, usePredictiveDate: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div>
+                  <label htmlFor="usePredictiveDate" className="text-sm text-gray-700">
+                    Use predictive date based on driving habits
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Calculate due date using vehicle&apos;s avg miles/day instead of fixed months
+                  </p>
+                </div>
               </div>
             </div>
           </div>
