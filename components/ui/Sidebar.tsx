@@ -24,7 +24,8 @@ import {
   BarChart3,
   LogOut,
   RefreshCw,
-  X
+  X,
+  Printer
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -41,6 +42,7 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   featureId?: string;
+  isModal?: boolean;
   children?: NavChild[];
 }
 
@@ -195,6 +197,13 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />
     },
+    {
+      name: "Quick Sticker",
+      href: "#quick-sticker",
+      icon: <Printer className="w-5 h-5" />,
+      featureId: "oil_sticker",
+      isModal: true
+    },
     // Reporting page hidden until we have enough data to verify with live users
     // {
     //   name: "Reporting",
@@ -217,8 +226,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           href: "/dashboard/settings/preferences",
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
-            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
-            { name: "Quick Sticker", href: "#quick-sticker", featureId: "oil_sticker", isModal: true }
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
           ]
         },
         // Billing page hidden until we have enough data to verify with live users
@@ -474,6 +482,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                     </ul>
                   )}
                 </div>
+              ) : item.isModal ? (
+                <button
+                  onClick={() => {
+                    if (item.href === "#quick-sticker" && onQuickStickerClick) {
+                      onQuickStickerClick();
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  {item.icon}
+                  <span>{item.name}</span>
+                </button>
               ) : (
                 <Link
                   href={item.href}
