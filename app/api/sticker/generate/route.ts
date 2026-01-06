@@ -115,10 +115,10 @@ interface StickerRequest {
 }
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "2x2": { width: 200, height: 200 },
-  "2x2.5": { width: 200, height: 250 },
-  "2x3": { width: 200, height: 300 },
-  "2x3.5": { width: 200, height: 350 },
+  "2x2": { width: 600, height: 600 },
+  "2x2.5": { width: 600, height: 750 },
+  "2x3": { width: 600, height: 900 },
+  "2x3.5": { width: 600, height: 1050 },
 };
 
 function generateStickerHtml(
@@ -254,7 +254,6 @@ function generateStickerHtml(
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
-      white-space: nowrap;
     }
     .service-centered {
       text-align: center;
