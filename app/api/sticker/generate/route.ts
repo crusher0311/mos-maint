@@ -263,8 +263,8 @@ function generateStickerHtml(
   const taglineLine2Color = config.colors?.taglineLine2Color || config.colors?.taglineColor || "#333333";
   const serviceLabelColor = config.colors?.serviceLabelColor || "#666666";
   const serviceValueColor = config.colors?.serviceValueColor || config.colors?.primary || "#cc0000";
-  const useHours = data.useHours ?? false;
-  const useKilometers = data.useKilometers ?? config.useKilometers ?? false;
+  const useHours = typeof data.useHours === "boolean" ? data.useHours : false;
+  const useKilometers = typeof data.useKilometers === "boolean" ? data.useKilometers : !!config.useKilometers;
   const distanceUnit = useHours ? "hrs" : useKilometers ? "km" : "mi";
 
   const formattedDate = data.nextServiceDate
