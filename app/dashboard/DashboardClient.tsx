@@ -167,44 +167,50 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         throw new Error(error.error || 'Failed to generate sticker');
       }
       
-      // Get the image blob
+      // Get the image blob and convert to data URL
       const blob = await response.blob();
-      const imageUrl = URL.createObjectURL(blob);
+      const reader = new FileReader();
       
-      // Open print window
-      const printWindow = window.open('', '_blank', 'width=400,height=500');
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Print Sticker</title>
-            <style>
-              body { 
-                margin: 0; 
-                padding: 20px;
-                display: flex; 
-                justify-content: center; 
-                align-items: center;
-                min-height: 100vh;
-                font-family: Arial, sans-serif;
-              }
-              img { max-width: 100%; height: auto; }
-              @media print {
-                body { padding: 0; }
-                .no-print { display: none; }
-              }
-            </style>
-          </head>
-          <body>
-            <div>
-              <img src="${imageUrl}" alt="Oil Change Sticker" onload="window.print(); window.close();" />
-            </div>
-          </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        
+        // Open print window
+        const printWindow = window.open('', '_blank', 'width=400,height=500');
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                body { 
+                  margin: 0; 
+                  padding: 20px;
+                  display: flex; 
+                  justify-content: center; 
+                  align-items: center;
+                  min-height: 100vh;
+                  font-family: Arial, sans-serif;
+                }
+                img { max-width: 100%; height: auto; }
+                @media print {
+                  body { padding: 0; }
+                  .no-print { display: none; }
+                }
+              </style>
+            </head>
+            <body>
+              <div>
+                <img src="${dataUrl}" alt="Oil Change Sticker" onload="window.print();" />
+              </div>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+      };
+      
+      reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print sticker:', error);
       alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
