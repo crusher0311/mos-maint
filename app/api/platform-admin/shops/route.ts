@@ -33,7 +33,12 @@ export async function GET() {
     
     const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts] = await Promise.all([
+    // Get first day of current month for monthly sticker counts
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -55,6 +60,14 @@ export async function GET() {
       db.collection("job_index").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("sticker_generations").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("sticker_generations").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants }, generatedAt: { $gte: monthStart } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray()
     ]);
     
@@ -73,6 +86,18 @@ export async function GET() {
     for (const j of jobIndexCounts) {
       const key = String(j._id);
       jobIndexCountMap.set(key, (jobIndexCountMap.get(key) || 0) + j.count);
+    }
+    
+    const stickerCountMap = new Map<string, number>();
+    for (const s of stickerCounts) {
+      const key = String(s._id);
+      stickerCountMap.set(key, (stickerCountMap.get(key) || 0) + s.count);
+    }
+    
+    const stickerCountThisMonthMap = new Map<string, number>();
+    for (const s of stickerCountsThisMonth) {
+      const key = String(s._id);
+      stickerCountThisMonthMap.set(key, (stickerCountThisMonthMap.get(key) || 0) + s.count);
     }
     
     const vehicleCountMap = new Map<string, number>();
@@ -123,6 +148,8 @@ export async function GET() {
           vinLimit,
           vinViewCount,
         },
+        stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
+        stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
         enabledFeatures: shop.enabledFeatures || {},
         backfill: (hasProtractor || hasTekmetric) ? {
           completed: hasProtractor 
