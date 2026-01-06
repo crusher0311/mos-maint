@@ -215,16 +215,20 @@ export async function GET(req: NextRequest) {
     );
     
     const hovercodeQRId = shop?.stickerConfig?.hovercodeQRId;
+    console.log(`[Sticker QR] Shop ${shopId} hovercodeQRId:`, hovercodeQRId || "not set");
     
     if (hovercodeQRId) {
       const hovercodeImage = await getHovercodeQRImage(hovercodeQRId);
       if (hovercodeImage) {
+        console.log(`[Sticker QR] Using HoverCode QR for shop ${shopId}`);
         return new NextResponse(new Uint8Array(hovercodeImage), {
           headers: {
             "Content-Type": "image/png",
             "Cache-Control": "no-cache",
           },
         });
+      } else {
+        console.log(`[Sticker QR] HoverCode fetch failed, falling back to generated QR`);
       }
     }
 
