@@ -240,6 +240,8 @@ interface StickerRequest {
   size?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
   includeQR?: boolean;
   previewConfig?: StickerConfig;
+  useKilometers?: boolean;
+  useHours?: boolean;
 }
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -261,7 +263,9 @@ function generateStickerHtml(
   const taglineLine2Color = config.colors?.taglineLine2Color || config.colors?.taglineColor || "#333333";
   const serviceLabelColor = config.colors?.serviceLabelColor || "#666666";
   const serviceValueColor = config.colors?.serviceValueColor || config.colors?.primary || "#cc0000";
-  const distanceUnit = config.useKilometers ? "km" : "mi";
+  const useHours = data.useHours ?? false;
+  const useKilometers = data.useKilometers ?? config.useKilometers ?? false;
+  const distanceUnit = useHours ? "hrs" : useKilometers ? "km" : "mi";
 
   const formattedDate = data.nextServiceDate
     ? new Date(data.nextServiceDate).toLocaleDateString("en-US", {
