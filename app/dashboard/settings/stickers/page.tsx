@@ -839,7 +839,7 @@ export default function StickerSettingsPage() {
                           fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
                           color: config.colors.serviceValueColor 
                         }}>
-                          {(config.roundMileage ? 65000 : 65123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
+                          {(config.roundMileage ? 165000 : 165123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
                         </div>
                       </div>
                     </div>
@@ -866,7 +866,7 @@ export default function StickerSettingsPage() {
                         fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
                         color: config.colors.serviceValueColor 
                       }}>
-                        {(config.roundMileage ? 65000 : 65123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
+                        {(config.roundMileage ? 165000 : 165123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
                       </div>
                     </div>
                   )}

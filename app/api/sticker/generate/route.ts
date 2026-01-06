@@ -68,6 +68,117 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
   }
 }
 
+const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.png");
+
+function drawRoundedRect(ctx: any, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+async function generateStyledQRForSticker(
+  url: string,
+  options: { size?: number; color?: string; backgroundColor?: string } = {}
+): Promise<Buffer> {
+  const { size = 240, color = "#1976d2", backgroundColor = "#ffffff" } = options;
+  const scale = 4;
+  const scaledSize = size * scale;
+
+  const qrMatrix = await QRCode.create(url, { errorCorrectionLevel: "H" });
+  const modules = qrMatrix.modules;
+  const moduleCount = modules.size;
+
+  const margin = 4;
+  const moduleSize = scaledSize / (moduleCount + margin * 2);
+  const actualSize = moduleSize * (moduleCount + margin * 2);
+  const offset = moduleSize * margin;
+
+  const canvas = createCanvas(actualSize, actualSize);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = backgroundColor;
+  ctx.fillRect(0, 0, actualSize, actualSize);
+  ctx.fillStyle = color;
+
+  const dotPadding = moduleSize * 0.18;
+  const dotSize = moduleSize - dotPadding * 2;
+  const cornerRadius = dotSize * 0.2;
+
+  for (let row = 0; row < moduleCount; row++) {
+    for (let col = 0; col < moduleCount; col++) {
+      if (modules.get(row, col)) {
+        const x = offset + col * moduleSize + dotPadding;
+        const y = offset + row * moduleSize + dotPadding;
+        const isFinderPattern = (row < 7 && col < 7) || (row < 7 && col >= moduleCount - 7) || (row >= moduleCount - 7 && col < 7);
+        if (!isFinderPattern) {
+          drawRoundedRect(ctx, x, y, dotSize, dotSize, cornerRadius);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  const finderSize = 7 * moduleSize;
+  const finderPositions = [
+    { x: offset, y: offset },
+    { x: offset + (moduleCount - 7) * moduleSize, y: offset },
+    { x: offset, y: offset + (moduleCount - 7) * moduleSize },
+  ];
+
+  ctx.fillStyle = backgroundColor;
+  for (const pos of finderPositions) {
+    ctx.fillRect(pos.x, pos.y, finderSize, finderSize);
+  }
+
+  ctx.fillStyle = color;
+  for (const pos of finderPositions) {
+    drawRoundedRect(ctx, pos.x, pos.y, finderSize, finderSize, moduleSize);
+    ctx.fill();
+    ctx.fillStyle = backgroundColor;
+    const inner1 = moduleSize;
+    drawRoundedRect(ctx, pos.x + inner1, pos.y + inner1, finderSize - inner1 * 2, finderSize - inner1 * 2, moduleSize * 0.6);
+    ctx.fill();
+    ctx.fillStyle = color;
+    const inner2 = moduleSize * 2;
+    drawRoundedRect(ctx, pos.x + inner2, pos.y + inner2, finderSize - inner2 * 2, finderSize - inner2 * 2, moduleSize * 0.4);
+    ctx.fill();
+  }
+
+  if (fs.existsSync(DEFAULT_LOGO_PATH)) {
+    try {
+      const logo = await loadImage(DEFAULT_LOGO_PATH);
+      const logoSize = actualSize * 0.22;
+      const logoX = (actualSize - logoSize) / 2;
+      const logoY = (actualSize - logoSize) / 2;
+      const padding = logoSize * 0.12;
+      ctx.fillStyle = backgroundColor;
+      ctx.beginPath();
+      ctx.arc(actualSize / 2, actualSize / 2, logoSize / 2 + padding, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+    } catch (err) {
+      console.error("[Sticker Generate] QR logo failed:", err);
+    }
+  }
+
+  const outputCanvas = createCanvas(size, size);
+  const outputCtx = outputCanvas.getContext("2d");
+  (outputCtx as any).imageSmoothingEnabled = true;
+  (outputCtx as any).imageSmoothingQuality = "high";
+  outputCtx.drawImage(canvas, 0, 0, size, size);
+
+  return outputCanvas.toBuffer("image/png");
+}
+
 interface FontStyle {
   bold?: boolean;
   italic?: boolean;
@@ -335,44 +446,9 @@ export async function POST(req: NextRequest) {
     let qrDataUrl: string | null = null;
     if (includeQR) {
       const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-      const logoPath = path.join(process.cwd(), "public", "sticker-qr-logo.png");
-      const qrSize = 100;
-
-      const canvas = createCanvas(qrSize, qrSize);
-      const ctx = canvas.getContext("2d");
-
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, qrSize, qrSize);
-
-      const baseQr = await QRCode.toDataURL(redirectUrl, {
-        width: qrSize,
-        margin: 1,
-        color: { dark: "#000000", light: "#ffffff" },
-        errorCorrectionLevel: "H",
-      });
-
-      const qrImage = await loadImage(baseQr);
-      ctx.drawImage(qrImage, 0, 0, qrSize, qrSize);
-
-      if (fs.existsSync(logoPath)) {
-        try {
-          const logo = await loadImage(logoPath);
-          const logoSize = qrSize * 0.25;
-          const logoX = (qrSize - logoSize) / 2;
-          const logoY = (qrSize - logoSize) / 2;
-          const padding = logoSize * 0.15;
-          ctx.fillStyle = "#ffffff";
-          ctx.beginPath();
-          ctx.roundRect(logoX - padding, logoY - padding, logoSize + padding * 2, logoSize + padding * 2, 4);
-          ctx.fill();
-          ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
-        } catch (err) {
-          console.error("[Sticker Generate] Logo loading failed:", err);
-        }
-      }
-
-      const buffer = canvas.toBuffer("image/png");
-      qrDataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
+      const qrColor = config.colors?.primary || "#1976d2";
+      const qrBuffer = await generateStyledQRForSticker(redirectUrl, { size: 240, color: qrColor });
+      qrDataUrl = `data:image/png;base64,${qrBuffer.toString("base64")}`;
     }
 
     const html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
