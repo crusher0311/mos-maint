@@ -212,6 +212,8 @@ export default function StickerSettingsPage() {
           taglineLine2: config.taglineLine2,
           serviceLabel: config.serviceLabel,
           showQRCode: config.showQRCode,
+          roundMileage: config.roundMileage,
+          usePredictiveDate: config.usePredictiveDate,
           fontStyles: config.fontStyles,
           colors: config.colors,
           defaultSize: config.defaultSize,
@@ -375,7 +377,7 @@ export default function StickerSettingsPage() {
   }
 
   return (
-    <main className="p-6 max-w-4xl">
+    <main className="p-6 max-w-6xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Oil Change Stickers</h1>
         <p className="text-gray-600 mt-1">
@@ -392,178 +394,15 @@ export default function StickerSettingsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <QrCode className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">QR Code Settings</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Link2 className="w-4 h-4" />
-                    Appointment URL (optional)
-                  </div>
-                </label>
-                <input
-                  type="url"
-                  value={config.appointmentUrl}
-                  onChange={(e) => setConfig({ ...config, appointmentUrl: e.target.value })}
-                  placeholder="https://your-booking-page.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Leave empty to use your shop&apos;s default appointment page from your SMS system.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Palette className="w-4 h-4" />
-                    QR Code Color
-                  </div>
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.primary}
-                    onChange={(e) => updateColor("primary", e.target.value)}
-                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.primary}
-                    onChange={(e) => updateColor("primary", e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Palette className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">Sticker Theme</h2>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Customize colors and font styling for each element of your sticker.
-            </p>
-
-            <div className="space-y-4">
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <label className="block text-sm font-medium text-gray-900 mb-2">Background Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.background}
-                    onChange={(e) => updateColor("background", e.target.value)}
-                    className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.background}
-                    onChange={(e) => updateColor("background", e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                </div>
-              </div>
-
-              {[
-                { key: "phone", label: "Phone", colorKey: "phoneColor" as const },
-                { key: "tagline", label: "Tagline (Line 1)", colorKey: "taglineColor" as const },
-                { key: "taglineLine2", label: "Line 2", colorKey: "taglineColor" as const },
-                { key: "serviceLabel", label: "Service Label", colorKey: "serviceLabelColor" as const },
-                { key: "serviceValue", label: "Date/Mileage", colorKey: "serviceValueColor" as const },
-              ].map((item) => {
-                const style = config.fontStyles[item.key as keyof typeof config.fontStyles];
-                const colorValue = config.colors[item.colorKey];
-                return (
-                  <div key={item.key} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-gray-900 text-sm">{item.label}</span>
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={colorValue}
-                          onChange={(e) => updateColor(item.colorKey, e.target.value)}
-                          className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={colorValue}
-                          onChange={(e) => updateColor(item.colorKey, e.target.value)}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <label className="text-xs text-gray-600">Size:</label>
-                        <input
-                          type="number"
-                          value={style.size}
-                          onChange={(e) => setConfig({
-                            ...config,
-                            fontStyles: {
-                              ...config.fontStyles,
-                              [item.key]: { ...style, size: Number(e.target.value) || 12 }
-                            }
-                          })}
-                          className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                          min={8}
-                          max={24}
-                        />
-                        <span className="text-xs text-gray-500">px</span>
-                      </div>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={style.bold}
-                          onChange={(e) => setConfig({
-                            ...config,
-                            fontStyles: {
-                              ...config.fontStyles,
-                              [item.key]: { ...style, bold: e.target.checked }
-                            }
-                          })}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <span className="text-xs font-bold text-gray-700">B</span>
-                      </label>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={style.italic}
-                          onChange={(e) => setConfig({
-                            ...config,
-                            fontStyles: {
-                              ...config.fontStyles,
-                              [item.key]: { ...style, italic: e.target.checked }
-                            }
-                          })}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <span className="text-xs italic text-gray-700">I</span>
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
+      <div className="flex gap-6">
+        <div className="flex-1 space-y-6 min-w-0">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
               <Type className="w-5 h-5 text-blue-600" />
               <h2 className="font-semibold text-gray-900">Sticker Content</h2>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <div className="flex items-center gap-2">
@@ -571,50 +410,40 @@ export default function StickerSettingsPage() {
                     Shop Logo
                   </div>
                 </label>
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={config.logo}
-                      onChange={(e) => setConfig({ ...config, logo: e.target.value })}
-                      placeholder="https://your-site.com/logo.png"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoUpload}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {uploading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Upload className="w-4 h-4" />
-                      )}
-                      {uploading ? "Uploading..." : "Upload"}
-                    </button>
-                  </div>
-                  {config.logo && (
-                    <div className="p-2 bg-gray-50 rounded-lg">
-                      <img 
-                        src={config.logo} 
-                        alt="Shop logo preview" 
-                        className="max-h-16 mx-auto object-contain"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    Upload an image or paste a URL. Your logo will appear at the top of the sticker.
-                  </p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={config.logo}
+                    onChange={(e) => setConfig({ ...config, logo: e.target.value })}
+                    placeholder="Logo URL or upload"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  </button>
                 </div>
+                {config.logo && (
+                  <div className="mt-2 p-2 bg-gray-50 rounded-lg">
+                    <img 
+                      src={config.logo} 
+                      alt="Logo" 
+                      className="max-h-12 mx-auto object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -634,9 +463,7 @@ export default function StickerSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tagline
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
                 <input
                   type="text"
                   value={config.tagline}
@@ -648,26 +475,19 @@ export default function StickerSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Line 2 (Optional)
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Line 2 (Optional)</label>
                 <input
                   type="text"
                   value={config.taglineLine2}
                   onChange={(e) => setConfig({ ...config, taglineLine2: e.target.value })}
-                  placeholder="Address or additional info"
+                  placeholder="Address or extra info"
                   maxLength={35}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Second line below tagline (e.g., address)
-                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Service Label
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service Label</label>
                 <input
                   type="text"
                   value={config.serviceLabel}
@@ -676,128 +496,236 @@ export default function StickerSettingsPage() {
                   maxLength={25}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Label above the date/mileage (e.g., &quot;Next Oil Service&quot;, &quot;Service Due&quot;)
-                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Default Sticker Size
+                  <div className="flex items-center gap-2">
+                    <Link2 className="w-4 h-4" />
+                    Appointment URL
+                  </div>
                 </label>
-                <select
-                  value={config.defaultSize}
-                  onChange={(e) => setConfig({ ...config, defaultSize: e.target.value })}
+                <input
+                  type="url"
+                  value={config.appointmentUrl}
+                  onChange={(e) => setConfig({ ...config, appointmentUrl: e.target.value })}
+                  placeholder="https://booking-page.com"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {STICKER_SIZES.map((size) => (
-                    <option key={size.value} value={size.value}>
-                      {size.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="useKilometers"
-                  checked={config.useKilometers}
-                  onChange={(e) => setConfig({ ...config, useKilometers: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="useKilometers" className="text-sm text-gray-700">
-                  Use kilometers instead of miles
-                </label>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="showQRCode"
-                  checked={config.showQRCode}
-                  onChange={(e) => setConfig({ ...config, showQRCode: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="showQRCode" className="text-sm text-gray-700">
-                  Include QR code for appointment scheduling
-                </label>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="roundMileage"
-                  checked={config.roundMileage}
-                  onChange={(e) => setConfig({ ...config, roundMileage: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="roundMileage" className="text-sm text-gray-700">
-                  Round mileage to nearest 100 {config.useKilometers ? "km" : "miles"}
-                </label>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="usePredictiveDate"
-                  checked={config.usePredictiveDate}
-                  onChange={(e) => setConfig({ ...config, usePredictiveDate: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div>
-                  <label htmlFor="usePredictiveDate" className="text-sm text-gray-700">
-                    Use predictive date based on driving habits
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    Calculate due date using vehicle&apos;s avg miles/day instead of fixed months
-                  </p>
-                </div>
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">Service Intervals by Oil Type</h2>
+              <Gauge className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Sticker Options</h2>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Set default intervals for each oil type. The system automatically selects the right interval based on vehicle make, fuel type, and service performed.
-            </p>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
+                <select
+                  value={config.defaultSize}
+                  onChange={(e) => setConfig({ ...config, defaultSize: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {STICKER_SIZES.map((size) => (
+                    <option key={size.value} value={size.value}>{size.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">QR Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.primary}
+                    onChange={(e) => updateColor("primary", e.target.value)}
+                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.primary}
+                    onChange={(e) => updateColor("primary", e.target.value)}
+                    className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Background</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={config.colors.background}
+                    onChange={(e) => updateColor("background", e.target.value)}
+                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={config.colors.background}
+                    onChange={(e) => updateColor("background", e.target.value)}
+                    className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.showQRCode}
+                  onChange={(e) => setConfig({ ...config, showQRCode: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Show QR code</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.useKilometers}
+                  onChange={(e) => setConfig({ ...config, useKilometers: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Use kilometers</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.roundMileage}
+                  onChange={(e) => setConfig({ ...config, roundMileage: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Round mileage</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer" title="Calculate due date using vehicle's avg miles/day">
+                <input
+                  type="checkbox"
+                  checked={config.usePredictiveDate}
+                  onChange={(e) => setConfig({ ...config, usePredictiveDate: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Predictive date</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Palette className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Text Styling</h2>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { key: "phone", label: "Phone", colorKey: "phoneColor" as const },
+                { key: "tagline", label: "Tagline", colorKey: "taglineColor" as const },
+                { key: "taglineLine2", label: "Line 2", colorKey: "taglineColor" as const },
+                { key: "serviceLabel", label: "Label", colorKey: "serviceLabelColor" as const },
+                { key: "serviceValue", label: "Date/Mileage", colorKey: "serviceValueColor" as const },
+              ].map((item) => {
+                const style = config.fontStyles[item.key as keyof typeof config.fontStyles];
+                const colorValue = config.colors[item.colorKey];
+                return (
+                  <div key={item.key} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                    <span className="w-20 font-medium text-gray-700 text-sm">{item.label}</span>
+                    <input
+                      type="color"
+                      value={colorValue}
+                      onChange={(e) => updateColor(item.colorKey, e.target.value)}
+                      className="w-8 h-8 rounded border border-gray-300 cursor-pointer flex-shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={colorValue}
+                      onChange={(e) => updateColor(item.colorKey, e.target.value)}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={style.size}
+                        onChange={(e) => setConfig({
+                          ...config,
+                          fontStyles: {
+                            ...config.fontStyles,
+                            [item.key]: { ...style, size: Number(e.target.value) || 12 }
+                          }
+                        })}
+                        className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                        min={8}
+                        max={24}
+                      />
+                      <span className="text-xs text-gray-500">px</span>
+                    </div>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={style.bold}
+                        onChange={(e) => setConfig({
+                          ...config,
+                          fontStyles: {
+                            ...config.fontStyles,
+                            [item.key]: { ...style, bold: e.target.checked }
+                          }
+                        })}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-bold text-gray-700">B</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={style.italic}
+                        onChange={(e) => setConfig({
+                          ...config,
+                          fontStyles: {
+                            ...config.fontStyles,
+                            [item.key]: { ...style, italic: e.target.checked }
+                          }
+                        })}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-xs italic text-gray-700">I</span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Service Intervals</h2>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {OIL_TYPES.map((oilType) => {
                 const interval = config.intervals?.[oilType.key] ?? DEFAULT_INTERVALS[oilType.key];
                 return (
                   <div key={oilType.key} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="font-medium text-gray-900 text-sm mb-2">{oilType.label}</div>
+                    <div className="space-y-2">
                       <div>
-                        <span className="font-medium text-gray-900">{oilType.label}</span>
-                        <span className="text-xs text-gray-500 ml-2">{oilType.description}</span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">
-                          {config.useKilometers ? "Kilometers" : "Miles"}
-                        </label>
+                        <label className="block text-xs text-gray-600">{config.useKilometers ? "km" : "Miles"}</label>
                         <input
                           type="number"
                           value={interval.mileage}
                           onChange={(e) => updateInterval(oilType.key, "mileage", Number(e.target.value) || 0)}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                           min={0}
                           step={500}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Months</label>
+                        <label className="block text-xs text-gray-600">Months</label>
                         <input
                           type="number"
                           value={interval.months}
                           onChange={(e) => updateInterval(oilType.key, "months", Number(e.target.value) || 0)}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                           min={1}
                           max={24}
                         />
@@ -809,205 +737,172 @@ export default function StickerSettingsPage() {
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
-              Save Settings
-            </button>
-          </div>
+          <button
+            onClick={saveSettings}
+            disabled={saving}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Save Settings
+          </button>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Sticker Preview</h2>
-            <div className="flex justify-center p-4 bg-gray-100 rounded-lg">
-              <div 
-                className="rounded shadow-md overflow-hidden"
-                style={{ 
-                  width: "200px",
-                  height: config.defaultSize === "2x2" ? "200px" : 
-                          config.defaultSize === "2x2.5" ? "250px" : 
-                          config.defaultSize === "2x3" ? "300px" : "350px",
-                  padding: "10px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  fontFamily: "Arial, sans-serif",
-                  backgroundColor: config.colors.background,
-                }}
-              >
-                <div className="text-center" style={{ marginBottom: "6px" }}>
-                  {config.logo && (
-                    <img 
-                      src={config.logo}
-                      alt="Shop Logo"
-                      style={{ maxHeight: "60px", maxWidth: "90%", marginLeft: "auto", marginRight: "auto", objectFit: "contain" }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-                </div>
-                
-                <div className="text-center" style={{ marginBottom: "4px" }}>
-                  {config.phone && (
-                    <div style={{ 
-                      fontSize: `${config.fontStyles.phone.size}px`,
-                      fontWeight: config.fontStyles.phone.bold ? "bold" : "normal",
-                      fontStyle: config.fontStyles.phone.italic ? "italic" : "normal",
-                      color: config.colors.phoneColor, 
-                      marginBottom: "2px" 
-                    }}>{config.phone}</div>
-                  )}
-                  {config.tagline && (
-                    <div style={{ 
-                      fontSize: `${config.fontStyles.tagline.size}px`,
-                      fontWeight: config.fontStyles.tagline.bold ? "bold" : "normal",
-                      fontStyle: config.fontStyles.tagline.italic ? "italic" : "normal",
-                      color: config.colors.taglineColor 
-                    }}>{config.tagline}</div>
-                  )}
-                  {config.taglineLine2 && (
-                    <div style={{ 
-                      fontSize: `${config.fontStyles.taglineLine2.size}px`,
-                      fontWeight: config.fontStyles.taglineLine2.bold ? "bold" : "normal",
-                      fontStyle: config.fontStyles.taglineLine2.italic ? "italic" : "normal",
-                      color: config.colors.taglineColor 
-                    }}>{config.taglineLine2}</div>
-                  )}
-                </div>
-                
-                {config.showQRCode ? (
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <div className="flex-shrink-0">
-                      {qrUrl ? (
-                        <img 
-                          src={qrUrl} 
-                          alt="QR Code" 
-                          className="w-[80px] h-[80px]"
-                        />
-                      ) : (
-                        <div className="w-[80px] h-[80px] bg-gray-200 rounded flex items-center justify-center">
-                          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-center flex-grow flex flex-col justify-center">
+        <div className="w-80 flex-shrink-0">
+          <div className="sticky top-6 space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="font-semibold text-gray-900 mb-4">Preview</h2>
+              <div className="flex justify-center p-4 bg-gray-100 rounded-lg">
+                <div 
+                  className="rounded shadow-md overflow-hidden"
+                  style={{ 
+                    width: "200px",
+                    height: config.defaultSize === "2x2" ? "200px" : 
+                            config.defaultSize === "2x2.5" ? "250px" : 
+                            config.defaultSize === "2x3" ? "300px" : "350px",
+                    padding: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    fontFamily: "Arial, sans-serif",
+                    backgroundColor: config.colors.background,
+                  }}
+                >
+                  <div className="text-center" style={{ marginBottom: "6px" }}>
+                    {config.logo && (
+                      <img 
+                        src={config.logo}
+                        alt="Shop Logo"
+                        style={{ maxHeight: "60px", maxWidth: "90%", marginLeft: "auto", marginRight: "auto", objectFit: "contain" }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+                  
+                  <div className="text-center" style={{ marginBottom: "4px" }}>
+                    {config.phone && (
                       <div style={{ 
-                        fontSize: `${config.fontStyles.serviceLabel.size}px`,
+                        fontSize: `${config.fontStyles.phone.size}px`,
+                        fontWeight: config.fontStyles.phone.bold ? "bold" : "normal",
+                        fontStyle: config.fontStyles.phone.italic ? "italic" : "normal",
+                        color: config.colors.phoneColor, 
+                        marginBottom: "2px" 
+                      }}>{config.phone}</div>
+                    )}
+                    {config.tagline && (
+                      <div style={{ 
+                        fontSize: `${config.fontStyles.tagline.size}px`,
+                        fontWeight: config.fontStyles.tagline.bold ? "bold" : "normal",
+                        fontStyle: config.fontStyles.tagline.italic ? "italic" : "normal",
+                        color: config.colors.taglineColor 
+                      }}>{config.tagline}</div>
+                    )}
+                    {config.taglineLine2 && (
+                      <div style={{ 
+                        fontSize: `${config.fontStyles.taglineLine2.size}px`,
+                        fontWeight: config.fontStyles.taglineLine2.bold ? "bold" : "normal",
+                        fontStyle: config.fontStyles.taglineLine2.italic ? "italic" : "normal",
+                        color: config.colors.taglineColor 
+                      }}>{config.taglineLine2}</div>
+                    )}
+                  </div>
+                  
+                  {config.showQRCode ? (
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <div className="flex-shrink-0">
+                        {qrUrl ? (
+                          <img src={qrUrl} alt="QR Code" className="w-[80px] h-[80px]" />
+                        ) : (
+                          <div className="w-[80px] h-[80px] bg-gray-200 rounded flex items-center justify-center">
+                            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-center flex-grow flex flex-col justify-center">
+                        <div style={{ 
+                          fontSize: `${config.fontStyles.serviceLabel.size}px`,
+                          fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
+                          fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
+                          color: config.colors.serviceLabelColor,
+                          marginBottom: "2px"
+                        }}>{config.serviceLabel || "Next Oil Service"}</div>
+                        <div style={{ 
+                          fontSize: `${config.fontStyles.serviceValue.size}px`,
+                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
+                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
+                          color: config.colors.serviceValueColor 
+                        }}>
+                          {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })}
+                        </div>
+                        <div style={{ 
+                          fontSize: `${config.fontStyles.serviceValue.size}px`,
+                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
+                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
+                          color: config.colors.serviceValueColor 
+                        }}>
+                          {(config.roundMileage ? 65000 : 65123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center mt-2">
+                      <div style={{ 
+                        fontSize: `${Math.round(config.fontStyles.serviceLabel.size * 1.17)}px`,
                         fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
                         fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
                         color: config.colors.serviceLabelColor,
-                        marginBottom: "2px"
+                        marginBottom: "4px"
                       }}>{config.serviceLabel || "Next Oil Service"}</div>
-                      <div 
-                        style={{ 
-                          fontSize: `${config.fontStyles.serviceValue.size}px`,
-                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
-                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
-                          color: config.colors.serviceValueColor 
-                        }}
-                      >
-                        {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
-                          month: "numeric",
-                          day: "numeric", 
-                          year: "numeric"
-                        })}
-                      </div>
-                      <div 
-                        style={{ 
-                          fontSize: `${config.fontStyles.serviceValue.size}px`,
-                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
-                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
-                          color: config.colors.serviceValueColor 
-                        }}
-                      >
-                        {(65000).toLocaleString()} {config.useKilometers ? "km" : "miles"}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center mt-2">
-                    <div style={{ 
-                      fontSize: `${Math.round(config.fontStyles.serviceLabel.size * 1.17)}px`,
-                      fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
-                      fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
-                      color: config.colors.serviceLabelColor,
-                      marginBottom: "4px"
-                    }}>{config.serviceLabel || "Next Oil Service"}</div>
-                    <div 
-                      style={{ 
+                      <div style={{ 
                         fontSize: `${Math.round(config.fontStyles.serviceValue.size * 1.29)}px`,
                         fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
                         fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
                         color: config.colors.serviceValueColor 
-                      }}
-                    >
-                      {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
-                        month: "numeric",
-                        day: "numeric", 
-                        year: "numeric"
-                      })}
-                    </div>
-                    <div 
-                      style={{ 
+                      }}>
+                        {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })}
+                      </div>
+                      <div style={{ 
                         fontSize: `${Math.round(config.fontStyles.serviceValue.size * 1.29)}px`,
                         fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
                         fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
                         color: config.colors.serviceValueColor 
-                      }}
-                    >
-                      {(65000).toLocaleString()} {config.useKilometers ? "km" : "miles"}
+                      }}>
+                        {(config.roundMileage ? 65000 : 65123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-            <p className="text-sm text-gray-500 text-center mt-3">
-              Live preview with sample date/mileage values
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Download Sticker</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Generate a print-ready sticker image with your settings.
-            </p>
-            
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {STICKER_SIZES.map((size) => (
-                <button
-                  key={size.value}
-                  onClick={() => setConfig({ ...config, defaultSize: size.value })}
-                  className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-                    config.defaultSize === size.value
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  {size.label}
-                </button>
-              ))}
+              <p className="text-xs text-gray-500 text-center mt-3">
+                Sample preview with {config.roundMileage ? "rounded" : "exact"} mileage
+              </p>
             </div>
 
-            <button
-              onClick={downloadSticker}
-              disabled={downloading}
-              className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {downloading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              Download {STICKER_SIZES.find(s => s.value === config.defaultSize)?.label} Sticker
-            </button>
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="font-semibold text-gray-900 mb-3">Download</h2>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {STICKER_SIZES.map((size) => (
+                  <button
+                    key={size.value}
+                    onClick={() => setConfig({ ...config, defaultSize: size.value })}
+                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                      config.defaultSize === size.value
+                        ? "border-blue-600 bg-blue-50 text-blue-700"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    {size.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={downloadSticker}
+                disabled={downloading}
+                className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Download {STICKER_SIZES.find(s => s.value === config.defaultSize)?.label}
+              </button>
+            </div>
           </div>
         </div>
       </div>
