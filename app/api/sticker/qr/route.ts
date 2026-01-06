@@ -14,6 +14,24 @@ const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.pn
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 
+async function convertSvgToPng(svgText: string, size: number): Promise<Buffer | null> {
+  try {
+    const canvas = createCanvas(size, size);
+    const ctx = canvas.getContext("2d");
+    
+    const base64Svg = Buffer.from(svgText).toString("base64");
+    const dataUrl = `data:image/svg+xml;base64,${base64Svg}`;
+    
+    const img = await loadImage(dataUrl);
+    ctx.drawImage(img, 0, 0, size, size);
+    
+    return canvas.toBuffer("image/png");
+  } catch (error) {
+    console.error("[Sticker QR] SVG to PNG conversion error:", error);
+    return null;
+  }
+}
+
 async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> {
   if (!HOVERCODE_API_TOKEN) {
     console.error("[Sticker QR] No API token configured");
@@ -44,14 +62,26 @@ async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> 
       console.log(`[Sticker QR] Fetching image from: ${imageUrl}`);
       const imageRes = await fetch(imageUrl);
       if (imageRes.ok) {
+        const contentType = imageRes.headers.get("content-type") || "";
         const arrayBuffer = await imageRes.arrayBuffer();
-        console.log(`[Sticker QR] Got PNG buffer, size: ${arrayBuffer.byteLength}`);
-        return Buffer.from(arrayBuffer);
+        console.log(`[Sticker QR] Got image buffer, size: ${arrayBuffer.byteLength}, type: ${contentType}`);
+        
+        if (contentType.includes("svg")) {
+          console.log(`[Sticker QR] Converting SVG to PNG`);
+          const svgText = new TextDecoder().decode(arrayBuffer);
+          const svgPngBuffer = await convertSvgToPng(svgText, 200);
+          if (svgPngBuffer) {
+            return svgPngBuffer;
+          }
+          console.error(`[Sticker QR] SVG to PNG conversion failed`);
+        } else {
+          return Buffer.from(arrayBuffer);
+        }
       } else {
-        console.error(`[Sticker QR] PNG fetch failed: ${imageRes.status}`);
+        console.error(`[Sticker QR] Image fetch failed: ${imageRes.status}`);
       }
     } else {
-      console.error(`[Sticker QR] No png field in response`);
+      console.error(`[Sticker QR] No png or svg_file field in response`);
     }
     return null;
   } catch (error) {
