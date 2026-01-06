@@ -206,6 +206,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true });
     return false;
   }
+
+  // Forward print request from sidepanel to content script
+  if (message.action === "PRINT_STICKER_VIA_CONTENT") {
+    // Get the active tab to send the sticker to
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          action: 'PRINT_STICKER_FROM_PANEL',
+          sticker: message.sticker
+        }, (response) => {
+          sendResponse(response || { success: false });
+        });
+      } else {
+        sendResponse({ success: false, error: 'No active tab' });
+      }
+    });
+    return true; // Async response
+  }
 });
 
 // ==================== MOS API FUNCTIONS ====================
