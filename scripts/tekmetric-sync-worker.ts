@@ -10,9 +10,22 @@ const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 5000;
 const RATE_LIMIT_BACKOFF_MS = 60000;
 
-const API_URL = process.env.REPLIT_DEV_DOMAIN 
-  ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/tekmetric-sync`
-  : 'http://localhost:5000/api/cron/tekmetric-sync';
+// Determine API URL based on environment
+function getApiUrl(): string {
+  // Production URL takes priority (for Render/external hosting)
+  if (process.env.PRODUCTION_URL) {
+    return `${process.env.PRODUCTION_URL}/api/cron/tekmetric-sync`;
+  }
+  // Replit dev domain
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/tekmetric-sync`;
+  }
+  // Local development - use PORT env var or default to 5000
+  const port = process.env.PORT || 5000;
+  return `http://localhost:${port}/api/cron/tekmetric-sync`;
+}
+
+const API_URL = getApiUrl();
 
 let isRunning = false;
 let consecutiveFailures = 0;
