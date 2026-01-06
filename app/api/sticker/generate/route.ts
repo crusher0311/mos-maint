@@ -7,12 +7,70 @@ import QRCode from "qrcode";
 import { createCanvas, loadImage } from "canvas";
 import path from "path";
 import fs from "fs";
+import { Storage } from "@google-cloud/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
+
+const storage = new Storage({
+  credentials: {
+    audience: "replit",
+    subject_token_type: "access_token",
+    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+    type: "external_account",
+    credential_source: {
+      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+      format: {
+        type: "json",
+        subject_token_field_name: "access_token",
+      },
+    },
+    universe_domain: "googleapis.com",
+  },
+  projectId: "",
+});
+
+async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
+  try {
+    if (logoObjectPath) {
+      const pathParts = logoObjectPath.split("/").filter(Boolean);
+      if (pathParts.length >= 2) {
+        const bucketName = pathParts[0];
+        const objectName = pathParts.slice(1).join("/");
+        const bucket = storage.bucket(bucketName);
+        const file = bucket.file(objectName);
+        
+        const [exists] = await file.exists();
+        if (exists) {
+          const [buffer] = await file.download();
+          const [metadata] = await file.getMetadata();
+          const contentType = metadata.contentType || "image/png";
+          return `data:${contentType};base64,${buffer.toString("base64")}`;
+        }
+      }
+    }
+    
+    if (logoUrl && logoUrl.startsWith("http")) {
+      const response = await fetch(logoUrl);
+      if (response.ok) {
+        const buffer = await response.arrayBuffer();
+        const contentType = response.headers.get("content-type") || "image/png";
+        return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("[Sticker Generate] Logo fetch failed:", error);
+    return null;
+  }
+}
+
 interface StickerConfig {
   logo?: string;
+  logoObjectPath?: string;
   phone?: string;
   tagline?: string;
   serviceLabel?: string;
@@ -203,6 +261,12 @@ export async function POST(req: NextRequest) {
     const config: StickerConfig = shop.stickerConfig || {};
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
+    let logoDataUrl: string | null = null;
+    if (config.logo || config.logoObjectPath) {
+      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath);
+    }
+    const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
+
     let qrDataUrl: string | null = null;
     if (includeQR) {
       const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
@@ -246,7 +310,7 @@ export async function POST(req: NextRequest) {
       qrDataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
     }
 
-    const html = generateStickerHtml(config, body, qrDataUrl, dimensions);
+    const html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
 
     const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH || "/nix/store/$(ls /nix/store | grep -m1 chromium)/bin/chromium";
     
