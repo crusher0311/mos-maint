@@ -747,7 +747,7 @@ export default function StickerSettingsPage() {
                   )}
                 </div>
                 
-                <div className="flex items-start justify-between gap-2 mt-auto">
+                <div className="flex items-start justify-between gap-2 mt-1">
                   <div className="flex-shrink-0">
                     {qrUrl ? (
                       <img 
@@ -761,7 +761,7 @@ export default function StickerSettingsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="text-right flex-grow">
+                  <div className="text-center flex-grow">
                     <div className="text-xs mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
                     <div 
                       className="text-sm font-bold italic"
