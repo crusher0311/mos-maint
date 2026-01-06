@@ -66,7 +66,20 @@ const elements = {
   failuresEmpty: document.getElementById('failures-empty'),
   failuresContent: document.getElementById('failures-content'),
   failuresSource: document.getElementById('failures-source'),
-  failuresList: document.getElementById('failures-list')
+  failuresList: document.getElementById('failures-list'),
+  
+  // Sticker
+  stickerLoading: document.getElementById('sticker-loading'),
+  stickerForm: document.getElementById('sticker-form'),
+  stickerDisabled: document.getElementById('sticker-disabled'),
+  stickerMileage: document.getElementById('sticker-mileage'),
+  stickerUnit: document.getElementById('sticker-unit'),
+  stickerInterval: document.getElementById('sticker-interval'),
+  customIntervalFields: document.getElementById('custom-interval-fields'),
+  customMonths: document.getElementById('custom-months'),
+  customMileage: document.getElementById('custom-mileage'),
+  stickerPrintBtn: document.getElementById('sticker-print-btn'),
+  stickerError: document.getElementById('sticker-error')
 };
 
 // ==================== INITIALIZATION ====================
@@ -118,12 +131,34 @@ function setupEventListeners() {
     if (e.key === 'Enter') handleJobSearch();
   });
   
+  // Sticker form
+  elements.stickerInterval.addEventListener('change', () => {
+    const isCustom = elements.stickerInterval.value === 'custom';
+    elements.customIntervalFields.classList.toggle('hidden', !isCustom);
+  });
+  
+  elements.stickerMileage.addEventListener('input', (e) => {
+    e.target.value = formatMileageInput(e.target.value);
+  });
+  
+  elements.customMileage.addEventListener('input', (e) => {
+    e.target.value = formatMileageInput(e.target.value);
+  });
+  
+  elements.stickerPrintBtn.addEventListener('click', handleStickerPrint);
+  
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
       updateContext(message.context);
     }
   });
+}
+
+function formatMileageInput(value) {
+  const numericValue = value.replace(/[^\d]/g, '');
+  if (!numericValue) return '';
+  return parseInt(numericValue, 10).toLocaleString();
 }
 
 // ==================== STATE MANAGEMENT ====================
@@ -164,6 +199,8 @@ function switchTab(tab) {
     loadCommonFailures();
   } else if (tab === 'canned' && currentContext) {
     loadCannedJobs();
+  } else if (tab === 'sticker') {
+    loadStickerConfig();
   }
 }
 
@@ -1043,6 +1080,164 @@ async function handleAddCannedJob(job) {
   } else {
     // MOS enriched job - convert to custom job
     await handleAddJob(job);
+  }
+}
+
+// ==================== STICKER ====================
+let stickerConfig = null;
+
+async function loadStickerConfig() {
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/sticker'
+    });
+    
+    if (result.error) {
+      console.error('[MOS] Sticker config error:', result.error);
+      elements.stickerForm.classList.add('hidden');
+      elements.stickerDisabled.classList.remove('hidden');
+      return;
+    }
+    
+    stickerConfig = result.config;
+    
+    if (!result.enabled) {
+      elements.stickerForm.classList.add('hidden');
+      elements.stickerDisabled.classList.remove('hidden');
+      return;
+    }
+    
+    elements.stickerForm.classList.remove('hidden');
+    elements.stickerDisabled.classList.add('hidden');
+    
+    // Set default unit based on config
+    if (stickerConfig.useKilometers) {
+      elements.stickerUnit.value = 'km';
+    }
+    
+    // Pre-fill mileage from current context if available
+    if (currentContext && currentContext.mileage) {
+      elements.stickerMileage.value = currentContext.mileage.toLocaleString();
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to load sticker config:', err);
+  }
+}
+
+async function handleStickerPrint() {
+  const mileageStr = elements.stickerMileage.value.replace(/,/g, '');
+  const currentMileage = parseInt(mileageStr, 10);
+  
+  if (!currentMileage || currentMileage <= 0) {
+    elements.stickerError.textContent = 'Please enter a valid reading';
+    elements.stickerError.classList.remove('hidden');
+    return;
+  }
+  
+  elements.stickerError.classList.add('hidden');
+  elements.stickerLoading.classList.remove('hidden');
+  elements.stickerPrintBtn.disabled = true;
+  
+  try {
+    const intervalType = elements.stickerInterval.value;
+    const unit = elements.stickerUnit.value;
+    
+    const body = {
+      currentMileage,
+      intervalType,
+      unit
+    };
+    
+    if (intervalType === 'custom') {
+      body.customMonths = parseInt(elements.customMonths.value, 10) || 6;
+      body.customMileage = parseInt(elements.customMileage.value.replace(/,/g, ''), 10) || 5000;
+    }
+    
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/sticker',
+      options: {
+        method: 'POST',
+        body: JSON.stringify(body)
+      }
+    });
+    
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    
+    if (!result.success || !result.sticker) {
+      throw new Error('Failed to generate sticker');
+    }
+    
+    // Print the sticker using an iframe
+    printStickerImage(result.sticker);
+    
+    showNotification('Sticker generated!', 'success');
+  } catch (err) {
+    console.error('[MOS] Sticker print error:', err);
+    elements.stickerError.textContent = err.message || 'Failed to generate sticker';
+    elements.stickerError.classList.remove('hidden');
+  } finally {
+    elements.stickerLoading.classList.add('hidden');
+    elements.stickerPrintBtn.disabled = false;
+  }
+}
+
+function printStickerImage(sticker) {
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
+  
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  if (iframeDoc) {
+    iframeDoc.open();
+    iframeDoc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print Sticker</title>
+        <style>
+          @page { margin: 0; size: auto; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          html, body { width: 100%; height: 100%; }
+          img { 
+            width: ${sticker.widthInches};
+            height: ${sticker.heightInches};
+            display: block;
+          }
+        </style>
+      </head>
+      <body>
+        <img id="sticker" src="${sticker.dataUrl}" />
+      </body>
+      </html>
+    `);
+    iframeDoc.close();
+    
+    const img = iframeDoc.getElementById('sticker');
+    if (img) {
+      const doPrint = () => {
+        setTimeout(() => {
+          iframe.contentWindow.print();
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 1000);
+        }, 100);
+      };
+      
+      if (img.complete) {
+        doPrint();
+      } else {
+        img.onload = doPrint;
+      }
+    }
   }
 }
 

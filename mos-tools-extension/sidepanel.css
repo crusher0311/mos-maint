@@ -959,6 +959,53 @@ body {
   color: var(--gray-700);
 }
 
+/* ==================== Sticker Tab ==================== */
+.sticker-form {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.input-with-unit {
+  display: flex;
+  gap: 8px;
+}
+
+.input-with-unit input {
+  flex: 1;
+}
+
+.input-with-unit select {
+  width: 100px;
+}
+
+.custom-interval {
+  background: var(--gray-50);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+}
+
+.custom-interval .form-group {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.btn-print {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 15px;
+}
+
+.btn-print svg {
+  flex-shrink: 0;
+}
+
 /* ==================== Responsive ==================== */
 @media (max-width: 320px) {
   .service-item {
@@ -970,5 +1017,17 @@ body {
   .btn-add {
     width: 100%;
     justify-content: center;
+  }
+  
+  .input-with-unit {
+    flex-direction: column;
+  }
+  
+  .input-with-unit select {
+    width: 100%;
+  }
+  
+  .custom-interval {
+    flex-direction: column;
   }
 }
