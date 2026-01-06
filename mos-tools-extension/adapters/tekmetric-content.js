@@ -125,27 +125,54 @@ function injectPrintButton() {
   const context = detectContext();
   if (!context.roId) return;
   
-  // Find a suitable location to inject the button
-  // Look for the vehicle info section or action buttons area
-  const targetSelectors = [
-    '[data-testid="ro-header-actions"]',
-    '.ro-header-actions',
-    '[class*="RepairOrderHeader"] [class*="actions"]',
-    '[class*="header-actions"]'
-  ];
-  
-  let targetContainer = null;
-  for (const selector of targetSelectors) {
-    targetContainer = document.querySelector(selector);
-    if (targetContainer) break;
+  // Check if button already exists
+  if (document.getElementById('mos-print-button')) {
+    printButtonInjected = true;
+    return;
   }
   
-  // Fallback: look for print/action buttons near the RO header
-  if (!targetContainer) {
-    const headerButtons = document.querySelectorAll('button');
-    for (const btn of headerButtons) {
-      if (btn.textContent.includes('Print') || btn.closest('[class*="header"]')) {
+  // Find the print icon button in Tekmetric's header action bar
+  // The print button is typically an icon button with a print SVG
+  let printButton = null;
+  let targetContainer = null;
+  
+  // Look for buttons with print-related attributes or SVGs
+  const allButtons = document.querySelectorAll('button');
+  for (const btn of allButtons) {
+    // Check if button contains a print icon (SVG with polyline for printer shape)
+    const svg = btn.querySelector('svg');
+    if (svg) {
+      const svgContent = svg.innerHTML.toLowerCase();
+      // Print icons typically have printer-related paths
+      if (svgContent.includes('polyline') && svgContent.includes('rect') && 
+          (btn.title?.toLowerCase().includes('print') || 
+           btn.getAttribute('aria-label')?.toLowerCase().includes('print') ||
+           svgContent.includes('6 9 6 2 18 2 18 9'))) {
+        printButton = btn;
         targetContainer = btn.parentElement;
+        break;
+      }
+    }
+    
+    // Also check for data-testid or class containing print
+    if (btn.dataset.testid?.includes('print') || 
+        btn.className?.includes('print') ||
+        btn.title?.toLowerCase() === 'print') {
+      printButton = btn;
+      targetContainer = btn.parentElement;
+      break;
+    }
+  }
+  
+  // If no print button found, try looking in the header icon row area
+  if (!targetContainer) {
+    // Tekmetric uses an icon row in the RO header - look for grouped icon buttons
+    const iconRows = document.querySelectorAll('[class*="IconButton"], [class*="icon-button"], [class*="action-bar"]');
+    for (const row of iconRows) {
+      const buttons = row.querySelectorAll('button');
+      if (buttons.length >= 2) {
+        targetContainer = row;
+        printButton = buttons[buttons.length - 1]; // Insert after last button
         break;
       }
     }
@@ -156,39 +183,32 @@ function injectPrintButton() {
     return;
   }
   
-  // Check if button already exists
-  if (document.getElementById('mos-print-button')) {
-    printButtonInjected = true;
-    return;
-  }
-  
-  // Create the MOS Print button
+  // Create the MOS Print button - icon-only style to match Tekmetric's UI
   const button = document.createElement('button');
   button.id = 'mos-print-button';
-  button.title = 'Left-click: Print sticker | Right-click: Customize';
+  button.title = 'MOS Oil Sticker\nLeft-click: Print | Right-click: Customize';
+  button.type = 'button';
   button.innerHTML = `
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19 7V4H5V7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M19 12H5V20H19V12Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M5 12V9C5 7.89543 5.89543 7 7 7H17C18.1046 7 19 7.89543 19 9V12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polyline points="6 9 6 2 18 2 18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="6" y="14" width="12" height="8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    <span>MOS</span>
   `;
   
   Object.assign(button.style, {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '8px 16px',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    padding: '0',
     backgroundColor: '#EA580C',
     color: 'white',
     border: 'none',
-    borderRadius: '6px',
-    fontSize: '14px',
-    fontWeight: '600',
-    fontFamily: 'system-ui, sans-serif',
+    borderRadius: '4px',
     cursor: 'pointer',
-    marginLeft: '8px',
+    marginLeft: '4px',
     transition: 'background-color 0.2s'
   });
   
@@ -214,7 +234,13 @@ function injectPrintButton() {
     openStickerPanel();
   });
   
-  targetContainer.appendChild(button);
+  // Insert after the print button if found, otherwise append to container
+  if (printButton && printButton.nextSibling) {
+    targetContainer.insertBefore(button, printButton.nextSibling);
+  } else {
+    targetContainer.appendChild(button);
+  }
+  
   printButtonInjected = true;
   console.log('[MOS Tools] Print button injected');
 }
