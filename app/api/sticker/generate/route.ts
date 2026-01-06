@@ -242,10 +242,10 @@ interface StickerRequest {
 }
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "2x2": { width: 600, height: 600 },
-  "2x2.5": { width: 600, height: 750 },
-  "2x3": { width: 600, height: 900 },
-  "2x3.5": { width: 600, height: 1050 },
+  "2x2": { width: 591, height: 591 },
+  "2x2.5": { width: 591, height: 739 },
+  "2x3": { width: 591, height: 887 },
+  "2x3.5": { width: 591, height: 1035 },
 };
 
 function generateStickerHtml(
