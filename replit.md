@@ -62,7 +62,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 
 ## My Oil Sticker Integration
 
-**Status**: Phase 1 Complete (Jan 2026) - Self-hosted APIs implemented
+**Status**: Phase 2 Complete (Jan 2026) - Dashboard UI implemented
 
 **Context**: ~290 shops using standalone My Oil Sticker product. Goal is to migrate them to MOS dashboard as a separately-billable feature toggle.
 
@@ -97,8 +97,11 @@ Replaced paid third-party APIs with free self-hosted solutions:
   logo: string,          // URL to shop logo
   phone: string,         // Shop phone number
   tagline: string,       // Custom tagline
-  primaryColor: string,  // Hex color
-  backgroundColor: string,
+  colors: {
+    primary: string,     // Hex color for QR code dots
+    secondary: string,   // Accent color
+    text: string,        // Text color
+  },
   defaultSize: string,   // "2x2" | "2x2.5" | "2x3" | "2x3.5"
   appointmentUrl: string,// Override redirect URL
   useKilometers: boolean // false = miles
@@ -111,8 +114,13 @@ Replaced paid third-party APIs with free self-hosted solutions:
 **Utility Functions**:
 - `lib/sticker-utils.ts`: `getBaseUrl()`, `getStickerRedirectUrl(shopId)`
 
+**Phase 2 - Dashboard UI (COMPLETE)**:
+- Sticker settings page at `/dashboard/settings/stickers`
+- Live QR code preview with color customization
+- Sticker download for all sizes (2x2", 2x2.5", 2x3", 2x3.5")
+- Feature-gated sidebar navigation (`featureId: "stickers"`)
+
 **Pending Phases**:
-- Phase 2: Dashboard UI (sticker preview, settings page)
 - Phase 3: Chrome extension merge (sticker tab in MOS Tools)
 - Phase 4: Billing integration (feature toggle in platform-admin)
 - Phase 5: Migration script (import existing shop settings)
