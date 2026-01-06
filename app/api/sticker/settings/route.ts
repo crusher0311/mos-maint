@@ -31,6 +31,8 @@ interface StickerConfig {
   taglineLine2?: string;
   serviceLabel?: string;
   showQRCode?: boolean;
+  roundMileage?: boolean;
+  usePredictiveDate?: boolean;
   fontStyles?: {
     phone?: FontStyle;
     tagline?: FontStyle;
