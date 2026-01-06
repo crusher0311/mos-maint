@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/ui/Sidebar";
+import QuickStickerModal from "@/components/stickers/QuickStickerModal";
 
 interface UserInfo {
   email: string;
@@ -19,6 +20,7 @@ interface UserInfo {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [quickStickerOpen, setQuickStickerOpen] = useState(false);
 
   useEffect(() => {
     async function fetchUserInfo() {
@@ -67,10 +69,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         currentShopId={userInfo?.shopId}
         enterpriseId={userInfo?.enterpriseId}
         enabledFeatures={userInfo?.enabledFeatures}
+        onQuickStickerClick={() => setQuickStickerOpen(true)}
       />
       <div className="flex-1 flex flex-col overflow-y-auto">
         {children}
       </div>
+      <QuickStickerModal 
+        isOpen={quickStickerOpen} 
+        onClose={() => setQuickStickerOpen(false)} 
+      />
     </div>
   );
 }
