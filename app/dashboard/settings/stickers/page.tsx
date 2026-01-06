@@ -117,7 +117,10 @@ export default function StickerSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const [config, setConfig] = useState<StickerConfig>(DEFAULT_CONFIG);
 
@@ -128,8 +131,49 @@ export default function StickerSettingsPage() {
   useEffect(() => {
     if (!loading) {
       refreshQrPreview();
+      debouncedRefreshPreview();
     }
-  }, [config.colors.primary, loading]);
+  }, [config, loading]);
+  
+  function debouncedRefreshPreview() {
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+    previewTimeoutRef.current = setTimeout(() => {
+      refreshStickerPreview();
+    }, 500);
+  }
+  
+  async function refreshStickerPreview() {
+    setPreviewLoading(true);
+    try {
+      const sampleMileage = config.roundMileage ? 165000 : 165123;
+      const sampleDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      
+      const res = await fetch("/api/sticker/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nextServiceMileage: sampleMileage,
+          nextServiceDate: sampleDate,
+          size: config.defaultSize,
+          includeQR: config.showQRCode,
+        }),
+      });
+      
+      if (res.ok) {
+        const blob = await res.blob();
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        setPreviewUrl(URL.createObjectURL(blob));
+      }
+    } catch (err) {
+      console.error("Failed to refresh sticker preview:", err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   async function fetchSettings() {
     try {
@@ -751,126 +795,39 @@ export default function StickerSettingsPage() {
           <div className="sticky top-6 space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="font-semibold text-gray-900 mb-4">Preview</h2>
-              <div className="flex justify-center p-4 bg-gray-100 rounded-lg">
-                <div 
-                  className="rounded shadow-md overflow-hidden"
-                  style={{ 
-                    width: "200px",
-                    height: config.defaultSize === "2x2" ? "200px" : 
-                            config.defaultSize === "2x2.5" ? "250px" : 
-                            config.defaultSize === "2x3" ? "300px" : "350px",
-                    padding: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    fontFamily: "Arial, sans-serif",
-                    backgroundColor: config.colors.background,
-                  }}
-                >
-                  <div className="text-center" style={{ marginBottom: "6px" }}>
-                    {config.logo && (
-                      <img 
-                        src={config.logo}
-                        alt="Shop Logo"
-                        style={{ maxHeight: "60px", maxWidth: "90%", marginLeft: "auto", marginRight: "auto", objectFit: "contain" }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
+              <div className="flex justify-center p-4 bg-gray-100 rounded-lg relative">
+                {previewUrl ? (
+                  <div className="relative">
+                    <img 
+                      src={previewUrl} 
+                      alt="Sticker Preview" 
+                      className="rounded shadow-md"
+                      style={{ 
+                        width: "200px",
+                        height: config.defaultSize === "2x2" ? "200px" : 
+                                config.defaultSize === "2x2.5" ? "250px" : 
+                                config.defaultSize === "2x3" ? "300px" : "350px",
+                      }}
+                    />
+                    {previewLoading && (
+                      <div className="absolute inset-0 bg-white/50 flex items-center justify-center rounded">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                      </div>
                     )}
                   </div>
-                  
-                  <div className="text-center" style={{ marginBottom: "4px" }}>
-                    {config.phone && (
-                      <div style={{ 
-                        fontSize: `${config.fontStyles.phone.size}px`,
-                        fontWeight: config.fontStyles.phone.bold ? "bold" : "normal",
-                        fontStyle: config.fontStyles.phone.italic ? "italic" : "normal",
-                        color: config.colors.phoneColor, 
-                        marginBottom: "2px" 
-                      }}>{config.phone}</div>
-                    )}
-                    {config.tagline && (
-                      <div style={{ 
-                        fontSize: `${config.fontStyles.tagline.size}px`,
-                        fontWeight: config.fontStyles.tagline.bold ? "bold" : "normal",
-                        fontStyle: config.fontStyles.tagline.italic ? "italic" : "normal",
-                        color: config.colors.taglineColor 
-                      }}>{config.tagline}</div>
-                    )}
-                    {config.taglineLine2 && (
-                      <div style={{ 
-                        fontSize: `${config.fontStyles.taglineLine2.size}px`,
-                        fontWeight: config.fontStyles.taglineLine2.bold ? "bold" : "normal",
-                        fontStyle: config.fontStyles.taglineLine2.italic ? "italic" : "normal",
-                        color: config.colors.taglineColor 
-                      }}>{config.taglineLine2}</div>
-                    )}
+                ) : (
+                  <div 
+                    className="rounded shadow-md bg-white flex items-center justify-center"
+                    style={{ 
+                      width: "200px",
+                      height: config.defaultSize === "2x2" ? "200px" : 
+                              config.defaultSize === "2x2.5" ? "250px" : 
+                              config.defaultSize === "2x3" ? "300px" : "350px",
+                    }}
+                  >
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                   </div>
-                  
-                  {config.showQRCode ? (
-                    <div className="flex items-center justify-between gap-2 mt-1">
-                      <div className="flex-shrink-0">
-                        {qrUrl ? (
-                          <img src={qrUrl} alt="QR Code" className="w-[80px] h-[80px]" />
-                        ) : (
-                          <div className="w-[80px] h-[80px] bg-gray-200 rounded flex items-center justify-center">
-                            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-center flex-grow flex flex-col justify-center">
-                        <div style={{ 
-                          fontSize: `${config.fontStyles.serviceLabel.size}px`,
-                          fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
-                          fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
-                          color: config.colors.serviceLabelColor,
-                          marginBottom: "2px"
-                        }}>{config.serviceLabel || "Next Oil Service"}</div>
-                        <div style={{ 
-                          fontSize: `${config.fontStyles.serviceValue.size}px`,
-                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
-                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
-                          color: config.colors.serviceValueColor 
-                        }}>
-                          {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })}
-                        </div>
-                        <div style={{ 
-                          fontSize: `${config.fontStyles.serviceValue.size}px`,
-                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
-                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
-                          color: config.colors.serviceValueColor 
-                        }}>
-                          {(config.roundMileage ? 165000 : 165123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center mt-2">
-                      <div style={{ 
-                        fontSize: `${Math.round(config.fontStyles.serviceLabel.size * 1.17)}px`,
-                        fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
-                        fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
-                        color: config.colors.serviceLabelColor,
-                        marginBottom: "4px"
-                      }}>{config.serviceLabel || "Next Oil Service"}</div>
-                      <div style={{ 
-                        fontSize: `${Math.round(config.fontStyles.serviceValue.size * 1.29)}px`,
-                        fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
-                        fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
-                        color: config.colors.serviceValueColor 
-                      }}>
-                        {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })}
-                      </div>
-                      <div style={{ 
-                        fontSize: `${Math.round(config.fontStyles.serviceValue.size * 1.29)}px`,
-                        fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
-                        fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
-                        color: config.colors.serviceValueColor 
-                      }}>
-                        {(config.roundMileage ? 165000 : 165123).toLocaleString()} {config.useKilometers ? "km" : "miles"}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
               <p className="text-xs text-gray-500 text-center mt-3">
                 Sample preview with {config.roundMileage ? "rounded" : "exact"} mileage
