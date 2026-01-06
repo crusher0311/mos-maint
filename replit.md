@@ -94,14 +94,20 @@ Replaced paid third-party APIs with free self-hosted solutions:
 ```typescript
 {
   enabled: boolean,
-  logo: string,          // URL to shop logo
+  logo: string,          // URL to shop logo (or proxy URL from upload)
+  logoObjectPath: string,// Object storage path for uploaded logos
   phone: string,         // Shop phone number
   tagline: string,       // Custom tagline
   serviceLabel: string,  // Label text (e.g., "Next Oil Service", "Service Due")
   colors: {
-    primary: string,     // Hex color for QR code dots
+    primary: string,     // Hex color for QR code dots (default: #1976d2)
     secondary: string,   // Accent color
     text: string,        // Text color
+    background: string,  // Sticker background color (default: #ffffff)
+    phoneColor: string,  // Phone number text color (default: #000000)
+    taglineColor: string,// Tagline text color (default: #333333)
+    serviceLabelColor: string, // Service label color (default: #666666)
+    serviceValueColor: string, // Date/mileage color (default: #cc0000)
   },
   defaultSize: string,   // "2x2" | "2x2.5" | "2x3" | "2x3.5"
   appointmentUrl: string,// Override redirect URL
@@ -115,6 +121,11 @@ Replaced paid third-party APIs with free self-hosted solutions:
 }
 ```
 
+**Logo Upload Flow**:
+- `POST /api/sticker/upload-logo` - Generate presigned URL for upload
+- `POST /api/sticker/finalize-logo` - Finalize upload and save path
+- `GET /api/sticker/logo/[shopId]/[filename]` - Proxy endpoint to serve logos
+
 **Environment Variables**:
 - `NEXT_PUBLIC_BASE_URL` - Required for QR code generation (set in development)
 
@@ -127,6 +138,9 @@ Replaced paid third-party APIs with free self-hosted solutions:
 - Sticker download for all sizes (2x2", 2x2.5", 2x3", 2x3.5")
 - Default service interval settings (mileage/kilometers + months)
 - Feature-gated sidebar navigation (`featureId: "oil_sticker"`)
+- Direct logo upload to Replit Object Storage
+- Full color customization: background, phone, tagline, label, and date/mileage colors
+- Larger logo display (80px max height, up from 50px)
 
 **Pending Phases**:
 - Phase 3: Chrome extension merge (sticker tab in MOS Tools)
