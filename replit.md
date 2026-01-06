@@ -165,6 +165,13 @@ Uses "shortest interval wins" logic:
 - Sticker download for all sizes (2x2", 2x2.5", 2x3", 2x3.5")
 - Default service interval settings (mileage/kilometers + months)
 - Feature-gated sidebar navigation (`featureId: "oil_sticker"`)
+- **Quick Sticker** (Jan 2026): Main sidebar menu item for rapid sticker printing
+  - Located directly below Dashboard button with Printer icon
+  - Unit selector: miles (mi), kilometers (km), hours (hrs) for equipment tracking
+  - Auto-uses default sticker size from Oil Sticker settings
+  - Service interval presets (conventional, synthetic, euro, diesel, custom)
+  - Iframe-based print for reliable full-size preview
+  - Component: `components/stickers/QuickStickerModal.tsx`
 - Direct logo upload to Replit Object Storage
 - Full color customization: background, phone, tagline, label, and date/mileage colors
 - Larger logo display (80px max height, up from 50px)
