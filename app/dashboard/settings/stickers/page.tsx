@@ -20,6 +20,7 @@ interface StickerConfig {
   logo: string;
   phone: string;
   tagline: string;
+  taglineLine2: string;
   serviceLabel: string;
   showQRCode: boolean;
   colors: {
@@ -64,6 +65,7 @@ const DEFAULT_CONFIG: StickerConfig = {
   logo: "",
   phone: "",
   tagline: "Schedule Service",
+  taglineLine2: "",
   serviceLabel: "Next Oil Service",
   showQRCode: true,
   colors: {
@@ -114,6 +116,7 @@ export default function StickerSettingsPage() {
             logo: data.config.logo ?? DEFAULT_CONFIG.logo,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
             tagline: data.config.tagline ?? DEFAULT_CONFIG.tagline,
+            taglineLine2: data.config.taglineLine2 ?? DEFAULT_CONFIG.taglineLine2,
             serviceLabel: data.config.serviceLabel ?? DEFAULT_CONFIG.serviceLabel,
             showQRCode: data.config.showQRCode ?? DEFAULT_CONFIG.showQRCode,
             colors: {
@@ -171,6 +174,7 @@ export default function StickerSettingsPage() {
           logo: config.logo,
           phone: config.phone,
           tagline: config.tagline,
+          taglineLine2: config.taglineLine2,
           serviceLabel: config.serviceLabel,
           showQRCode: config.showQRCode,
           colors: config.colors,
@@ -592,8 +596,22 @@ export default function StickerSettingsPage() {
                   maxLength={30}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Line 2 (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={config.taglineLine2}
+                  onChange={(e) => setConfig({ ...config, taglineLine2: e.target.value })}
+                  placeholder="Address or additional info"
+                  maxLength={35}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
                 <p className="text-xs text-gray-500 mt-1">
-                  Appears below your phone number
+                  Second line below tagline (e.g., address)
                 </p>
               </div>
 
@@ -746,7 +764,7 @@ export default function StickerSettingsPage() {
                   backgroundColor: config.colors.background,
                 }}
               >
-                <div className="text-center">
+                <div className="text-center" style={{ marginBottom: "6px" }}>
                   {config.logo && (
                     <img 
                       src={config.logo}
@@ -757,12 +775,15 @@ export default function StickerSettingsPage() {
                   )}
                 </div>
                 
-                <div className="text-center mb-2">
+                <div className="text-center" style={{ marginBottom: "4px" }}>
                   {config.phone && (
-                    <div className="text-sm font-bold" style={{ color: config.colors.phoneColor }}>{config.phone}</div>
+                    <div className="text-sm font-bold" style={{ color: config.colors.phoneColor, marginBottom: "2px" }}>{config.phone}</div>
                   )}
                   {config.tagline && (
                     <div className="text-xs italic" style={{ color: config.colors.taglineColor }}>{config.tagline}</div>
+                  )}
+                  {config.taglineLine2 && (
+                    <div className="text-xs italic" style={{ color: config.colors.taglineColor }}>{config.taglineLine2}</div>
                   )}
                 </div>
                 
