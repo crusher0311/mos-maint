@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getNextShopId } from "@/lib/ids";
 import { sendEmail, makeWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings, getBaseUrl } from "@/lib/stripe";
+import { validateShopAccess } from "@/lib/tekmetric";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
@@ -107,14 +108,24 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // Store Tekmetric config if provided
+    // Store Tekmetric config if provided (with validation)
     if (tekmetricShopId) {
       const parsedTekmetricShopId = parseInt(tekmetricShopId, 10);
       if (!isNaN(parsedTekmetricShopId)) {
-        shopDoc.tekmetric = {
-          shopId: parsedTekmetricShopId,
-          connectedAt: now,
-        };
+        try {
+          const validation = await validateShopAccess(parsedTekmetricShopId);
+          if (validation.valid && validation.shop) {
+            shopDoc.tekmetric = {
+              shopId: parsedTekmetricShopId,
+              shopName: validation.shop.name,
+              connectedAt: now,
+            };
+          } else {
+            console.log(`[Setup] Invalid Tekmetric Shop ID ${parsedTekmetricShopId}: ${validation.error}`);
+          }
+        } catch (error: any) {
+          console.log(`[Setup] Failed to validate Tekmetric Shop ID ${parsedTekmetricShopId}: ${error.message}`);
+        }
       }
     }
 
