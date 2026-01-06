@@ -199,7 +199,7 @@ function generateStickerHtml(
       height: ${qrSize}px;
     }
     .service-info {
-      text-align: right;
+      text-align: center;
       flex-grow: 1;
     }
     .service-label {
