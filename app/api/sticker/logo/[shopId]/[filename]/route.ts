@@ -31,12 +31,16 @@ export async function GET(
 ) {
   try {
     const shopId = Number(params.shopId);
+    console.log("[Logo Proxy] Request for shopId:", shopId, "filename:", params.filename);
+    
     if (!shopId || isNaN(shopId)) {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ id: shopId });
+    const shop = await db.collection("shops").findOne({ shopId });
+    
+    console.log("[Logo Proxy] Shop found:", !!shop, "logoObjectPath:", shop?.stickerConfig?.logoObjectPath);
 
     if (!shop?.stickerConfig?.logoObjectPath) {
       return NextResponse.json({ error: "Logo not found" }, { status: 404 });
