@@ -216,7 +216,7 @@ function generateStickerHtml(
     }
     .bottom-section {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       width: 100%;
       margin-top: ${Math.round(5 * scaleFactor)}px;
@@ -232,6 +232,9 @@ function generateStickerHtml(
     .service-info {
       text-align: center;
       flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .service-label {
       font-size: ${labelSize}px;
