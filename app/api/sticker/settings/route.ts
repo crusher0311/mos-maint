@@ -27,6 +27,11 @@ interface StickerConfig {
     primary?: string;
     secondary?: string;
     text?: string;
+    background?: string;
+    phoneColor?: string;
+    taglineColor?: string;
+    serviceLabelColor?: string;
+    serviceValueColor?: string;
   };
   defaultSize?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
   appointmentUrl?: string;
@@ -60,7 +65,15 @@ export async function GET(req: NextRequest) {
       enabled: false,
       phone: shop.phone || "",
       appointmentUrl: shop.websiteUrl || "",
-      colors: { primary: "#1976d2", text: "#ffffff" },
+      colors: { 
+        primary: "#1976d2", 
+        text: "#ffffff",
+        background: "#ffffff",
+        phoneColor: "#000000",
+        taglineColor: "#333333",
+        serviceLabelColor: "#666666",
+        serviceValueColor: "#cc0000",
+      },
       defaultSize: "2x2.5",
       useKilometers: false,
     };
