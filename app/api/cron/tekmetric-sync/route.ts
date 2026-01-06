@@ -124,7 +124,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const shops = await db.collection("shops").find({
-      "tekmetric.shopId": { $exists: true, $ne: null }
+      $or: [
+        { "tekmetric.shopId": { $exists: true, $ne: null } },
+        { tekmetricShopId: { $exists: true, $ne: null } }
+      ]
     }).toArray();
 
     const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; error?: string }[] = [];
@@ -134,7 +137,7 @@ export async function GET(req: NextRequest) {
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
-      const tekmetricShopId = shop.tekmetric?.shopId;
+      const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
       
       if (!tekmetricShopId) continue;
 
