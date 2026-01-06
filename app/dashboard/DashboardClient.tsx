@@ -288,11 +288,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               <title>Print Sticker</title>
               <style>
                 @page { size: ${dims.width} ${dims.height}; margin: 0; }
-                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; width: ${dims.width}; height: ${dims.height}; }
-                img { width: ${dims.width}; height: ${dims.height}; object-fit: contain; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
               </style>
             </head>
-            <body><img src="${dataUrl}" alt="Oil Change Sticker" /></body>
+            <body><img src="${dataUrl}" /></body>
             </html>
           `);
           iframeDoc.close();
@@ -422,11 +423,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               <title>Print Sticker</title>
               <style>
                 @page { size: ${dims.width} ${dims.height}; margin: 0; }
-                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; width: ${dims.width}; height: ${dims.height}; }
-                img { width: ${dims.width}; height: ${dims.height}; object-fit: contain; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
               </style>
             </head>
-            <body><img src="${dataUrl}" alt="Oil Change Sticker" /></body>
+            <body><img src="${dataUrl}" /></body>
             </html>
           `);
           iframeDoc.close();
