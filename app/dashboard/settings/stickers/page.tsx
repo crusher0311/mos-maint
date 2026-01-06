@@ -15,6 +15,12 @@ interface IntervalsConfig {
   conventional: IntervalConfig;
 }
 
+interface FontStyle {
+  bold: boolean;
+  italic: boolean;
+  size: number;
+}
+
 interface StickerConfig {
   enabled: boolean;
   logo: string;
@@ -23,6 +29,13 @@ interface StickerConfig {
   taglineLine2: string;
   serviceLabel: string;
   showQRCode: boolean;
+  fontStyles: {
+    phone: FontStyle;
+    tagline: FontStyle;
+    taglineLine2: FontStyle;
+    serviceLabel: FontStyle;
+    serviceValue: FontStyle;
+  };
   colors: {
     primary: string;
     secondary: string;
@@ -60,14 +73,23 @@ const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: strin
   { key: "diesel", label: "Diesel", description: "Diesel engines" },
 ];
 
+const DEFAULT_FONT_STYLES = {
+  phone: { bold: true, italic: false, size: 14 },
+  tagline: { bold: false, italic: true, size: 11 },
+  taglineLine2: { bold: false, italic: true, size: 11 },
+  serviceLabel: { bold: false, italic: false, size: 12 },
+  serviceValue: { bold: true, italic: true, size: 14 },
+};
+
 const DEFAULT_CONFIG: StickerConfig = {
   enabled: true,
   logo: "",
   phone: "",
-  tagline: "Schedule Service",
+  tagline: "",
   taglineLine2: "",
   serviceLabel: "Next Oil Service",
   showQRCode: true,
+  fontStyles: DEFAULT_FONT_STYLES,
   colors: {
     primary: "#cc0000",
     secondary: "#1976d2",
@@ -119,6 +141,13 @@ export default function StickerSettingsPage() {
             taglineLine2: data.config.taglineLine2 ?? DEFAULT_CONFIG.taglineLine2,
             serviceLabel: data.config.serviceLabel ?? DEFAULT_CONFIG.serviceLabel,
             showQRCode: data.config.showQRCode ?? DEFAULT_CONFIG.showQRCode,
+            fontStyles: {
+              phone: data.config.fontStyles?.phone ?? DEFAULT_FONT_STYLES.phone,
+              tagline: data.config.fontStyles?.tagline ?? DEFAULT_FONT_STYLES.tagline,
+              taglineLine2: data.config.fontStyles?.taglineLine2 ?? DEFAULT_FONT_STYLES.taglineLine2,
+              serviceLabel: data.config.fontStyles?.serviceLabel ?? DEFAULT_FONT_STYLES.serviceLabel,
+              serviceValue: data.config.fontStyles?.serviceValue ?? DEFAULT_FONT_STYLES.serviceValue,
+            },
             colors: {
               primary: data.config.colors?.primary ?? DEFAULT_CONFIG.colors.primary,
               secondary: data.config.colors?.secondary ?? DEFAULT_CONFIG.colors.secondary,
@@ -177,6 +206,7 @@ export default function StickerSettingsPage() {
           taglineLine2: config.taglineLine2,
           serviceLabel: config.serviceLabel,
           showQRCode: config.showQRCode,
+          fontStyles: config.fontStyles,
           colors: config.colors,
           defaultSize: config.defaultSize,
           appointmentUrl: config.appointmentUrl,
