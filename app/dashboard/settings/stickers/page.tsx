@@ -21,6 +21,7 @@ interface StickerConfig {
   phone: string;
   tagline: string;
   serviceLabel: string;
+  showQRCode: boolean;
   colors: {
     primary: string;
     secondary: string;
@@ -64,6 +65,7 @@ const DEFAULT_CONFIG: StickerConfig = {
   phone: "",
   tagline: "Schedule Service",
   serviceLabel: "Next Oil Service",
+  showQRCode: true,
   colors: {
     primary: "#cc0000",
     secondary: "#1976d2",
@@ -113,6 +115,7 @@ export default function StickerSettingsPage() {
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
             tagline: data.config.tagline ?? DEFAULT_CONFIG.tagline,
             serviceLabel: data.config.serviceLabel ?? DEFAULT_CONFIG.serviceLabel,
+            showQRCode: data.config.showQRCode ?? DEFAULT_CONFIG.showQRCode,
             colors: {
               primary: data.config.colors?.primary ?? DEFAULT_CONFIG.colors.primary,
               secondary: data.config.colors?.secondary ?? DEFAULT_CONFIG.colors.secondary,
@@ -169,6 +172,7 @@ export default function StickerSettingsPage() {
           phone: config.phone,
           tagline: config.tagline,
           serviceLabel: config.serviceLabel,
+          showQRCode: config.showQRCode,
           colors: config.colors,
           defaultSize: config.defaultSize,
           appointmentUrl: config.appointmentUrl,
@@ -203,6 +207,7 @@ export default function StickerSettingsPage() {
           tagline: config.tagline,
           phone: config.phone,
           useKilometers: config.useKilometers,
+          includeQR: config.showQRCode,
         }),
       });
       
@@ -638,6 +643,19 @@ export default function StickerSettingsPage() {
                   Use kilometers instead of miles
                 </label>
               </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="showQRCode"
+                  checked={config.showQRCode}
+                  onChange={(e) => setConfig({ ...config, showQRCode: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="showQRCode" className="text-sm text-gray-700">
+                  Include QR code for appointment scheduling
+                </label>
+              </div>
             </div>
           </div>
 
@@ -748,24 +766,46 @@ export default function StickerSettingsPage() {
                   )}
                 </div>
                 
-                <div className="flex items-start justify-between gap-2 mt-1">
-                  <div className="flex-shrink-0">
-                    {qrUrl ? (
-                      <img 
-                        src={qrUrl} 
-                        alt="QR Code" 
-                        className="w-[80px] h-[80px]"
-                      />
-                    ) : (
-                      <div className="w-[80px] h-[80px] bg-gray-200 rounded flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                {config.showQRCode ? (
+                  <div className="flex items-start justify-between gap-2 mt-1">
+                    <div className="flex-shrink-0">
+                      {qrUrl ? (
+                        <img 
+                          src={qrUrl} 
+                          alt="QR Code" 
+                          className="w-[80px] h-[80px]"
+                        />
+                      ) : (
+                        <div className="w-[80px] h-[80px] bg-gray-200 rounded flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-center flex-grow">
+                      <div className="text-xs mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
+                      <div 
+                        className="text-sm font-bold italic"
+                        style={{ color: config.colors.serviceValueColor }}
+                      >
+                        {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+                          month: "numeric",
+                          day: "numeric", 
+                          year: "numeric"
+                        })}
                       </div>
-                    )}
+                      <div 
+                        className="text-sm font-bold italic"
+                        style={{ color: config.colors.serviceValueColor }}
+                      >
+                        {(65000).toLocaleString()} {config.useKilometers ? "kilometers" : "miles"}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-center flex-grow">
-                    <div className="text-xs mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
+                ) : (
+                  <div className="text-center mt-2">
+                    <div className="text-sm mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
                     <div 
-                      className="text-sm font-bold italic"
+                      className="text-base font-bold italic"
                       style={{ color: config.colors.serviceValueColor }}
                     >
                       {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
@@ -775,13 +815,13 @@ export default function StickerSettingsPage() {
                       })}
                     </div>
                     <div 
-                      className="text-sm font-bold italic"
+                      className="text-base font-bold italic"
                       style={{ color: config.colors.serviceValueColor }}
                     >
                       {(65000).toLocaleString()} {config.useKilometers ? "kilometers" : "miles"}
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
             <p className="text-sm text-gray-500 text-center mt-3">

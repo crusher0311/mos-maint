@@ -219,6 +219,17 @@ function generateStickerHtml(
       color: ${serviceValueColor};
       font-weight: bold;
     }
+    .service-centered {
+      text-align: center;
+      margin-top: ${Math.round(8 * scaleFactor)}px;
+    }
+    .service-centered .service-label {
+      font-size: ${Math.round(14 * scaleFactor)}px;
+    }
+    .service-centered .service-date,
+    .service-centered .service-mileage {
+      font-size: ${Math.round(18 * scaleFactor)}px;
+    }
   </style>
 </head>
 <body>
@@ -231,14 +242,22 @@ function generateStickerHtml(
     ${config.tagline ? `<div class="tagline">${config.tagline}</div>` : ""}
   </div>
   
+  ${qrDataUrl ? `
   <div class="bottom-section">
-    ${qrDataUrl ? `<div class="qr-code"><img src="${qrDataUrl}" alt="Scan to Schedule" /></div>` : ""}
+    <div class="qr-code"><img src="${qrDataUrl}" alt="Scan to Schedule" /></div>
     <div class="service-info">
       <div class="service-label">${config.serviceLabel || "Next Oil Service"}</div>
       ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
       ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
     </div>
   </div>
+  ` : `
+  <div class="service-centered">
+    <div class="service-label">${config.serviceLabel || "Next Oil Service"}</div>
+    ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
+    ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
+  </div>
+  `}
 </body>
 </html>
   `;
