@@ -133,7 +133,7 @@ function generateStickerHtml(
     : "";
 
   const scaleFactor = dimensions.width / 200;
-  const logoHeight = Math.round(80 * scaleFactor);
+  const logoHeight = Math.round(60 * scaleFactor);
   const phoneSize = Math.round(14 * scaleFactor);
   const taglineSize = Math.round(11 * scaleFactor);
   const labelSize = Math.round(12 * scaleFactor);
@@ -161,7 +161,6 @@ function generateStickerHtml(
     .header {
       text-align: center;
       width: 100%;
-      margin-bottom: ${padding}px;
     }
     .logo {
       max-width: 90%;
