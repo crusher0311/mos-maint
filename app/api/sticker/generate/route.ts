@@ -188,7 +188,7 @@ function generateStickerHtml(
       align-items: flex-start;
       justify-content: space-between;
       width: 100%;
-      margin-top: auto;
+      margin-top: ${Math.round(5 * scaleFactor)}px;
       gap: ${padding}px;
     }
     .qr-code {
