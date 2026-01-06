@@ -66,13 +66,19 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 
 **Context**: ~290 shops using standalone My Oil Sticker product. Goal is to migrate them to MOS dashboard as a separately-billable feature toggle.
 
-**Phase 1 - Self-Hosted APIs (COMPLETE)**:
-Replaced paid third-party APIs with free self-hosted solutions:
+**Phase 1 - QR Code Generation (UPDATED Jan 2026)**:
+Switched back to HoverCode API for better quality and tracking:
 
-| Original (Paid) | Replacement (Free) | Status |
-|-----------------|-------------------|--------|
-| HoverCode API | `qrcode` npm package | DONE |
-| HCTI API | `node-html-to-image` | DONE |
+| Component | Solution | Status |
+|-----------|----------|--------|
+| QR Codes | HoverCode API (dynamic, tracked) | DONE |
+| Sticker Images | `node-html-to-image` | DONE |
+
+**HoverCode Integration**:
+- Creates dynamic QR codes with tracking/analytics
+- Supports existing QR codes via `hovercodeQRId` field (for migrated shops)
+- Falls back to `qrcode` npm package if API fails
+- Environment: `HOVERCODE_API_TOKEN`, `HOVERCODE_WORKSPACE_ID`
 
 **API Endpoints**:
 - `GET /api/sticker/redirect/[shopId]` - Dynamic QR redirect to shop appointment URL (tracks scans)
@@ -112,6 +118,7 @@ Replaced paid third-party APIs with free self-hosted solutions:
   defaultSize: string,   // "2x2" | "2x2.5" | "2x3" | "2x3.5"
   appointmentUrl: string,// Override redirect URL
   useKilometers: boolean, // false = miles
+  hovercodeQRId: string, // HoverCode QR ID for existing/migrated shops
   intervals: {           // Per-oil-type interval settings
     diesel: { mileage: number, months: number },     // Default: 7500/6
     euro: { mileage: number, months: number },       // Default: 10000/12
@@ -156,3 +163,4 @@ Replaced paid third-party APIs with free self-hosted solutions:
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals (via Chrome Extension)
 *   **MOS Tools Chrome Extension**: Custom Chrome extension for Tekmetric integration
+*   **QR Code Generation**: HoverCode API (dynamic QR codes with analytics)
