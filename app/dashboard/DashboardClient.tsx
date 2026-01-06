@@ -327,6 +327,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       let intervalMonths = 3;
       let stickerSize = '2x2';
       let includeQR = true;
+      let usePredictiveDate = false;
       
       try {
         const settingsRes = await fetch('/api/sticker/settings');
@@ -345,6 +346,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             includeQR = config.showQRCode;
           }
           
+          // Check if predictive date is enabled
+          if (config?.usePredictiveDate) {
+            usePredictiveDate = true;
+          }
+          
           // Use synthetic oil as default interval (most common)
           if (intervals?.synthetic) {
             intervalMileage = intervals.synthetic.mileage || 5000;
@@ -358,13 +364,46 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         console.log('Using default intervals');
       }
       
-      // Calculate next service date based on shop interval
-      const nextDate = new Date();
-      nextDate.setMonth(nextDate.getMonth() + intervalMonths);
-      const nextServiceDate = nextDate.toISOString().split('T')[0];
-      
       // Calculate next service mileage based on shop interval
       const nextServiceMileage = currentMileage + intervalMileage;
+      
+      // Calculate next service date - use "shortest interval wins" logic
+      let nextServiceDate: string;
+      
+      // Fixed interval date (always calculate as baseline)
+      const fixedDate = new Date();
+      fixedDate.setMonth(fixedDate.getMonth() + intervalMonths);
+      
+      if (usePredictiveDate) {
+        try {
+          const statsRes = await fetch(`/api/vehicle/driving-stats?vin=${encodeURIComponent(vin)}`);
+          if (statsRes.ok) {
+            const stats = await statsRes.json();
+            if (stats.milesPerDay && stats.milesPerDay > 0) {
+              // Calculate days until next service based on driving habits
+              const daysUntilService = Math.ceil(intervalMileage / stats.milesPerDay);
+              const predictiveDate = new Date();
+              predictiveDate.setDate(predictiveDate.getDate() + daysUntilService);
+              
+              // Use the SHORTER of the two intervals (earliest date)
+              if (predictiveDate < fixedDate) {
+                nextServiceDate = predictiveDate.toISOString().split('T')[0];
+              } else {
+                nextServiceDate = fixedDate.toISOString().split('T')[0];
+              }
+            } else {
+              // No driving data, use fixed interval
+              nextServiceDate = fixedDate.toISOString().split('T')[0];
+            }
+          } else {
+            nextServiceDate = fixedDate.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          nextServiceDate = fixedDate.toISOString().split('T')[0];
+        }
+      } else {
+        nextServiceDate = fixedDate.toISOString().split('T')[0];
+      }
       
       // Generate the sticker image
       const response = await fetch('/api/sticker/generate', {
