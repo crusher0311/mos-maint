@@ -106,8 +106,12 @@ Replaced paid third-party APIs with free self-hosted solutions:
   defaultSize: string,   // "2x2" | "2x2.5" | "2x3" | "2x3.5"
   appointmentUrl: string,// Override redirect URL
   useKilometers: boolean, // false = miles
-  defaultMileageInterval: number, // 5000 default (miles or km based on useKilometers)
-  defaultMonthsInterval: number   // 6 default (months between services)
+  intervals: {           // Per-oil-type interval settings
+    diesel: { mileage: number, months: number },     // Default: 7500/6
+    euro: { mileage: number, months: number },       // Default: 10000/12
+    synthetic: { mileage: number, months: number },  // Default: 7500/6
+    conventional: { mileage: number, months: number } // Default: 3000/3
+  }
 }
 ```
 

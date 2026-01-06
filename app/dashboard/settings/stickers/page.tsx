@@ -3,6 +3,18 @@
 import { useState, useEffect } from "react";
 import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge, ImageIcon } from "lucide-react";
 
+interface IntervalConfig {
+  mileage: number;
+  months: number;
+}
+
+interface IntervalsConfig {
+  diesel: IntervalConfig;
+  euro: IntervalConfig;
+  synthetic: IntervalConfig;
+  conventional: IntervalConfig;
+}
+
 interface StickerConfig {
   enabled: boolean;
   logo: string;
@@ -17,8 +29,7 @@ interface StickerConfig {
   defaultSize: string;
   appointmentUrl: string;
   useKilometers: boolean;
-  defaultMileageInterval: number;
-  defaultMonthsInterval: number;
+  intervals: IntervalsConfig;
 }
 
 const STICKER_SIZES = [
@@ -26,6 +37,20 @@ const STICKER_SIZES = [
   { value: "2x2.5", label: "2\" x 2.5\"" },
   { value: "2x3", label: "2\" x 3\"" },
   { value: "2x3.5", label: "2\" x 3.5\"" },
+];
+
+const DEFAULT_INTERVALS: IntervalsConfig = {
+  diesel: { mileage: 7500, months: 6 },
+  euro: { mileage: 10000, months: 12 },
+  synthetic: { mileage: 7500, months: 6 },
+  conventional: { mileage: 3000, months: 3 },
+};
+
+const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: string }[] = [
+  { key: "conventional", label: "Conventional", description: "Standard oil changes" },
+  { key: "synthetic", label: "Synthetic", description: "Full synthetic oil" },
+  { key: "euro", label: "European", description: "BMW, Mercedes, Audi, VW, etc." },
+  { key: "diesel", label: "Diesel", description: "Diesel engines" },
 ];
 
 const DEFAULT_CONFIG: StickerConfig = {
@@ -42,8 +67,7 @@ const DEFAULT_CONFIG: StickerConfig = {
   defaultSize: "2x2.5",
   appointmentUrl: "",
   useKilometers: false,
-  defaultMileageInterval: 5000,
-  defaultMonthsInterval: 6,
+  intervals: DEFAULT_INTERVALS,
 };
 
 export default function StickerSettingsPage() {
@@ -85,8 +109,12 @@ export default function StickerSettingsPage() {
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
-            defaultMileageInterval: data.config.defaultMileageInterval ?? DEFAULT_CONFIG.defaultMileageInterval,
-            defaultMonthsInterval: data.config.defaultMonthsInterval ?? DEFAULT_CONFIG.defaultMonthsInterval,
+            intervals: {
+              diesel: data.config.intervals?.diesel ?? DEFAULT_INTERVALS.diesel,
+              euro: data.config.intervals?.euro ?? DEFAULT_INTERVALS.euro,
+              synthetic: data.config.intervals?.synthetic ?? DEFAULT_INTERVALS.synthetic,
+              conventional: data.config.intervals?.conventional ?? DEFAULT_INTERVALS.conventional,
+            },
           });
         }
       }
@@ -128,8 +156,7 @@ export default function StickerSettingsPage() {
           defaultSize: config.defaultSize,
           appointmentUrl: config.appointmentUrl,
           useKilometers: config.useKilometers,
-          defaultMileageInterval: config.defaultMileageInterval,
-          defaultMonthsInterval: config.defaultMonthsInterval,
+          intervals: config.intervals,
         }),
       });
       
@@ -186,6 +213,25 @@ export default function StickerSettingsPage() {
     setConfig({
       ...config,
       colors: { ...config.colors, [colorKey]: value },
+    });
+  }
+
+  function updateInterval(
+    oilType: keyof IntervalsConfig,
+    field: keyof IntervalConfig,
+    value: number
+  ) {
+    const currentInterval = config.intervals?.[oilType] ?? DEFAULT_INTERVALS[oilType];
+    setConfig({
+      ...config,
+      intervals: {
+        ...DEFAULT_INTERVALS,
+        ...config.intervals,
+        [oilType]: {
+          ...currentInterval,
+          [field]: value,
+        },
+      },
     });
   }
 
@@ -392,61 +438,52 @@ export default function StickerSettingsPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
               <Calendar className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">Default Service Intervals</h2>
+              <h2 className="font-semibold text-gray-900">Service Intervals by Oil Type</h2>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              These defaults will be printed on stickers when generating for customers.
+              Set default intervals for each oil type. The system automatically selects the right interval based on vehicle make, fuel type, and service performed.
             </p>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Gauge className="w-4 h-4" />
-                    {config.useKilometers ? "Kilometers" : "Miles"} Interval
+            <div className="space-y-4">
+              {OIL_TYPES.map((oilType) => {
+                const interval = config.intervals?.[oilType.key] ?? DEFAULT_INTERVALS[oilType.key];
+                return (
+                  <div key={oilType.key} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="font-medium text-gray-900">{oilType.label}</span>
+                        <span className="text-xs text-gray-500 ml-2">{oilType.description}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          {config.useKilometers ? "Kilometers" : "Miles"}
+                        </label>
+                        <input
+                          type="number"
+                          value={interval.mileage}
+                          onChange={(e) => updateInterval(oilType.key, "mileage", Number(e.target.value) || 0)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          min={0}
+                          step={500}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Months</label>
+                        <input
+                          type="number"
+                          value={interval.months}
+                          onChange={(e) => updateInterval(oilType.key, "months", Number(e.target.value) || 0)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          min={1}
+                          max={24}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </label>
-                <select
-                  value={config.defaultMileageInterval}
-                  onChange={(e) => setConfig({ ...config, defaultMileageInterval: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {config.useKilometers ? (
-                    <>
-                      <option value={5000}>5,000 km</option>
-                      <option value={8000}>8,000 km</option>
-                      <option value={10000}>10,000 km</option>
-                      <option value={15000}>15,000 km</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value={3000}>3,000 miles</option>
-                      <option value={5000}>5,000 miles</option>
-                      <option value={7500}>7,500 miles</option>
-                      <option value={10000}>10,000 miles</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    Months Interval
-                  </div>
-                </label>
-                <select
-                  value={config.defaultMonthsInterval}
-                  onChange={(e) => setConfig({ ...config, defaultMonthsInterval: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value={3}>3 months</option>
-                  <option value={6}>6 months</option>
-                  <option value={9}>9 months</option>
-                  <option value={12}>12 months</option>
-                </select>
-              </div>
+                );
+              })}
             </div>
           </div>
 
