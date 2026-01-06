@@ -9,7 +9,8 @@ import {
   LayoutDashboard,
   LogOut,
   Shield,
-  Settings
+  Settings,
+  QrCode
 } from "lucide-react";
 
 interface PlatformAdminSidebarProps {
@@ -48,6 +49,11 @@ export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
       name: "Usage & Costs",
       href: "/platform-admin/usage",
       icon: <DollarSign className="w-5 h-5" />
+    },
+    {
+      name: "HoverCode QRs",
+      href: "/platform-admin/hovercode",
+      icon: <QrCode className="w-5 h-5" />
     },
     {
       name: "Settings",
