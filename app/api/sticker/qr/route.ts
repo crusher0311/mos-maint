@@ -35,10 +35,14 @@ async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> 
     
     const data = await response.json();
     console.log(`[Sticker QR] HoverCode response keys:`, Object.keys(data));
+    console.log(`[Sticker QR] png value:`, data.png);
+    console.log(`[Sticker QR] svg value:`, data.svg);
+    console.log(`[Sticker QR] svg_file value:`, data.svg_file);
     
-    if (data.png) {
-      console.log(`[Sticker QR] Fetching PNG from: ${data.png}`);
-      const imageRes = await fetch(data.png);
+    const imageUrl = data.png || data.svg_file;
+    if (imageUrl) {
+      console.log(`[Sticker QR] Fetching image from: ${imageUrl}`);
+      const imageRes = await fetch(imageUrl);
       if (imageRes.ok) {
         const arrayBuffer = await imageRes.arrayBuffer();
         console.log(`[Sticker QR] Got PNG buffer, size: ${arrayBuffer.byteLength}`);
