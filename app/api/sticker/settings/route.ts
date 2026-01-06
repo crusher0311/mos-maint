@@ -135,6 +135,8 @@ export async function PUT(req: NextRequest) {
       "taglineLine2",
       "serviceLabel",
       "showQRCode",
+      "roundMileage",
+      "usePredictiveDate",
       "fontStyles",
       "colors",
       "defaultSize",
