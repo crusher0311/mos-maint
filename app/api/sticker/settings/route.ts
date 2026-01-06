@@ -54,6 +54,7 @@ interface StickerConfig {
   appointmentUrl?: string;
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
+  hovercodeQRId?: string;
 }
 
 export async function GET(req: NextRequest) {
@@ -140,6 +141,7 @@ export async function PUT(req: NextRequest) {
       "appointmentUrl",
       "useKilometers",
       "intervals",
+      "hovercodeQRId",
     ];
 
     const updateFields: Record<string, unknown> = {};

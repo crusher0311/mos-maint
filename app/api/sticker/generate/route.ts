@@ -65,14 +65,70 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
   }
 }
 
-const HOVERCODE_API_URL = "https://hovercode.com/api/v2/hovercode/create/";
+const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 const HOVERCODE_WORKSPACE_ID = process.env.HOVERCODE_WORKSPACE_ID;
 
-async function generateHovercodeQR(
+async function fetchImageAsDataUri(imageUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type") || "image/png";
+    return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
+  } catch (error) {
+    console.error("[Sticker Generate] Failed to fetch image:", error);
+    return null;
+  }
+}
+
+async function getExistingHovercodeQR(hovercodeId: string): Promise<{ dataUri: string | null; svg: string | null }> {
+  if (!HOVERCODE_API_TOKEN) {
+    console.error("[Sticker Generate] HoverCode API token not configured");
+    return { dataUri: null, svg: null };
+  }
+
+  try {
+    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error("[Sticker Generate] HoverCode retrieve error:", response.status);
+      return { dataUri: null, svg: null };
+    }
+
+    const data = await response.json();
+    
+    if (data.png) {
+      const dataUri = await fetchImageAsDataUri(data.png);
+      if (dataUri) return { dataUri, svg: data.svg || null };
+    }
+    
+    if (data.svg) {
+      const svgBase64 = Buffer.from(data.svg).toString("base64");
+      return { dataUri: `data:image/svg+xml;base64,${svgBase64}`, svg: data.svg };
+    }
+    
+    return { dataUri: null, svg: null };
+  } catch (error) {
+    console.error("[Sticker Generate] HoverCode retrieve failed:", error);
+    return { dataUri: null, svg: null };
+  }
+}
+
+interface HovercodeCreateResult {
+  id: string;
+  dataUri: string | null;
+}
+
+async function createHovercodeQR(
   url: string,
   options: { size?: number; color?: string; backgroundColor?: string; displayName?: string } = {}
-): Promise<string | null> {
+): Promise<HovercodeCreateResult | null> {
   const { size = 300, color = "#1976d2", backgroundColor = "#ffffff", displayName } = options;
 
   if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
@@ -81,7 +137,7 @@ async function generateHovercodeQR(
   }
 
   try {
-    const response = await fetch(HOVERCODE_API_URL, {
+    const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
         "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
@@ -104,22 +160,24 @@ async function generateHovercodeQR(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Sticker Generate] HoverCode API error:", response.status, errorText);
+      console.error("[Sticker Generate] HoverCode create error:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
+    const hovercodeId = data.id;
     
+    let dataUri: string | null = null;
     if (data.png) {
-      return data.png;
-    } else if (data.svg) {
-      const svgBase64 = Buffer.from(data.svg).toString("base64");
-      return `data:image/svg+xml;base64,${svgBase64}`;
+      dataUri = await fetchImageAsDataUri(data.png);
+    }
+    if (!dataUri && data.svg) {
+      dataUri = `data:image/svg+xml;base64,${Buffer.from(data.svg).toString("base64")}`;
     }
     
-    return null;
+    return { id: hovercodeId, dataUri };
   } catch (error) {
-    console.error("[Sticker Generate] HoverCode API failed:", error);
+    console.error("[Sticker Generate] HoverCode create failed:", error);
     return null;
   }
 }
@@ -166,6 +224,7 @@ interface StickerConfig {
   };
   appointmentUrl?: string;
   useKilometers?: boolean;
+  hovercodeQRId?: string;
 }
 
 interface StickerRequest {
@@ -408,16 +467,36 @@ export async function POST(req: NextRequest) {
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
-      const hovercodeUrl = await generateHovercodeQR(redirectUrl, {
-        size: 300,
-        color: qrColor,
-        backgroundColor: qrBgColor,
-        displayName: `${shopName} - Oil Sticker`,
-      });
+      if (config.hovercodeQRId) {
+        console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
+        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+        if (existingQR.dataUri) {
+          qrDataUrl = existingQR.dataUri;
+        }
+      }
       
-      if (hovercodeUrl) {
-        qrDataUrl = hovercodeUrl;
-      } else {
+      if (!qrDataUrl) {
+        const newQR = await createHovercodeQR(redirectUrl, {
+          size: 300,
+          color: qrColor,
+          backgroundColor: qrBgColor,
+          displayName: `${shopName} - Oil Sticker`,
+        });
+        
+        if (newQR?.dataUri) {
+          qrDataUrl = newQR.dataUri;
+          
+          if (newQR.id && !config.hovercodeQRId) {
+            await db.collection("shops").updateOne(
+              { shopId },
+              { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
+            );
+            console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
+          }
+        }
+      }
+      
+      if (!qrDataUrl) {
         console.log("[Sticker Generate] HoverCode failed, using fallback QR");
         qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
       }
