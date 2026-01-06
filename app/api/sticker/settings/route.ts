@@ -22,6 +22,7 @@ interface StickerConfig {
   logo?: string;
   phone?: string;
   tagline?: string;
+  taglineLine2?: string;
   serviceLabel?: string;
   showQRCode?: boolean;
   colors?: {
@@ -115,6 +116,7 @@ export async function PUT(req: NextRequest) {
       "logo",
       "phone",
       "tagline",
+      "taglineLine2",
       "serviceLabel",
       "showQRCode",
       "colors",

@@ -73,6 +73,7 @@ interface StickerConfig {
   logoObjectPath?: string;
   phone?: string;
   tagline?: string;
+  taglineLine2?: string;
   serviceLabel?: string;
   colors?: {
     primary?: string;
@@ -162,6 +163,7 @@ function generateStickerHtml(
     .header {
       text-align: center;
       width: 100%;
+      margin-bottom: ${Math.round(6 * scaleFactor)}px;
     }
     .logo {
       max-width: 90%;
@@ -170,18 +172,23 @@ function generateStickerHtml(
     }
     .contact {
       text-align: center;
-      margin-bottom: ${padding}px;
+      margin-bottom: ${Math.round(4 * scaleFactor)}px;
     }
     .phone {
       font-size: ${phoneSize}px;
       font-weight: bold;
       color: ${phoneColor};
+      margin-bottom: 2px;
     }
     .tagline {
       font-size: ${taglineSize}px;
       font-style: italic;
       color: ${taglineColor};
-      margin-top: 2px;
+    }
+    .tagline-line2 {
+      font-size: ${taglineSize}px;
+      font-style: italic;
+      color: ${taglineColor};
     }
     .bottom-section {
       display: flex;
@@ -240,6 +247,7 @@ function generateStickerHtml(
   <div class="contact">
     ${config.phone ? `<div class="phone">${config.phone}</div>` : ""}
     ${config.tagline ? `<div class="tagline">${config.tagline}</div>` : ""}
+    ${config.taglineLine2 ? `<div class="tagline-line2">${config.taglineLine2}</div>` : ""}
   </div>
   
   ${qrDataUrl ? `
