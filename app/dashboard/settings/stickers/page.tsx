@@ -818,7 +818,7 @@ export default function StickerSettingsPage() {
                         className="text-sm font-bold italic"
                         style={{ color: config.colors.serviceValueColor }}
                       >
-                        {(65000).toLocaleString()} {config.useKilometers ? "kilometers" : "miles"}
+                        {(65000).toLocaleString()} {config.useKilometers ? "km" : "miles"}
                       </div>
                     </div>
                   </div>
@@ -839,7 +839,7 @@ export default function StickerSettingsPage() {
                       className="text-base font-bold italic"
                       style={{ color: config.colors.serviceValueColor }}
                     >
-                      {(65000).toLocaleString()} {config.useKilometers ? "kilometers" : "miles"}
+                      {(65000).toLocaleString()} {config.useKilometers ? "km" : "miles"}
                     </div>
                   </div>
                 )}
