@@ -28,12 +28,19 @@ import {
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
+interface NavChild {
+  name: string;
+  href: string;
+  featureId?: string;
+  children?: { name: string; href: string; featureId?: string }[];
+}
+
 interface NavItem {
   name: string;
   href: string;
   icon: React.ReactNode;
   featureId?: string;
-  children?: { name: string; href: string; featureId?: string }[];
+  children?: NavChild[];
 }
 
 interface ShopOption {
@@ -57,10 +64,23 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+function getInitialExpandedSections(pathname: string | null): Set<string> {
+  const sections = new Set<string>();
+  if (pathname?.startsWith("/dashboard/settings")) {
+    sections.add("Settings");
+  }
+  if (pathname?.startsWith("/dashboard/settings/branding") || 
+      pathname?.startsWith("/dashboard/settings/stickers") ||
+      pathname?.startsWith("/dashboard/settings/preferences")) {
+    sections.add("Preferences");
+  }
+  return sections;
+}
+
 export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => getInitialExpandedSections(pathname));
   const [searchQuery, setSearchQuery] = useState("");
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false);
   const [shops, setShops] = useState<ShopOption[]>([]);
@@ -106,6 +126,28 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       setTimeout(() => shopSearchRef.current?.focus(), 50);
     }
   }, [shopDropdownOpen]);
+
+  useEffect(() => {
+    if (!pathname) return;
+    
+    setExpandedSections(prev => {
+      const newExpanded = new Set(prev);
+      let changed = false;
+      
+      if (pathname.startsWith("/dashboard/settings") && !newExpanded.has("Settings")) {
+        newExpanded.add("Settings");
+        changed = true;
+      }
+      if ((pathname.startsWith("/dashboard/settings/branding") || 
+           pathname.startsWith("/dashboard/settings/stickers") ||
+           pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
+        newExpanded.add("Preferences");
+        changed = true;
+      }
+      
+      return changed ? newExpanded : prev;
+    });
+  }, [pathname]);
 
   async function switchShop(shopId: number) {
     if (switching || shopId === currentShopId) {
@@ -168,8 +210,14 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard/settings",
       icon: <Settings className="w-5 h-5" />,
       children: [
-        { name: "Preferences", href: "/dashboard/settings/preferences" },
-        { name: "Shop Branding", href: "/dashboard/settings/branding" },
+        { 
+          name: "Preferences", 
+          href: "/dashboard/settings/preferences",
+          children: [
+            { name: "Shop Branding", href: "/dashboard/settings/branding" },
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
+          ]
+        },
         // Billing page hidden until we have enough data to verify with live users
         // { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
@@ -177,8 +225,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        { name: "Integrations", href: "/dashboard/settings/integrations" },
-        { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
+        { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
   ];
@@ -193,6 +240,20 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         children: item.children.filter(child => {
           if (!child.featureId) return true;
           return enabledFeatures.includes(child.featureId);
+        }).map(child => {
+          if (child.children) {
+            return {
+              ...child,
+              children: child.children.filter(grandchild => {
+                if (!grandchild.featureId) return true;
+                return enabledFeatures.includes(grandchild.featureId);
+              }),
+            };
+          }
+          return child;
+        }).filter(child => {
+          if (child.children && child.children.length === 0) return false;
+          return true;
         }),
       };
     }
@@ -331,16 +392,67 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                     <ul className="mt-1 ml-4 space-y-1 border-l border-white/20 pl-4">
                       {item.children.map((child) => (
                         <li key={child.name}>
-                          <Link
-                            href={child.href}
-                            className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                              isActive(child.href)
-                                ? "bg-white/20 text-white font-medium"
-                                : "text-white/70 hover:bg-white/10 hover:text-white"
-                            }`}
-                          >
-                            {child.name}
-                          </Link>
+                          {child.children && child.children.length > 0 ? (
+                            <div>
+                              <div className="flex items-center">
+                                <Link
+                                  href={child.href}
+                                  className={`flex-1 px-3 py-2 rounded-l-lg text-sm transition-colors ${
+                                    isActive(child.href) && !child.children.some(gc => isActive(gc.href))
+                                      ? "bg-white/20 text-white font-medium"
+                                      : child.children.some(gc => isActive(gc.href))
+                                        ? "bg-white/10 text-white"
+                                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                                  }`}
+                                >
+                                  {child.name}
+                                </Link>
+                                <button
+                                  onClick={() => toggleSection(child.name)}
+                                  className={`px-2 py-2 rounded-r-lg text-sm transition-colors ${
+                                    child.children.some(gc => isActive(gc.href))
+                                      ? "bg-white/10 text-white"
+                                      : "text-white/70 hover:bg-white/10 hover:text-white"
+                                  }`}
+                                >
+                                  {expandedSections.has(child.name) ? (
+                                    <ChevronDown className="w-3 h-3" />
+                                  ) : (
+                                    <ChevronRight className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                              {expandedSections.has(child.name) && (
+                                <ul className="mt-1 ml-3 space-y-1 border-l border-white/15 pl-3">
+                                  {child.children.map((grandchild) => (
+                                    <li key={grandchild.name}>
+                                      <Link
+                                        href={grandchild.href}
+                                        className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                          isActive(grandchild.href)
+                                            ? "bg-white/20 text-white font-medium"
+                                            : "text-white/60 hover:bg-white/10 hover:text-white"
+                                        }`}
+                                      >
+                                        {grandchild.name}
+                                      </Link>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ) : (
+                            <Link
+                              href={child.href}
+                              className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                                isActive(child.href)
+                                  ? "bg-white/20 text-white font-medium"
+                                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                              }`}
+                            >
+                              {child.name}
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>
