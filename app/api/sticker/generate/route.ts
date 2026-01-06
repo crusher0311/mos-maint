@@ -225,6 +225,7 @@ interface StickerConfig {
   appointmentUrl?: string;
   useKilometers?: boolean;
   hovercodeQRId?: string;
+  roundMileage?: boolean;
 }
 
 interface StickerRequest {
@@ -268,8 +269,12 @@ function generateStickerHtml(
       })
     : "";
 
-  const formattedMileage = data.nextServiceMileage
-    ? data.nextServiceMileage.toLocaleString()
+  let mileageValue = data.nextServiceMileage;
+  if (mileageValue && config.roundMileage) {
+    mileageValue = Math.round(mileageValue / 1000) * 1000;
+  }
+  const formattedMileage = mileageValue
+    ? mileageValue.toLocaleString()
     : "";
 
   const scaleFactor = dimensions.width / 200;
@@ -375,7 +380,7 @@ function generateStickerHtml(
       font-weight: ${serviceLabelFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
-      margin-bottom: 4px;
+      margin-bottom: ${Math.round(8 * scaleFactor)}px;
       white-space: nowrap;
     }
     .service-date {

@@ -167,6 +167,7 @@ export default function StickerSettingsPage() {
             fontStyles: config.fontStyles,
             colors: config.colors,
             useKilometers: config.useKilometers,
+            roundMileage: config.roundMileage,
           },
         }),
       });
