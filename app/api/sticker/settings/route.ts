@@ -17,6 +17,12 @@ interface IntervalsConfig {
   conventional: IntervalConfig;
 }
 
+interface FontStyle {
+  bold?: boolean;
+  italic?: boolean;
+  size?: number;
+}
+
 interface StickerConfig {
   enabled?: boolean;
   logo?: string;
@@ -25,6 +31,13 @@ interface StickerConfig {
   taglineLine2?: string;
   serviceLabel?: string;
   showQRCode?: boolean;
+  fontStyles?: {
+    phone?: FontStyle;
+    tagline?: FontStyle;
+    taglineLine2?: FontStyle;
+    serviceLabel?: FontStyle;
+    serviceValue?: FontStyle;
+  };
   colors?: {
     primary?: string;
     secondary?: string;
@@ -119,6 +132,7 @@ export async function PUT(req: NextRequest) {
       "taglineLine2",
       "serviceLabel",
       "showQRCode",
+      "fontStyles",
       "colors",
       "defaultSize",
       "appointmentUrl",

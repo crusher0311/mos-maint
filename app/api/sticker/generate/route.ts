@@ -68,6 +68,12 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
   }
 }
 
+interface FontStyle {
+  bold?: boolean;
+  italic?: boolean;
+  size?: number;
+}
+
 interface StickerConfig {
   logo?: string;
   logoObjectPath?: string;
@@ -75,6 +81,13 @@ interface StickerConfig {
   tagline?: string;
   taglineLine2?: string;
   serviceLabel?: string;
+  fontStyles?: {
+    phone?: FontStyle;
+    tagline?: FontStyle;
+    taglineLine2?: FontStyle;
+    serviceLabel?: FontStyle;
+    serviceValue?: FontStyle;
+  };
   colors?: {
     primary?: string;
     secondary?: string;
@@ -135,10 +148,18 @@ function generateStickerHtml(
 
   const scaleFactor = dimensions.width / 200;
   const logoHeight = Math.round(60 * scaleFactor);
-  const phoneSize = Math.round(14 * scaleFactor);
-  const taglineSize = Math.round(11 * scaleFactor);
-  const labelSize = Math.round(12 * scaleFactor);
-  const valueSize = Math.round(14 * scaleFactor);
+  
+  const phoneFontStyle = config.fontStyles?.phone || { bold: true, italic: false, size: 14 };
+  const taglineFontStyle = config.fontStyles?.tagline || { bold: false, italic: true, size: 11 };
+  const taglineLine2FontStyle = config.fontStyles?.taglineLine2 || { bold: false, italic: true, size: 11 };
+  const serviceLabelFontStyle = config.fontStyles?.serviceLabel || { bold: false, italic: false, size: 12 };
+  const serviceValueFontStyle = config.fontStyles?.serviceValue || { bold: true, italic: true, size: 14 };
+  
+  const phoneSize = Math.round((phoneFontStyle.size || 14) * scaleFactor);
+  const taglineSize = Math.round((taglineFontStyle.size || 11) * scaleFactor);
+  const taglineLine2Size = Math.round((taglineLine2FontStyle.size || 11) * scaleFactor);
+  const labelSize = Math.round((serviceLabelFontStyle.size || 12) * scaleFactor);
+  const valueSize = Math.round((serviceValueFontStyle.size || 14) * scaleFactor);
   const qrSize = Math.round(80 * scaleFactor);
   const padding = Math.round(10 * scaleFactor);
 
@@ -176,18 +197,21 @@ function generateStickerHtml(
     }
     .phone {
       font-size: ${phoneSize}px;
-      font-weight: bold;
+      font-weight: ${phoneFontStyle.bold ? "bold" : "normal"};
+      font-style: ${phoneFontStyle.italic ? "italic" : "normal"};
       color: ${phoneColor};
       margin-bottom: 2px;
     }
     .tagline {
       font-size: ${taglineSize}px;
-      font-style: italic;
+      font-weight: ${taglineFontStyle.bold ? "bold" : "normal"};
+      font-style: ${taglineFontStyle.italic ? "italic" : "normal"};
       color: ${taglineColor};
     }
     .tagline-line2 {
-      font-size: ${taglineSize}px;
-      font-style: italic;
+      font-size: ${taglineLine2Size}px;
+      font-weight: ${taglineLine2FontStyle.bold ? "bold" : "normal"};
+      font-style: ${taglineLine2FontStyle.italic ? "italic" : "normal"};
       color: ${taglineColor};
     }
     .bottom-section {
@@ -211,31 +235,33 @@ function generateStickerHtml(
     }
     .service-label {
       font-size: ${labelSize}px;
+      font-weight: ${serviceLabelFontStyle.bold ? "bold" : "normal"};
+      font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
       margin-bottom: 4px;
     }
     .service-date {
       font-size: ${valueSize}px;
-      font-style: italic;
+      font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
+      font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
-      font-weight: bold;
     }
     .service-mileage {
       font-size: ${valueSize}px;
-      font-style: italic;
+      font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
+      font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
-      font-weight: bold;
     }
     .service-centered {
       text-align: center;
       margin-top: ${Math.round(8 * scaleFactor)}px;
     }
     .service-centered .service-label {
-      font-size: ${Math.round(14 * scaleFactor)}px;
+      font-size: ${Math.round((serviceLabelFontStyle.size || 12) * scaleFactor * 1.17)}px;
     }
     .service-centered .service-date,
     .service-centered .service-mileage {
-      font-size: ${Math.round(18 * scaleFactor)}px;
+      font-size: ${Math.round((serviceValueFontStyle.size || 14) * scaleFactor * 1.29)}px;
     }
   </style>
 </head>

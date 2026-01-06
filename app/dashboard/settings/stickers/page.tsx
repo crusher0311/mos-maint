@@ -709,6 +709,85 @@ export default function StickerSettingsPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-4">
+              <Type className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Text Styling</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Customize font size, bold, and italic for each text element.
+            </p>
+
+            <div className="space-y-4">
+              {[
+                { key: "phone", label: "Phone" },
+                { key: "tagline", label: "Tagline" },
+                { key: "taglineLine2", label: "Line 2" },
+                { key: "serviceLabel", label: "Service Label" },
+                { key: "serviceValue", label: "Date/Mileage" },
+              ].map((item) => {
+                const style = config.fontStyles[item.key as keyof typeof config.fontStyles];
+                return (
+                  <div key={item.key} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900 text-sm">{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <label className="text-xs text-gray-600">Size:</label>
+                          <input
+                            type="number"
+                            value={style.size}
+                            onChange={(e) => setConfig({
+                              ...config,
+                              fontStyles: {
+                                ...config.fontStyles,
+                                [item.key]: { ...style, size: Number(e.target.value) || 12 }
+                              }
+                            })}
+                            className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            min={8}
+                            max={24}
+                          />
+                          <span className="text-xs text-gray-500">px</span>
+                        </div>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={style.bold}
+                            onChange={(e) => setConfig({
+                              ...config,
+                              fontStyles: {
+                                ...config.fontStyles,
+                                [item.key]: { ...style, bold: e.target.checked }
+                              }
+                            })}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="text-xs font-bold text-gray-700">B</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={style.italic}
+                            onChange={(e) => setConfig({
+                              ...config,
+                              fontStyles: {
+                                ...config.fontStyles,
+                                [item.key]: { ...style, italic: e.target.checked }
+                              }
+                            })}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="text-xs italic text-gray-700">I</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
               <Calendar className="w-5 h-5 text-blue-600" />
               <h2 className="font-semibold text-gray-900">Service Intervals by Oil Type</h2>
             </div>
@@ -807,13 +886,29 @@ export default function StickerSettingsPage() {
                 
                 <div className="text-center" style={{ marginBottom: "4px" }}>
                   {config.phone && (
-                    <div className="text-sm font-bold" style={{ color: config.colors.phoneColor, marginBottom: "2px" }}>{config.phone}</div>
+                    <div style={{ 
+                      fontSize: `${config.fontStyles.phone.size}px`,
+                      fontWeight: config.fontStyles.phone.bold ? "bold" : "normal",
+                      fontStyle: config.fontStyles.phone.italic ? "italic" : "normal",
+                      color: config.colors.phoneColor, 
+                      marginBottom: "2px" 
+                    }}>{config.phone}</div>
                   )}
                   {config.tagline && (
-                    <div className="text-xs italic" style={{ color: config.colors.taglineColor }}>{config.tagline}</div>
+                    <div style={{ 
+                      fontSize: `${config.fontStyles.tagline.size}px`,
+                      fontWeight: config.fontStyles.tagline.bold ? "bold" : "normal",
+                      fontStyle: config.fontStyles.tagline.italic ? "italic" : "normal",
+                      color: config.colors.taglineColor 
+                    }}>{config.tagline}</div>
                   )}
                   {config.taglineLine2 && (
-                    <div className="text-xs italic" style={{ color: config.colors.taglineColor }}>{config.taglineLine2}</div>
+                    <div style={{ 
+                      fontSize: `${config.fontStyles.taglineLine2.size}px`,
+                      fontWeight: config.fontStyles.taglineLine2.bold ? "bold" : "normal",
+                      fontStyle: config.fontStyles.taglineLine2.italic ? "italic" : "normal",
+                      color: config.colors.taglineColor 
+                    }}>{config.taglineLine2}</div>
                   )}
                 </div>
                 
@@ -833,10 +928,20 @@ export default function StickerSettingsPage() {
                       )}
                     </div>
                     <div className="text-center flex-grow">
-                      <div className="text-xs mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
+                      <div style={{ 
+                        fontSize: `${config.fontStyles.serviceLabel.size}px`,
+                        fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
+                        fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
+                        color: config.colors.serviceLabelColor,
+                        marginBottom: "2px"
+                      }}>{config.serviceLabel || "Next Oil Service"}</div>
                       <div 
-                        className="text-sm font-bold italic"
-                        style={{ color: config.colors.serviceValueColor }}
+                        style={{ 
+                          fontSize: `${config.fontStyles.serviceValue.size}px`,
+                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
+                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
+                          color: config.colors.serviceValueColor 
+                        }}
                       >
                         {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
                           month: "numeric",
@@ -845,8 +950,12 @@ export default function StickerSettingsPage() {
                         })}
                       </div>
                       <div 
-                        className="text-sm font-bold italic"
-                        style={{ color: config.colors.serviceValueColor }}
+                        style={{ 
+                          fontSize: `${config.fontStyles.serviceValue.size}px`,
+                          fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
+                          fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
+                          color: config.colors.serviceValueColor 
+                        }}
                       >
                         {(65000).toLocaleString()} {config.useKilometers ? "km" : "miles"}
                       </div>
@@ -854,10 +963,20 @@ export default function StickerSettingsPage() {
                   </div>
                 ) : (
                   <div className="text-center mt-2">
-                    <div className="text-sm mb-1" style={{ color: config.colors.serviceLabelColor }}>{config.serviceLabel || "Next Oil Service"}</div>
+                    <div style={{ 
+                      fontSize: `${Math.round(config.fontStyles.serviceLabel.size * 1.17)}px`,
+                      fontWeight: config.fontStyles.serviceLabel.bold ? "bold" : "normal",
+                      fontStyle: config.fontStyles.serviceLabel.italic ? "italic" : "normal",
+                      color: config.colors.serviceLabelColor,
+                      marginBottom: "4px"
+                    }}>{config.serviceLabel || "Next Oil Service"}</div>
                     <div 
-                      className="text-base font-bold italic"
-                      style={{ color: config.colors.serviceValueColor }}
+                      style={{ 
+                        fontSize: `${Math.round(config.fontStyles.serviceValue.size * 1.29)}px`,
+                        fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
+                        fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
+                        color: config.colors.serviceValueColor 
+                      }}
                     >
                       {new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
                         month: "numeric",
@@ -866,8 +985,12 @@ export default function StickerSettingsPage() {
                       })}
                     </div>
                     <div 
-                      className="text-base font-bold italic"
-                      style={{ color: config.colors.serviceValueColor }}
+                      style={{ 
+                        fontSize: `${Math.round(config.fontStyles.serviceValue.size * 1.29)}px`,
+                        fontWeight: config.fontStyles.serviceValue.bold ? "bold" : "normal",
+                        fontStyle: config.fontStyles.serviceValue.italic ? "italic" : "normal",
+                        color: config.colors.serviceValueColor 
+                      }}
                     >
                       {(65000).toLocaleString()} {config.useKilometers ? "km" : "miles"}
                     </div>
