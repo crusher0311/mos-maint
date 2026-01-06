@@ -271,7 +271,7 @@ function generateStickerHtml(
 
   let mileageValue = data.nextServiceMileage;
   if (mileageValue && config.roundMileage) {
-    mileageValue = Math.round(mileageValue / 1000) * 1000;
+    mileageValue = Math.round(mileageValue / 100) * 100;
   }
   const formattedMileage = mileageValue
     ? mileageValue.toLocaleString()
