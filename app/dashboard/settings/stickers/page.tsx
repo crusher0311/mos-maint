@@ -723,6 +723,7 @@ export default function StickerSettingsPage() {
                   padding: "10px",
                   display: "flex",
                   flexDirection: "column",
+                  justifyContent: "center",
                   fontFamily: "Arial, sans-serif",
                   backgroundColor: config.colors.background,
                 }}
