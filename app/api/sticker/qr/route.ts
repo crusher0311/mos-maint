@@ -14,7 +14,7 @@ const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.pn
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 
-async function convertSvgToPng(svgText: string, size: number): Promise<Buffer | null> {
+async function convertSvgToPng(svgText: string, size: number, addLogo: boolean = true): Promise<Buffer | null> {
   try {
     const canvas = createCanvas(size, size);
     const ctx = canvas.getContext("2d");
@@ -24,6 +24,25 @@ async function convertSvgToPng(svgText: string, size: number): Promise<Buffer | 
     
     const img = await loadImage(dataUrl);
     ctx.drawImage(img, 0, 0, size, size);
+    
+    if (addLogo) {
+      try {
+        if (fs.existsSync(DEFAULT_LOGO_PATH)) {
+          const logo = await loadImage(DEFAULT_LOGO_PATH);
+          const logoSize = Math.floor(size * 0.22);
+          const logoX = Math.floor((size - logoSize) / 2);
+          const logoY = Math.floor((size - logoSize) / 2);
+          
+          const padding = 4;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(logoX - padding, logoY - padding, logoSize + padding * 2, logoSize + padding * 2);
+          
+          ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+        }
+      } catch (logoError) {
+        console.error("[Sticker QR] Logo overlay error:", logoError);
+      }
+    }
     
     return canvas.toBuffer("image/png");
   } catch (error) {
