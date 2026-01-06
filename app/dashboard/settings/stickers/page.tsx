@@ -754,10 +754,10 @@ export default function StickerSettingsPage() {
                       <img 
                         src={qrUrl} 
                         alt="QR Code" 
-                        className="w-[70px] h-[70px]"
+                        className="w-[80px] h-[80px]"
                       />
                     ) : (
-                      <div className="w-[70px] h-[70px] bg-gray-200 rounded flex items-center justify-center">
+                      <div className="w-[80px] h-[80px] bg-gray-200 rounded flex items-center justify-center">
                         <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                       </div>
                     )}

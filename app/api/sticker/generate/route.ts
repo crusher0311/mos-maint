@@ -138,7 +138,7 @@ function generateStickerHtml(
   const taglineSize = Math.round(11 * scaleFactor);
   const labelSize = Math.round(12 * scaleFactor);
   const valueSize = Math.round(14 * scaleFactor);
-  const qrSize = Math.round(70 * scaleFactor);
+  const qrSize = Math.round(80 * scaleFactor);
   const padding = Math.round(10 * scaleFactor);
 
   return `
