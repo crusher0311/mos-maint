@@ -109,6 +109,191 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
+  const [stickerContextMenu, setStickerContextMenu] = useState<{
+    vin: string;
+    mileage: number;
+    x: number;
+    y: number;
+    intervals: Record<string, { mileage: number; months: number }>;
+    useKilometers: boolean;
+  } | null>(null);
+  const [customStickerModal, setCustomStickerModal] = useState<{
+    vin: string;
+    mileage: number;
+  } | null>(null);
+  const [customDate, setCustomDate] = useState('');
+  const [customMileage, setCustomMileage] = useState('');
+  const stickerContextRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutsideContext(e: MouseEvent) {
+      if (stickerContextRef.current && !stickerContextRef.current.contains(e.target as Node)) {
+        setStickerContextMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutsideContext);
+    return () => document.removeEventListener("mousedown", handleClickOutsideContext);
+  }, []);
+
+  const handleStickerRightClick = async (e: React.MouseEvent, vin: string, currentMileage: number | null) => {
+    e.preventDefault();
+    if (!currentMileage) {
+      alert("Mileage is required to print a sticker");
+      return;
+    }
+    
+    // Fetch sticker settings to get intervals
+    try {
+      const settingsRes = await fetch('/api/sticker/settings');
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const config = settingsData.config || {};
+        const defaultIntervals = {
+          conventional: { mileage: 3000, months: 3 },
+          synthetic: { mileage: 5000, months: 6 },
+          euro: { mileage: 10000, months: 12 },
+          diesel: { mileage: 7500, months: 6 },
+        };
+        setStickerContextMenu({
+          vin,
+          mileage: currentMileage,
+          x: e.clientX,
+          y: e.clientY,
+          intervals: config.intervals || defaultIntervals,
+          useKilometers: config.useKilometers || false,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch sticker settings', err);
+    }
+  };
+
+  const handlePrintWithInterval = (intervalType: string) => {
+    if (!stickerContextMenu) return;
+    const interval = stickerContextMenu.intervals[intervalType];
+    if (!interval) return;
+    
+    const nextDate = new Date();
+    nextDate.setMonth(nextDate.getMonth() + interval.months);
+    const nextServiceDate = nextDate.toISOString().split('T')[0];
+    const nextServiceMileage = stickerContextMenu.mileage + interval.mileage;
+    
+    setStickerContextMenu(null);
+    handleQuickPrintStickerWithValues(
+      stickerContextMenu.vin,
+      stickerContextMenu.mileage,
+      nextServiceMileage,
+      nextServiceDate
+    );
+  };
+
+  const handleOpenCustomModal = () => {
+    if (!stickerContextMenu) return;
+    const nextDate = new Date();
+    nextDate.setMonth(nextDate.getMonth() + 3);
+    setCustomDate(nextDate.toISOString().split('T')[0]);
+    setCustomMileage(String(stickerContextMenu.mileage + 5000));
+    setCustomStickerModal({
+      vin: stickerContextMenu.vin,
+      mileage: stickerContextMenu.mileage,
+    });
+    setStickerContextMenu(null);
+  };
+
+  const handlePrintCustom = () => {
+    if (!customStickerModal) return;
+    handleQuickPrintStickerWithValues(
+      customStickerModal.vin,
+      customStickerModal.mileage,
+      parseInt(customMileage) || customStickerModal.mileage + 5000,
+      customDate
+    );
+    setCustomStickerModal(null);
+  };
+
+  const handleQuickPrintStickerWithValues = async (
+    vin: string,
+    currentMileage: number,
+    nextServiceMileage: number,
+    nextServiceDate: string
+  ) => {
+    setPrintingSticker(vin);
+    try {
+      let stickerSize = '2x2';
+      let includeQR = true;
+      
+      try {
+        const settingsRes = await fetch('/api/sticker/settings');
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          const config = settingsData.config;
+          if (config?.defaultSize) stickerSize = config.defaultSize;
+          if (config?.showQRCode !== undefined) includeQR = config.showQRCode;
+        }
+      } catch (e) {
+        console.log('Using default settings');
+      }
+      
+      const response = await fetch('/api/sticker/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vin,
+          currentMileage,
+          nextServiceMileage,
+          nextServiceDate,
+          size: stickerSize,
+          includeQR,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate sticker');
+      }
+      
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const sizeMap: Record<string, { width: string; height: string }> = {
+          '2x2': { width: '2in', height: '2in' },
+          '2x2.5': { width: '2in', height: '2.5in' },
+          '2x3': { width: '2in', height: '3in' },
+          '2x3.5': { width: '2in', height: '3.5in' },
+        };
+        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
+        
+        const printWindow = window.open('', '_blank', 'width=400,height=500');
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; width: ${dims.width}; height: ${dims.height}; }
+                img { width: ${dims.width}; height: ${dims.height}; object-fit: contain; }
+                @media screen { body { padding: 20px; width: auto; height: auto; } img { max-width: 300px; height: auto; width: auto; } }
+              </style>
+            </head>
+            <body><div><img src="${dataUrl}" alt="Oil Change Sticker" onload="window.print();" /></div></body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+      };
+      
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Failed to print sticker:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate sticker.');
+    } finally {
+      setPrintingSticker(null);
+    }
+  };
 
   const handleQuickPrintSticker = async (vin: string, currentMileage: number | null) => {
     if (!currentMileage) {
@@ -709,13 +894,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           </button>
                           <button
                             onClick={() => handleQuickPrintSticker(vin, r.displayMiles)}
+                            onContextMenu={(e) => handleStickerRightClick(e, vin, r.displayMiles)}
                             disabled={printingSticker === vin || !r.displayMiles}
                             className={`p-1.5 rounded transition-colors ${
                               !r.displayMiles 
                                 ? "text-gray-300 cursor-not-allowed" 
                                 : "text-gray-400 hover:text-green-600 hover:bg-green-50"
                             }`}
-                            title={r.displayMiles ? "Quick Print Oil Sticker" : "Mileage required for sticker"}
+                            title={r.displayMiles ? "Quick Print Oil Sticker (Right-click for options)" : "Mileage required for sticker"}
                           >
                             {printingSticker === vin ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -881,6 +1067,112 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   mileage: commonFailuresVehicle.mileage,
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stickerContextMenu && (
+        <div
+          ref={stickerContextRef}
+          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[200px]"
+          style={{ left: stickerContextMenu.x, top: stickerContextMenu.y }}
+        >
+          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
+            Oil Type Presets
+          </div>
+          <button
+            onClick={() => handlePrintWithInterval('conventional')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>Conventional</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.conventional?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.conventional?.months} mo
+            </span>
+          </button>
+          <button
+            onClick={() => handlePrintWithInterval('synthetic')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>Synthetic</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.synthetic?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.synthetic?.months} mo
+            </span>
+          </button>
+          <button
+            onClick={() => handlePrintWithInterval('euro')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>European</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.euro?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.euro?.months} mo
+            </span>
+          </button>
+          <button
+            onClick={() => handlePrintWithInterval('diesel')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>Diesel</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.diesel?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.diesel?.months} mo
+            </span>
+          </button>
+          <div className="border-t border-gray-100 mt-1 pt-1">
+            <button
+              onClick={handleOpenCustomModal}
+              className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 font-medium"
+            >
+              Custom Date/Mileage...
+            </button>
+          </div>
+        </div>
+      )}
+
+      {customStickerModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Custom Sticker Values</h2>
+              <button
+                onClick={() => setCustomStickerModal(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next Service Date</label>
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next Service Mileage</label>
+                <input
+                  type="number"
+                  value={customMileage}
+                  onChange={(e) => setCustomMileage(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setCustomStickerModal(null)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePrintCustom}
+                  className="flex-1 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Print Sticker
+                </button>
+              </div>
             </div>
           </div>
         </div>
