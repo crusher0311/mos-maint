@@ -398,7 +398,6 @@ function printStickerFromContentScript(sticker) {
     setTimeout(() => {
       iframe.contentWindow.print();
       setTimeout(() => iframe.remove(), 1000);
-      showToast('Sticker printed!', 'success');
     }, 100);
   };
   
