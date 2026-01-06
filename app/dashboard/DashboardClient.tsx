@@ -118,15 +118,29 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     
     setPrintingSticker(vin);
     try {
-      // Fetch shop sticker settings to get interval preferences
+      // Fetch shop sticker settings to get interval preferences and size
       let intervalMileage = 5000;
       let intervalMonths = 3;
+      let stickerSize = '2x2';
+      let includeQR = true;
       
       try {
         const settingsRes = await fetch('/api/sticker/settings');
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json();
-          const intervals = settingsData.config?.intervals;
+          const config = settingsData.config;
+          const intervals = config?.intervals;
+          
+          // Use shop's configured sticker size
+          if (config?.defaultSize) {
+            stickerSize = config.defaultSize;
+          }
+          
+          // Use shop's QR code preference
+          if (config?.showQRCode !== undefined) {
+            includeQR = config.showQRCode;
+          }
+          
           // Use synthetic oil as default interval (most common)
           if (intervals?.synthetic) {
             intervalMileage = intervals.synthetic.mileage || 5000;
@@ -157,8 +171,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           currentMileage,
           nextServiceMileage,
           nextServiceDate,
-          size: '2x2.5',
-          includeQR: true,
+          size: stickerSize,
+          includeQR,
         }),
       });
       
@@ -174,6 +188,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
+        // Parse sticker dimensions for print CSS
+        const sizeMap: Record<string, { width: string; height: string }> = {
+          '2x2': { width: '2in', height: '2in' },
+          '2x2.5': { width: '2in', height: '2.5in' },
+          '2x3': { width: '2in', height: '3in' },
+          '2x3.5': { width: '2in', height: '3.5in' },
+        };
+        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
+        
         // Open print window
         const printWindow = window.open('', '_blank', 'width=400,height=500');
         if (printWindow) {
@@ -183,19 +206,35 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <head>
               <title>Print Sticker</title>
               <style>
+                @page {
+                  size: ${dims.width} ${dims.height};
+                  margin: 0;
+                }
                 body { 
                   margin: 0; 
-                  padding: 20px;
+                  padding: 0;
                   display: flex; 
                   justify-content: center; 
                   align-items: center;
-                  min-height: 100vh;
-                  font-family: Arial, sans-serif;
+                  width: ${dims.width};
+                  height: ${dims.height};
                 }
-                img { max-width: 100%; height: auto; }
-                @media print {
-                  body { padding: 0; }
-                  .no-print { display: none; }
+                img { 
+                  width: ${dims.width}; 
+                  height: ${dims.height}; 
+                  object-fit: contain;
+                }
+                @media screen {
+                  body {
+                    padding: 20px;
+                    width: auto;
+                    height: auto;
+                  }
+                  img {
+                    max-width: 300px;
+                    height: auto;
+                    width: auto;
+                  }
                 }
               </style>
             </head>
