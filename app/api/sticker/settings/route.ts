@@ -18,6 +18,8 @@ interface StickerConfig {
   defaultSize?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
   appointmentUrl?: string;
   useKilometers?: boolean;
+  defaultMileageInterval?: number;
+  defaultMonthsInterval?: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -91,6 +93,8 @@ export async function PUT(req: NextRequest) {
       "defaultSize",
       "appointmentUrl",
       "useKilometers",
+      "defaultMileageInterval",
+      "defaultMonthsInterval",
     ];
 
     const updateFields: Record<string, unknown> = {};

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2 } from "lucide-react";
+import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge } from "lucide-react";
 
 interface StickerConfig {
   enabled: boolean;
@@ -16,6 +16,8 @@ interface StickerConfig {
   defaultSize: string;
   appointmentUrl: string;
   useKilometers: boolean;
+  defaultMileageInterval: number;
+  defaultMonthsInterval: number;
 }
 
 const STICKER_SIZES = [
@@ -38,6 +40,8 @@ const DEFAULT_CONFIG: StickerConfig = {
   defaultSize: "2x2.5",
   appointmentUrl: "",
   useKilometers: false,
+  defaultMileageInterval: 5000,
+  defaultMonthsInterval: 6,
 };
 
 export default function StickerSettingsPage() {
@@ -78,6 +82,8 @@ export default function StickerSettingsPage() {
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
+            defaultMileageInterval: data.config.defaultMileageInterval ?? DEFAULT_CONFIG.defaultMileageInterval,
+            defaultMonthsInterval: data.config.defaultMonthsInterval ?? DEFAULT_CONFIG.defaultMonthsInterval,
           });
         }
       }
@@ -118,6 +124,8 @@ export default function StickerSettingsPage() {
           defaultSize: config.defaultSize,
           appointmentUrl: config.appointmentUrl,
           useKilometers: config.useKilometers,
+          defaultMileageInterval: config.defaultMileageInterval,
+          defaultMonthsInterval: config.defaultMonthsInterval,
         }),
       });
       
@@ -327,6 +335,67 @@ export default function StickerSettingsPage() {
                 <label htmlFor="useKilometers" className="text-sm text-gray-700">
                   Use kilometers instead of miles
                 </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Default Service Intervals</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              These defaults will be printed on stickers when generating for customers.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="flex items-center gap-2">
+                    <Gauge className="w-4 h-4" />
+                    {config.useKilometers ? "Kilometers" : "Miles"} Interval
+                  </div>
+                </label>
+                <select
+                  value={config.defaultMileageInterval}
+                  onChange={(e) => setConfig({ ...config, defaultMileageInterval: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {config.useKilometers ? (
+                    <>
+                      <option value={5000}>5,000 km</option>
+                      <option value={8000}>8,000 km</option>
+                      <option value={10000}>10,000 km</option>
+                      <option value={15000}>15,000 km</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value={3000}>3,000 miles</option>
+                      <option value={5000}>5,000 miles</option>
+                      <option value={7500}>7,500 miles</option>
+                      <option value={10000}>10,000 miles</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Months Interval
+                  </div>
+                </label>
+                <select
+                  value={config.defaultMonthsInterval}
+                  onChange={(e) => setConfig({ ...config, defaultMonthsInterval: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value={3}>3 months</option>
+                  <option value={6}>6 months</option>
+                  <option value={9}>9 months</option>
+                  <option value={12}>12 months</option>
+                </select>
               </div>
             </div>
           </div>

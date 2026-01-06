@@ -78,7 +78,7 @@ externalPort = 80
 
 [nix]
 channel = "stable-25_05"
-packages = ["mongodb", "unzip", "libuuid"]
+packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -92,6 +92,7 @@ DATAONE_API_URL = "http://3.144.191.161:3000"
 CARFAX_POST_URL = "https://servicesocket.carfax.com/data/1"
 CARFAX_PDI = "207625C61DD1C38E"
 EMAIL_FROM = "MOS Tools <noreply@mos.tools>"
+CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium"
 
 [userenv.development]
 DEV_AUTO_LOGIN = "true"

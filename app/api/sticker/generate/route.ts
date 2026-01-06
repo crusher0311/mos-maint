@@ -240,12 +240,15 @@ export async function POST(req: NextRequest) {
 
     const html = generateStickerHtml(config, body, qrDataUrl, dimensions);
 
+    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH || "/nix/store/$(ls /nix/store | grep -m1 chromium)/bin/chromium";
+    
     const image = await nodeHtmlToImage({
       html,
       type: "png",
       transparent: false,
       puppeteerArgs: {
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
       },
     });
 
