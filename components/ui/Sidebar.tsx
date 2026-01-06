@@ -289,18 +289,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
           }`}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             {shopLogo && (
               <img 
                 src={shopLogo} 
                 alt="" 
-                className="h-6 w-auto max-w-[32px] object-contain flex-shrink-0"
+                className="h-10 w-auto max-w-[48px] object-contain flex-shrink-0"
               />
             )}
-            <div className="min-w-0">
-              <span className="font-medium truncate block">{shopName}</span>
+            <div className="min-w-0 flex-1">
+              <span className="font-medium text-sm leading-tight block break-words">{shopName}</span>
               {locationIdentifier && (
-                <span className="text-xs text-white/70 truncate block">{locationIdentifier}</span>
+                <span className="text-xs text-white/70 block break-words">{locationIdentifier}</span>
               )}
             </div>
           </div>
