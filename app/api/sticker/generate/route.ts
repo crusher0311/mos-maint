@@ -261,7 +261,7 @@ function generateStickerHtml(
   const taglineLine2Color = config.colors?.taglineLine2Color || config.colors?.taglineColor || "#333333";
   const serviceLabelColor = config.colors?.serviceLabelColor || "#666666";
   const serviceValueColor = config.colors?.serviceValueColor || config.colors?.primary || "#cc0000";
-  const distanceUnit = config.useKilometers ? "km" : "miles";
+  const distanceUnit = config.useKilometers ? "km" : "mi";
 
   const formattedDate = data.nextServiceDate
     ? new Date(data.nextServiceDate).toLocaleDateString("en-US", {
