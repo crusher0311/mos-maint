@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     const db = await getDb();
     await db.collection("shops").updateOne(
-      { id: shopId },
+      { shopId },
       {
         $set: {
           "stickerConfig.logo": proxyUrl,
