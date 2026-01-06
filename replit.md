@@ -104,7 +104,18 @@ Switched back to HoverCode API for better quality and tracking:
   logoObjectPath: string,// Object storage path for uploaded logos
   phone: string,         // Shop phone number
   tagline: string,       // Custom tagline
+  taglineLine2: string,  // Second tagline line
   serviceLabel: string,  // Label text (e.g., "Next Oil Service", "Service Due")
+  showQRCode: boolean,   // Toggle QR code visibility
+  roundMileage: boolean, // Round mileage to nearest 100
+  usePredictiveDate: boolean, // Use driving habits to predict service date
+  fontStyles: {          // Font styling for each text element
+    phone: { bold: boolean, italic: boolean, size: number },
+    tagline: { bold: boolean, italic: boolean, size: number },
+    taglineLine2: { bold: boolean, italic: boolean, size: number },
+    serviceLabel: { bold: boolean, italic: boolean, size: number },
+    serviceValue: { bold: boolean, italic: boolean, size: number },
+  },
   colors: {
     primary: string,     // Hex color for QR code dots (default: #1976d2)
     secondary: string,   // Accent color
@@ -127,6 +138,15 @@ Switched back to HoverCode API for better quality and tracking:
   }
 }
 ```
+
+**Predictive Date Calculation (Jan 2026)**:
+Uses "shortest interval wins" logic:
+1. Calculates fixed date: today + interval months (e.g., 5 months for synthetic)
+2. Calculates predictive date: today + (interval miles / milesPerDay from CARFAX)
+3. Uses whichever date comes FIRST (earliest)
+- Example: 5000 miles at 98.6 mi/day = 51 days → uses Feb 26, 2026 (shorter than 5 months)
+- Example: 5000 miles at 13.3 mi/day = 376 days → uses fixed 5 months (shorter than 12+ months)
+- API: `GET /api/vehicle/driving-stats?vin=XXX` returns milesPerDay from CARFAX history
 
 **Logo Upload Flow**:
 - `POST /api/sticker/upload-logo` - Generate presigned URL for upload
