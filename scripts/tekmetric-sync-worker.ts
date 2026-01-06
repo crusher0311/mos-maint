@@ -12,13 +12,18 @@ const RATE_LIMIT_BACKOFF_MS = 60000;
 
 // Determine API URL based on environment
 function getApiUrl(): string {
-  // Production URL takes priority (for Render/external hosting)
+  // When running inside combined script, always use localhost
+  // This avoids health check interference on cloud platforms
+  const port = process.env.PORT || 5000;
+  
+  if (process.env.COMBINED_SCRIPT === 'true') {
+    return `http://localhost:${port}/api/cron/tekmetric-sync`;
+  }
+  // Production URL for external hosting (when running as separate service)
   if (process.env.PRODUCTION_URL) {
     return `${process.env.PRODUCTION_URL}/api/cron/tekmetric-sync`;
   }
-  // In Replit, always use localhost to avoid external network issues
-  // The server runs on port 5000 in the same environment
-  const port = process.env.PORT || 5000;
+  // Default to localhost for Replit and local development
   return `http://localhost:${port}/api/cron/tekmetric-sync`;
 }
 

@@ -69,10 +69,13 @@ async function main() {
     console.log('[Startup] Health check failed, but continuing anyway...');
   }
 
+  // Pass COMBINED_SCRIPT=true to workers so they use localhost
+  const workerEnv = { ...process.env, COMBINED_SCRIPT: 'true' };
+
   console.log('[2/3] Starting Tekmetric Sync Worker...');
   const tekmetricWorker = spawn('npx', ['tsx', 'scripts/tekmetric-sync-worker.ts'], {
     stdio: 'inherit',
-    env: process.env
+    env: workerEnv
   });
 
   tekmetricWorker.on('error', (err) => {
@@ -82,7 +85,7 @@ async function main() {
   console.log('[3/3] Starting Protractor Sync Worker...');
   const protractorWorker = spawn('npx', ['tsx', 'scripts/protractor-sync-worker.ts'], {
     stdio: 'inherit',
-    env: process.env
+    env: workerEnv
   });
 
   protractorWorker.on('error', (err) => {

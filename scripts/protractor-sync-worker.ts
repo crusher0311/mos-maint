@@ -12,7 +12,16 @@ const RATE_LIMIT_BACKOFF_MS = 60000;
 
 // Determine API URL based on environment
 function getApiUrl(): string {
-  // Production URL takes priority (for Render/external hosting)
+  // When running inside combined script or locally, always use localhost
+  // This avoids health check interference on cloud platforms
+  const port = process.env.PORT || 5000;
+  const useLocalhost = process.env.USE_LOCALHOST_API === 'true' || 
+                       (!process.env.PRODUCTION_URL && !process.env.REPLIT_DEV_DOMAIN);
+  
+  if (useLocalhost || process.env.COMBINED_SCRIPT === 'true') {
+    return `http://localhost:${port}/api/cron/protractor-sync`;
+  }
+  // Production URL for external hosting (when running as separate service)
   if (process.env.PRODUCTION_URL) {
     return `${process.env.PRODUCTION_URL}/api/cron/protractor-sync`;
   }
@@ -20,8 +29,6 @@ function getApiUrl(): string {
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/protractor-sync`;
   }
-  // Local development - use PORT env var or default to 5000
-  const port = process.env.PORT || 5000;
   return `http://localhost:${port}/api/cron/protractor-sync`;
 }
 
