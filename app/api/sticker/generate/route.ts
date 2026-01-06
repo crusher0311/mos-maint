@@ -254,6 +254,7 @@ function generateStickerHtml(
       font-weight: ${serviceValueFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceValueFontStyle.italic ? "italic" : "normal"};
       color: ${serviceValueColor};
+      white-space: nowrap;
     }
     .service-centered {
       text-align: center;
