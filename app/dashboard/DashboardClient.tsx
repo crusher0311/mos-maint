@@ -265,9 +265,23 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         };
         const dims = sizeMap[stickerSize] || sizeMap['2x2'];
         
-        const printWindow = window.open('', '_blank', 'width=400,height=500');
-        if (printWindow) {
-          printWindow.document.write(`
+        const existingFrame = document.getElementById('sticker-print-frame');
+        if (existingFrame) existingFrame.remove();
+        
+        const iframe = document.createElement('iframe');
+        iframe.id = 'sticker-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
             <!DOCTYPE html>
             <html>
             <head>
@@ -276,13 +290,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                 @page { size: ${dims.width} ${dims.height}; margin: 0; }
                 body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; width: ${dims.width}; height: ${dims.height}; }
                 img { width: ${dims.width}; height: ${dims.height}; object-fit: contain; }
-                @media screen { body { padding: 20px; width: auto; height: auto; } img { max-width: 300px; height: auto; width: auto; } }
               </style>
             </head>
-            <body><div><img src="${dataUrl}" alt="Oil Change Sticker" onload="window.print();" /></div></body>
+            <body><img src="${dataUrl}" alt="Oil Change Sticker" /></body>
             </html>
           `);
-          printWindow.document.close();
+          iframeDoc.close();
+          
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }, 250);
         }
       };
       
@@ -373,7 +391,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        // Parse sticker dimensions for print CSS
         const sizeMap: Record<string, { width: string; height: string }> = {
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
@@ -382,55 +399,42 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         };
         const dims = sizeMap[stickerSize] || sizeMap['2x2'];
         
-        // Open print window
-        const printWindow = window.open('', '_blank', 'width=400,height=500');
-        if (printWindow) {
-          printWindow.document.write(`
+        const existingFrame = document.getElementById('sticker-print-frame');
+        if (existingFrame) existingFrame.remove();
+        
+        const iframe = document.createElement('iframe');
+        iframe.id = 'sticker-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
             <!DOCTYPE html>
             <html>
             <head>
               <title>Print Sticker</title>
               <style>
-                @page {
-                  size: ${dims.width} ${dims.height};
-                  margin: 0;
-                }
-                body { 
-                  margin: 0; 
-                  padding: 0;
-                  display: flex; 
-                  justify-content: center; 
-                  align-items: center;
-                  width: ${dims.width};
-                  height: ${dims.height};
-                }
-                img { 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  object-fit: contain;
-                }
-                @media screen {
-                  body {
-                    padding: 20px;
-                    width: auto;
-                    height: auto;
-                  }
-                  img {
-                    max-width: 300px;
-                    height: auto;
-                    width: auto;
-                  }
-                }
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; width: ${dims.width}; height: ${dims.height}; }
+                img { width: ${dims.width}; height: ${dims.height}; object-fit: contain; }
               </style>
             </head>
-            <body>
-              <div>
-                <img src="${dataUrl}" alt="Oil Change Sticker" onload="window.print();" />
-              </div>
-            </body>
+            <body><img src="${dataUrl}" alt="Oil Change Sticker" /></body>
             </html>
           `);
-          printWindow.document.close();
+          iframeDoc.close();
+          
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }, 250);
         }
       };
       
@@ -1076,7 +1080,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         <div
           ref={stickerContextRef}
           className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[200px]"
-          style={{ left: stickerContextMenu.x, top: stickerContextMenu.y }}
+          style={{ 
+            left: Math.min(stickerContextMenu.x, window.innerWidth - 280),
+            top: Math.min(stickerContextMenu.y, window.innerHeight - 250),
+          }}
         >
           <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
             Oil Type Presets
