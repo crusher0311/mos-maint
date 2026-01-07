@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/tekmetric";
+import { syncSingleShop } from "@/lib/tekmetric-sync";
 
 async function getUserShopId(): Promise<string | null> {
   const store = await cookies();
@@ -107,10 +108,23 @@ export async function POST(request: NextRequest) {
       { upsert: true }
     );
 
+    let syncResult: { success: boolean; synced: number; error?: string } = { success: false, synced: 0 };
+    try {
+      syncResult = await syncSingleShop(userShopId, tekmetricShopId);
+    } catch (syncErr: any) {
+      console.error("[Tekmetric Settings] Initial sync failed:", syncErr.message);
+      syncResult.error = syncErr.message;
+    }
+
     return NextResponse.json({
       success: true,
       shopId: tekmetricShopId,
       shopName: validation.shop?.name,
+      initialSync: {
+        completed: syncResult.success,
+        vehiclesSynced: syncResult.synced,
+        error: syncResult.error
+      }
     });
   } catch (error: any) {
     console.error("Error saving Tekmetric settings:", error);
