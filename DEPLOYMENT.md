@@ -110,28 +110,28 @@ STRIPE_SECRET_KEY=your_stripe_key
 
 ### Option 2: Render (Production)
 
-Render is recommended for production deployments. You have two options for handling background sync:
+Render offers two deployment types. Choose based on your needs:
 
-#### Option A: Combined Script (Simplest)
+#### Option A: Autoscale (Recommended for Cost)
 
-Run everything in one process using the combined start script:
+Autoscale deployments scale to zero when idle - great for cost savings. **Background workers are NOT supported** in Autoscale, so use webhooks or cron jobs for sync.
 
 1. **Create Web Service**
    - Go to [render.com](https://render.com)
    - Click "New" → "Web Service"
    - Connect your GitHub repository
+   - Select **Autoscale** deployment type
 
 2. **Configure Settings**
    - **Name**: `mos-maintenance`
    - **Runtime**: Node
    - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `node scripts/start-with-workers.js`
-   - **Instance Type**: Starter or higher
+   - **Start Command**: `node scripts/start-production.js`
+   - **Health Check Path**: `/api/health`
 
 3. **Add Environment Variables**
    ```
    NODE_ENV=production
-   PRODUCTION_URL=https://your-app.onrender.com
    MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/db
    MONGODB_DB=mos-maintenance-mvp
    SESSION_SECRET=your-32-character-secret-here
@@ -139,29 +139,39 @@ Run everything in one process using the combined start script:
    TEKMETRIC_API_TOKEN=your-token
    ```
 
-4. **Deploy** - Render will build and deploy automatically
+4. **Set Up Data Sync** (pick one):
+   - **Webhooks**: Configure Tekmetric to send updates to `https://your-app.onrender.com/api/webhooks/tekmetric`
+   - **Cron Job**: Create a Render Cron Job to call `/api/cron/tekmetric-sync` every 5 minutes
 
-#### Option B: Webhooks Only (No Workers)
+5. **Deploy** - Render will build and deploy automatically
 
-If Tekmetric is configured to send webhooks, you don't need background workers:
+#### Option B: Reserved VM (For Background Workers)
 
-1. **Start Command**: `npm start` (just the Next.js app)
-2. **Configure Tekmetric webhooks** to point to:
-   - `https://your-app.onrender.com/api/webhooks/tekmetric`
+Reserved VM runs continuously - required if you want background sync workers running 24/7.
 
-3. **Optional Cron Job** for periodic full sync:
-   - Create a Render Cron Job
-   - Schedule: `*/5 * * * *` (every 5 minutes)
-   - Command: `curl -X GET https://your-app.onrender.com/api/cron/tekmetric-sync`
+1. **Create Web Service**
+   - Select **Reserved VM** deployment type
 
-#### Option C: Separate Background Worker
+2. **Configure Settings**
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `node scripts/start-with-workers.js`
+   - **Instance Type**: Starter or higher
 
-For better reliability, run workers as a separate Render service:
+3. **Add Environment Variables** (same as Option A, plus):
+   ```
+   PRODUCTION_URL=https://your-app.onrender.com
+   ```
 
-1. **Web Service** (main app)
-   - Start Command: `npm start`
+4. **Deploy** - Workers will run continuously alongside the web server
 
-2. **Background Worker** (sync)
+#### Option C: Separate Background Worker Service
+
+For best reliability, run the web app and workers as separate services:
+
+1. **Web Service** (Autoscale or Reserved VM)
+   - Start Command: `node scripts/start-production.js`
+
+2. **Background Worker** (separate service)
    - Type: Background Worker
    - Start Command: `npx tsx scripts/tekmetric-sync-worker.ts`
    - Add `PRODUCTION_URL=https://your-web-service.onrender.com`
