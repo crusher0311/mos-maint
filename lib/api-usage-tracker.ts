@@ -171,15 +171,32 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
     ]);
 
     const totalCurrentMinute = currentMinute + inMemoryCurrent;
+    const total60Min = last60Minutes + inMemory60Min;
     
     let usagePercent: number | undefined;
     let warningLevel: 'ok' | 'warning' | 'critical' | 'stopped' = 'ok';
     
+    // Check rate limit usage
     if (config.rateLimit?.perMinute) {
       usagePercent = Math.round((totalCurrentMinute / config.rateLimit.perMinute) * 100);
       if (usagePercent >= 95) warningLevel = 'stopped';
       else if (usagePercent >= config.criticalThreshold * 100) warningLevel = 'critical';
       else if (usagePercent >= config.warningThreshold * 100) warningLevel = 'warning';
+    }
+    
+    // Check error rate - high error rates indicate problems
+    if (total60Min > 0) {
+      const errorRate = errorCount / total60Min;
+      if (errorRate >= 0.9) {
+        // 90%+ errors = critical
+        warningLevel = 'critical';
+      } else if (errorRate >= 0.5 && warningLevel === 'ok') {
+        // 50%+ errors = warning (don't downgrade from rate limit issues)
+        warningLevel = 'warning';
+      }
+    } else if (errorCount > 0) {
+      // No successful requests but have errors = critical
+      warningLevel = 'critical';
     }
 
     results.push({
