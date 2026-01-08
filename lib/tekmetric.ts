@@ -1,3 +1,5 @@
+import { trackTekmetricRequest, shouldThrottle } from "@/lib/tekmetric-usage-tracker";
+
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
 function getApiToken(): string {
@@ -8,25 +10,45 @@ function getApiToken(): string {
   return token;
 }
 
-async function tekmetricRequest(endpoint: string, options: RequestInit = {}) {
-  const token = getApiToken();
-  
-  const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
-    ...options,
-    cache: 'no-store',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
+async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number) {
+  const throttleCheck = shouldThrottle();
+  if (throttleCheck.throttle) {
+    console.warn(`[Tekmetric] Throttled: ${throttleCheck.reason}`);
+    throw new Error(`Rate limit protection: ${throttleCheck.reason}`);
   }
 
-  return response.json();
+  const token = getApiToken();
+  const method = options.method || 'GET';
+  const startTime = Date.now();
+  
+  let statusCode = 0;
+  try {
+    const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
+      ...options,
+      cache: 'no-store',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    statusCode = response.status;
+    const latencyMs = Date.now() - startTime;
+    
+    trackTekmetricRequest(endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
+    }
+
+    return response.json();
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    trackTekmetricRequest(endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
+    throw err;
+  }
 }
 
 export interface TekmetricShop {
@@ -147,7 +169,7 @@ export interface PaginatedResponse<T> {
 }
 
 export async function getShop(shopId: number): Promise<TekmetricShop> {
-  return tekmetricRequest(`/shops/${shopId}`);
+  return tekmetricRequest(`/shops/${shopId}`, {}, shopId);
 }
 
 export async function getShops(): Promise<TekmetricShop[]> {
@@ -171,7 +193,7 @@ export async function getCustomers(
   if (params.updatedDateStart) queryParams.set('updatedDateStart', params.updatedDateStart);
   if (params.updatedDateEnd) queryParams.set('updatedDateEnd', params.updatedDateEnd);
   
-  return tekmetricRequest(`/customers?${queryParams}`);
+  return tekmetricRequest(`/customers?${queryParams}`, {}, shopId);
 }
 
 export async function getCustomer(customerId: number): Promise<TekmetricCustomer> {
@@ -197,11 +219,11 @@ export async function getVehicles(
   if (params.updatedDateStart) queryParams.set('updatedDateStart', params.updatedDateStart);
   if (params.updatedDateEnd) queryParams.set('updatedDateEnd', params.updatedDateEnd);
   
-  return tekmetricRequest(`/vehicles?${queryParams}`);
+  return tekmetricRequest(`/vehicles?${queryParams}`, {}, shopId);
 }
 
-export async function getVehicle(vehicleId: number): Promise<TekmetricVehicle> {
-  return tekmetricRequest(`/vehicles/${vehicleId}`);
+export async function getVehicle(vehicleId: number, shopId?: number): Promise<TekmetricVehicle> {
+  return tekmetricRequest(`/vehicles/${vehicleId}`, {}, shopId);
 }
 
 export async function searchVehiclesByVin(shopId: number, vin: string): Promise<PaginatedResponse<TekmetricVehicle>> {
@@ -209,7 +231,7 @@ export async function searchVehiclesByVin(shopId: number, vin: string): Promise<
     shop: shopId.toString(),
     search: vin
   });
-  return tekmetricRequest(`/vehicles?${queryParams}`);
+  return tekmetricRequest(`/vehicles?${queryParams}`, {}, shopId);
 }
 
 export interface TekmetricInspectionItem {
@@ -306,7 +328,7 @@ export async function getRepairOrders(
   if (params.sort) queryParams.set('sort', params.sort);
   if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
   
-  return tekmetricRequest(`/repair-orders?${queryParams}`);
+  return tekmetricRequest(`/repair-orders?${queryParams}`, {}, shopId);
 }
 
 export async function getRepairOrder(roId: number): Promise<TekmetricRepairOrder> {

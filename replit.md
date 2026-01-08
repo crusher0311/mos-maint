@@ -37,10 +37,17 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Chrome Extension API for fetching sticker config and generating stickers as base64 data URLs for printing.
     *   Sticker generation tracking for billing with monthly/total counts in platform-admin.
 *   **Tekmetric Sync**:
-    *   Background sync worker polls Tekmetric API for active ROs.
+    *   Initial sync triggers automatically when shop completes Tekmetric setup.
     *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
     *   Shop ID validation on signup prevents invalid configurations.
-    *   Adaptive backoff and retry logic for API reliability.
+    *   Sync via webhooks (real-time) or cron job (periodic).
+*   **Tekmetric API Usage Monitoring** (Platform Admin):
+    *   Tracks all Tekmetric API calls with shopId, endpoint, latency, status.
+    *   Real-time usage gauges: requests/min, requests/sec, usage %.
+    *   Automatic throttling at 85% capacity, circuit breaker at 95%.
+    *   Dashboard shows top shops by usage, 429 error heatmap, hourly trends.
+    *   MongoDB collection `tekmetric_api_usage` with 7-day TTL auto-cleanup.
+    *   API endpoint: `/api/platform-admin/tekmetric-usage`
 
 **Feature Specifications:**
 *   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.

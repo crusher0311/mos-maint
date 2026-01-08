@@ -44,3 +44,21 @@ async function addIndexes() {
 }
 
 addIndexes().catch(console.error);
+
+// Tekmetric API Usage Tracking indexes
+async function addTekmetricUsageIndexes() {
+  const db = await getDb();
+  
+  // TTL index - auto-delete records older than 7 days
+  await db.collection("tekmetric_api_usage").createIndex(
+    { timestamp: 1 },
+    { expireAfterSeconds: 7 * 24 * 60 * 60 }
+  );
+  
+  // Query optimization indexes
+  await db.collection("tekmetric_api_usage").createIndex({ shopId: 1, timestamp: -1 });
+  await db.collection("tekmetric_api_usage").createIndex({ is429: 1, timestamp: -1 });
+  await db.collection("tekmetric_api_usage").createIndex({ endpoint: 1, timestamp: -1 });
+  
+  console.log("Tekmetric usage indexes created");
+}
