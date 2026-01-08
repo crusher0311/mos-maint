@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 import { getApiUsageStats, getHourlyUsage, ApiProvider, API_PROVIDER_CONFIGS } from "@/lib/api-usage-tracker";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function isPlatformAdmin(): Promise<boolean> {
-  const store = await cookies();
-  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-  if (!sid) return false;
-
-  const db = await getDb();
-  const now = new Date();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
-  if (!sess) return false;
-
-  const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.platformAdmin === true;
-}
-
 export async function GET(request: NextRequest) {
-  if (!(await isPlatformAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json({ error: "Forbidden - platform admin access required" }, { status: 403 });
   }
 
   try {
