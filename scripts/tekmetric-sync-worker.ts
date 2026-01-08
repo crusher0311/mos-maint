@@ -4,8 +4,8 @@
 
 export {};
 
-const BASE_SYNC_INTERVAL_MS = 10 * 1000; // 10 seconds
-const MAX_SYNC_INTERVAL_MS = 120 * 1000; // 2 minutes max backoff
+const BASE_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes max backoff
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 5000;
 const RATE_LIMIT_BACKOFF_MS = 60000;
