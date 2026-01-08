@@ -10,7 +10,8 @@ import {
   LogOut,
   Shield,
   Settings,
-  QrCode
+  QrCode,
+  Activity
 } from "lucide-react";
 
 interface PlatformAdminSidebarProps {
@@ -49,6 +50,11 @@ export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
       name: "Usage & Costs",
       href: "/platform-admin/usage",
       icon: <DollarSign className="w-5 h-5" />
+    },
+    {
+      name: "API Traffic",
+      href: "/platform-admin/api-usage",
+      icon: <Activity className="w-5 h-5" />
     },
     {
       name: "HoverCode QRs",
