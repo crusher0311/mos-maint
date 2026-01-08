@@ -1,30 +1,26 @@
 #!/usr/bin/env npx tsx
-// Tekmetric Sync Worker - runs continuously to sync recent repair orders
+// Tekmetric Incremental Sync Worker - runs continuously with optimized API usage
 // Usage: npx tsx scripts/tekmetric-sync-worker.ts
 
 export {};
 
-const BASE_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes max backoff
+const BASE_SYNC_INTERVAL_MS = 60 * 1000; // 60 seconds - incremental sync is efficient
+const MAX_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes max backoff
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 5000;
 const RATE_LIMIT_BACKOFF_MS = 60000;
 
 // Determine API URL based on environment
 function getApiUrl(): string {
-  // When running inside combined script, always use localhost
-  // This avoids health check interference on cloud platforms
   const port = process.env.PORT || 5000;
   
   if (process.env.COMBINED_SCRIPT === 'true') {
-    return `http://localhost:${port}/api/cron/tekmetric-sync`;
+    return `http://localhost:${port}/api/cron/tekmetric-incremental-sync`;
   }
-  // Production URL for external hosting (when running as separate service)
   if (process.env.PRODUCTION_URL) {
-    return `${process.env.PRODUCTION_URL}/api/cron/tekmetric-sync`;
+    return `${process.env.PRODUCTION_URL}/api/cron/tekmetric-incremental-sync`;
   }
-  // Default to localhost for Replit and local development
-  return `http://localhost:${port}/api/cron/tekmetric-sync`;
+  return `http://localhost:${port}/api/cron/tekmetric-incremental-sync`;
 }
 
 const API_URL = getApiUrl();
@@ -117,7 +113,7 @@ async function runSync(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log('Tekmetric Sync Worker started');
+  console.log('Tekmetric Incremental Sync Worker started');
   console.log(`Base sync interval: ${BASE_SYNC_INTERVAL_MS / 1000} seconds`);
   console.log(`Max retries: ${MAX_RETRIES}`);
   console.log(`API URL: ${API_URL}`);
