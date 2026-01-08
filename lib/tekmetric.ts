@@ -1,23 +1,16 @@
 import { trackApiRequest, shouldThrottleProvider } from "@/lib/api-usage-tracker";
+import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
-function getApiToken(): string {
-  const token = process.env.TEKMETRIC_API_TOKEN;
-  if (!token) {
-    throw new Error('TEKMETRIC_API_TOKEN not configured');
-  }
-  return token;
-}
-
-async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number) {
+async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
   const throttleCheck = shouldThrottleProvider('tekmetric');
   if (throttleCheck.throttle) {
     console.warn(`[Tekmetric] Throttled: ${throttleCheck.reason}`);
     throw new Error(`Rate limit protection: ${throttleCheck.reason}`);
   }
 
-  const token = getApiToken();
+  const token = await getValidToken();
   const method = options.method || 'GET';
   const startTime = Date.now();
   
@@ -37,6 +30,14 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
     const latencyMs = Date.now() - startTime;
     
     trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
+
+    // Handle 401 Unauthorized - attempt token refresh
+    if (response.status === 401 && !isRetry) {
+      console.log('[Tekmetric] Received 401, refreshing token and retrying...');
+      clearCachedToken();
+      await refreshToken();
+      return tekmetricRequest(endpoint, options, shopId, true);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

@@ -41,6 +41,11 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
     *   Shop ID validation on signup prevents invalid configurations.
     *   Sync via webhooks (real-time) or incremental sync worker (60-second cycles).
+    *   **OAuth Token Management** (`lib/tekmetric-auth.ts`):
+        *   Automatic token refresh using client credentials flow (TEKMETRIC_CLIENT_ID, TEKMETRIC_CLIENT_SECRET).
+        *   Token cached in memory and persisted to MongoDB (`tekmetric_tokens` collection).
+        *   Auto-refresh on 401 errors with single retry.
+        *   Tokens expire after 55 minutes (with 5-minute refresh buffer).
     *   **Incremental Sync System** (`lib/tekmetric-incremental-sync.ts`):
         *   Per-shop sync state tracking (lastSyncCursor, overflowQueue, lastClosedSweepAt).
         *   Uses `updatedDateStart` filter to fetch only recently modified ROs.
