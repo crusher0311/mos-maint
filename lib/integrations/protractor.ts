@@ -1,6 +1,7 @@
 import "server-only";
 import crypto from "node:crypto";
 import { getDb } from "@/lib/mongo";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
@@ -243,6 +244,7 @@ export async function protractorFetch<T>(
   await acquireRateLimitSlot();
 
   const url = `${BASE_URL}${endpoint}`;
+  const startTime = Date.now();
   
   try {
     const res = await fetch(url, {
@@ -257,6 +259,8 @@ export async function protractorFetch<T>(
       },
       cache: "no-store",
     });
+
+    trackApiRequest('protractor', endpoint, options.method || 'GET', res.status, Date.now() - startTime).catch(() => {});
 
     // Handle rate limiting (429) with exponential backoff
     if (res.status === 429 && retryCount < 3) {

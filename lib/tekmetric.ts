@@ -1,4 +1,4 @@
-import { trackTekmetricRequest, shouldThrottle } from "@/lib/tekmetric-usage-tracker";
+import { trackApiRequest, shouldThrottleProvider } from "@/lib/api-usage-tracker";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
@@ -11,7 +11,7 @@ function getApiToken(): string {
 }
 
 async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number) {
-  const throttleCheck = shouldThrottle();
+  const throttleCheck = shouldThrottleProvider('tekmetric');
   if (throttleCheck.throttle) {
     console.warn(`[Tekmetric] Throttled: ${throttleCheck.reason}`);
     throw new Error(`Rate limit protection: ${throttleCheck.reason}`);
@@ -36,7 +36,7 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
     statusCode = response.status;
     const latencyMs = Date.now() - startTime;
     
-    trackTekmetricRequest(endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
+    trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -46,7 +46,7 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
     return response.json();
   } catch (err: any) {
     const latencyMs = Date.now() - startTime;
-    trackTekmetricRequest(endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
+    trackApiRequest('tekmetric', endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
     throw err;
   }
 }
