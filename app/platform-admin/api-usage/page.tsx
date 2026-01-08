@@ -195,8 +195,10 @@ export default function ApiUsageDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {data?.providers.map((provider) => (
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Individual Integrations</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        {(data?.providers || []).map((provider) => (
           <div key={provider.provider} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -314,6 +316,7 @@ export default function ApiUsageDashboard() {
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       {data?.lastUpdated && (
