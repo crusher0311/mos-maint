@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   Activity, 
   AlertTriangle, 
-  TrendingUp, 
   Clock, 
   Zap,
   RefreshCw,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  X,
+  ChevronRight,
+  ExternalLink,
+  Filter
 } from "lucide-react";
 
 interface ProviderUsage {
@@ -38,10 +41,42 @@ interface ApiUsageData {
   lastUpdated: string;
 }
 
+interface ErrorRecord {
+  _id: string;
+  timestamp: string;
+  provider: string;
+  shopId?: number;
+  shopName?: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  errorMessage?: string;
+  errorCode?: string;
+  latencyMs: number;
+  requestId?: string;
+  sourceWorker?: string;
+}
+
+interface DrawerState {
+  type: 'errors' | 'shop' | null;
+  provider?: string;
+  shopId?: number;
+}
+
 export default function ApiUsageDashboard() {
   const [data, setData] = useState<ApiUsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [drawer, setDrawer] = useState<DrawerState>({ type: null });
+  const [drawerData, setDrawerData] = useState<{
+    errors?: ErrorRecord[];
+    total?: number;
+    hasMore?: boolean;
+    stats?: { total: number; errors: number; avgLatency: number };
+    breakdown?: { byStatusCode: any[]; byEndpoint: any[] };
+  } | null>(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<number | null>(null);
 
   const loadData = async () => {
     try {
@@ -65,6 +100,92 @@ export default function ApiUsageDashboard() {
       return () => clearInterval(interval);
     }
   }, [autoRefresh]);
+
+  const openErrorsDrawer = useCallback(async (provider?: string) => {
+    setDrawer({ type: 'errors', provider });
+    setDrawerLoading(true);
+    setStatusFilter(null);
+    
+    try {
+      const params = new URLSearchParams({ hours: '24' });
+      if (provider) params.set('provider', provider);
+      
+      const [errorsRes, breakdownRes] = await Promise.all([
+        fetch(`/api/platform-admin/api-usage/errors?${params}`),
+        fetch(`/api/platform-admin/api-usage/errors?breakdown=true${provider ? `&provider=${provider}` : ''}`)
+      ]);
+      
+      const [errorsData, breakdownData] = await Promise.all([
+        errorsRes.json(),
+        breakdownRes.json()
+      ]);
+      
+      setDrawerData({
+        errors: errorsData.errors || [],
+        total: errorsData.total,
+        hasMore: errorsData.hasMore,
+        breakdown: breakdownData
+      });
+    } catch (err) {
+      console.error("Error loading errors:", err);
+    } finally {
+      setDrawerLoading(false);
+    }
+  }, []);
+
+  const openShopDrawer = useCallback(async (shopId: number, provider?: string) => {
+    setDrawer({ type: 'shop', shopId, provider });
+    setDrawerLoading(true);
+    
+    try {
+      const params = new URLSearchParams({ hours: '24' });
+      if (provider) params.set('provider', provider);
+      
+      const res = await fetch(`/api/platform-admin/api-usage/shops/${shopId}?${params}`);
+      const data = await res.json();
+      
+      setDrawerData({
+        errors: data.requests || [],
+        total: data.total,
+        hasMore: data.hasMore,
+        stats: data.stats
+      });
+    } catch (err) {
+      console.error("Error loading shop requests:", err);
+    } finally {
+      setDrawerLoading(false);
+    }
+  }, []);
+
+  const closeDrawer = () => {
+    setDrawer({ type: null });
+    setDrawerData(null);
+  };
+
+  const filterByStatus = async (statusCode: number | null) => {
+    setStatusFilter(statusCode);
+    setDrawerLoading(true);
+    
+    try {
+      const params = new URLSearchParams({ hours: '24' });
+      if (drawer.provider) params.set('provider', drawer.provider);
+      if (statusCode) params.set('statusCode', statusCode.toString());
+      
+      const res = await fetch(`/api/platform-admin/api-usage/errors?${params}`);
+      const data = await res.json();
+      
+      setDrawerData(prev => ({
+        ...prev,
+        errors: data.errors || [],
+        total: data.total,
+        hasMore: data.hasMore
+      }));
+    } catch (err) {
+      console.error("Error filtering errors:", err);
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
 
   const getStatusColor = (level: string) => {
     switch (level) {
@@ -90,9 +211,19 @@ export default function ApiUsageDashboard() {
     }
   };
 
+  const getHttpStatusColor = (code: number) => {
+    if (code >= 500) return 'bg-red-100 text-red-800';
+    if (code >= 400) return 'bg-amber-100 text-amber-800';
+    return 'bg-green-100 text-green-800';
+  };
+
   const formatLatency = (ms: number) => {
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
+  };
+
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString();
   };
 
   if (loading) {
@@ -111,7 +242,7 @@ export default function ApiUsageDashboard() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-8 space-y-6 relative">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">API Usage Dashboard</h1>
@@ -150,17 +281,21 @@ export default function ApiUsageDashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <button
+          onClick={() => openErrorsDrawer()}
+          className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-red-200 hover:shadow-md transition-all text-left group"
+        >
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-red-100 rounded-lg">
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <span className="text-sm text-gray-600">Errors (1hr)</span>
+            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <div className="text-2xl font-bold text-gray-900">
             {data?.summary.totalErrorsLastHour || 0}
           </div>
-        </div>
+        </button>
 
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
@@ -258,15 +393,19 @@ export default function ApiUsageDashboard() {
                   </div>
                   <div className="text-sm font-medium text-gray-900">{formatLatency(provider.avgLatencyMs)}</div>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-2">
+                <button
+                  onClick={() => provider.errorCount > 0 && openErrorsDrawer(provider.provider)}
+                  disabled={provider.errorCount === 0}
+                  className={`bg-gray-50 rounded-lg p-2 ${provider.errorCount > 0 ? 'hover:bg-red-50 cursor-pointer transition-colors' : ''}`}
+                >
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
                     <AlertTriangle className="w-3 h-3" />
                     Errors
                   </div>
-                  <div className={`text-sm font-medium ${provider.errorCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  <div className={`text-sm font-medium ${provider.errorCount > 0 ? 'text-red-600 underline' : 'text-gray-900'}`}>
                     {provider.errorCount}
                   </div>
-                </div>
+                </button>
                 <div className="bg-gray-50 rounded-lg p-2">
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
                     <Zap className="w-3 h-3" />
@@ -304,11 +443,18 @@ export default function ApiUsageDashboard() {
                 <div>
                   <div className="text-xs text-gray-500 mb-2">Top Shops by Usage</div>
                   <div className="space-y-1">
-                    {provider.topShops.slice(0, 3).map((shop, i) => (
-                      <div key={shop.shopId} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">Shop #{shop.shopId}</span>
-                        <span className="font-medium text-gray-900">{shop.count} req</span>
-                      </div>
+                    {provider.topShops.slice(0, 3).map((shop) => (
+                      <button
+                        key={shop.shopId}
+                        onClick={() => openShopDrawer(shop.shopId, provider.provider)}
+                        className="flex items-center justify-between text-sm w-full hover:bg-gray-50 rounded px-1 py-0.5 transition-colors group"
+                      >
+                        <span className="text-blue-600 hover:underline">Shop #{shop.shopId}</span>
+                        <span className="font-medium text-gray-900 flex items-center gap-1">
+                          {shop.count} req
+                          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -324,6 +470,148 @@ export default function ApiUsageDashboard() {
           Last updated: {new Date(data.lastUpdated).toLocaleTimeString()}
         </div>
       )}
+
+      {drawer.type && (
+        <div className="fixed inset-0 bg-black/30 z-40" onClick={closeDrawer} />
+      )}
+      
+      <div className={`fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ${
+        drawer.type ? 'translate-x-0' : 'translate-x-full'
+      }`}>
+        <div className="h-full flex flex-col">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {drawer.type === 'errors' ? 'Error Details' : `Shop #${drawer.shopId} Requests`}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {drawer.provider ? `Provider: ${drawer.provider}` : 'All providers'} - Last 24 hours
+              </p>
+            </div>
+            <button
+              onClick={closeDrawer}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {drawer.type === 'shop' && drawerData?.stats && (
+            <div className="p-4 bg-gray-50 border-b border-gray-200 grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{drawerData.stats.total}</div>
+                <div className="text-xs text-gray-500">Total Requests</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">{drawerData.stats.errors}</div>
+                <div className="text-xs text-gray-500">Errors</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{formatLatency(drawerData.stats.avgLatency)}</div>
+                <div className="text-xs text-gray-500">Avg Latency</div>
+              </div>
+            </div>
+          )}
+
+          {drawer.type === 'errors' && drawerData?.breakdown && (
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <Filter className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">Filter by Status</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => filterByStatus(null)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    statusFilter === null ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  All ({drawerData.total})
+                </button>
+                {drawerData.breakdown.byStatusCode.map((s) => (
+                  <button
+                    key={s.statusCode}
+                    onClick={() => filterByStatus(s.statusCode)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      statusFilter === s.statusCode 
+                        ? 'bg-purple-600 text-white' 
+                        : `${getHttpStatusColor(s.statusCode)} hover:opacity-80`
+                    }`}
+                  >
+                    {s.statusCode} ({s.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {drawerLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="animate-pulse bg-gray-100 rounded-lg h-20" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(drawerData?.errors || []).length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    No records found
+                  </div>
+                ) : (
+                  (drawerData?.errors || []).map((record) => (
+                    <div key={record._id} className="bg-gray-50 rounded-lg p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getHttpStatusColor(record.statusCode)}`}>
+                            {record.statusCode}
+                          </span>
+                          <span className="text-xs font-mono text-gray-500">{record.method}</span>
+                          <span className="text-xs text-gray-500">{formatLatency(record.latencyMs)}</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{formatTime(record.timestamp)}</span>
+                      </div>
+                      
+                      <div className="font-mono text-sm text-gray-800 break-all">
+                        {record.endpoint}
+                      </div>
+                      
+                      {record.errorMessage && (
+                        <div className="text-sm text-red-600 bg-red-50 rounded p-2 break-words">
+                          {record.errorMessage}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span>Provider: {record.provider}</span>
+                        {record.shopId && (
+                          <button
+                            onClick={() => openShopDrawer(record.shopId!, record.provider)}
+                            className="text-blue-600 hover:underline"
+                          >
+                            Shop #{record.shopId}
+                          </button>
+                        )}
+                        {record.requestId && (
+                          <span className="font-mono">{record.requestId}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                
+                {drawerData?.hasMore && (
+                  <div className="text-center py-4">
+                    <span className="text-sm text-gray-500">
+                      Showing {drawerData.errors?.length} of {drawerData.total} records
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

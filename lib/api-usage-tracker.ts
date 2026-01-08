@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 
 export type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode';
 
@@ -6,6 +7,7 @@ interface ApiUsageRecord {
   timestamp: Date;
   provider: ApiProvider;
   shopId?: number;
+  shopName?: string;
   endpoint: string;
   method: string;
   statusCode: number;
@@ -13,6 +15,20 @@ interface ApiUsageRecord {
   isError: boolean;
   isRateLimited: boolean;
   minuteBucket: string;
+  errorMessage?: string;
+  errorCode?: string;
+  requestId?: string;
+  retryCount?: number;
+  sourceWorker?: string;
+}
+
+export interface TrackingOptions {
+  shopName?: string;
+  errorMessage?: string;
+  errorCode?: string;
+  requestId?: string;
+  retryCount?: number;
+  sourceWorker?: string;
 }
 
 interface ProviderConfig {
@@ -80,20 +96,27 @@ export async function trackApiRequest(
   method: string,
   statusCode: number,
   latencyMs: number,
-  shopId?: number
+  shopId?: number,
+  options?: TrackingOptions
 ): Promise<void> {
   const now = new Date();
   const record: ApiUsageRecord = {
     timestamp: now,
     provider,
     shopId,
+    shopName: options?.shopName,
     endpoint,
     method,
     statusCode,
     latencyMs,
     isError: statusCode >= 400,
     isRateLimited: statusCode === 429,
-    minuteBucket: getMinuteBucket(now)
+    minuteBucket: getMinuteBucket(now),
+    errorMessage: options?.errorMessage ? truncateMessage(options.errorMessage, 500) : undefined,
+    errorCode: options?.errorCode,
+    requestId: options?.requestId || generateRequestId(),
+    retryCount: options?.retryCount,
+    sourceWorker: options?.sourceWorker
   };
 
   inMemoryBuffer.push(record);
@@ -101,6 +124,15 @@ export async function trackApiRequest(
   if (Date.now() - lastFlush > FLUSH_INTERVAL_MS || inMemoryBuffer.length > 100) {
     await flushToDb();
   }
+}
+
+function truncateMessage(msg: string, maxLength: number): string {
+  if (msg.length <= maxLength) return msg;
+  return msg.substring(0, maxLength - 3) + '...';
+}
+
+function generateRequestId(): string {
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
 async function flushToDb(): Promise<void> {
@@ -273,4 +305,263 @@ export function shouldThrottleProvider(provider: ApiProvider): { throttle: boole
   }
 
   return { throttle: false };
+}
+
+export interface ErrorRecord {
+  _id?: string;
+  timestamp: Date;
+  provider: ApiProvider;
+  shopId?: number;
+  shopName?: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  errorMessage?: string;
+  errorCode?: string;
+  latencyMs: number;
+  requestId?: string;
+  sourceWorker?: string;
+}
+
+export interface DrillDownQuery {
+  provider?: ApiProvider;
+  shopId?: number;
+  statusCode?: number;
+  isError?: boolean;
+  since?: Date;
+  limit?: number;
+  cursor?: string;
+}
+
+export async function getErrorDetails(query: DrillDownQuery): Promise<{
+  errors: ErrorRecord[];
+  total: number;
+  hasMore: boolean;
+  nextCursor?: string;
+}> {
+  const db = await getDb();
+  const limit = Math.min(query.limit || 50, 100);
+  const since = query.since || new Date(Date.now() - 60 * 60 * 1000);
+
+  const baseFilter: any = {
+    isError: true,
+    timestamp: { $gte: since }
+  };
+  
+  if (query.provider) baseFilter.provider = query.provider;
+  if (query.shopId) baseFilter.shopId = query.shopId;
+  if (query.statusCode) baseFilter.statusCode = query.statusCode;
+
+  const findFilter = { ...baseFilter };
+  if (query.cursor) {
+    try {
+      findFilter._id = { $lt: new ObjectId(query.cursor) };
+    } catch {
+      findFilter._id = { $lt: query.cursor };
+    }
+  }
+
+  const [errors, total] = await Promise.all([
+    db.collection(COLLECTION_NAME)
+      .find(findFilter)
+      .sort({ _id: -1 })
+      .limit(limit + 1)
+      .toArray(),
+    db.collection(COLLECTION_NAME).countDocuments(baseFilter)
+  ]);
+
+  const hasMore = errors.length > limit;
+  if (hasMore) errors.pop();
+
+  const lastError = errors[errors.length - 1];
+
+  return {
+    errors: errors.map(e => ({
+      _id: e._id?.toString(),
+      timestamp: e.timestamp,
+      provider: e.provider,
+      shopId: e.shopId,
+      shopName: e.shopName,
+      endpoint: e.endpoint,
+      method: e.method,
+      statusCode: e.statusCode,
+      errorMessage: e.errorMessage,
+      errorCode: e.errorCode,
+      latencyMs: e.latencyMs,
+      requestId: e.requestId,
+      sourceWorker: e.sourceWorker
+    })),
+    total,
+    hasMore,
+    nextCursor: hasMore && lastError ? lastError._id?.toString() : undefined
+  };
+}
+
+export async function getShopRequests(
+  shopId: number,
+  query: { provider?: ApiProvider; since?: Date; limit?: number; cursor?: string }
+): Promise<{
+  requests: ErrorRecord[];
+  total: number;
+  hasMore: boolean;
+  nextCursor?: string;
+  stats: { total: number; errors: number; avgLatency: number };
+}> {
+  const db = await getDb();
+  const limit = Math.min(query.limit || 50, 100);
+  const since = query.since || new Date(Date.now() - 60 * 60 * 1000);
+
+  const baseFilter: any = {
+    shopId,
+    timestamp: { $gte: since }
+  };
+  
+  if (query.provider) baseFilter.provider = query.provider;
+
+  const findFilter = { ...baseFilter };
+  if (query.cursor) {
+    try {
+      findFilter._id = { $lt: new ObjectId(query.cursor) };
+    } catch {
+      findFilter._id = { $lt: query.cursor };
+    }
+  }
+
+  const [requests, total, statsResult] = await Promise.all([
+    db.collection(COLLECTION_NAME)
+      .find(findFilter)
+      .sort({ _id: -1 })
+      .limit(limit + 1)
+      .toArray(),
+    db.collection(COLLECTION_NAME).countDocuments(baseFilter),
+    db.collection(COLLECTION_NAME).aggregate([
+      { $match: baseFilter },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: 1 },
+          errors: { $sum: { $cond: ["$isError", 1, 0] } },
+          avgLatency: { $avg: "$latencyMs" }
+        } 
+      }
+    ]).toArray()
+  ]);
+
+  const hasMore = requests.length > limit;
+  if (hasMore) requests.pop();
+
+  const stats = statsResult[0] || { total: 0, errors: 0, avgLatency: 0 };
+  const lastRequest = requests[requests.length - 1];
+
+  return {
+    requests: requests.map(r => ({
+      _id: r._id?.toString(),
+      timestamp: r.timestamp,
+      provider: r.provider,
+      shopId: r.shopId,
+      shopName: r.shopName,
+      endpoint: r.endpoint,
+      method: r.method,
+      statusCode: r.statusCode,
+      errorMessage: r.errorMessage,
+      errorCode: r.errorCode,
+      latencyMs: r.latencyMs,
+      requestId: r.requestId,
+      sourceWorker: r.sourceWorker
+    })),
+    total,
+    hasMore,
+    nextCursor: hasMore && lastRequest ? lastRequest._id?.toString() : undefined,
+    stats: {
+      total: stats.total,
+      errors: stats.errors,
+      avgLatency: Math.round(stats.avgLatency || 0)
+    }
+  };
+}
+
+export async function getRequestById(requestId: string): Promise<ErrorRecord | null> {
+  const db = await getDb();
+  const record = await db.collection(COLLECTION_NAME).findOne({ requestId });
+  
+  if (!record) return null;
+
+  return {
+    _id: record._id?.toString(),
+    timestamp: record.timestamp,
+    provider: record.provider,
+    shopId: record.shopId,
+    shopName: record.shopName,
+    endpoint: record.endpoint,
+    method: record.method,
+    statusCode: record.statusCode,
+    errorMessage: record.errorMessage,
+    errorCode: record.errorCode,
+    latencyMs: record.latencyMs,
+    requestId: record.requestId,
+    sourceWorker: record.sourceWorker
+  };
+}
+
+export async function getErrorBreakdown(provider?: ApiProvider): Promise<{
+  byStatusCode: { statusCode: number; count: number; label: string }[];
+  byEndpoint: { endpoint: string; count: number }[];
+}> {
+  const db = await getDb();
+  const since = new Date(Date.now() - 60 * 60 * 1000);
+  
+  const filter: any = { isError: true, timestamp: { $gte: since } };
+  if (provider) filter.provider = provider;
+
+  const [byStatusCode, byEndpoint] = await Promise.all([
+    db.collection(COLLECTION_NAME).aggregate([
+      { $match: filter },
+      { $group: { _id: "$statusCode", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]).toArray(),
+    db.collection(COLLECTION_NAME).aggregate([
+      { $match: filter },
+      { $group: { _id: "$endpoint", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]).toArray()
+  ]);
+
+  const statusLabels: Record<number, string> = {
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    403: 'Forbidden',
+    404: 'Not Found',
+    429: 'Rate Limited',
+    500: 'Internal Error',
+    502: 'Bad Gateway',
+    503: 'Service Unavailable',
+    504: 'Gateway Timeout'
+  };
+
+  return {
+    byStatusCode: byStatusCode.map(s => ({
+      statusCode: s._id,
+      count: s.count,
+      label: statusLabels[s._id] || `HTTP ${s._id}`
+    })),
+    byEndpoint: byEndpoint.map(e => ({
+      endpoint: e._id,
+      count: e.count
+    }))
+  };
+}
+
+export async function ensureApiUsageIndexes(): Promise<void> {
+  const db = await getDb();
+  const collection = db.collection(COLLECTION_NAME);
+  
+  await Promise.all([
+    collection.createIndex({ provider: 1, timestamp: -1 }),
+    collection.createIndex({ provider: 1, isError: 1, timestamp: -1 }),
+    collection.createIndex({ provider: 1, shopId: 1, timestamp: -1 }),
+    collection.createIndex({ requestId: 1 }, { sparse: true }),
+    collection.createIndex({ timestamp: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 })
+  ]);
 }
