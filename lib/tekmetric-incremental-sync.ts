@@ -12,7 +12,8 @@ import {
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_PAGES_PER_CYCLE = 1;
+const MAX_PAGES_PER_CYCLE = 3; // Process up to 3 pages (300 records) per shop per cycle
+const MAX_QUEUED_PAGES = 20; // Max pages to queue for later processing
 const TERMINAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
 export interface ShopSyncState {
@@ -193,7 +194,8 @@ export async function syncShopIncremental(
       newOverflowQueue.shift();
     }
     
-    if (!response.last && pageToFetch < 10) {
+    // Queue next pages if not at the end and within queue limits
+    if (!response.last && newOverflowQueue.length < MAX_QUEUED_PAGES) {
       newOverflowQueue.push({
         page: pageToFetch + 1,
         updatedDateStart: updatedDateFilter,
@@ -358,6 +360,8 @@ async function sweepTerminalStatuses(
   return removedCount;
 }
 
+const CONCURRENT_SHOPS = 5; // Process 5 shops concurrently to stay under rate limits
+
 export async function runIncrementalSyncCycle(): Promise<{
   results: IncrementalSyncResult[];
   duration: number;
@@ -381,15 +385,25 @@ export async function runIncrementalSyncCycle(): Promise<{
     }
   }
 
-  for (let i = 0; i < shopStates.length; i++) {
-    const state = shopStates[i];
+  // Process shops in concurrent batches
+  for (let i = 0; i < shopStates.length; i += CONCURRENT_SHOPS) {
+    const batch = shopStates.slice(i, i + CONCURRENT_SHOPS);
     
-    if (i > 0) {
-      await new Promise(resolve => setTimeout(resolve, 5000 + Math.random() * 5000));
+    const batchPromises = batch.map(async (state, index) => {
+      // Small stagger within batch (0-2 seconds) to avoid burst
+      if (index > 0) {
+        await new Promise(resolve => setTimeout(resolve, index * 400));
+      }
+      return syncShopIncremental(state.shopId, state.tekmetricShopId, state);
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // Small pause between batches to avoid overwhelming API
+    if (i + CONCURRENT_SHOPS < shopStates.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
-    const result = await syncShopIncremental(state.shopId, state.tekmetricShopId, state);
-    results.push(result);
   }
 
   return {
