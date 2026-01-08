@@ -40,7 +40,16 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Initial sync triggers automatically when shop completes Tekmetric setup.
     *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
     *   Shop ID validation on signup prevents invalid configurations.
-    *   Sync via webhooks (real-time) or cron job (periodic).
+    *   Sync via webhooks (real-time) or incremental sync worker (60-second cycles).
+    *   **Incremental Sync System** (`lib/tekmetric-incremental-sync.ts`):
+        *   Per-shop sync state tracking (lastSyncCursor, overflowQueue, lastClosedSweepAt).
+        *   Uses `updatedDateStart` filter to fetch only recently modified ROs.
+        *   Vehicle/customer caching with 24-hour TTL (`tekmetric_vehicle_cache`, `tekmetric_customer_cache` collections).
+        *   Concurrent batch processing (5 shops per batch) with small stagger delays.
+        *   Overflow page queue (up to 20 pages) for handling large data bursts.
+        *   Terminal status sweep deferred to every 15 minutes when queue is empty.
+        *   Auth failure circuit breaker: auto-pauses shop sync for 1 hour after 3 consecutive 401 errors.
+        *   Targets 50-150 API requests/min (down from 1000-2000 req/min with full sync).
 *   **Unified API Usage Monitoring** (Platform Admin):
     *   Tracks all external API calls: Tekmetric, CARFAX, DataOne, OpenAI, Protractor, AutoFlow, HoverCode.
     *   Real-time usage gauges: requests/min, requests/sec, usage %, latency.
