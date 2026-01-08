@@ -1,4 +1,5 @@
 // lib/ai.ts
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 // Available OpenAI models via Replit AI Integrations
 export const MODELS = [
@@ -65,6 +66,7 @@ export function getOpenAI() {
     baseUrl,
     source,
     async chat(messages: any[], model = DEFAULT_MODEL) {
+      const startTime = Date.now();
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -77,6 +79,8 @@ export function getOpenAI() {
           max_tokens: 1000,
         }),
       });
+      
+      trackApiRequest('openai', '/chat/completions', 'POST', response.status, Date.now() - startTime).catch(() => {});
       
       if (!response.ok) {
         throw new Error(`OpenAI API error: ${response.statusText}`);

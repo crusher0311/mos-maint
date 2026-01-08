@@ -3,6 +3,7 @@
 // Includes MongoDB Atlas caching to avoid repeated API calls
 
 import { getDb } from "@/lib/mongo";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 const DATAONE_API_BASE = process.env.DATAONE_API_URL || "http://3.144.191.161:3000";
 const CACHE_TTL_HOURS = 24 * 7; // Cache for 7 days (OEM data rarely changes)
@@ -82,11 +83,14 @@ export async function decodeVin(vin: string): Promise<{
   try {
     const squish = toSquish(vin);
     const url = `${DATAONE_API_BASE}/api/data/VIN_REFERENCE?vin_pattern__regex=^${squish}&limit=1`;
+    const startTime = Date.now();
     
     const response = await fetch(url, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
     });
+
+    trackApiRequest('dataone', '/VIN_REFERENCE', 'GET', response.status, Date.now() - startTime).catch(() => {});
 
     if (!response.ok) {
       return { ok: false, vin, error: `API error: ${response.status}` };
@@ -115,9 +119,12 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
 }> {
   try {
     const squish = toSquish(vin);
+    const startTime = Date.now();
     
     const vinMaintenanceUrl = `${DATAONE_API_BASE}/api/data/LKP_VIN_MAINTENANCE?squish=${squish}&limit=500`;
     const vinMaintenanceResponse = await fetch(vinMaintenanceUrl);
+    
+    trackApiRequest('dataone', '/LKP_VIN_MAINTENANCE', 'GET', vinMaintenanceResponse.status, Date.now() - startTime).catch(() => {});
     
     if (!vinMaintenanceResponse.ok) {
       return { ok: false, vin, squish, count: 0, items: [], error: `API error: ${vinMaintenanceResponse.status}` };

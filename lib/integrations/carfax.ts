@@ -1,6 +1,7 @@
 // lib/integrations/carfax.ts
 import "server-only";
 import { getDb } from "@/lib/mongo";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 type Fetcher = typeof fetch;
 
@@ -79,6 +80,7 @@ export async function fetchCarfaxLive(
   if (!vin) return { ok: false, error: "VIN is required." };
 
   const payload = { vin, productDataId: cfg.productDataId, locationId: cfg.locationId };
+  const startTime = Date.now();
 
   const res = await doFetch(cfg.base, {
     method: "POST",
@@ -89,6 +91,9 @@ export async function fetchCarfaxLive(
     body: JSON.stringify(payload),
     cache: "no-store",
   });
+
+  const latencyMs = Date.now() - startTime;
+  trackApiRequest('carfax', '/data', 'POST', res.status, latencyMs, shopId).catch(() => {});
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");

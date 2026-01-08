@@ -41,13 +41,13 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
     *   Shop ID validation on signup prevents invalid configurations.
     *   Sync via webhooks (real-time) or cron job (periodic).
-*   **Tekmetric API Usage Monitoring** (Platform Admin):
-    *   Tracks all Tekmetric API calls with shopId, endpoint, latency, status.
-    *   Real-time usage gauges: requests/min, requests/sec, usage %.
-    *   Automatic throttling at 85% capacity, circuit breaker at 95%.
-    *   Dashboard shows top shops by usage, 429 error heatmap, hourly trends.
-    *   MongoDB collection `tekmetric_api_usage` with 7-day TTL auto-cleanup.
-    *   API endpoint: `/api/platform-admin/tekmetric-usage`
+*   **Unified API Usage Monitoring** (Platform Admin):
+    *   Tracks all external API calls: Tekmetric, CARFAX, DataOne, OpenAI, Protractor, AutoFlow, HoverCode.
+    *   Real-time usage gauges: requests/min, requests/sec, usage %, latency.
+    *   Automatic throttling at 85% capacity, circuit breaker at 95% (Tekmetric/Protractor).
+    *   Dashboard shows top shops by usage, error rates, hourly trends per provider.
+    *   MongoDB collection `api_usage` with 7-day TTL auto-cleanup.
+    *   API endpoint: `/api/platform-admin/api-usage` (all providers) or `?provider=tekmetric` for specific.
 
 **Feature Specifications:**
 *   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
