@@ -455,18 +455,18 @@ export default function ApiUsageDashboard() {
 
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div title="API requests made in the current minute">
                   <div className="text-xs text-gray-500 mb-1">Current / min</div>
                   <div className="text-xl font-bold text-gray-900">{provider.currentMinute}</div>
                 </div>
-                <div>
+                <div title="Total API requests made in the last 60 minutes">
                   <div className="text-xs text-gray-500 mb-1">Last hour</div>
                   <div className="text-xl font-bold text-gray-900">{provider.last60Minutes}</div>
                 </div>
               </div>
 
               {provider.usagePercent !== undefined && (
-                <div>
+                <div title={`${provider.usagePercent}% of rate limit used. Green: <60%, Yellow: 60-85%, Red: >85%`}>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-gray-500">Usage</span>
                     <span className={`font-medium ${
@@ -489,7 +489,7 @@ export default function ApiUsageDashboard() {
               )}
 
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-gray-50 rounded-lg p-2">
+                <div className="bg-gray-50 rounded-lg p-2" title="Average response time for API calls in the last hour">
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
                     <Clock className="w-3 h-3" />
                     Latency
@@ -500,6 +500,7 @@ export default function ApiUsageDashboard() {
                   onClick={() => provider.errorCount > 0 && openErrorsDrawer(provider.provider)}
                   disabled={provider.errorCount === 0}
                   className={`bg-gray-50 rounded-lg p-2 ${provider.errorCount > 0 ? 'hover:bg-red-50 cursor-pointer transition-colors' : ''}`}
+                  title={provider.errorCount > 0 ? `${provider.errorCount} failed API calls in the last hour. Click to view details.` : 'No errors in the last hour'}
                 >
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
                     <AlertTriangle className="w-3 h-3" />
@@ -509,7 +510,7 @@ export default function ApiUsageDashboard() {
                     {provider.errorCount}
                   </div>
                 </button>
-                <div className="bg-gray-50 rounded-lg p-2">
+                <div className="bg-gray-50 rounded-lg p-2" title="Rate limit responses (HTTP 429) in the last hour. These indicate the API is being called too frequently.">
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500 mb-1">
                     <Zap className="w-3 h-3" />
                     429s
@@ -524,20 +525,32 @@ export default function ApiUsageDashboard() {
                 <div>
                   <div className="text-xs text-gray-500 mb-2">24h Usage Trend</div>
                   <div className="flex items-end gap-0.5 h-12">
-                    {provider.hourlyUsage.slice(-24).map((hour, i) => {
-                      const maxCount = Math.max(...provider.hourlyUsage.map(h => h.requests), 1);
+                    {provider.hourlyUsage.slice(-24).map((hour: { hour: string; requests: number; errors: number }, i: number) => {
+                      const maxCount = Math.max(...provider.hourlyUsage.map((h: { requests: number }) => h.requests), 1);
                       const height = (hour.requests / maxCount) * 100;
+                      const hasErrors = hour.errors > 0;
+                      const errorRate = hour.requests > 0 ? ((hour.errors / hour.requests) * 100).toFixed(1) : '0';
                       return (
                         <div
                           key={i}
-                          className={`flex-1 rounded-t transition-all ${
-                            hour.errors > 0 ? 'bg-red-400' : 'bg-purple-400'
+                          className={`flex-1 rounded-t transition-all hover:opacity-80 ${
+                            hasErrors ? 'bg-red-400' : 'bg-purple-400'
                           }`}
                           style={{ height: `${Math.max(height, 2)}%` }}
-                          title={`${hour.hour}: ${hour.requests} requests, ${hour.errors} errors`}
+                          title={`${hour.hour}\n${hour.requests.toLocaleString()} requests\n${hasErrors ? `${hour.errors} errors (${errorRate}% error rate)` : 'No errors'}`}
                         />
                       );
                     })}
+                  </div>
+                  <div className="flex items-center justify-end gap-3 mt-1">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-sm bg-purple-400"></div>
+                      <span className="text-[10px] text-gray-400">OK</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-sm bg-red-400"></div>
+                      <span className="text-[10px] text-gray-400">Errors</span>
+                    </div>
                   </div>
                 </div>
               )}
