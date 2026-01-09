@@ -256,14 +256,38 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
   }
 
   if (allShopIds.size > 0) {
+    const shopIdArray = Array.from(allShopIds);
+    
+    // Look up shops by multiple possible ID fields:
+    // - shopId: MOS internal ID (used by Protractor)
+    // - tekmetric.shopId or tekmetricShopId: Tekmetric's shop ID
     const shops = await db.collection("shops").find(
-      { shopId: { $in: Array.from(allShopIds) } },
-      { projection: { shopId: 1, name: 1 } }
+      { 
+        $or: [
+          { shopId: { $in: shopIdArray } },
+          { "tekmetric.shopId": { $in: shopIdArray } },
+          { tekmetricShopId: { $in: shopIdArray } }
+        ]
+      },
+      { projection: { shopId: 1, name: 1, locationIdentifier: 1, "tekmetric.shopId": 1, tekmetricShopId: 1 } }
     ).toArray();
     
     const shopNameMap = new Map<number, string>();
     for (const shop of shops) {
-      shopNameMap.set(shop.shopId, shop.name);
+      // Build display name: "Shop Name (Location)" or just "Shop Name"
+      const displayName = shop.locationIdentifier 
+        ? `${shop.name} (${shop.locationIdentifier})`
+        : shop.name;
+      
+      // Map by MOS shopId
+      if (shop.shopId) {
+        shopNameMap.set(shop.shopId, displayName);
+      }
+      // Also map by Tekmetric shop ID
+      const tekShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
+      if (tekShopId) {
+        shopNameMap.set(Number(tekShopId), displayName);
+      }
     }
 
     // Enrich topShops with names
