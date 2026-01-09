@@ -82,6 +82,9 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
 *   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach, utilizing pre-computed `shop_repair_patterns` and enterprise aggregation.
 
+## Future Ideas (Saved for Later)
+*   **Districts Layer**: Add organizational groupings between enterprise and shops for large organizations. Would enable district managers, regional filtering in job history/analytics, and district-level repair pattern aggregations. Additive approach recommended (keep current enterprise model, add districts on top).
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
