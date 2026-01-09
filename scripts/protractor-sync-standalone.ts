@@ -2,7 +2,33 @@
 // Standalone Protractor Sync Worker - runs sync logic directly without HTTP calls
 // Usage: npx tsx scripts/protractor-sync-standalone.ts
 
+import http from "node:http";
 import { getDb } from "../lib/mongo";
+
+const PORT = parseInt(process.env.PORT || "3000", 10);
+
+function startHealthServer(): void {
+  const server = http.createServer((req, res) => {
+    if (req.url === "/health" || req.url === "/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ 
+        status: "ok", 
+        worker: "protractor-sync",
+        totalSyncs,
+        successfulSyncs,
+        consecutiveFailures,
+        uptime: process.uptime()
+      }));
+    } else {
+      res.writeHead(404);
+      res.end("Not found");
+    }
+  });
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Health check server listening on port ${PORT}`);
+  });
+}
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
@@ -282,7 +308,8 @@ async function runSync(): Promise<void> {
 async function main(): Promise<void> {
   console.log('Protractor Sync Worker (Standalone) started');
   console.log(`Base sync interval: ${BASE_SYNC_INTERVAL_MS / 1000} seconds`);
-  console.log('Running sync logic directly (no HTTP server required)');
+  
+  startHealthServer();
   console.log('');
   
   // Initial delay
