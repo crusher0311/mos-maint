@@ -79,9 +79,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.TEKMETRIC_API_TOKEN) {
+    if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
       return NextResponse.json(
-        { error: "Tekmetric API token not configured. Please contact support." },
+        { error: "Tekmetric API credentials not configured. Please contact support." },
         { status: 500 }
       );
     }

@@ -3,13 +3,13 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
+import { getValidToken } from "@/lib/tekmetric-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
 const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
 const MONTHS_PER_RUN = 3;
 const MAX_SHOPS_PER_RUN = 1;
@@ -77,15 +77,18 @@ function computeContentHash(entry: any): string {
 }
 
 async function tekmetricRequest<T>(endpoint: string, retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
-  if (!TEKMETRIC_API_TOKEN) {
-    return { ok: false, error: "No API token" };
+  let token: string;
+  try {
+    token = await getValidToken();
+  } catch (err: any) {
+    return { ok: false, error: `Token error: ${err.message}` };
   }
   
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`${TEKMETRIC_API_BASE}${endpoint}`, {
         headers: {
-          Authorization: `Bearer ${TEKMETRIC_API_TOKEN}`,
+          Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
         cache: "no-store",
@@ -477,8 +480,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!TEKMETRIC_API_TOKEN) {
-    return NextResponse.json({ error: "TEKMETRIC_API_TOKEN not configured" }, { status: 500 });
+  if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
+    return NextResponse.json({ error: "Tekmetric OAuth credentials not configured" }, { status: 500 });
   }
 
   const db = await getDb();
