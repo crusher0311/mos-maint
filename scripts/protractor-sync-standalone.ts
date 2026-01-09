@@ -2,6 +2,13 @@
 // Standalone Protractor Sync Worker - runs sync logic directly without HTTP calls
 // Usage: npx tsx scripts/protractor-sync-standalone.ts
 
+// Check if Protractor sync is disabled (e.g., on Render where IP isn't whitelisted)
+if (process.env.DISABLE_PROTRACTOR_SYNC === "true") {
+  console.log("[Protractor Sync] DISABLED via DISABLE_PROTRACTOR_SYNC environment variable");
+  console.log("[Protractor Sync] Worker will not start. Set DISABLE_PROTRACTOR_SYNC=false or remove the variable to enable.");
+  process.exit(0);
+}
+
 import http from "node:http";
 import { getDb } from "../lib/mongo";
 
