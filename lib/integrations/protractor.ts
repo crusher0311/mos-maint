@@ -462,10 +462,14 @@ export async function fetchActiveInspections(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const numShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
   // Try /WorkOrder/Inspections with workOrderId filter
   const result = await protractorFetch<{ ItemCollection?: ProtractorActiveInspection[] }>(
     `/WorkOrder/Inspections?workOrderId=${workOrderId}`,
-    config
+    config,
+    {},
+    0,
+    numShopId
   );
 
   if (!result.ok) {
@@ -486,10 +490,14 @@ export async function fetchAllActiveInspections(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const numShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
   // Try /WorkOrder/Inspections endpoint
   const result = await protractorFetch<{ ItemCollection?: ProtractorActiveInspection[] }>(
     `/WorkOrder/Inspections`,
-    config
+    config,
+    {},
+    0,
+    numShopId
   );
 
   if (!result.ok) {
@@ -512,7 +520,10 @@ export async function fetchInvoiceById(
 
   const result = await protractorFetch<ProtractorInvoice>(
     `/Invoice/${invoiceId}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -539,7 +550,10 @@ export async function fetchInvoicesForVehicle(
   const queryStr = params.toString() ? `?${params.toString()}` : "";
   const result = await protractorFetch<{ ItemCollection?: ProtractorInvoice[] }>(
     `/ServiceItem/${serviceItemId}/Invoice${queryStr}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -566,7 +580,10 @@ export async function fetchDeferredWork(
 
   const result = await protractorFetch<{ ItemCollection?: ProtractorDeferredWork[] }>(
     `/ServicePackage/DeferredWorks?${params.toString()}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -924,7 +941,10 @@ export async function fetchCannedJobs(
   console.log(`[Protractor] Trying GET /ServicePackageTemplate...`);
   const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
     "/ServicePackageTemplate",
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (getResult.ok && getResult.data?.ItemCollection?.length) {
@@ -957,7 +977,9 @@ export async function fetchCannedJobs(
     }>(
       endpoint,
       config,
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
+      0,
+      shopId
     );
 
     const items = result.data?.ItemCollection || 
@@ -991,7 +1013,10 @@ export async function fetchCannedJobById(
 
   const result = await protractorFetch<ProtractorCannedJob>(
     `/ServicePackage/CannedJob/${cannedJobId}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -1063,7 +1088,10 @@ export async function fetchServicePackageTemplates(
     console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorServicePackageTemplate[] }>(
       endpoint,
-      config
+      config,
+      {},
+      0,
+      shopId
     );
 
     console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}`);
@@ -1101,7 +1129,10 @@ export async function fetchServicePackageTemplateDetail(
     console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
       endpoint,
-      config
+      config,
+      {},
+      0,
+      shopId
     );
 
     console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}`);
@@ -1314,7 +1345,9 @@ export async function applyCannedJobToWorkOrder(
         {
           method: "POST",
           body: JSON.stringify(updatedWorkOrder)
-        }
+        },
+        0,
+        shopId
       );
       
       console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
@@ -1408,7 +1441,9 @@ export async function applyCannedJobToWorkOrder(
         {
           method: "POST",
           body: JSON.stringify(timeClockPayload)
-        }
+        },
+        0,
+        shopId
       );
       
       if (timeClockResult.ok) {
@@ -1568,7 +1603,9 @@ export async function applyCannedJobToWorkOrder(
       {
         method: "POST",
         body: JSON.stringify(payload)
-      }
+      },
+      0,
+      shopId
     );
     
     console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
@@ -1628,7 +1665,10 @@ export async function fetchWorkOrdersForVehicle(
   // Try API first
   const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
     `/ServiceItem/${serviceItemId}/WorkOrder`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (result.ok) {
