@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import { 
   Activity, 
   AlertTriangle, 
@@ -13,8 +14,21 @@ import {
   X,
   ChevronRight,
   ExternalLink,
-  Filter
+  Filter,
+  GripVertical
 } from "lucide-react";
+
+const PROVIDER_LOGOS: Record<string, string> = {
+  tekmetric: "/logos/tekmetric.png",
+  protractor: "/logos/protractor.png",
+  openai: "/logos/openai.png",
+  carfax: "/logos/carfax.png",
+  dataone: "/logos/dataone.png",
+  autoflow: "/logos/autoflow.png",
+  hovercode: "/logos/hovercode.png",
+};
+
+const CARD_ORDER_STORAGE_KEY = "api-usage-card-order";
 
 interface ProviderUsage {
   provider: string;
@@ -78,6 +92,70 @@ export default function ApiUsageDashboard() {
   } | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<number | null>(null);
+  const [cardOrder, setCardOrder] = useState<string[]>([]);
+  const [draggedCard, setDraggedCard] = useState<string | null>(null);
+  const dragOverCard = useRef<string | null>(null);
+
+  useEffect(() => {
+    const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
+    if (savedOrder) {
+      try {
+        setCardOrder(JSON.parse(savedOrder));
+      } catch (e) {
+        console.error("Failed to parse saved card order");
+      }
+    }
+  }, []);
+
+  const getOrderedProviders = useCallback(() => {
+    if (!data?.providers) return [];
+    if (cardOrder.length === 0) return data.providers;
+    
+    const providerMap = new Map(data.providers.map(p => [p.provider, p]));
+    const ordered: ProviderUsage[] = [];
+    
+    for (const key of cardOrder) {
+      const provider = providerMap.get(key);
+      if (provider) {
+        ordered.push(provider);
+        providerMap.delete(key);
+      }
+    }
+    
+    for (const provider of providerMap.values()) {
+      ordered.push(provider);
+    }
+    
+    return ordered;
+  }, [data?.providers, cardOrder]);
+
+  const handleDragStart = (provider: string) => {
+    setDraggedCard(provider);
+  };
+
+  const handleDragEnter = (provider: string) => {
+    dragOverCard.current = provider;
+  };
+
+  const handleDragEnd = () => {
+    if (draggedCard && dragOverCard.current && draggedCard !== dragOverCard.current) {
+      const orderedProviders = getOrderedProviders();
+      const currentOrder = orderedProviders.map(p => p.provider);
+      
+      const draggedIdx = currentOrder.indexOf(draggedCard);
+      const overIdx = currentOrder.indexOf(dragOverCard.current);
+      
+      if (draggedIdx !== -1 && overIdx !== -1) {
+        const newOrder = [...currentOrder];
+        newOrder.splice(draggedIdx, 1);
+        newOrder.splice(overIdx, 0, draggedCard);
+        setCardOrder(newOrder);
+        localStorage.setItem(CARD_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+      }
+    }
+    setDraggedCard(null);
+    dragOverCard.current = null;
+  };
 
   const loadData = async () => {
     try {
@@ -332,15 +410,39 @@ export default function ApiUsageDashboard() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Individual Integrations</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Individual Integrations</h2>
+          <span className="text-xs text-gray-400">Drag cards to reorder</span>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {(data?.providers || []).map((provider) => (
-          <div key={provider.provider} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        {getOrderedProviders().map((provider) => (
+          <div 
+            key={provider.provider} 
+            className={`bg-white rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing transition-all ${
+              draggedCard === provider.provider ? 'opacity-50 scale-95 border-blue-300' : 'border-gray-100 hover:shadow-md'
+            }`}
+            draggable
+            onDragStart={() => handleDragStart(provider.provider)}
+            onDragEnter={() => handleDragEnter(provider.provider)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => e.preventDefault()}
+          >
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${getStatusColor(provider.warningLevel)}`}>
-                  {getStatusIcon(provider.warningLevel)}
-                </div>
+                <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                {PROVIDER_LOGOS[provider.provider] ? (
+                  <Image 
+                    src={PROVIDER_LOGOS[provider.provider]} 
+                    alt={provider.name} 
+                    width={40} 
+                    height={40} 
+                    className="rounded-lg object-contain"
+                  />
+                ) : (
+                  <div className={`p-2 rounded-lg ${getStatusColor(provider.warningLevel)}`}>
+                    {getStatusIcon(provider.warningLevel)}
+                  </div>
+                )}
                 <div>
                   <h3 className="font-semibold text-gray-900">{provider.name}</h3>
                   <p className="text-xs text-gray-500">{provider.provider}</p>
