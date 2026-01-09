@@ -272,14 +272,15 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   });
 
   return (
-    <aside className="w-64 min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
+    <aside className="w-full h-full min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
       {/* Mobile close button */}
       {onClose && (
         <button
           onClick={onClose}
-          className="lg:hidden absolute top-3 right-3 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg z-10"
+          className="absolute top-3 right-3 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg z-10"
+          aria-label="Close menu"
         >
-          <X className="w-5 h-5" />
+          <X className="w-6 h-6" />
         </button>
       )}
       <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
