@@ -56,9 +56,10 @@ channel = "stable-25_05"
 packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "gce"
 run = ["npx", "tsx", "scripts/protractor-sync-standalone.ts"]
 build = ["npm", "run", "build"]
+ignorePorts = true
 
 [userenv]
 
