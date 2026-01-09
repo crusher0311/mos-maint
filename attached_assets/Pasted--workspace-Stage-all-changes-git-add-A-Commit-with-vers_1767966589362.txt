@@ -1,0 +1,49 @@
+~/workspace$ # Stage all changes
+git add -A
+
+# Commit with version tag message
+git commit -m "v1.8.0: API Usage Dashboard enhancements
+
+- Added integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode)
+- Drag-and-drop card reordering with localStorage persistence
+- Enhanced tooltips for all metrics (latency, errors, rate limits, usage thresholds)
+- 24h Usage Trend chart with color-coded legend (purple=OK, red=errors)
+- Fixed drag-and-drop to handle newly added integrations"
+
+# Create a git tag for the release
+git tag -a v1.8.0 -m "Release v1.8.0 - API Usage Dashboard enhancements"
+
+# Push to your QA branch (assuming 'qa' branch)
+git push origin main:qa
+
+# Push the tag
+git push origin v1.8.0
+On branch qa
+nothing to commit, working tree clean
+To https://github.com/crusher0311/mos-maint.git
+ ! [rejected]        main -> qa (non-fast-forward)
+error: failed to push some refs to 'https://github.com/crusher0311/mos-maint.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. If you want to integrate the remote changes,
+hint: use 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+Enumerating objects: 292, done.
+Counting objects: 100% (292/292), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (240/240), done.
+Writing objects: 100% (255/255), 1.67 MiB | 5.59 MiB/s, done.
+Total 255 (delta 190), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (190/190), completed with 33 local objects.
+To https://github.com/crusher0311/mos-maint.git
+ * [new tag]         v1.8.0 -> v1.8.0
+~/workspace$ git push origin main:qa
+git push origin v1.8.0
+To https://github.com/crusher0311/mos-maint.git
+ ! [rejected]        main -> qa (non-fast-forward)
+error: failed to push some refs to 'https://github.com/crusher0311/mos-maint.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. If you want to integrate the remote changes,
+hint: use 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+Everything up-to-date
+~/workspace$ 
