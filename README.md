@@ -35,7 +35,8 @@ Copy `.env.example` to `.env` and configure:
 ```bash
 MONGODB_USERNAME=your_username
 MONGODB_PASSWORD=your_password
-TEKMETRIC_API_TOKEN=your_token
+TEKMETRIC_CLIENT_ID
+TEKMETRIC_CLIENT_SECRET=your_token
 HOVERCODE_API_TOKEN=your_token
 HOVERCODE_WORKSPACE_ID=your_workspace
 ```

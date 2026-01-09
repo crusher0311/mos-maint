@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
+import { getValidToken } from "@/lib/tekmetric-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,26 +87,24 @@ export async function GET(request: NextRequest) {
         // Work order not in sync cache - fetch directly from Tekmetric API
         console.log(`[Jobs Search] WO ${roId} not in cache, fetching from Tekmetric API`);
         try {
-          const tekApiToken = process.env.TEKMETRIC_API_TOKEN;
-          if (tekApiToken) {
-            const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
-              headers: { Authorization: `Bearer ${tekApiToken}` }
-            });
-            if (res.ok) {
-              const data = await res.json();
-              // If no VIN but we have vehicleId, fetch vehicle details
-              if (data?.vehicleId) {
-                const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
-                  headers: { Authorization: `Bearer ${tekApiToken}` }
-                });
-                if (vehRes.ok) {
-                  const vehData = await vehRes.json();
-                  year = vehData?.year?.toString() || null;
-                  make = vehData?.make || null;
-                  model = vehData?.model || null;
-                  engine = vehData?.engine || null;
-                  console.log(`[Jobs Search] Resolved vehicle from Tekmetric API: ${year} ${make} ${model}`);
-                }
+          const tekApiToken = await getValidToken();
+          const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
+            headers: { Authorization: `Bearer ${tekApiToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            // If no VIN but we have vehicleId, fetch vehicle details
+            if (data?.vehicleId) {
+              const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
+                headers: { Authorization: `Bearer ${tekApiToken}` }
+              });
+              if (vehRes.ok) {
+                const vehData = await vehRes.json();
+                year = vehData?.year?.toString() || null;
+                make = vehData?.make || null;
+                model = vehData?.model || null;
+                engine = vehData?.engine || null;
+                console.log(`[Jobs Search] Resolved vehicle from Tekmetric API: ${year} ${make} ${model}`);
               }
             }
           }

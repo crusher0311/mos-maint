@@ -48,7 +48,8 @@ The app supports two OpenAI modes:
 
 | Variable | Integration |
 |----------|-------------|
-| `TEKMETRIC_API_TOKEN` | Tekmetric shop management |
+| `TEKMETRIC_CLIENT_ID` | Tekmetric OAuth client ID |
+| `TEKMETRIC_CLIENT_SECRET` | Tekmetric OAuth client secret |
 | `CARFAX_PDI` | CARFAX vehicle history |
 | `CARFAX_POST_URL` | CARFAX API endpoint |
 | `DATAONE_API_URL` | DataOne VIN decoder |
@@ -98,7 +99,8 @@ Replit auto-provides some variables. Add these in the Secrets tab:
 ```
 MONGODB_USERNAME=your_username
 MONGODB_PASSWORD=your_password
-TEKMETRIC_API_TOKEN=your_token
+TEKMETRIC_CLIENT_ID=your_client_id
+TEKMETRIC_CLIENT_SECRET=your_client_secret
 HOVERCODE_API_TOKEN=your_token
 HOVERCODE_WORKSPACE_ID=your_workspace
 STRIPE_SECRET_KEY=your_stripe_key
@@ -136,7 +138,8 @@ Autoscale deployments scale to zero when idle - great for cost savings. **Backgr
    MONGODB_DB=mos-maintenance-mvp
    SESSION_SECRET=your-32-character-secret-here
    OPENAI_API_KEY=sk-your-openai-key
-   TEKMETRIC_API_TOKEN=your-token
+   TEKMETRIC_CLIENT_ID=your-client-id
+   TEKMETRIC_CLIENT_SECRET=your-client-secret
    ```
 
 4. **Set Up Data Sync** (pick one):

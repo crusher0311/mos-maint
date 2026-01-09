@@ -4,6 +4,7 @@ import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin } from "@/lib/plan-cache";
+import { getValidToken } from "@/lib/tekmetric-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -412,40 +413,36 @@ export async function GET(request: NextRequest) {
         if (!workOrder && shopDoc?.tekmetric?.shopId) {
           console.log(`[Extension] Fetching RO ${roId} directly from Tekmetric API`);
           try {
-            const tekApiToken = process.env.TEKMETRIC_API_TOKEN;
-            if (tekApiToken) {
-              const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
-                headers: { Authorization: `Bearer ${tekApiToken}` }
-              });
-              console.log(`[Extension] Tekmetric API response status: ${res.status}`);
-              if (res.ok) {
-                const data = await res.json();
-                console.log(`[Extension] Tekmetric API data: vehicleId=${data?.vehicleId}, vin=${data?.vehicle?.vin || data?.vehicleVin}`);
-                if (data) {
-                  let roVin = data.vehicle?.vin || data.vehicleVin;
-                  const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
-                  
-                  // If no VIN but we have vehicleId, fetch vehicle details
-                  if (!roVin && data.vehicleId) {
-                    console.log(`[Extension] Fetching vehicle ${data.vehicleId} from Tekmetric API`);
-                    const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
-                      headers: { Authorization: `Bearer ${tekApiToken}` }
-                    });
-                    if (vehRes.ok) {
-                      const vehData = await vehRes.json();
-                      roVin = vehData?.vin;
-                      console.log(`[Extension] Vehicle API returned: vin=${roVin}`);
-                    }
+            const tekApiToken = await getValidToken();
+            const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
+              headers: { Authorization: `Bearer ${tekApiToken}` }
+            });
+            console.log(`[Extension] Tekmetric API response status: ${res.status}`);
+            if (res.ok) {
+              const data = await res.json();
+              console.log(`[Extension] Tekmetric API data: vehicleId=${data?.vehicleId}, vin=${data?.vehicle?.vin || data?.vehicleVin}`);
+              if (data) {
+                let roVin = data.vehicle?.vin || data.vehicleVin;
+                const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
+                
+                // If no VIN but we have vehicleId, fetch vehicle details
+                if (!roVin && data.vehicleId) {
+                  console.log(`[Extension] Fetching vehicle ${data.vehicleId} from Tekmetric API`);
+                  const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
+                    headers: { Authorization: `Bearer ${tekApiToken}` }
+                  });
+                  if (vehRes.ok) {
+                    const vehData = await vehRes.json();
+                    roVin = vehData?.vin;
+                    console.log(`[Extension] Vehicle API returned: vin=${roVin}`);
                   }
-                  
-                  workOrder = { vin: roVin, odometer };
-                  console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
                 }
-              } else {
-                console.log(`[Extension] Tekmetric API returned error: ${res.status} ${res.statusText}`);
+                
+                workOrder = { vin: roVin, odometer };
+                console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
               }
             } else {
-              console.log(`[Extension] No TEKMETRIC_API_TOKEN available`);
+              console.log(`[Extension] Tekmetric API returned error: ${res.status} ${res.statusText}`);
             }
           } catch (e) {
             console.error(`[Extension] Tekmetric API fetch failed:`, e);
