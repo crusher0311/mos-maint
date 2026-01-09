@@ -52,7 +52,7 @@ packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
 
 [deployment]
 deploymentTarget = "vm"
-run = ["bash", "-c", "npm start & npx tsx scripts/protractor-sync-worker.ts"]
+run = ["npx", "tsx", "scripts/protractor-sync-worker.ts"]
 build = ["npm", "run", "build"]
 
 [userenv]
