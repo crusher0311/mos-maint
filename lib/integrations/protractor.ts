@@ -248,7 +248,17 @@ function httpsRequest(
       headers: headers,
     };
     
-    console.log(`[Protractor] HTTPS Request: ${method} ${url.pathname}, headers:`, Object.keys(headers).join(', '));
+    const authHash = headers.Authentication 
+      ? crypto.createHash('md5').update(headers.Authentication).digest('hex').slice(0, 8)
+      : 'none';
+    const connIdHash = headers.ConnectionId
+      ? crypto.createHash('md5').update(headers.ConnectionId).digest('hex').slice(0, 8)
+      : 'none';
+    
+    console.log(`[Protractor Debug] Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
+    console.log(`[Protractor Debug] ${method} ${url.pathname}`);
+    console.log(`[Protractor Debug] Headers: ${Object.keys(headers).join(', ')}`);
+    console.log(`[Protractor Debug] ConnId hash: ${connIdHash}, Auth hash: ${authHash}`);
     
     const req = https.request(options, (res) => {
       let data = "";
