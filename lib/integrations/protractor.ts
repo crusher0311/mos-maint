@@ -1,4 +1,4 @@
-import "server-only";
+// Note: "server-only" import removed to allow standalone script usage
 import crypto from "node:crypto";
 import https from "node:https";
 import { getDb } from "@/lib/mongo";
