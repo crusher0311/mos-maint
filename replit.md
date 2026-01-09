@@ -62,6 +62,11 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Dashboard shows top shops by usage, error rates, hourly trends per provider.
     *   MongoDB collection `api_usage` with 7-day TTL auto-cleanup.
     *   API endpoint: `/api/platform-admin/api-usage` (all providers) or `?provider=tekmetric` for specific.
+    *   **v1.8.0 Enhancements**:
+        *   Integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode) displayed on cards.
+        *   Drag-and-drop card reordering with localStorage persistence.
+        *   Enhanced tooltips explaining all metrics: latency, errors, rate limits, usage thresholds.
+        *   24h Usage Trend chart with color-coded bars (purple=OK, red=errors) and legend.
 
 **Feature Specifications:**
 *   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
