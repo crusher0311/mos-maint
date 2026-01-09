@@ -163,7 +163,7 @@ export interface ProviderStats {
   rateLimit?: { perMinute?: number; perSecond?: number };
   usagePercent?: number;
   warningLevel: 'ok' | 'warning' | 'critical' | 'stopped';
-  topShops: { shopId: number; count: number }[];
+  topShops: { shopId: number; shopName?: string; count: number }[];
 }
 
 export async function getApiUsageStats(provider?: ApiProvider): Promise<ProviderStats[]> {
@@ -245,6 +245,33 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
       warningLevel,
       topShops: topShops.map(s => ({ shopId: s._id, count: s.count }))
     });
+  }
+
+  // Look up shop names for all unique shopIds across all providers
+  const allShopIds = new Set<number>();
+  for (const r of results) {
+    for (const s of r.topShops) {
+      if (s.shopId) allShopIds.add(s.shopId);
+    }
+  }
+
+  if (allShopIds.size > 0) {
+    const shops = await db.collection("shops").find(
+      { id: { $in: Array.from(allShopIds) } },
+      { projection: { id: 1, name: 1 } }
+    ).toArray();
+    
+    const shopNameMap = new Map<number, string>();
+    for (const shop of shops) {
+      shopNameMap.set(shop.id, shop.name);
+    }
+
+    // Enrich topShops with names
+    for (const r of results) {
+      for (const s of r.topShops) {
+        s.shopName = shopNameMap.get(s.shopId);
+      }
+    }
   }
 
   return results;
