@@ -1,5 +1,5 @@
 import { requirePlatformAdmin } from "@/lib/auth";
-import { PlatformAdminSidebar } from "@/components/ui/PlatformAdminSidebar";
+import { PlatformAdminLayoutClient } from "@/components/ui/PlatformAdminLayoutClient";
 
 export default async function PlatformAdminLayout({
   children,
@@ -9,11 +9,8 @@ export default async function PlatformAdminLayout({
   const session = await requirePlatformAdmin();
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <PlatformAdminSidebar userEmail={session.email} />
-      <main className="flex-1 overflow-auto">
-        {children}
-      </main>
-    </div>
+    <PlatformAdminLayoutClient userEmail={session.email}>
+      {children}
+    </PlatformAdminLayoutClient>
   );
 }
