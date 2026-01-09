@@ -1,0 +1,164 @@
+2026-01-09 11:26:58.51
+28204162
+System
+starting up user application
+2026-01-09 11:26:58.51
+28204162
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-01-09 11:27:00.01
+28204162
+User
+Protractor Sync Worker started
+2026-01-09 11:27:00.01
+28204162
+User
+Max retries: 3
+2026-01-09 11:27:00.01
+28204162
+User
+Base sync interval: 10 seconds
+2026-01-09 11:27:00.01
+28204162
+User
+API URL: https://28204162-4199-4caa-93d3-c7a20d63a688-00-21qxalra1voa7.riker.replit.dev/api/cron/protractor-sync
+2026-01-09 11:27:06.64
+28204162
+User
+[2026-01-09T17:27:06.642Z] Running Protractor sync...
+2026-01-09 11:27:06.66
+28204162
+User
+[2026-01-09T17:27:06.642Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:10.01
+28204162
+User
+[2026-01-09T17:27:10.016Z] Running Protractor sync...
+2026-01-09 11:27:10.12
+28204162
+User
+[2026-01-09T17:27:10.016Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:16.67
+28204162
+User
+[2026-01-09T17:27:16.673Z] Running Protractor sync...
+2026-01-09 11:27:16.70
+28204162
+User
+[2026-01-09T17:27:16.673Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:20.13
+28204162
+User
+[2026-01-09T17:27:20.131Z] Running Protractor sync...
+2026-01-09 11:27:20.15
+28204162
+User
+[2026-01-09T17:27:20.131Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:23.91
+28204162
+System
+a port configuration was specified but the required port was never opened
+2026-01-09 11:27:30.15
+28204162
+User
+[2026-01-09T17:27:30.158Z] Running Protractor sync...
+2026-01-09 11:27:30.18
+28204162
+User
+[2026-01-09T17:27:30.158Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:40.18
+28204162
+User
+[2026-01-09T17:27:40.189Z] Running Protractor sync...
+2026-01-09 11:27:40.21
+28204162
+User
+[2026-01-09T17:27:40.189Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:50.22
+28204162
+User
+[2026-01-09T17:27:50.222Z] Running Protractor sync...
+2026-01-09 11:27:50.24
+28204162
+User
+[2026-01-09T17:27:50.222Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:27:58.51
+28204162
+System
+a port configuration was specified but the required port was never opened
+2026-01-09 11:28:00.25
+28204162
+User
+[2026-01-09T17:28:00.255Z] Running Protractor sync...
+2026-01-09 11:28:00.28
+28204162
+User
+[2026-01-09T17:28:00.255Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:28:07.86
+28204162
+System
+starting up user application
+2026-01-09 11:28:07.86
+28204162
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-01-09 11:28:07.86
+28204162
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-01-09 11:28:09.35
+28204162
+User
+Protractor Sync Worker started
+2026-01-09 11:28:09.35
+28204162
+User
+API URL: https://28204162-4199-4caa-93d3-c7a20d63a688-00-21qxalra1voa7.riker.replit.dev/api/cron/protractor-sync
+2026-01-09 11:28:09.35
+28204162
+User
+Base sync interval: 10 seconds
+2026-01-09 11:28:09.35
+28204162
+User
+Max retries: 3
+2026-01-09 11:28:19.35
+28204162
+User
+[2026-01-09T17:28:19.358Z] Running Protractor sync...
+2026-01-09 11:28:19.50
+28204162
+User
+[2026-01-09T17:28:19.358Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:28:29.51
+28204162
+User
+[2026-01-09T17:28:29.511Z] Running Protractor sync...
+2026-01-09 11:28:29.53
+28204162
+User
+[2026-01-09T17:28:29.511Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:28:29.53
+28204162
+User
+[2026-01-09T17:28:29.511Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:28:29.53
+28204162
+User
+[2026-01-09T17:28:29.511Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:28:39.54
+28204162
+User
+[2026-01-09T17:28:39.544Z] Running Protractor sync...
+2026-01-09 11:28:39.56
+28204162
+User
+[2026-01-09T17:28:39.544Z] Server not ready (HTML response). Will retry next interval.
+2026-01-09 11:28:49.57
+28204162
+User
+[2026-01-09T17:28:49.572Z] Running Protractor sync...
+2026-01-09 11:28:49.59
+28204162
+User
+[2026-01-09T17:28:49.572Z] Server not ready (HTML response). Will retry next interval.

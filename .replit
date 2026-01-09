@@ -35,12 +35,12 @@ outputType = "webview"
 name = "Protractor Sync Worker"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/protractor-sync-worker.ts"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx scripts/protractor-sync-standalone.ts"
 
 [[ports]]
 localPort = 5000
@@ -52,7 +52,7 @@ packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
 
 [deployment]
 deploymentTarget = "vm"
-run = ["npx", "tsx", "scripts/protractor-sync-worker.ts"]
+run = ["npx", "tsx", "scripts/protractor-sync-standalone.ts"]
 build = ["npm", "run", "build"]
 
 [userenv]
