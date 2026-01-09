@@ -248,6 +248,8 @@ function httpsRequest(
       headers: headers,
     };
     
+    console.log(`[Protractor] HTTPS Request: ${method} ${url.pathname}, headers:`, Object.keys(headers).join(', '));
+    
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
