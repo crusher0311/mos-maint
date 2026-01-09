@@ -234,7 +234,8 @@ export async function protractorFetch<T>(
   endpoint: string,
   config: ProtractorConfig,
   options: RequestInit = {},
-  retryCount = 0
+  retryCount = 0,
+  shopId?: number
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
@@ -260,7 +261,7 @@ export async function protractorFetch<T>(
       cache: "no-store",
     });
 
-    trackApiRequest('protractor', endpoint, options.method || 'GET', res.status, Date.now() - startTime).catch(() => {});
+    trackApiRequest('protractor', endpoint, options.method || 'GET', res.status, Date.now() - startTime, shopId).catch(() => {});
 
     // Handle rate limiting (429) with exponential backoff
     if (res.status === 429 && retryCount < 3) {
@@ -268,7 +269,7 @@ export async function protractorFetch<T>(
       const waitMs = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retryCount + 1) * 1000;
       console.log(`[Protractor] Rate limited, retrying in ${waitMs}ms (attempt ${retryCount + 1}/3)`);
       await new Promise(r => setTimeout(r, waitMs));
-      return protractorFetch<T>(endpoint, config, options, retryCount + 1);
+      return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId);
     }
 
     if (!res.ok) {
@@ -294,7 +295,10 @@ export async function fetchVehicleByVin(
 
   const result = await protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
     `/ServiceItem/Search/${encodeURIComponent(vin)}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -324,7 +328,10 @@ export async function fetchVehicleById(
 
   const result = await protractorFetch<ProtractorVehicle>(
     `/ServiceItem/${serviceItemId}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -361,7 +368,10 @@ export async function fetchActiveWorkOrders(
     const queryStr = `?${params.toString()}`;
     const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
       `/WorkOrder/${queryStr}`,
-      config
+      config,
+      {},
+      0,
+      shopId
     );
 
     if (!result.ok) {
@@ -403,9 +413,13 @@ export async function fetchWorkOrderById(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const numShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
   const result = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${workOrderId}`,
-    config
+    config,
+    {},
+    0,
+    numShopId
   );
 
   if (!result.ok) {
