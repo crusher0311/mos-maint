@@ -17,6 +17,15 @@ export const dynamic = "force-dynamic";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(req: NextRequest) {
+  // Check if Protractor sync is disabled (e.g., on Render where IP isn't whitelisted)
+  if (process.env.DISABLE_PROTRACTOR_SYNC === "true") {
+    return NextResponse.json({ 
+      ok: true, 
+      message: "Protractor sync disabled via DISABLE_PROTRACTOR_SYNC environment variable",
+      disabled: true 
+    });
+  }
+
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
