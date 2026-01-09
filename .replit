@@ -15,18 +15,6 @@ author = "agent"
 task = "workflow.run"
 args = "MOS Maintenance MVP"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Protractor Sync Worker"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Protractor Backfill Worker"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Tekmetric Sync Worker"
-
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -38,39 +26,6 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
-
-[[workflows.workflow]]
-name = "Protractor Sync Worker"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/protractor-sync-worker.ts"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "Protractor Backfill Worker"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/protractor-backfill-worker.ts"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "Tekmetric Sync Worker"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/tekmetric-sync-worker.ts"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[ports]]
 localPort = 5000
