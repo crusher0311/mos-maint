@@ -1,5 +1,6 @@
 import "server-only";
 import crypto from "node:crypto";
+import https from "node:https";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 
@@ -230,6 +231,48 @@ export async function resolveProtractorConfig(shopId: number | string): Promise<
   };
 }
 
+function httpsRequest(
+  urlString: string,
+  method: string,
+  headers: Record<string, string>,
+  body?: string
+): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    
+    const options: https.RequestOptions = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method: method,
+      headers: headers,
+    };
+    
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        resolve({ statusCode: res.statusCode || 0, body: data });
+      });
+    });
+    
+    req.on("error", (err) => {
+      reject(err);
+    });
+    
+    req.setTimeout(30000, () => {
+      req.destroy();
+      reject(new Error("Request timeout"));
+    });
+    
+    if (body) {
+      req.write(body);
+    }
+    
+    req.end();
+  });
+}
+
 export async function protractorFetch<T>(
   endpoint: string,
   config: ProtractorConfig,
@@ -241,52 +284,45 @@ export async function protractorFetch<T>(
     return { ok: false, error: "Protractor not configured" };
   }
 
-  // Acquire rate limit slot before making request
   await acquireRateLimitSlot();
 
   const url = `${BASE_URL}${endpoint}`;
   const startTime = Date.now();
+  const method = (options.method || "GET").toUpperCase();
   
   try {
-    // Use Headers API to preserve exact header casing - Protractor's nginx requires exact case
-    const headers = new Headers();
-    headers.set("ConnectionId", config.connectionId);
-    headers.set("ApiKey", config.apiKey);
-    headers.set("Authentication", config.authentication);
-    headers.set("Accept", "application/json");
-    headers.set("Content-Type", "application/json");
+    const headers: Record<string, string> = {
+      "ConnectionId": config.connectionId,
+      "ApiKey": config.apiKey,
+      "Authentication": config.authentication,
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    };
     
-    // Merge any additional headers from options
     if (options.headers) {
       const optHeaders = options.headers as Record<string, string>;
       Object.entries(optHeaders).forEach(([key, value]) => {
-        headers.set(key, value);
+        headers[key] = value;
       });
     }
     
-    const res = await fetch(url, {
-      ...options,
-      headers,
-      cache: "no-store",
-    });
+    const body = options.body ? String(options.body) : undefined;
+    const res = await httpsRequest(url, method, headers, body);
 
-    trackApiRequest('protractor', endpoint, options.method || 'GET', res.status, Date.now() - startTime, shopId).catch(() => {});
+    trackApiRequest('protractor', endpoint, method, res.statusCode, Date.now() - startTime, shopId).catch(() => {});
 
-    // Handle rate limiting (429) with exponential backoff
-    if (res.status === 429 && retryCount < 3) {
-      const retryAfter = res.headers.get("Retry-After");
-      const waitMs = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retryCount + 1) * 1000;
+    if (res.statusCode === 429 && retryCount < 3) {
+      const waitMs = Math.pow(2, retryCount + 1) * 1000;
       console.log(`[Protractor] Rate limited, retrying in ${waitMs}ms (attempt ${retryCount + 1}/3)`);
       await new Promise(r => setTimeout(r, waitMs));
       return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId);
     }
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return { ok: false, error: `HTTP ${res.status}: ${text || res.statusText}` };
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return { ok: false, error: `HTTP ${res.statusCode}: ${res.body || "Unknown error"}` };
     }
 
-    const data = await res.json().catch(() => null);
+    const data = res.body ? JSON.parse(res.body) : null;
     return { ok: true, data: data as T };
   } catch (err: any) {
     return { ok: false, error: err.message || "Network error" };
