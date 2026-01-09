@@ -26,7 +26,7 @@ interface ProviderUsage {
   avgLatencyMs: number;
   errorCount: number;
   rateLimitCount: number;
-  topShops: Array<{ shopId: number; count: number }>;
+  topShops: Array<{ shopId: number; shopName?: string; count: number }>;
   hourlyUsage: Array<{ hour: string; requests: number; errors: number }>;
 }
 
@@ -61,6 +61,7 @@ interface DrawerState {
   type: 'errors' | 'shop' | null;
   provider?: string;
   shopId?: number;
+  shopName?: string;
 }
 
 export default function ApiUsageDashboard() {
@@ -133,8 +134,8 @@ export default function ApiUsageDashboard() {
     }
   }, []);
 
-  const openShopDrawer = useCallback(async (shopId: number, provider?: string) => {
-    setDrawer({ type: 'shop', shopId, provider });
+  const openShopDrawer = useCallback(async (shopId: number, provider?: string, shopName?: string) => {
+    setDrawer({ type: 'shop', shopId, provider, shopName });
     setDrawerLoading(true);
     
     try {
@@ -446,10 +447,12 @@ export default function ApiUsageDashboard() {
                     {provider.topShops.slice(0, 3).map((shop) => (
                       <button
                         key={shop.shopId}
-                        onClick={() => openShopDrawer(shop.shopId, provider.provider)}
+                        onClick={() => openShopDrawer(shop.shopId, provider.provider, shop.shopName)}
                         className="flex items-center justify-between text-sm w-full hover:bg-gray-50 rounded px-1 py-0.5 transition-colors group"
                       >
-                        <span className="text-blue-600 hover:underline">Shop #{shop.shopId}</span>
+                        <span className="text-blue-600 hover:underline truncate max-w-[140px]" title={shop.shopName || `Shop #${shop.shopId}`}>
+                          {shop.shopName || `Shop #${shop.shopId}`}
+                        </span>
                         <span className="font-medium text-gray-900 flex items-center gap-1">
                           {shop.count} req
                           <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -482,7 +485,7 @@ export default function ApiUsageDashboard() {
           <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                {drawer.type === 'errors' ? 'Error Details' : `Shop #${drawer.shopId} Requests`}
+                {drawer.type === 'errors' ? 'Error Details' : `${drawer.shopName || `Shop #${drawer.shopId}`} Requests`}
               </h2>
               <p className="text-sm text-gray-500">
                 {drawer.provider ? `Provider: ${drawer.provider}` : 'All providers'} - Last 24 hours
@@ -586,10 +589,10 @@ export default function ApiUsageDashboard() {
                         <span>Provider: {record.provider}</span>
                         {record.shopId && (
                           <button
-                            onClick={() => openShopDrawer(record.shopId!, record.provider)}
+                            onClick={() => openShopDrawer(record.shopId!, record.provider, record.shopName)}
                             className="text-blue-600 hover:underline"
                           >
-                            Shop #{record.shopId}
+                            {record.shopName || `Shop #${record.shopId}`}
                           </button>
                         )}
                         {record.requestId && (
