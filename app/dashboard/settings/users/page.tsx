@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus } from "lucide-react";
+import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building } from "lucide-react";
 import Link from "next/link";
 
 interface ShopUser {
   _id: string;
   email: string;
   role: string;
+  shopId: string;
+  shopIds?: string[];
   createdAt: string;
   lastLogin?: string;
 }
@@ -20,14 +22,35 @@ interface PendingInvite {
   expiresAt: string;
 }
 
+interface Shop {
+  shopId: string;
+  name: string;
+  location?: string;
+}
+
+interface UserModalData {
+  _id: string;
+  email: string;
+  role: string;
+  shopId: string;
+  shopIds: string[];
+  shopNames: { shopId: string; name: string }[];
+}
+
 export default function UsersSettingsPage() {
   const [users, setUsers] = useState<ShopUser[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
+  const [selectedUser, setSelectedUser] = useState<UserModalData | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [allShops, setAllShops] = useState<Shop[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [selectedShopIds, setSelectedShopIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchUsers();
+    fetchAllShops();
   }, []);
 
   async function fetchUsers() {
@@ -44,6 +67,70 @@ export default function UsersSettingsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function fetchAllShops() {
+    try {
+      const res = await fetch("/api/shops/list");
+      if (res.ok) {
+        const data = await res.json();
+        setAllShops(data.shops || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch shops:", err);
+    }
+  }
+
+  async function handleUserClick(userId: string) {
+    if (!canManageUsers) return;
+    
+    setModalLoading(true);
+    try {
+      const res = await fetch(`/api/settings/users/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedUser(data.user);
+        setSelectedShopIds(data.user.shopIds || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user details:", err);
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  async function handleSaveLocations() {
+    if (!selectedUser) return;
+    
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/settings/users/${selectedUser._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopIds: selectedShopIds }),
+      });
+      
+      if (res.ok) {
+        setSelectedUser(null);
+        fetchUsers();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+      alert("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleShopSelection(shopId: string) {
+    setSelectedShopIds(prev => 
+      prev.includes(shopId)
+        ? prev.filter(id => id !== shopId)
+        : [...prev, shopId]
+    );
   }
 
   async function handleRemoveUser(userId: string) {
@@ -121,6 +208,9 @@ export default function UsersSettingsPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Team Members</h2>
+            {canManageUsers && (
+              <p className="text-sm text-gray-500 mt-1">Click on a user to manage their location access</p>
+            )}
           </div>
           <div className="divide-y divide-gray-200">
             {users.length === 0 ? (
@@ -129,7 +219,11 @@ export default function UsersSettingsPage() {
               </div>
             ) : (
               users.map((user) => (
-                <div key={user._id} className="px-6 py-4 flex items-center justify-between">
+                <div 
+                  key={user._id} 
+                  className={`px-6 py-4 flex items-center justify-between ${canManageUsers ? "cursor-pointer hover:bg-gray-50" : ""}`}
+                  onClick={() => handleUserClick(user._id)}
+                >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
                       <span className="text-white font-medium">
@@ -138,9 +232,18 @@ export default function UsersSettingsPage() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">{user.email}</p>
-                      <p className="text-sm text-gray-500">
-                        Joined {new Date(user.createdAt).toLocaleDateString()}
-                      </p>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <span>Joined {new Date(user.createdAt).toLocaleDateString()}</span>
+                        {user.shopIds && user.shopIds.length > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {user.shopIds.length + 1} location{user.shopIds.length > 0 ? "s" : ""}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -149,7 +252,10 @@ export default function UsersSettingsPage() {
                     </span>
                     {canManageUsers && user.role !== "owner" && (
                       <button
-                        onClick={() => handleRemoveUser(user._id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveUser(user._id);
+                        }}
                         className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                         title="Remove user"
                       >
@@ -212,6 +318,96 @@ export default function UsersSettingsPage() {
           </ul>
         </div>
       </div>
+
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Edit Location Access</h2>
+                <p className="text-sm text-gray-500">{selectedUser.email}</p>
+              </div>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[50vh] overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Primary Location
+                </label>
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Building className="w-4 h-4 text-gray-500" />
+                    <span className="font-medium">
+                      {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.name || `Shop ${selectedUser.shopId}`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Primary location cannot be changed</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional Location Access
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Select locations this user can also access
+                </p>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {allShops
+                    .filter(shop => String(shop.shopId) !== String(selectedUser.shopId))
+                    .map(shop => (
+                      <label
+                        key={shop.shopId}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedShopIds.includes(String(shop.shopId))}
+                          onChange={() => toggleShopSelection(String(shop.shopId))}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">{shop.name}</div>
+                          {shop.location && (
+                            <div className="text-xs text-gray-500">{shop.location}</div>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  {allShops.filter(shop => String(shop.shopId) !== String(selectedUser.shopId)).length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      No other locations available
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveLocations}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
