@@ -766,19 +766,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="relative">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="relative flex-1 sm:flex-none">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search vehicles..."
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              <div className="flex items-center gap-4 text-sm text-gray-500">
+              <div className="flex items-center gap-4 text-xs sm:text-sm text-gray-500">
                 <span>
                   Showing {((pagination.page - 1) * pagination.pageSize) + 1}-{Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
                 </span>
@@ -787,17 +787,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 text-left text-sm text-gray-600">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-gray-50 text-left text-xs sm:text-sm text-gray-600">
                 <tr>
                   <SortHeader column="customer">Customer</SortHeader>
-                  <SortHeader column="vehicle">Vehicle</SortHeader>
+                  <SortHeader column="vehicle"><span className="hidden sm:inline">Vehicle</span><span className="sm:hidden">Veh.</span></SortHeader>
                   <SortHeader column="vin">VIN</SortHeader>
                   <SortHeader column="ro">RO #</SortHeader>
-                  <SortHeader column="status">{data.smsType === 'protractor' ? 'Workflow Stage' : 'Status'}</SortHeader>
+                  <SortHeader column="status">{data.smsType === 'protractor' ? 'Stage' : 'Status'}</SortHeader>
                   <SortHeader column="dvi">DVI</SortHeader>
-                  <SortHeader column="mileage">{data.distanceUnit === "kilometers" ? "Odometer (km)" : "Mileage"}</SortHeader>
-                  <th className="px-6 py-3 font-medium"></th>
+                  <SortHeader column="mileage"><span className="hidden sm:inline">{data.distanceUnit === "kilometers" ? "Odometer" : "Mileage"}</span><span className="sm:hidden">Mi.</span></SortHeader>
+                  <th className="px-3 sm:px-6 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -808,27 +808,27 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   
                   return (
                     <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <Link href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <Link href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors text-sm">
                           {r.displayName || "Unknown"}
                         </Link>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-gray-600 text-sm">
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
                       </td>
-                      <td className="px-6 py-4">
-                        <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono text-gray-700">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <code className="text-xs bg-gray-100 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono text-gray-700">
                           {vin}
                         </code>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.displayRo ? (
-                          <span className="text-gray-600">{r.displayRo}</span>
+                          <span className="text-gray-600 text-sm">{r.displayRo}</span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {(() => {
                           const { label, color, icon } = formatWorkflowStage(statusText);
                           return (
@@ -839,24 +839,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.dviDone ? (
-                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-100 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
                           </div>
                         ) : (
-                          <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                            <Clock className="w-4 h-4 text-gray-400" />
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                            <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 font-mono text-sm text-gray-600">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-xs sm:text-sm text-gray-600">
                         {r.displayMiles != null
                           ? Number(r.displayMiles).toLocaleString()
                           : "—"}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           {r.displayMiles != null && r.displayMiles > 0 ? (
                             <Link
                               href={VEHICLE_HREF(vin)}
