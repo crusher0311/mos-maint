@@ -257,13 +257,13 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
 
   if (allShopIds.size > 0) {
     const shops = await db.collection("shops").find(
-      { id: { $in: Array.from(allShopIds) } },
-      { projection: { id: 1, name: 1 } }
+      { shopId: { $in: Array.from(allShopIds) } },
+      { projection: { shopId: 1, name: 1 } }
     ).toArray();
     
     const shopNameMap = new Map<number, string>();
     for (const shop of shops) {
-      shopNameMap.set(shop.id, shop.name);
+      shopNameMap.set(shop.shopId, shop.name);
     }
 
     // Enrich topShops with names
