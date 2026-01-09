@@ -142,13 +142,20 @@ export async function fetchDviByInvoice(
   if (!inv) return { ok: false, error: "Missing invoice/RO." };
 
   const url = `${cfg.base}/api/v1/dvi/${encodeURIComponent(String(inv))}`;
-  const res = await doFetch(url, {
-    headers: {
-      Authorization: basicAuthHeader(String(cfg.apiKey), String(cfg.apiPassword)),
-      accept: "application/json",
-    },
-    cache: "no-store",
-  });
+  
+  let res: Response;
+  try {
+    res = await doFetch(url, {
+      headers: {
+        Authorization: basicAuthHeader(String(cfg.apiKey), String(cfg.apiPassword)),
+        accept: "application/json",
+      },
+      cache: "no-store",
+    });
+  } catch (err: any) {
+    console.error(`[AutoFlow] Network error fetching DVI for invoice ${inv}:`, err?.message || err);
+    return { ok: false, error: `AutoFlow connection failed: ${err?.message || 'Network error'}` };
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
