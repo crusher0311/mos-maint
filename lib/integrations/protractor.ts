@@ -248,11 +248,11 @@ function httpsRequest(
       headers: headers,
     };
     
-    const authHash = headers.Authentication 
-      ? crypto.createHash('md5').update(headers.Authentication).digest('hex').slice(0, 8)
+    const authHash = headers.authentication 
+      ? crypto.createHash('md5').update(headers.authentication).digest('hex').slice(0, 8)
       : 'none';
-    const connIdHash = headers.ConnectionId
-      ? crypto.createHash('md5').update(headers.ConnectionId).digest('hex').slice(0, 8)
+    const connIdHash = headers.connectionid
+      ? crypto.createHash('md5').update(headers.connectionid).digest('hex').slice(0, 8)
       : 'none';
     
     console.log(`[Protractor Debug] Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
@@ -304,9 +304,9 @@ export async function protractorFetch<T>(
   
   try {
     const headers: Record<string, string> = {
-      "ConnectionId": config.connectionId,
-      "ApiKey": config.apiKey,
-      "Authentication": config.authentication,
+      "connectionid": config.connectionId,
+      "apikey": config.apiKey,
+      "authentication": config.authentication,
       "Accept": "application/json",
       "Content-Type": "application/json",
     };
