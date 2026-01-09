@@ -248,16 +248,25 @@ export async function protractorFetch<T>(
   const startTime = Date.now();
   
   try {
+    // Use Headers API to preserve exact header casing - Protractor's nginx requires exact case
+    const headers = new Headers();
+    headers.set("ConnectionId", config.connectionId);
+    headers.set("ApiKey", config.apiKey);
+    headers.set("Authentication", config.authentication);
+    headers.set("Accept", "application/json");
+    headers.set("Content-Type", "application/json");
+    
+    // Merge any additional headers from options
+    if (options.headers) {
+      const optHeaders = options.headers as Record<string, string>;
+      Object.entries(optHeaders).forEach(([key, value]) => {
+        headers.set(key, value);
+      });
+    }
+    
     const res = await fetch(url, {
       ...options,
-      headers: {
-        connectionId: config.connectionId,
-        apiKey: config.apiKey,
-        authentication: config.authentication,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers,
       cache: "no-store",
     });
 
