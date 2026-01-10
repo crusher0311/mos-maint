@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { fetchWorkOrderById } from "@/lib/integrations/protractor";
 import { getTekmetricWorkOrderWithMileage } from "@/lib/tekmetric";
+
+const BATCH_SIZE = 5;
+const BATCH_DELAY_MS = 2000;
+const MAX_VEHICLES_PER_REQUEST = 50;
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +36,7 @@ export async function POST(request: NextRequest) {
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
       "status.active": true,
       "status.sources": { $exists: true, $ne: [] }
-    }).toArray();
+    }).limit(MAX_VEHICLES_PER_REQUEST).toArray();
 
     if (activeVehicles.length === 0) {
       return NextResponse.json({ checked: 0, closed: 0, mileageUpdated: 0 });
@@ -42,44 +47,69 @@ export async function POST(request: NextRequest) {
     let mileageUpdatedCount = 0;
     const closedOrders: { vin: string; workOrderId: string; provider: string; mileage?: number }[] = [];
 
+    const workOrderChecks: Array<{
+      vehicle: any;
+      source: any;
+      currentMileage: number;
+    }> = [];
+
     for (const vehicle of activeVehicles) {
       const sources = vehicle.status?.sources || [];
-      let currentMileage = vehicle.mileage || vehicle.odometer || vehicle.lastMileage || 0;
+      const currentMileage = vehicle.mileage || vehicle.odometer || vehicle.lastMileage || 0;
       
       for (const source of sources) {
-        checkedCount++;
-        
-        let isClosed = false;
-        let workOrderMileage: number | undefined;
-        
-        if (source.provider === "protractor") {
-          try {
-            const result = await fetchWorkOrderById(shopId, String(source.workOrderId));
-            if (result.ok && result.workOrder) {
-              const wo = result.workOrder;
-              const status = (wo.Status || wo.WorkflowStage || "").toUpperCase();
-              isClosed = status === "INVOICED" || status === "INVOICE" || 
-                         status === "CLOSED" || status === "VOID";
-              workOrderMileage = wo.Odometer || wo.InUsage || wo.OutUsage ||
-                                 (wo as any).ServiceItems?.[0]?.Odometer ||
-                                 (wo as any).ServiceItem?.Odometer;
+        workOrderChecks.push({ vehicle, source, currentMileage });
+      }
+    }
+
+    const limit = pLimit(BATCH_SIZE);
+    
+    for (let i = 0; i < workOrderChecks.length; i += BATCH_SIZE) {
+      const batch = workOrderChecks.slice(i, i + BATCH_SIZE);
+      
+      const batchResults = await Promise.all(
+        batch.map(({ vehicle, source, currentMileage }) =>
+          limit(async () => {
+            checkedCount++;
+            let isClosed = false;
+            let workOrderMileage: number | undefined;
+
+            if (source.provider === "protractor") {
+              try {
+                const result = await fetchWorkOrderById(shopId!, String(source.workOrderId));
+                if (result.ok && result.workOrder) {
+                  const wo = result.workOrder;
+                  const status = (wo.Status || wo.WorkflowStage || "").toUpperCase();
+                  isClosed = status === "INVOICED" || status === "INVOICE" || 
+                             status === "CLOSED" || status === "VOID";
+                  workOrderMileage = wo.Odometer || wo.InUsage || wo.OutUsage ||
+                                     (wo as any).ServiceItems?.[0]?.Odometer ||
+                                     (wo as any).ServiceItem?.Odometer;
+                }
+              } catch (err) {
+                console.error(`Error checking Protractor WO ${source.workOrderId}:`, err);
+              }
+            } else if (source.provider === "tekmetric" && shop.tekmetric?.shopId) {
+              try {
+                const woData = await getTekmetricWorkOrderWithMileage(source.workOrderId);
+                if (woData) {
+                  const normalizedStatus = woData.status?.toUpperCase();
+                  isClosed = normalizedStatus === "INVOICED" || normalizedStatus === "INVOICE" || 
+                             normalizedStatus === "VOID" || normalizedStatus === "CLOSED";
+                  workOrderMileage = woData.mileageOut ?? woData.mileageIn ?? undefined;
+                }
+              } catch (err) {
+                console.error(`Error checking Tekmetric RO ${source.workOrderId}:`, err);
+              }
             }
-          } catch (err) {
-            console.error(`Error checking Protractor WO ${source.workOrderId}:`, err);
-          }
-        } else if (source.provider === "tekmetric" && shop.tekmetric?.shopId) {
-          try {
-            const woData = await getTekmetricWorkOrderWithMileage(source.workOrderId);
-            if (woData) {
-              const normalizedStatus = woData.status?.toUpperCase();
-              isClosed = normalizedStatus === "INVOICED" || normalizedStatus === "INVOICE" || 
-                         normalizedStatus === "VOID" || normalizedStatus === "CLOSED";
-              workOrderMileage = woData.mileageOut ?? woData.mileageIn ?? undefined;
-            }
-          } catch (err) {
-            console.error(`Error checking Tekmetric RO ${source.workOrderId}:`, err);
-          }
-        }
+
+            return { vehicle, source, currentMileage, isClosed, workOrderMileage };
+          })
+        )
+      );
+
+      for (const result of batchResults) {
+        const { vehicle, source, currentMileage, isClosed, workOrderMileage } = result;
 
         if (workOrderMileage && workOrderMileage > 0 && workOrderMileage > currentMileage) {
           await db.collection("vehicles").updateOne(
@@ -93,7 +123,6 @@ export async function POST(request: NextRequest) {
               }
             }
           );
-          currentMileage = workOrderMileage;
           mileageUpdatedCount++;
         }
 
@@ -127,6 +156,10 @@ export async function POST(request: NextRequest) {
             );
           }
         }
+      }
+
+      if (i + BATCH_SIZE < workOrderChecks.length) {
+        await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
       }
     }
 
