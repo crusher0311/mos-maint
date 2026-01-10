@@ -229,13 +229,13 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
           ]
         },
-        // Billing page hidden until we have enough data to verify with live users
-        // { name: "Billing", href: "/dashboard/settings/billing" },
+        { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
+        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }

@@ -1,23 +1,33 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2 } from "lucide-react";
+import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, ChevronDown, ChevronRight, Plus } from "lucide-react";
 
 interface User {
   _id: string;
   email: string;
   role: string;
-  shopId: number;
+  shopId: number | string;
   shopName: string;
+  locationIdentifier?: string | null;
   shopIds?: string[];
   createdAt: string;
   isPlatformAdmin?: boolean;
 }
 
-interface Shop {
+interface ShopMetadata {
   shopId: string;
   name: string;
-  location?: string;
+  locationIdentifier?: string | null;
+  isInUserEnterprise: boolean;
+  isUserPrimary: boolean;
+  isSelected: boolean;
+}
+
+interface EnterpriseInfo {
+  _id: string;
+  name: string;
+  shopIds: string[];
 }
 
 interface UserModalData {
@@ -26,7 +36,6 @@ interface UserModalData {
   role: string;
   shopId: string;
   shopIds: string[];
-  shopNames: { shopId: string; name: string }[];
   isPlatformAdmin: boolean;
   createdAt: string;
   lastLogin?: string;
@@ -39,15 +48,17 @@ export default function PlatformUsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<UserModalData | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
-  const [allShops, setAllShops] = useState<Shop[]>([]);
+  const [allShops, setAllShops] = useState<ShopMetadata[]>([]);
+  const [userEnterprise, setUserEnterprise] = useState<EnterpriseInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [editedRole, setEditedRole] = useState("");
   const [editedShopIds, setEditedShopIds] = useState<string[]>([]);
   const [editedIsPlatformAdmin, setEditedIsPlatformAdmin] = useState(false);
+  const [showOtherLocations, setShowOtherLocations] = useState(false);
+  const [locationSearch, setLocationSearch] = useState("");
 
   useEffect(() => {
     loadUsers();
-    fetchAllShops();
   }, []);
 
   const loadUsers = async () => {
@@ -65,28 +76,20 @@ export default function PlatformUsersPage() {
     }
   };
 
-  async function fetchAllShops() {
-    try {
-      const res = await fetch("/api/shops/list?scope=all");
-      if (res.ok) {
-        const data = await res.json();
-        setAllShops(data.shops || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch shops:", err);
-    }
-  }
-
   async function handleUserClick(userId: string) {
     setModalLoading(true);
+    setLocationSearch("");
+    setShowOtherLocations(false);
     try {
       const res = await fetch(`/api/platform-admin/users/${userId}`);
       if (res.ok) {
         const data = await res.json();
         setSelectedUser(data.user);
         setEditedRole(data.user.role);
-        setEditedShopIds(data.user.shopIds || []);
+        setEditedShopIds((data.user.shopIds || []).map((id: any) => String(id)));
         setEditedIsPlatformAdmin(data.user.isPlatformAdmin || false);
+        setAllShops(data.shops || []);
+        setUserEnterprise(data.enterprise || null);
       }
     } catch (err) {
       console.error("Failed to fetch user details:", err);
@@ -105,6 +108,7 @@ export default function PlatformUsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           role: editedRole,
+          shopId: selectedUser.shopId,
           shopIds: editedShopIds,
           isPlatformAdmin: editedIsPlatformAdmin,
         }),
@@ -270,7 +274,10 @@ export default function PlatformUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-gray-900">{user.shopName}</div>
-                    <div className="text-xs text-gray-500">ID: {user.shopId}</div>
+                    <div className="text-xs text-gray-500">
+                      {user.locationIdentifier && <span className="mr-2">{user.locationIdentifier}</span>}
+                      ID: {user.shopId}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${roleColors[user.role] || roleColors.user}`}>
@@ -365,50 +372,174 @@ export default function PlatformUsersPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Primary Location
                     </label>
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center gap-2">
-                        <Building className="w-4 h-4 text-gray-500" />
-                        <span className="font-medium">
-                          {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.name || `Shop ${selectedUser.shopId}`}
-                        </span>
-                      </div>
-                    </div>
+                    <select
+                      value={String(selectedUser.shopId)}
+                      onChange={(e) => {
+                        const newPrimaryId = e.target.value;
+                        const oldPrimaryId = String(selectedUser.shopId);
+                        setSelectedUser({...selectedUser, shopId: newPrimaryId});
+                        // Move old primary to shopIds if not already there
+                        if (!editedShopIds.includes(oldPrimaryId)) {
+                          setEditedShopIds(prev => [...prev, oldPrimaryId]);
+                        }
+                        // Remove new primary from shopIds
+                        setEditedShopIds(prev => prev.filter(id => id !== newPrimaryId));
+                      }}
+                      className="w-full p-3 bg-purple-50 rounded-lg border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {allShops.map(shop => (
+                        <option key={shop.shopId} value={shop.shopId}>
+                          {shop.name}{shop.locationIdentifier ? ` (${shop.locationIdentifier})` : ''} - ID: {shop.shopId}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">This is the user's main shop for login</p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Additional Location Access
-                    </label>
-                    <div className="space-y-2 max-h-[180px] overflow-y-auto border border-gray-200 rounded-lg p-2">
-                      {allShops
-                        .filter(shop => String(shop.shopId) !== String(selectedUser.shopId))
-                        .map(shop => (
-                          <label
-                            key={shop.shopId}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={editedShopIds.includes(String(shop.shopId))}
-                              onChange={() => toggleShopSelection(String(shop.shopId))}
-                              className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-900 text-sm truncate">{shop.name}</div>
-                              {shop.location && (
-                                <div className="text-xs text-gray-500 truncate">{shop.location}</div>
+                  {userEnterprise && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {userEnterprise.name} Locations
+                      </label>
+                      <div className="space-y-1 border border-gray-200 rounded-lg p-2 max-h-[140px] overflow-y-auto">
+                        {allShops
+                          .filter(shop => shop.isInUserEnterprise && !shop.isUserPrimary)
+                          .map(shop => (
+                            <div
+                              key={shop.shopId}
+                              className={`flex items-center gap-3 p-2 rounded-lg ${editedShopIds.includes(shop.shopId) ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={editedShopIds.includes(shop.shopId)}
+                                onChange={() => toggleShopSelection(shop.shopId)}
+                                className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-gray-900 text-sm truncate">
+                                  {shop.name}
+                                  {shop.locationIdentifier && (
+                                    <span className="ml-1 text-gray-500">({shop.locationIdentifier})</span>
+                                  )}
+                                </div>
+                              </div>
+                              {editedShopIds.includes(shop.shopId) && (
+                                <button
+                                  onClick={(e) => { e.preventDefault(); toggleShopSelection(shop.shopId); }}
+                                  className="text-red-500 hover:text-red-700 p-1"
+                                  title="Remove access"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400">ID: {shop.shopId}</div>
-                          </label>
-                        ))}
-                      {allShops.filter(shop => String(shop.shopId) !== String(selectedUser.shopId)).length === 0 && (
-                        <p className="text-sm text-gray-500 text-center py-4">
-                          No other locations available
-                        </p>
-                      )}
+                          ))}
+                        {allShops.filter(s => s.isInUserEnterprise && !s.isUserPrimary).length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-2">No other enterprise locations</p>
+                        )}
+                      </div>
                     </div>
+                  )}
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowOtherLocations(!showOtherLocations)}
+                      className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 mb-2"
+                    >
+                      {showOtherLocations ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      All Other Locations ({allShops.filter(s => !s.isInUserEnterprise && !s.isUserPrimary).length})
+                    </button>
+                    
+                    {showOtherLocations && (
+                      <div className="border border-gray-200 rounded-lg p-2 space-y-2">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="Search locations..."
+                            value={locationSearch}
+                            onChange={(e) => setLocationSearch(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div className="max-h-[140px] overflow-y-auto space-y-1">
+                          {allShops
+                            .filter(shop => !shop.isInUserEnterprise && !shop.isUserPrimary)
+                            .filter(shop => 
+                              !locationSearch || 
+                              shop.name.toLowerCase().includes(locationSearch.toLowerCase()) ||
+                              shop.shopId.toLowerCase().includes(locationSearch.toLowerCase())
+                            )
+                            .map(shop => (
+                              <div
+                                key={shop.shopId}
+                                className={`flex items-center gap-3 p-2 rounded-lg ${editedShopIds.includes(shop.shopId) ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={editedShopIds.includes(shop.shopId)}
+                                  onChange={() => toggleShopSelection(shop.shopId)}
+                                  className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-gray-900 text-sm truncate">
+                                    {shop.name}
+                                    {shop.locationIdentifier && (
+                                      <span className="ml-1 text-gray-500">({shop.locationIdentifier})</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-xs text-gray-400">ID: {shop.shopId}</div>
+                                {editedShopIds.includes(shop.shopId) && (
+                                  <button
+                                    onClick={(e) => { e.preventDefault(); toggleShopSelection(shop.shopId); }}
+                                    className="text-red-500 hover:text-red-700 p-1"
+                                    title="Remove access"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          {allShops.filter(s => !s.isInUserEnterprise && !s.isUserPrimary).filter(s => 
+                            !locationSearch || s.name.toLowerCase().includes(locationSearch.toLowerCase())
+                          ).length === 0 && (
+                            <p className="text-sm text-gray-500 text-center py-2">
+                              {locationSearch ? 'No locations match your search' : 'No other locations'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {editedShopIds.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Selected Additional Locations ({editedShopIds.length})
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {editedShopIds.map(shopId => {
+                          const shop = allShops.find(s => s.shopId === shopId);
+                          return (
+                            <span
+                              key={shopId}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs"
+                            >
+                              {shop?.name || `Shop ${shopId}`}
+                              <button
+                                onClick={() => toggleShopSelection(shopId)}
+                                className="hover:text-purple-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="pt-2">
                     <div className="text-xs text-gray-500 space-y-1">

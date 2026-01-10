@@ -69,7 +69,8 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Adaptive delays with exponential backoff when approaching limits.
     *   Retry logic for 429 (rate limit) and 5xx errors with jitter.
     *   `sourceWorker` field tracks requests from 'render' vs 'replit' workers.
-    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables sync on specific deployments.
+    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables Protractor sync on specific deployments.
+    *   `DISABLE_TEKMETRIC_SYNC=true` env var disables Tekmetric sync on specific deployments.
     *   **v1.8.0 Enhancements**:
         *   Integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode) displayed on cards.
         *   Drag-and-drop card reordering with localStorage persistence.
@@ -90,6 +91,14 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
 *   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach, utilizing pre-computed `shop_repair_patterns` and enterprise aggregation.
 
+## Work In Progress (Paused)
+*   **Auto Booking Feature** (Tasks 1-4 complete, 5-6 pending):
+    *   Settings API: `app/api/settings/auto-booking/route.ts` - Feature-gated for paid plans + Oil Sticker
+    *   Settings UI: `app/dashboard/settings/auto-booking/page.tsx` - Lead time, holidays, business hours, confirmation mode
+    *   Scheduler: `lib/auto-booking/scheduler.ts` - Finds slots respecting preferences
+    *   Queue UI: `app/dashboard/settings/auto-booking/queue/page.tsx` - Review and confirm bookings
+    *   **Next steps**: Integrate with SMS calendar (Tekmetric/Protractor) for real-time availability, connect to sticker generation
+
 ## Future Ideas (Saved for Later)
 *   **Districts Layer**: Add organizational groupings between enterprise and shops for large organizations. Would enable district managers, regional filtering in job history/analytics, and district-level repair pattern aggregations. Additive approach recommended (keep current enterprise model, add districts on top).
 
@@ -103,6 +112,13 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Add caching: stale-while-revalidate for vehicle/customer lists, cache feature flags
     *   Use Next.js Image component for hero images, preload primary fonts
 *   **Observability**: Add Next.js bundle analyzer, track real-user metrics
+
+## Deployment
+To deploy to Render (QA environment):
+```bash
+git push --force
+```
+This pushes the current `qa` branch to trigger a Render deploy.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas

@@ -12,6 +12,7 @@ import {
   Settings,
   QrCode,
   Activity,
+  CreditCard,
   X
 } from "lucide-react";
 
@@ -53,6 +54,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "Usage & Costs",
       href: "/platform-admin/usage",
       icon: <DollarSign className="w-5 h-5" />
+    },
+    {
+      name: "Billing",
+      href: "/platform-admin/billing",
+      icon: <CreditCard className="w-5 h-5" />
     },
     {
       name: "API Traffic",
