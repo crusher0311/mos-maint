@@ -1,0 +1,694 @@
+~/workspace$ git reset --hard origin/main
+git pull origin main
+HEAD is now at 82250ae Update application version and documentation with new features
+remote: Enumerating objects: 1, done.
+remote: Counting objects: 100% (1/1), done.
+remote: Total 1 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (1/1), 908 bytes | 908.00 KiB/s, done.
+From https://github.com/crusher0311/mos-maint
+ * branch            main       -> FETCH_HEAD
+   82250ae..84fd304  main       -> origin/main
+Updating 82250ae..84fd304
+Fast-forward
+ .replit                                                                              |   60 +-
+ .replit_integration_files/client/src/components/ObjectUploader.tsx                   |  103 ++
+ .replit_integration_files/client/src/hooks/use-upload.ts                             |  199 +++
+ .replit_integration_files/server/replit_integrations/object_storage/index.ts         |   21 +
+ .replit_integration_files/server/replit_integrations/object_storage/objectAcl.ts     |  181 ++
+ .replit_integration_files/server/replit_integrations/object_storage/objectStorage.ts |  300 ++++
+ .replit_integration_files/server/replit_integrations/object_storage/routes.ts        |   86 +
+ DEPLOYMENT.md                                                                        |  187 ++-
+ README.md                                                                            |   83 +-
+ app/LandingPage.tsx                                                                  |  752 +++++----
+ app/admin/billing/BillingSettingsForm.tsx                                            |  510 ++++--
+ app/admin/billing/page.tsx                                                           |   23 +-
+ app/admin/enterprise/users/page.tsx                                                  |    5 +
+ app/api/admin/audit-logs/route.ts                                                    |   35 +
+ app/api/admin/billing/settings/route.ts                                              |   32 +-
+ app/api/admin/billing/sync-stripe/route.ts                                           |   23 +-
+ app/api/admin/extension-analytics/route.ts                                           |   44 +
+ app/api/admin/hovercode-qrs/route.ts                                                 |  219 +++
+ app/api/admin/normalized-stats/route.ts                                              |   78 +
+ app/api/admin/sync-health/route.ts                                                   |  111 ++
+ app/api/analyze/route.ts                                                             |    7 +
+ app/api/auth/invite/route.ts                                                         |    8 +-
+ app/api/auth/setup/route.ts                                                          |  182 +-
+ app/api/billing/config/route.ts                                                      |   32 +
+ app/api/cron/protractor-backfill/route.ts                                            |  303 +++-
+ app/api/cron/protractor-sync/route.ts                                                |   59 +
+ app/api/cron/tekmetric-backfill/route.ts                                             |  526 ++++++
+ app/api/cron/tekmetric-incremental-sync/route.ts                                     |   51 +
+ app/api/cron/tekmetric-sync/route.ts                                                 |   68 +-
+ app/api/dashboard/data-v2/route.ts                                                   |  205 +++
+ app/api/dashboard/data/route.ts                                                      |    7 +-
+ app/api/e2e/token/route.ts                                                           |   52 +
+ app/api/enterprise/users/route.ts                                                    |   12 +-
+ app/api/extension/analytics/push-to-ro/route.ts                                      |   47 +
+ app/api/extension/jobs/search/route.ts                                               |   39 +-
+ app/api/extension/plan/route.ts                                                      |  187 ++-
+ app/api/extension/sticker/route.ts                                                   |  586 +++++++
+ app/api/extension/version/route.ts                                                   |   43 +
+ app/api/health/route.ts                                                              |    5 +
+ app/api/internal/plan-pregenerate/route.ts                                           |  126 ++
+ app/api/jobs/add-to-ro/route.ts                                                      |   27 +-
+ app/api/jobs/autocomplete/route.ts                                                   |  254 +++
+ app/api/jobs/search-normalized/route.ts                                              |  335 ++++
+ app/api/jobs/search/route.ts                                                         |  225 ++-
+ app/api/platform-admin/api-usage/errors/route.ts                                     |   48 +
+ app/api/platform-admin/api-usage/route.ts                                            |   54 +
+ app/api/platform-admin/api-usage/shops/[shopId]/route.ts                             |   46 +
+ app/api/platform-admin/impersonate/route.ts                                          |   12 +-
+ app/api/platform-admin/settings/route.ts                                             |   88 +-
+ app/api/platform-admin/shops/[shopId]/vins/route.ts                                  |   55 +-
+ app/api/platform-admin/shops/route.ts                                                |   94 +-
+ app/api/platform-admin/tekmetric-usage/route.ts                                      |   95 ++
+ app/api/platform-admin/users/[userId]/route.ts                                       |  194 +++
+ app/api/recommended/analyze/route.ts                                                 |   40 +
+ app/api/settings/integration-setup/route.ts                                          |  104 ++
+ app/api/settings/tekmetric/route.ts                                                  |   18 +-
+ app/api/settings/users/[userId]/route.ts                                             |  227 ++-
+ app/api/shop/features/route.ts                                                       |   16 +-
+ app/api/shops/list/route.ts                                                          |   62 +
+ app/api/shops/route.ts                                                               |   25 +
+ app/api/sticker/finalize-logo/route.ts                                               |  196 +++
+ app/api/sticker/generate/route.ts                                                    |  565 +++++++
+ app/api/sticker/logo/[shopId]/[filename]/route.ts                                    |   84 +
+ app/api/sticker/qr/route.ts                                                          |  364 ++++
+ app/api/sticker/redirect/[shopId]/route.ts                                           |   55 +
+ app/api/sticker/settings/route.ts                                                    |  224 +++
+ app/api/sticker/upload-logo/route.ts                                                 |  115 ++
+ app/api/stripe/webhook/route.ts                                                      |   92 +-
+ app/api/tekmetric/apply-canned-job/route.ts                                          |   10 +
+ app/api/trial/view-vin/route.ts                                                      |    6 +-
+ app/api/vehicle-analyzer/route.ts                                                    |    5 +
+ app/api/vehicle/common-failures/route.ts                                             |   86 +
+ app/api/vehicle/driving-stats/route.ts                                               |  111 ++
+ app/api/vehicles/check-closed-orders/route.ts                                        |    9 +-
+ app/dashboard/DashboardClient.tsx                                                    |  711 +++++++-
+ app/dashboard/invite/page.tsx                                                        |   72 +-
+ app/dashboard/layout.tsx                                                             |  114 +-
+ app/dashboard/settings/canned-jobs/page.tsx                                          |   77 +-
+ app/dashboard/settings/integrations/page.tsx                                         |  106 +-
+ app/dashboard/settings/intervals/IntervalsForm.tsx                                   |    2 +-
+ app/dashboard/settings/maintenance/MaintenanceForm.tsx                               |   36 +-
+ app/dashboard/settings/maintenance/page.tsx                                          |   15 +-
+ app/dashboard/settings/stickers/page.tsx                                             |  882 ++++++++++
+ app/dashboard/settings/users/page.tsx                                                |  208 ++-
+ app/dashboard/vehicles/[vin]/page.tsx                                                |    4 +-
+ app/dashboard/vehicles/[vin]/plan/PlanUI.tsx                                         |   89 +-
+ app/dashboard/vehicles/[vin]/plan/page.tsx                                           |    1 +
+ app/layout.tsx                                                                       |    2 +-
+ app/login/page.tsx                                                                   |   18 +-
+ app/page.tsx                                                                         |    2 +
+ app/platform-admin/api-usage/page.tsx                                                |  737 +++++++++
+ app/platform-admin/hovercode/page.tsx                                                |  232 +++
+ app/platform-admin/layout.tsx                                                        |   11 +-
+ app/platform-admin/settings/page.tsx                                                 |  348 +++-
+ app/platform-admin/shops/page.tsx                                                    |  472 +++++-
+ app/platform-admin/users/page.tsx                                                    |  299 +++-
+ app/privacy/page.tsx                                                                 |  219 +++
+ app/setup/SetupWizard.tsx                                                            |  119 +-
+ app/ui-demo/autocomplete/page.tsx                                                    |  303 ++++
+ app/ui-demo/common-failures/page.tsx                                                 |  369 +++++
+ attached_assets/2026-01-09_19-07-18_1768007244981.PNG                                |  Bin 0 -> 187802 bytes
+ attached_assets/2026-01-09_19-09-37_1768007382761.PNG                                |  Bin 0 -> 146296 bytes
+ attached_assets/2026-01-10_12-44-46_1768070696949.PNG                                |  Bin 0 -> 125423 bytes
+ attached_assets/2026-01-10_13-07-09_1768072032996.PNG                                |  Bin 0 -> 237024 bytes
+ attached_assets/Admin-main_1767637336737.zip                                         |  Bin 0 -> 1640284 bytes
+ attached_assets/Alert_-_MOS_-_2026-01-01T23_33Z_1767310569567.eml                    |  457 +++++
+ attached_assets/Andrews_Diesel_1767658274393.png                                     |  Bin 0 -> 35701 bytes
+ attached_assets/Autoflow_Icon_1767305740195.PNG                                      |  Bin 0 -> 5482 bytes
+ attached_assets/Back-End-main_(1)_1767580054083.zip                                  |  Bin 0 -> 308476 bytes
+ attached_assets/CAR_Experts_1767658274393.png                                        |  Bin 0 -> 34510 bytes
+ attached_assets/CarFax_Icon_1767305647962.png                                        |  Bin 0 -> 6691 bytes
+ attached_assets/Data_One_Logo_1767962266784.png                                      |  Bin 0 -> 6874 bytes
+ attached_assets/Front-End-main_(1)_1767580057033.zip                                 |  Bin 0 -> 3834713 bytes
+ attached_assets/Gary_Jackson_Motors_1767658274394.png                                |  Bin 0 -> 40585 bytes
+ attached_assets/Graham_Auto_Service_1767658274394.png                                |  Bin 0 -> 33836 bytes
+ attached_assets/Hovercode_Icon_1767962261011.png                                     |  Bin 0 -> 28391 bytes
+ attached_assets/IMG_0750_1767667640786.jpeg                                          |  Bin 0 -> 3006630 bytes
+ attached_assets/MOS_Print_Button_1767730700598.png                                   |  Bin 0 -> 22259 bytes
+ attached_assets/MOS_Print_Button_1767731591800.png                                   |  Bin 0 -> 22259 bytes
+ attached_assets/OpenAI_Logo_1767962264447.png                                        |  Bin 0 -> 32893 bytes
+ .../Pasted--MOS-Tools-Background-service-worker-loaded-MOS-Restore_1767389774320.txt |  100 ++
+ attached_assets/Pasted--Your-service-is-live--1767361012405_1767361012406.txt        |  151 ++
+ .../Pasted--workspace-Stage-all-changes-git-add-A-Commit-with-vers_1767966589362.txt |   49 +
+ .../Pasted--workspace-Stage-all-changes-git-add-A-Commit-with-vers_1767966718510.txt |   49 +
+ .../Pasted-2026-01-06T22-00-05Z-clientIP-72-198-61-82-requestID-8b_1767737197204.txt |  162 ++
+ .../Pasted-2026-01-09-11-26-58-51-28204162-System-starting-up-user_1767979742048.txt |  164 ++
+ .../Pasted-2026-01-09T14-12-50Z-clientIP-74-220-48-6-requestID-8cb_1767968016634.txt |  300 ++++
+ .../Pasted-2026-01-09T14-18-08Z-clientIP-74-220-48-6-requestID-d29_1767968335552.txt |  300 ++++
+ .../Pasted-2026-01-09T14-43-43Z-clientIP-74-220-48-6-requestID-9c0_1767969851112.txt |  300 ++++
+ .../Pasted-2026-01-09T16-38-16-820957964Z-body-r-n-2026-01-09T16-3_1767976731507.txt |  300 ++++
+ .../Pasted-2026-01-09T16-58-29-56026102Z-2026-01-09T16-58-29-56026_1767977931840.txt |  400 +++++
+ .../Pasted-2026-01-10T18-37-29-679467092Z-Startup-Waiting-for-serv_1768070332230.txt |  300 ++++
+ .../Pasted-2026-01-10T18-39-59-871872649Z-duration-4500ms-2026-01-_1768070466690.txt |  350 ++++
+ .../Pasted-2026-01-10T18-55-57-223078505Z-Protractor-Debug-Headers_1768071375382.txt |  300 ++++
+ .../Pasted-2026-01-10T18-56-47-260051415Z-Cron-Protractor-sync-nor_1768071460311.txt |   52 +
+ .../Pasted-ET-mos-tools-api-extension-plan-shopId-14956-roId-28637_1767361911378.txt |   97 ++
+ .../Pasted-Privacy-Policy-MOS-Tools-Last-updated-January-2026-1-In_1767309529081.txt |  139 ++
+ .../Pasted-Rate-Limiting-Our-API-enforces-rate-limits-to-maintain-_1767320697159.txt |   31 +
+ .../Pasted-background-js-104-MOS-Message-received-MOS-API-REQUEST-_1767732958235.txt |   69 +
+ .../Pasted-background-js-403-MOS-Tools-Background-service-worker-l_1767359424125.txt |   66 +
+ .../Pasted-contentscript-js-25-contentscript-No-benefits-on-init-w_1767381828703.txt |   27 +
+ .../Pasted-fetch-api-admin-hovercode-qrs-then-r-r-json-then-data-c_1767704060706.txt |    5 +
+ attached_assets/Precision_Auto_Service_1767375481301.eml                             | 1317 +++++++++++++++
+ attached_assets/Snag_694b465a_1767301153119.png                                      |  Bin 0 -> 178045 bytes
+ attached_assets/Snag_695249f2_1767301612958.png                                      |  Bin 0 -> 139799 bytes
+ attached_assets/Snag_69551e01_1767301797844.png                                      |  Bin 0 -> 101900 bytes
+ attached_assets/Snag_695f313b_1767302458074.png                                      |  Bin 0 -> 108334 bytes
+ attached_assets/Snag_696572bb_1767302868460.png                                      |  Bin 0 -> 270715 bytes
+ attached_assets/Snag_696d0ab3_1767303365825.png                                      |  Bin 0 -> 179415 bytes
+ attached_assets/Snag_696d13ac_1767303367993.png                                      |  Bin 0 -> 201513 bytes
+ attached_assets/Snag_6979a478_1767304191593.png                                      |  Bin 0 -> 167922 bytes
+ attached_assets/Snag_697abe06_1767304263710.png                                      |  Bin 0 -> 182385 bytes
+ attached_assets/Snag_698df21a_1767305522457.png                                      |  Bin 0 -> 181128 bytes
+ attached_assets/Snag_699bd9fa_1767306433747.png                                      |  Bin 0 -> 267548 bytes
+ attached_assets/Snag_699d70b7_1767306537698.png                                      |  Bin 0 -> 267548 bytes
+ attached_assets/Snag_69b54b19_1767308101032.png                                      |  Bin 0 -> 187384 bytes
+ attached_assets/Snag_69dc4724_1767310656068.png                                      |  Bin 0 -> 366378 bytes
+ attached_assets/Snag_69ed88ce_1767311787074.png                                      |  Bin 0 -> 174831 bytes
+ attached_assets/Snag_69f05d7a_1767311972394.png                                      |  Bin 0 -> 120504 bytes
+ attached_assets/Snag_69f0671e_1767311974762.png                                      |  Bin 0 -> 139812 bytes
+ attached_assets/Snag_69f1aad9_1767312057634.png                                      |  Bin 0 -> 93148 bytes
+ attached_assets/Snag_69f1b614_1767312060366.png                                      |  Bin 0 -> 103883 bytes
+ attached_assets/Snag_69f20d1e_1767312082919.png                                      |  Bin 0 -> 59711 bytes
+ attached_assets/Snag_69f25ff1_1767312103929.png                                      |  Bin 0 -> 65606 bytes
+ attached_assets/Snag_69f3f3a0_1767312207188.png                                      |  Bin 0 -> 188429 bytes
+ attached_assets/Snag_6a316de8_1767316236358.png                                      |  Bin 0 -> 50829 bytes
+ attached_assets/Snag_6a381caa_1767316674181.png                                      |  Bin 0 -> 81718 bytes
+ attached_assets/Snag_6a478984_1767317685085.png                                      |  Bin 0 -> 82310 bytes
+ attached_assets/Snag_6a5ece2e_1767319210154.png                                      |  Bin 0 -> 207660 bytes
+ attached_assets/Snag_6a5f687a_1767319249577.png                                      |  Bin 0 -> 44449 bytes
+ attached_assets/Snag_6a72c5ff_1767320518657.png                                      |  Bin 0 -> 57891 bytes
+ attached_assets/Snag_6a73efc9_1767320594925.png                                      |  Bin 0 -> 42733 bytes
+ attached_assets/Snag_6a770c5b_1767320798798.png                                      |  Bin 0 -> 42733 bytes
+ attached_assets/Snag_6cc788b0_1767359627841.png                                      |  Bin 0 -> 201922 bytes
+ attached_assets/Snag_6cd005a9_1767360184154.png                                      |  Bin 0 -> 212098 bytes
+ attached_assets/Snag_6cd0c252_1767360232575.png                                      |  Bin 0 -> 191914 bytes
+ attached_assets/Snag_6cd30df8_1767360383140.png                                      |  Bin 0 -> 168242 bytes
+ attached_assets/Snag_6cd334aa_1767360392930.png                                      |  Bin 0 -> 169108 bytes
+ attached_assets/Snag_6ce049c9_1767361250272.png                                      |  Bin 0 -> 212778 bytes
+ attached_assets/Snag_6ce051a8_1767361252229.png                                      |  Bin 0 -> 229910 bytes
+ attached_assets/Snag_6d0ce641_1767364173978.png                                      |  Bin 0 -> 212250 bytes
+ attached_assets/Snag_6d0d9dab_1767364220805.png                                      |  Bin 0 -> 89364 bytes
+ attached_assets/Snag_6d279261_1767365921840.png                                      |  Bin 0 -> 219529 bytes
+ attached_assets/Snag_6db3fb34_1767375123859.png                                      |  Bin 0 -> 115822 bytes
+ attached_assets/Snag_6dc90eb6_1767376505070.png                                      |  Bin 0 -> 159482 bytes
+ attached_assets/Snag_6ddd3529_1767377825678.png                                      |  Bin 0 -> 113836 bytes
+ attached_assets/Snag_6de10730_1767378076266.png                                      |  Bin 0 -> 115386 bytes
+ attached_assets/Snag_6de32695_1767378214935.png                                      |  Bin 0 -> 115386 bytes
+ attached_assets/Snag_6e09ab1e_1767380739811.png                                      |  Bin 0 -> 96137 bytes
+ attached_assets/Snag_6e11f60b_1767381283093.png                                      |  Bin 0 -> 68187 bytes
+ attached_assets/Snag_6e161d46_1767381555163.png                                      |  Bin 0 -> 185852 bytes
+ attached_assets/Snag_6e1a3eb6_1767381825960.png                                      |  Bin 0 -> 150733 bytes
+ attached_assets/Snag_6e23f102_1767382461237.png                                      |  Bin 0 -> 61748 bytes
+ attached_assets/Snag_6e23f901_1767382463266.png                                      |  Bin 0 -> 146814 bytes
+ attached_assets/Snag_6e2f82bd_1767383219407.png                                      |  Bin 0 -> 198424 bytes
+ attached_assets/Snag_725835e9_1767452995731.png                                      |  Bin 0 -> 225376 bytes
+ attached_assets/Snag_7c114187_1767616118894.png                                      |  Bin 0 -> 194543 bytes
+ attached_assets/Snag_7c114a32_1767616121109.png                                      |  Bin 0 -> 223313 bytes
+ attached_assets/Snag_7c4350a7_1767619399951.png                                      |  Bin 0 -> 194031 bytes
+ attached_assets/Snag_7e5f9dcb_1767654808779.png                                      |  Bin 0 -> 41706 bytes
+ attached_assets/Snag_7e7001a7_1767655883046.png                                      |  Bin 0 -> 15812 bytes
+ attached_assets/Snag_7ea849ad_1767659571724.png                                      |  Bin 0 -> 243797 bytes
+ attached_assets/Snag_7eac6d5e_1767659842678.png                                      |  Bin 0 -> 126152 bytes
+ attached_assets/Snag_7eaeedb0_1767660007129.png                                      |  Bin 0 -> 18801 bytes
+ attached_assets/Snag_7eb39a77_1767660313071.png                                      |  Bin 0 -> 14773 bytes
+ attached_assets/Snag_7eb43530_1767660352681.png                                      |  Bin 0 -> 23534 bytes
+ attached_assets/Snag_7ece382f_1767662057794.png                                      |  Bin 0 -> 29057 bytes
+ attached_assets/Snag_7ed150aa_1767662260255.png                                      |  Bin 0 -> 28172 bytes
+ attached_assets/Snag_7ede7366_1767663121187.png                                      |  Bin 0 -> 196179 bytes
+ attached_assets/Snag_7edf50b6_1767663178035.png                                      |  Bin 0 -> 71608 bytes
+ attached_assets/Snag_7ee37438_1767663449573.png                                      |  Bin 0 -> 37657 bytes
+ attached_assets/Snag_7ef121fd_1767664345633.png                                      |  Bin 0 -> 4549 bytes
+ attached_assets/Snag_7ef36863_1767664494808.png                                      |  Bin 0 -> 149535 bytes
+ attached_assets/Snag_7efcfe4e_1767665123083.png                                      |  Bin 0 -> 297661 bytes
+ attached_assets/Snag_7f0c0431_1767666107268.png                                      |  Bin 0 -> 125744 bytes
+ attached_assets/Snag_7f0d7c6a_1767666203659.png                                      |  Bin 0 -> 52308 bytes
+ attached_assets/Snag_7f0db915_1767666219169.png                                      |  Bin 0 -> 206523 bytes
+ attached_assets/Snag_7f0e9d4b_1767666277840.png                                      |  Bin 0 -> 341477 bytes
+ attached_assets/Snag_7f17163d_1767666832885.png                                      |  Bin 0 -> 140043 bytes
+ attached_assets/Snag_7f1b2c23_1767667100591.png                                      |  Bin 0 -> 399143 bytes
+ attached_assets/Snag_7f1caa56_1767667198643.png                                      |  Bin 0 -> 31957 bytes
+ attached_assets/Snag_7f2ca18f_1767668244637.png                                      |  Bin 0 -> 295502 bytes
+ attached_assets/Snag_814ccadb_1767703906715.png                                      |  Bin 0 -> 119992 bytes
+ attached_assets/Snag_81672c17_1767705635804.png                                      |  Bin 0 -> 255825 bytes
+ attached_assets/Snag_8167356e_1767705638389.png                                      |  Bin 0 -> 162228 bytes
+ attached_assets/Snag_816e04d6_1767706084538.png                                      |  Bin 0 -> 31685 bytes
+ attached_assets/Snag_816e0ddf_1767706086818.png                                      |  Bin 0 -> 198322 bytes
+ attached_assets/Snag_81732b90_1767706422035.png                                      |  Bin 0 -> 148222 bytes
+ attached_assets/Snag_8174f68c_1767706539762.png                                      |  Bin 0 -> 140917 bytes
+ attached_assets/Snag_8176826c_1767706640972.png                                      |  Bin 0 -> 157899 bytes
+ attached_assets/Snag_817691fc_1767706645009.png                                      |  Bin 0 -> 276270 bytes
+ attached_assets/Snag_8178ec09_1767706798891.png                                      |  Bin 0 -> 197090 bytes
+ attached_assets/Snag_81803005_1767707275143.png                                      |  Bin 0 -> 167525 bytes
+ attached_assets/Snag_8185672a_1767707616899.png                                      |  Bin 0 -> 264047 bytes
+ attached_assets/Snag_81857013_1767707619221.png                                      |  Bin 0 -> 38563 bytes
+ attached_assets/Snag_818f59bc_1767708268790.png                                      |  Bin 0 -> 263496 bytes
+ attached_assets/Snag_8198fb5f_1767708900048.png                                      |  Bin 0 -> 139665 bytes
+ attached_assets/Snag_81990ff1_1767708905367.png                                      |  Bin 0 -> 151701 bytes
+ attached_assets/Snag_81d29cda_1767712676852.png                                      |  Bin 0 -> 34366 bytes
+ attached_assets/Snag_825822ad_1767721427399.png                                      |  Bin 0 -> 119166 bytes
+ attached_assets/Snag_82aacebd_1767726845414.png                                      |  Bin 0 -> 38080 bytes
+ attached_assets/Snag_82ada00d_1767727030060.png                                      |  Bin 0 -> 70202 bytes
+ attached_assets/Snag_82b25d2f_1767727340848.png                                      |  Bin 0 -> 20084 bytes
+ attached_assets/Snag_82b265ab_1767727342902.png                                      |  Bin 0 -> 141155 bytes
+ attached_assets/Snag_82b34f40_1767727402662.png                                      |  Bin 0 -> 44641 bytes
+ attached_assets/Snag_82d397a8_1767729519048.png                                      |  Bin 0 -> 304514 bytes
+ attached_assets/Snag_82d9f80a_1767729936759.png                                      |  Bin 0 -> 306999 bytes
+ attached_assets/Snag_82da73e1_1767729967970.png                                      |  Bin 0 -> 278799 bytes
+ attached_assets/Snag_82da7cda_1767729970488.png                                      |  Bin 0 -> 405292 bytes
+ attached_assets/Snag_82eef5f1_1767731312415.png                                      |  Bin 0 -> 305319 bytes
+ attached_assets/Snag_82ef01f7_1767731315360.png                                      |  Bin 0 -> 251843 bytes
+ attached_assets/Snag_82f40143_1767731642723.png                                      |  Bin 0 -> 313177 bytes
+ attached_assets/Snag_82f8ccae_1767731957050.png                                      |  Bin 0 -> 363797 bytes
+ attached_assets/Snag_82f8d7ca_1767731959886.png                                      |  Bin 0 -> 295658 bytes
+ attached_assets/Snag_82fd9385_1767732269831.png                                      |  Bin 0 -> 16669 bytes
+ attached_assets/Snag_8300bab5_1767732476534.png                                      |  Bin 0 -> 16669 bytes
+ attached_assets/Snag_83067cb5_1767732854070.png                                      |  Bin 0 -> 23424 bytes
+ attached_assets/Snag_8325be4b_1767734902791.png                                      |  Bin 0 -> 70760 bytes
+ attached_assets/Snag_8329193e_1767735122440.png                                      |  Bin 0 -> 212876 bytes
+ attached_assets/Snag_83292208_1767735124186.png                                      |  Bin 0 -> 206234 bytes
+ attached_assets/Snag_8335ad08_1767735947050.png                                      |  Bin 0 -> 812010 bytes
+ attached_assets/Snag_834df7a8_1767737538560.png                                      |  Bin 0 -> 27401 bytes
+ attached_assets/Snag_8352def8_1767737859647.png                                      |  Bin 0 -> 119353 bytes
+ attached_assets/Snag_8354cc41_1767737986176.png                                      |  Bin 0 -> 93667 bytes
+ attached_assets/Snag_8354d52a_1767737988322.png                                      |  Bin 0 -> 97268 bytes
+ attached_assets/Snag_8ceefe2b_1767899087330.png                                      |  Bin 0 -> 59256 bytes
+ attached_assets/Snag_8cf1a0aa_1767899260178.png                                      |  Bin 0 -> 60372 bytes
+ attached_assets/Snag_8d5cd9b4_1767906288987.png                                      |  Bin 0 -> 103616 bytes
+ attached_assets/Snag_8d6156ef_1767906581298.png                                      |  Bin 0 -> 103616 bytes
+ attached_assets/Snag_8d6bb02a_1767907259282.png                                      |  Bin 0 -> 95615 bytes
+ attached_assets/Snag_90a42ed8_1767961293517.png                                      |  Bin 0 -> 99341 bytes
+ attached_assets/Snag_90aca77b_1767961848726.png                                      |  Bin 0 -> 89752 bytes
+ attached_assets/Snag_90ae1fd3_1767961945188.png                                      |  Bin 0 -> 165789 bytes
+ attached_assets/Snag_90b2deab_1767962256302.png                                      |  Bin 0 -> 13954 bytes
+ attached_assets/Snag_90c9c509_1767963757226.png                                      |  Bin 0 -> 26720 bytes
+ attached_assets/Snag_91186c0b_1767968911519.png                                      |  Bin 0 -> 103563 bytes
+ attached_assets/Snag_911b111b_1767969084871.png                                      |  Bin 0 -> 8610 bytes
+ attached_assets/Snag_91242331_1767969679415.png                                      |  Bin 0 -> 78496 bytes
+ attached_assets/Snag_912531b3_1767969748422.png                                      |  Bin 0 -> 122849 bytes
+ attached_assets/Snag_91290c07_1767970000912.png                                      |  Bin 0 -> 159780 bytes
+ attached_assets/Snag_9138817c_1767971014482.png                                      |  Bin 0 -> 98908 bytes
+ attached_assets/appointment_1767655870101.png                                        |  Bin 0 -> 12950 bytes
+ attached_assets/hovercode_(10)_1767654461308.png                                     |  Bin 0 -> 45490 bytes
+ attached_assets/hovercode_(10)_1767656190064.png                                     |  Bin 0 -> 45490 bytes
+ attached_assets/image_1767657112949.png                                              |  Bin 0 -> 43973 bytes
+ attached_assets/image_1767807146316.png                                              |  Bin 0 -> 74506 bytes
+ attached_assets/image_1767919767351.png                                              |  Bin 0 -> 256589 bytes
+ attached_assets/image_1767920421522.png                                              |  Bin 0 -> 287481 bytes
+ attached_assets/image_1767920944225.png                                              |  Bin 0 -> 273607 bytes
+ attached_assets/image_1767922335867.png                                              |  Bin 0 -> 308085 bytes
+ attached_assets/mos-print-0.1.4-test-v1_(1)_1767637313053.zip                        |  Bin 0 -> 521707 bytes
+ attached_assets/oil-sticker-2x2_(1)_1767659278787.png                                |  Bin 0 -> 15204 bytes
+ attached_assets/oil-sticker-2x2_(2)_1767659824607.png                                |  Bin 0 -> 16940 bytes
+ components/CommonFailuresPanel.tsx                                                   |  272 +++
+ components/JobLookup.tsx                                                             |   76 +-
+ components/stickers/QuickStickerModal.tsx                                            |  402 +++++
+ components/ui/AddToROWithHistory.tsx                                                 |   71 +-
+ components/ui/AppLayout.tsx                                                          |   83 +-
+ components/ui/PlatformAdminLayoutClient.tsx                                          |   80 +
+ components/ui/PlatformAdminSidebar.tsx                                               |   55 +-
+ components/ui/Sidebar.tsx                                                            |  220 ++-
+ lib/ai.ts                                                                            |   37 +-
+ lib/api-usage-tracker.ts                                                             |  772 +++++++++
+ lib/audit-log.ts                                                                     |   67 +
+ lib/auth.ts                                                                          |   21 +-
+ lib/common-failures.ts                                                               |  443 +++++
+ lib/email.ts                                                                         |  165 +-
+ lib/extension-analytics.ts                                                           |   90 +
+ lib/featureResolver.ts                                                               |   13 +-
+ lib/hovercode.ts                                                                     |  140 ++
+ lib/integrations/autoflow.ts                                                         |   21 +-
+ lib/integrations/carfax.ts                                                           |    5 +
+ lib/integrations/dataone-api.ts                                                      |    7 +
+ lib/integrations/protractor.ts                                                       |  333 +++-
+ lib/job-index.ts                                                                     |   65 +-
+ lib/job-scoring.ts                                                                   |   34 +-
+ lib/mongo.ts                                                                         |   16 +-
+ lib/normalized-adapters.ts                                                           | 1204 ++++++++++++++
+ lib/normalized-cache.ts                                                              |  125 ++
+ lib/normalized-ingestion.ts                                                          | 1330 +++++++++++++++
+ lib/normalized-schema.ts                                                             | 1501 +++++++++++++++++
+ lib/object-id-utils.ts                                                               |   38 +
+ lib/plan-cache.ts                                                                    |   99 +-
+ lib/repair-patterns.ts                                                               |  361 ++++
+ lib/sticker-defaults.ts                                                              |   84 +
+ lib/sticker-utils.ts                                                                 |   15 +
+ lib/stripe.ts                                                                        |  136 +-
+ lib/sync-metrics.ts                                                                  |  134 ++
+ lib/tekmetric-auth.ts                                                                |  168 ++
+ lib/tekmetric-incremental-sync.ts                                                    |  435 +++++
+ lib/tekmetric-job-index.ts                                                           |   21 +-
+ lib/tekmetric-sync.ts                                                                |  136 ++
+ lib/tekmetric-usage-tracker.ts                                                       |  154 ++
+ lib/tekmetric.ts                                                                     |   81 +-
+ lib/test-auth.ts                                                                     |   66 +
+ middleware.ts                                                                        |   30 +-
+ mos-tools-extension/adapters/tekmetric-content.js                                    |  337 +++-
+ mos-tools-extension/background.js                                                    |  119 ++
+ mos-tools-extension/icons/mos-print-button.png                                       |  Bin 0 -> 22259 bytes
+ mos-tools-extension/manifest.json                                                    |   10 +-
+ mos-tools-extension/sidepanel.css                                                    |  187 +++
+ mos-tools-extension/sidepanel.html                                                   |   78 +-
+ mos-tools-extension/sidepanel.js                                                     |  455 ++++-
+ next.config.mjs                                                                      |    3 +-
+ package-lock.json                                                                    | 3484 ++++++++++++++++++++++++++++++++++++++-
+ package.json                                                                         |   20 +-
+ public/icons/autoflow.png                                                            |  Bin 0 -> 5482 bytes
+ public/icons/carfax.png                                                              |  Bin 0 -> 6691 bytes
+ public/logos/autoflow.png                                                            |  Bin 0 -> 5482 bytes
+ public/logos/carfax.png                                                              |  Bin 0 -> 6691 bytes
+ public/logos/dataone.png                                                             |  Bin 0 -> 6874 bytes
+ public/logos/hovercode.png                                                           |  Bin 0 -> 28391 bytes
+ public/logos/openai.png                                                              |  Bin 0 -> 32893 bytes
+ public/logos/protractor.png                                                          |  Bin 0 -> 2594 bytes
+ public/logos/tekmetric.png                                                           |  Bin 0 -> 2010 bytes
+ public/screenshots/carfax-history.png                                                |  Bin 0 -> 103883 bytes
+ public/screenshots/chrome-ext-job.png                                                |  Bin 0 -> 65606 bytes
+ public/screenshots/chrome-ext-plan.png                                               |  Bin 0 -> 59711 bytes
+ public/screenshots/dashboard.png                                                     |  Bin 0 -> 174831 bytes
+ public/screenshots/job-history.png                                                   |  Bin 0 -> 139812 bytes
+ public/screenshots/maintenance-plan.png                                              |  Bin 0 -> 120504 bytes
+ public/screenshots/oem-data.png                                                      |  Bin 0 -> 93148 bytes
+ public/sticker-qr-logo.png                                                           |  Bin 0 -> 12950 bytes
+ public/sticker-qr-logo.svg                                                           |   19 +
+ replit.md                                                                            |  132 +-
+ scripts/add-indexes.ts                                                               |   18 +
+ scripts/backfill-repair-patterns.ts                                                  |  144 ++
+ scripts/check-field-extraction.ts                                                    |   87 +
+ scripts/create-job-index-indexes.ts                                                  |   60 +
+ scripts/ensure-indexes.ts                                                            |  135 ++
+ scripts/fix-duplicate-source-ids.ts                                                  |   81 +
+ scripts/protractor-backfill-worker.ts                                                |  113 +-
+ scripts/protractor-sync-standalone.ts                                                |  335 ++++
+ scripts/protractor-sync-worker.ts                                                    |  145 +-
+ scripts/repair-patterns-from-jobindex.ts                                             |  100 ++
+ scripts/setup-normalized-indexes.ts                                                  |  130 ++
+ scripts/setup-repair-patterns-indexes.ts                                             |   22 +
+ scripts/start-production.js                                                          |   40 +
+ scripts/start-with-workers.js                                                        |  123 ++
+ scripts/tekmetric-backfill-worker.ts                                                 |  101 ++
+ scripts/tekmetric-sync-worker.ts                                                     |  138 +-
+ scripts/verify-normalized-data.ts                                                    |  258 +++
+ tests/e2e/example.test.ts                                                            |  131 ++
+ tests/e2e/full-suite.test.ts                                                         |  410 +++++
+ tests/e2e/test-utils.ts                                                              |  100 ++
+ 385 files changed, 35913 insertions(+), 1679 deletions(-)
+ create mode 100644 .replit_integration_files/client/src/components/ObjectUploader.tsx
+ create mode 100644 .replit_integration_files/client/src/hooks/use-upload.ts
+ create mode 100644 .replit_integration_files/server/replit_integrations/object_storage/index.ts
+ create mode 100644 .replit_integration_files/server/replit_integrations/object_storage/objectAcl.ts
+ create mode 100644 .replit_integration_files/server/replit_integrations/object_storage/objectStorage.ts
+ create mode 100644 .replit_integration_files/server/replit_integrations/object_storage/routes.ts
+ create mode 100644 app/api/admin/audit-logs/route.ts
+ create mode 100644 app/api/admin/extension-analytics/route.ts
+ create mode 100644 app/api/admin/hovercode-qrs/route.ts
+ create mode 100644 app/api/admin/normalized-stats/route.ts
+ create mode 100644 app/api/admin/sync-health/route.ts
+ create mode 100644 app/api/billing/config/route.ts
+ create mode 100644 app/api/cron/tekmetric-backfill/route.ts
+ create mode 100644 app/api/cron/tekmetric-incremental-sync/route.ts
+ create mode 100644 app/api/dashboard/data-v2/route.ts
+ create mode 100644 app/api/e2e/token/route.ts
+ create mode 100644 app/api/extension/analytics/push-to-ro/route.ts
+ create mode 100644 app/api/extension/sticker/route.ts
+ create mode 100644 app/api/extension/version/route.ts
+ create mode 100644 app/api/health/route.ts
+ create mode 100644 app/api/internal/plan-pregenerate/route.ts
+ create mode 100644 app/api/jobs/autocomplete/route.ts
+ create mode 100644 app/api/jobs/search-normalized/route.ts
+ create mode 100644 app/api/platform-admin/api-usage/errors/route.ts
+ create mode 100644 app/api/platform-admin/api-usage/route.ts
+ create mode 100644 app/api/platform-admin/api-usage/shops/[shopId]/route.ts
+ create mode 100644 app/api/platform-admin/tekmetric-usage/route.ts
+ create mode 100644 app/api/platform-admin/users/[userId]/route.ts
+ create mode 100644 app/api/settings/integration-setup/route.ts
+ create mode 100644 app/api/shops/list/route.ts
+ create mode 100644 app/api/sticker/finalize-logo/route.ts
+ create mode 100644 app/api/sticker/generate/route.ts
+ create mode 100644 app/api/sticker/logo/[shopId]/[filename]/route.ts
+ create mode 100644 app/api/sticker/qr/route.ts
+ create mode 100644 app/api/sticker/redirect/[shopId]/route.ts
+ create mode 100644 app/api/sticker/settings/route.ts
+ create mode 100644 app/api/sticker/upload-logo/route.ts
+ create mode 100644 app/api/vehicle/common-failures/route.ts
+ create mode 100644 app/api/vehicle/driving-stats/route.ts
+ create mode 100644 app/dashboard/settings/stickers/page.tsx
+ create mode 100644 app/platform-admin/api-usage/page.tsx
+ create mode 100644 app/platform-admin/hovercode/page.tsx
+ create mode 100644 app/privacy/page.tsx
+ create mode 100644 app/ui-demo/autocomplete/page.tsx
+ create mode 100644 app/ui-demo/common-failures/page.tsx
+ create mode 100644 attached_assets/2026-01-09_19-07-18_1768007244981.PNG
+ create mode 100644 attached_assets/2026-01-09_19-09-37_1768007382761.PNG
+ create mode 100644 attached_assets/2026-01-10_12-44-46_1768070696949.PNG
+ create mode 100644 attached_assets/2026-01-10_13-07-09_1768072032996.PNG
+ create mode 100644 attached_assets/Admin-main_1767637336737.zip
+ create mode 100644 attached_assets/Alert_-_MOS_-_2026-01-01T23_33Z_1767310569567.eml
+ create mode 100644 attached_assets/Andrews_Diesel_1767658274393.png
+ create mode 100644 attached_assets/Autoflow_Icon_1767305740195.PNG
+ create mode 100644 attached_assets/Back-End-main_(1)_1767580054083.zip
+ create mode 100644 attached_assets/CAR_Experts_1767658274393.png
+ create mode 100644 attached_assets/CarFax_Icon_1767305647962.png
+ create mode 100644 attached_assets/Data_One_Logo_1767962266784.png
+ create mode 100644 attached_assets/Front-End-main_(1)_1767580057033.zip
+ create mode 100644 attached_assets/Gary_Jackson_Motors_1767658274394.png
+ create mode 100644 attached_assets/Graham_Auto_Service_1767658274394.png
+ create mode 100644 attached_assets/Hovercode_Icon_1767962261011.png
+ create mode 100644 attached_assets/IMG_0750_1767667640786.jpeg
+ create mode 100644 attached_assets/MOS_Print_Button_1767730700598.png
+ create mode 100644 attached_assets/MOS_Print_Button_1767731591800.png
+ create mode 100644 attached_assets/OpenAI_Logo_1767962264447.png
+ create mode 100644 attached_assets/Pasted--MOS-Tools-Background-service-worker-loaded-MOS-Restore_1767389774320.txt
+ create mode 100644 attached_assets/Pasted--Your-service-is-live--1767361012405_1767361012406.txt
+ create mode 100644 attached_assets/Pasted--workspace-Stage-all-changes-git-add-A-Commit-with-vers_1767966589362.txt
+ create mode 100644 attached_assets/Pasted--workspace-Stage-all-changes-git-add-A-Commit-with-vers_1767966718510.txt
+ create mode 100644 attached_assets/Pasted-2026-01-06T22-00-05Z-clientIP-72-198-61-82-requestID-8b_1767737197204.txt
+ create mode 100644 attached_assets/Pasted-2026-01-09-11-26-58-51-28204162-System-starting-up-user_1767979742048.txt
+ create mode 100644 attached_assets/Pasted-2026-01-09T14-12-50Z-clientIP-74-220-48-6-requestID-8cb_1767968016634.txt
+ create mode 100644 attached_assets/Pasted-2026-01-09T14-18-08Z-clientIP-74-220-48-6-requestID-d29_1767968335552.txt
+ create mode 100644 attached_assets/Pasted-2026-01-09T14-43-43Z-clientIP-74-220-48-6-requestID-9c0_1767969851112.txt
+ create mode 100644 attached_assets/Pasted-2026-01-09T16-38-16-820957964Z-body-r-n-2026-01-09T16-3_1767976731507.txt
+ create mode 100644 attached_assets/Pasted-2026-01-09T16-58-29-56026102Z-2026-01-09T16-58-29-56026_1767977931840.txt
+ create mode 100644 attached_assets/Pasted-2026-01-10T18-37-29-679467092Z-Startup-Waiting-for-serv_1768070332230.txt
+ create mode 100644 attached_assets/Pasted-2026-01-10T18-39-59-871872649Z-duration-4500ms-2026-01-_1768070466690.txt
+ create mode 100644 attached_assets/Pasted-2026-01-10T18-55-57-223078505Z-Protractor-Debug-Headers_1768071375382.txt
+ create mode 100644 attached_assets/Pasted-2026-01-10T18-56-47-260051415Z-Cron-Protractor-sync-nor_1768071460311.txt
+ create mode 100644 attached_assets/Pasted-ET-mos-tools-api-extension-plan-shopId-14956-roId-28637_1767361911378.txt
+ create mode 100644 attached_assets/Pasted-Privacy-Policy-MOS-Tools-Last-updated-January-2026-1-In_1767309529081.txt
+ create mode 100644 attached_assets/Pasted-Rate-Limiting-Our-API-enforces-rate-limits-to-maintain-_1767320697159.txt
+ create mode 100644 attached_assets/Pasted-background-js-104-MOS-Message-received-MOS-API-REQUEST-_1767732958235.txt
+ create mode 100644 attached_assets/Pasted-background-js-403-MOS-Tools-Background-service-worker-l_1767359424125.txt
+ create mode 100644 attached_assets/Pasted-contentscript-js-25-contentscript-No-benefits-on-init-w_1767381828703.txt
+ create mode 100644 attached_assets/Pasted-fetch-api-admin-hovercode-qrs-then-r-r-json-then-data-c_1767704060706.txt
+ create mode 100644 attached_assets/Precision_Auto_Service_1767375481301.eml
+ create mode 100644 attached_assets/Snag_694b465a_1767301153119.png
+ create mode 100644 attached_assets/Snag_695249f2_1767301612958.png
+ create mode 100644 attached_assets/Snag_69551e01_1767301797844.png
+ create mode 100644 attached_assets/Snag_695f313b_1767302458074.png
+ create mode 100644 attached_assets/Snag_696572bb_1767302868460.png
+ create mode 100644 attached_assets/Snag_696d0ab3_1767303365825.png
+ create mode 100644 attached_assets/Snag_696d13ac_1767303367993.png
+ create mode 100644 attached_assets/Snag_6979a478_1767304191593.png
+ create mode 100644 attached_assets/Snag_697abe06_1767304263710.png
+ create mode 100644 attached_assets/Snag_698df21a_1767305522457.png
+ create mode 100644 attached_assets/Snag_699bd9fa_1767306433747.png
+ create mode 100644 attached_assets/Snag_699d70b7_1767306537698.png
+ create mode 100644 attached_assets/Snag_69b54b19_1767308101032.png
+ create mode 100644 attached_assets/Snag_69dc4724_1767310656068.png
+ create mode 100644 attached_assets/Snag_69ed88ce_1767311787074.png
+ create mode 100644 attached_assets/Snag_69f05d7a_1767311972394.png
+ create mode 100644 attached_assets/Snag_69f0671e_1767311974762.png
+ create mode 100644 attached_assets/Snag_69f1aad9_1767312057634.png
+ create mode 100644 attached_assets/Snag_69f1b614_1767312060366.png
+ create mode 100644 attached_assets/Snag_69f20d1e_1767312082919.png
+ create mode 100644 attached_assets/Snag_69f25ff1_1767312103929.png
+ create mode 100644 attached_assets/Snag_69f3f3a0_1767312207188.png
+ create mode 100644 attached_assets/Snag_6a316de8_1767316236358.png
+ create mode 100644 attached_assets/Snag_6a381caa_1767316674181.png
+ create mode 100644 attached_assets/Snag_6a478984_1767317685085.png
+ create mode 100644 attached_assets/Snag_6a5ece2e_1767319210154.png
+ create mode 100644 attached_assets/Snag_6a5f687a_1767319249577.png
+ create mode 100644 attached_assets/Snag_6a72c5ff_1767320518657.png
+ create mode 100644 attached_assets/Snag_6a73efc9_1767320594925.png
+ create mode 100644 attached_assets/Snag_6a770c5b_1767320798798.png
+ create mode 100644 attached_assets/Snag_6cc788b0_1767359627841.png
+ create mode 100644 attached_assets/Snag_6cd005a9_1767360184154.png
+ create mode 100644 attached_assets/Snag_6cd0c252_1767360232575.png
+ create mode 100644 attached_assets/Snag_6cd30df8_1767360383140.png
+ create mode 100644 attached_assets/Snag_6cd334aa_1767360392930.png
+ create mode 100644 attached_assets/Snag_6ce049c9_1767361250272.png
+ create mode 100644 attached_assets/Snag_6ce051a8_1767361252229.png
+ create mode 100644 attached_assets/Snag_6d0ce641_1767364173978.png
+ create mode 100644 attached_assets/Snag_6d0d9dab_1767364220805.png
+ create mode 100644 attached_assets/Snag_6d279261_1767365921840.png
+ create mode 100644 attached_assets/Snag_6db3fb34_1767375123859.png
+ create mode 100644 attached_assets/Snag_6dc90eb6_1767376505070.png
+ create mode 100644 attached_assets/Snag_6ddd3529_1767377825678.png
+ create mode 100644 attached_assets/Snag_6de10730_1767378076266.png
+ create mode 100644 attached_assets/Snag_6de32695_1767378214935.png
+ create mode 100644 attached_assets/Snag_6e09ab1e_1767380739811.png
+ create mode 100644 attached_assets/Snag_6e11f60b_1767381283093.png
+ create mode 100644 attached_assets/Snag_6e161d46_1767381555163.png
+ create mode 100644 attached_assets/Snag_6e1a3eb6_1767381825960.png
+ create mode 100644 attached_assets/Snag_6e23f102_1767382461237.png
+ create mode 100644 attached_assets/Snag_6e23f901_1767382463266.png
+ create mode 100644 attached_assets/Snag_6e2f82bd_1767383219407.png
+ create mode 100644 attached_assets/Snag_725835e9_1767452995731.png
+ create mode 100644 attached_assets/Snag_7c114187_1767616118894.png
+ create mode 100644 attached_assets/Snag_7c114a32_1767616121109.png
+ create mode 100644 attached_assets/Snag_7c4350a7_1767619399951.png
+ create mode 100644 attached_assets/Snag_7e5f9dcb_1767654808779.png
+ create mode 100644 attached_assets/Snag_7e7001a7_1767655883046.png
+ create mode 100644 attached_assets/Snag_7ea849ad_1767659571724.png
+ create mode 100644 attached_assets/Snag_7eac6d5e_1767659842678.png
+ create mode 100644 attached_assets/Snag_7eaeedb0_1767660007129.png
+ create mode 100644 attached_assets/Snag_7eb39a77_1767660313071.png
+ create mode 100644 attached_assets/Snag_7eb43530_1767660352681.png
+ create mode 100644 attached_assets/Snag_7ece382f_1767662057794.png
+ create mode 100644 attached_assets/Snag_7ed150aa_1767662260255.png
+ create mode 100644 attached_assets/Snag_7ede7366_1767663121187.png
+ create mode 100644 attached_assets/Snag_7edf50b6_1767663178035.png
+ create mode 100644 attached_assets/Snag_7ee37438_1767663449573.png
+ create mode 100644 attached_assets/Snag_7ef121fd_1767664345633.png
+ create mode 100644 attached_assets/Snag_7ef36863_1767664494808.png
+ create mode 100644 attached_assets/Snag_7efcfe4e_1767665123083.png
+ create mode 100644 attached_assets/Snag_7f0c0431_1767666107268.png
+ create mode 100644 attached_assets/Snag_7f0d7c6a_1767666203659.png
+ create mode 100644 attached_assets/Snag_7f0db915_1767666219169.png
+ create mode 100644 attached_assets/Snag_7f0e9d4b_1767666277840.png
+ create mode 100644 attached_assets/Snag_7f17163d_1767666832885.png
+ create mode 100644 attached_assets/Snag_7f1b2c23_1767667100591.png
+ create mode 100644 attached_assets/Snag_7f1caa56_1767667198643.png
+ create mode 100644 attached_assets/Snag_7f2ca18f_1767668244637.png
+ create mode 100644 attached_assets/Snag_814ccadb_1767703906715.png
+ create mode 100644 attached_assets/Snag_81672c17_1767705635804.png
+ create mode 100644 attached_assets/Snag_8167356e_1767705638389.png
+ create mode 100644 attached_assets/Snag_816e04d6_1767706084538.png
+ create mode 100644 attached_assets/Snag_816e0ddf_1767706086818.png
+ create mode 100644 attached_assets/Snag_81732b90_1767706422035.png
+ create mode 100644 attached_assets/Snag_8174f68c_1767706539762.png
+ create mode 100644 attached_assets/Snag_8176826c_1767706640972.png
+ create mode 100644 attached_assets/Snag_817691fc_1767706645009.png
+ create mode 100644 attached_assets/Snag_8178ec09_1767706798891.png
+ create mode 100644 attached_assets/Snag_81803005_1767707275143.png
+ create mode 100644 attached_assets/Snag_8185672a_1767707616899.png
+ create mode 100644 attached_assets/Snag_81857013_1767707619221.png
+ create mode 100644 attached_assets/Snag_818f59bc_1767708268790.png
+ create mode 100644 attached_assets/Snag_8198fb5f_1767708900048.png
+ create mode 100644 attached_assets/Snag_81990ff1_1767708905367.png
+ create mode 100644 attached_assets/Snag_81d29cda_1767712676852.png
+ create mode 100644 attached_assets/Snag_825822ad_1767721427399.png
+ create mode 100644 attached_assets/Snag_82aacebd_1767726845414.png
+ create mode 100644 attached_assets/Snag_82ada00d_1767727030060.png
+ create mode 100644 attached_assets/Snag_82b25d2f_1767727340848.png
+ create mode 100644 attached_assets/Snag_82b265ab_1767727342902.png
+ create mode 100644 attached_assets/Snag_82b34f40_1767727402662.png
+ create mode 100644 attached_assets/Snag_82d397a8_1767729519048.png
+ create mode 100644 attached_assets/Snag_82d9f80a_1767729936759.png
+ create mode 100644 attached_assets/Snag_82da73e1_1767729967970.png
+ create mode 100644 attached_assets/Snag_82da7cda_1767729970488.png
+ create mode 100644 attached_assets/Snag_82eef5f1_1767731312415.png
+ create mode 100644 attached_assets/Snag_82ef01f7_1767731315360.png
+ create mode 100644 attached_assets/Snag_82f40143_1767731642723.png
+ create mode 100644 attached_assets/Snag_82f8ccae_1767731957050.png
+ create mode 100644 attached_assets/Snag_82f8d7ca_1767731959886.png
+ create mode 100644 attached_assets/Snag_82fd9385_1767732269831.png
+ create mode 100644 attached_assets/Snag_8300bab5_1767732476534.png
+ create mode 100644 attached_assets/Snag_83067cb5_1767732854070.png
+ create mode 100644 attached_assets/Snag_8325be4b_1767734902791.png
+ create mode 100644 attached_assets/Snag_8329193e_1767735122440.png
+ create mode 100644 attached_assets/Snag_83292208_1767735124186.png
+ create mode 100644 attached_assets/Snag_8335ad08_1767735947050.png
+ create mode 100644 attached_assets/Snag_834df7a8_1767737538560.png
+ create mode 100644 attached_assets/Snag_8352def8_1767737859647.png
+ create mode 100644 attached_assets/Snag_8354cc41_1767737986176.png
+ create mode 100644 attached_assets/Snag_8354d52a_1767737988322.png
+ create mode 100644 attached_assets/Snag_8ceefe2b_1767899087330.png
+ create mode 100644 attached_assets/Snag_8cf1a0aa_1767899260178.png
+ create mode 100644 attached_assets/Snag_8d5cd9b4_1767906288987.png
+ create mode 100644 attached_assets/Snag_8d6156ef_1767906581298.png
+ create mode 100644 attached_assets/Snag_8d6bb02a_1767907259282.png
+ create mode 100644 attached_assets/Snag_90a42ed8_1767961293517.png
+ create mode 100644 attached_assets/Snag_90aca77b_1767961848726.png
+ create mode 100644 attached_assets/Snag_90ae1fd3_1767961945188.png
+ create mode 100644 attached_assets/Snag_90b2deab_1767962256302.png
+ create mode 100644 attached_assets/Snag_90c9c509_1767963757226.png
+ create mode 100644 attached_assets/Snag_91186c0b_1767968911519.png
+ create mode 100644 attached_assets/Snag_911b111b_1767969084871.png
+ create mode 100644 attached_assets/Snag_91242331_1767969679415.png
+ create mode 100644 attached_assets/Snag_912531b3_1767969748422.png
+ create mode 100644 attached_assets/Snag_91290c07_1767970000912.png
+ create mode 100644 attached_assets/Snag_9138817c_1767971014482.png
+ create mode 100644 attached_assets/appointment_1767655870101.png
+ create mode 100644 attached_assets/hovercode_(10)_1767654461308.png
+ create mode 100644 attached_assets/hovercode_(10)_1767656190064.png
+ create mode 100644 attached_assets/image_1767657112949.png
+ create mode 100644 attached_assets/image_1767807146316.png
+ create mode 100644 attached_assets/image_1767919767351.png
+ create mode 100644 attached_assets/image_1767920421522.png
+ create mode 100644 attached_assets/image_1767920944225.png
+ create mode 100644 attached_assets/image_1767922335867.png
+ create mode 100644 attached_assets/mos-print-0.1.4-test-v1_(1)_1767637313053.zip
+ create mode 100644 attached_assets/oil-sticker-2x2_(1)_1767659278787.png
+ create mode 100644 attached_assets/oil-sticker-2x2_(2)_1767659824607.png
+ create mode 100644 components/CommonFailuresPanel.tsx
+ create mode 100644 components/stickers/QuickStickerModal.tsx
+ create mode 100644 components/ui/PlatformAdminLayoutClient.tsx
+ create mode 100644 lib/api-usage-tracker.ts
+ create mode 100644 lib/audit-log.ts
+ create mode 100644 lib/common-failures.ts
+ create mode 100644 lib/extension-analytics.ts
+ create mode 100644 lib/hovercode.ts
+ create mode 100644 lib/normalized-adapters.ts
+ create mode 100644 lib/normalized-cache.ts
+ create mode 100644 lib/normalized-ingestion.ts
+ create mode 100644 lib/normalized-schema.ts
+ create mode 100644 lib/object-id-utils.ts
+ create mode 100644 lib/repair-patterns.ts
+ create mode 100644 lib/sticker-defaults.ts
+ create mode 100644 lib/sticker-utils.ts
+ create mode 100644 lib/sync-metrics.ts
+ create mode 100644 lib/tekmetric-auth.ts
+ create mode 100644 lib/tekmetric-incremental-sync.ts
+ create mode 100644 lib/tekmetric-sync.ts
+ create mode 100644 lib/tekmetric-usage-tracker.ts
+ create mode 100644 lib/test-auth.ts
+ create mode 100644 mos-tools-extension/icons/mos-print-button.png
+ create mode 100644 public/icons/autoflow.png
+ create mode 100644 public/icons/carfax.png
+ create mode 100644 public/logos/autoflow.png
+ create mode 100644 public/logos/carfax.png
+ create mode 100644 public/logos/dataone.png
+ create mode 100644 public/logos/hovercode.png
+ create mode 100644 public/logos/openai.png
+ create mode 100644 public/logos/protractor.png
+ create mode 100644 public/logos/tekmetric.png
+ create mode 100644 public/screenshots/carfax-history.png
+ create mode 100644 public/screenshots/chrome-ext-job.png
+ create mode 100644 public/screenshots/chrome-ext-plan.png
+ create mode 100644 public/screenshots/dashboard.png
+ create mode 100644 public/screenshots/job-history.png
+ create mode 100644 public/screenshots/maintenance-plan.png
+ create mode 100644 public/screenshots/oem-data.png
+ create mode 100644 public/sticker-qr-logo.png
+ create mode 100644 public/sticker-qr-logo.svg
+ create mode 100644 scripts/backfill-repair-patterns.ts
+ create mode 100644 scripts/check-field-extraction.ts
+ create mode 100644 scripts/create-job-index-indexes.ts
+ create mode 100644 scripts/ensure-indexes.ts
+ create mode 100644 scripts/fix-duplicate-source-ids.ts
+ create mode 100644 scripts/protractor-sync-standalone.ts
+ create mode 100644 scripts/repair-patterns-from-jobindex.ts
+ create mode 100644 scripts/setup-normalized-indexes.ts
+ create mode 100644 scripts/setup-repair-patterns-indexes.ts
+ create mode 100644 scripts/start-production.js
+ create mode 100644 scripts/start-with-workers.js
+ create mode 100644 scripts/tekmetric-backfill-worker.ts
+ create mode 100644 scripts/verify-normalized-data.ts
+ create mode 100644 tests/e2e/example.test.ts
+ create mode 100644 tests/e2e/full-suite.test.ts
+ create mode 100644 tests/e2e/test-utils.ts
+~/workspace$ 
