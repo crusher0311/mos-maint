@@ -449,7 +449,9 @@ export default function ApiUsageDashboard() {
                 </div>
               </div>
               <div className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(provider.warningLevel)}`}>
-                {provider.warningLevel === 'ok' ? 'Healthy' : provider.warningLevel.toUpperCase()}
+                {provider.warningLevel === 'ok' ? 'Healthy' : 
+                 provider.warningLevel === 'stopped' ? 'Over Limit' :
+                 provider.warningLevel === 'critical' ? 'Critical' : 'Warning'}
               </div>
             </div>
 
