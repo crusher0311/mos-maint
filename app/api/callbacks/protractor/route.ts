@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 
+import { Db } from "mongodb";
+
+const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
+const RATE_LIMIT_WINDOW_MS = 60000;
+const RATE_LIMIT_MAX = 30;
+
+async function checkRateLimit(db: Db, connectionId: string): Promise<{ allowed: boolean; remaining: number }> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - RATE_LIMIT_WINDOW_MS);
+  
+  const recentCount = await db.collection("protractor_callback_events").countDocuments({
+    connectionId,
+    receivedAt: { $gte: windowStart }
+  });
+  
+  if (recentCount >= RATE_LIMIT_MAX) {
+    return { allowed: false, remaining: 0 };
+  }
+  
+  return { allowed: true, remaining: RATE_LIMIT_MAX - recentCount };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
@@ -16,6 +38,12 @@ export async function POST(request: NextRequest) {
     if (!connectionId) {
       console.log("[Protractor Callback] Rejected: No connectionId in payload");
       return NextResponse.json({ ok: false, error: "Missing connectionId" }, { status: 400 });
+    }
+
+    const rateCheck = await checkRateLimit(db, connectionId);
+    if (!rateCheck.allowed) {
+      console.warn(`[Protractor Callback] Rate limited: connectionId ${connectionId}`);
+      return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
     }
 
     const shop = await db.collection("shops").findOne({
@@ -35,6 +63,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, message: "No work order ID" });
     }
 
+    const existingEvent = await db.collection("protractor_callback_events").findOne({
+      workOrderId,
+      status,
+      processed: true,
+      processedAt: { $gte: new Date(Date.now() - 300000) }
+    });
+
+    if (existingEvent) {
+      console.log(`[Protractor Callback] Duplicate event for ${workOrderId}, skipping`);
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+
     await db.collection("protractor_callback_events").insertOne({
       receivedAt: new Date(),
       payload,
@@ -46,11 +86,20 @@ export async function POST(request: NextRequest) {
     });
 
     const normalizedStatus = (status || "").toUpperCase();
-    const isClosed = normalizedStatus === "INVOICED" || normalizedStatus === "INVOICE" || 
-                     normalizedStatus === "CLOSED" || normalizedStatus === "VOID";
+    const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
 
     if (isClosed) {
       console.log(`[Protractor Callback] Work order ${workOrderId} closed with status: ${status} (shop: ${shop.shopId})`);
+
+      const existingWorkOrder = await db.collection("protractor_work_orders").findOne({
+        $or: [{ shopId: String(shop.shopId) }, { shopId: Number(shop.shopId) }],
+        workOrderGuid: workOrderId
+      });
+
+      if (!existingWorkOrder) {
+        console.log(`[Protractor Callback] Work order ${workOrderId} not found in our records, skipping`);
+        return NextResponse.json({ ok: true, skipped: true, reason: "Unknown work order" });
+      }
 
       const vehicle = await db.collection("vehicles").findOne({
         $or: [{ shopId: String(shop.shopId) }, { shopId: Number(shop.shopId) }],
@@ -83,23 +132,23 @@ export async function POST(request: NextRequest) {
         );
 
         console.log(`[Protractor Callback] Vehicle ${vehicle.vin} updated - active: ${hasActiveSources}`);
-
-        await db.collection("protractor_work_orders").updateMany(
-          { workOrderGuid: workOrderId },
-          {
-            $set: {
-              workflowStage: status,
-              status: status,
-              closedAt: new Date(),
-              closedViaCallback: true,
-              updatedAt: new Date()
-            }
-          }
-        );
       }
 
+      await db.collection("protractor_work_orders").updateMany(
+        { workOrderGuid: workOrderId },
+        {
+          $set: {
+            workflowStage: status,
+            status: status,
+            closedAt: new Date(),
+            closedViaCallback: true,
+            updatedAt: new Date()
+          }
+        }
+      );
+
       await db.collection("protractor_callback_events").updateOne(
-        { workOrderId, receivedAt: { $gte: new Date(Date.now() - 5000) } },
+        { workOrderId, status, processed: false },
         { $set: { processed: true, processedAt: new Date() } }
       );
     }
