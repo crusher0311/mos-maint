@@ -1,13 +1,13 @@
-import { trackApiRequest, shouldThrottleProvider } from "@/lib/api-usage-tracker";
+import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
 async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
-  const throttleCheck = shouldThrottleProvider('tekmetric');
-  if (throttleCheck.throttle) {
-    console.warn(`[Tekmetric] Throttled: ${throttleCheck.reason}`);
-    throw new Error(`Rate limit protection: ${throttleCheck.reason}`);
+  // Acquire distributed rate limit slot (blocks if limit exceeded)
+  const rateLimitResult = await acquireDistributedRateLimitSlot('tekmetric');
+  if (!rateLimitResult.acquired) {
+    console.warn(`[Tekmetric] Rate limit slot not acquired after ${rateLimitResult.waitedMs}ms, proceeding anyway`);
   }
 
   const token = await getValidToken();
