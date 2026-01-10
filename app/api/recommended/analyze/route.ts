@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { logUsage, estimateCost, estimateTokens } from "@/lib/usage";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 export const runtime = "nodejs";
 
@@ -292,8 +294,24 @@ export async function POST(req: Request) {
       safeJson(Array.isArray(oem) ? oem : []),
     ].join("\n");
 
+    // Get shopId from request body or vehicle lookup for tracking
+    let logShopId: string | number | null = body?.shopId || null;
+    if (!logShopId && vin) {
+      try {
+        const usageDb = await getDb();
+        const vehicleForLog = await usageDb.collection("vehicles").findOne({ vin }, { projection: { shopId: 1 } });
+        logShopId = vehicleForLog?.shopId;
+      } catch {}
+    }
+
     // OpenAI call
+    const aiStartTime = Date.now();
     const ai = await callOpenAI(model, systemPrompt, userPrompt);
+    const aiDuration = Date.now() - aiStartTime;
+    
+    // Track API request for traffic monitoring
+    trackApiRequest('openai', '/responses', 'POST', ai.ok ? 200 : 500, aiDuration, logShopId ? Number(logShopId) : undefined).catch(() => {});
+    
     if (!ai.ok) {
       return NextResponse.json({ ok: false, error: ai.error ?? "Analyzer failed" }, { status: 500 });
     }
@@ -306,6 +324,28 @@ export async function POST(req: Request) {
         parsed = JSON.parse(jsonBlock);
       } catch {
         parsed = null;
+      }
+    }
+
+    // Log usage for analytics (estimate tokens since Responses API doesn't return usage)
+    const inputTokens = estimateTokens(systemPrompt + userPrompt);
+    const outputTokens = estimateTokens(raw);
+    const cost = estimateCost(model, inputTokens, outputTokens);
+    
+    if (logShopId) {
+      try {
+        await logUsage({
+          shopId: String(logShopId),
+          action: "analyze",
+          model,
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          estimatedCost: cost,
+          vin: vin || undefined,
+        });
+      } catch (logErr) {
+        console.error("Failed to log usage:", logErr);
       }
     }
 
