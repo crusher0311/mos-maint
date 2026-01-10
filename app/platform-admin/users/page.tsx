@@ -7,8 +7,9 @@ interface User {
   _id: string;
   email: string;
   role: string;
-  shopId: number;
+  shopId: number | string;
   shopName: string;
+  locationIdentifier?: string | null;
   shopIds?: string[];
   createdAt: string;
   isPlatformAdmin?: boolean;
@@ -273,7 +274,10 @@ export default function PlatformUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-gray-900">{user.shopName}</div>
-                    <div className="text-xs text-gray-500">ID: {user.shopId}</div>
+                    <div className="text-xs text-gray-500">
+                      {user.locationIdentifier && <span className="mr-2">{user.locationIdentifier}</span>}
+                      ID: {user.shopId}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${roleColors[user.role] || roleColors.user}`}>
