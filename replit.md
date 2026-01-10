@@ -93,6 +93,17 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 ## Future Ideas (Saved for Later)
 *   **Districts Layer**: Add organizational groupings between enterprise and shops for large organizations. Would enable district managers, regional filtering in job history/analytics, and district-level repair pattern aggregations. Additive approach recommended (keep current enterprise model, add districts on top).
 
+## Planned Performance Optimizations (Page Load Speed)
+*   **High Priority**:
+    *   Lazy-load heavy components: sticker/QR generation, Uppy file upload, framer-motion animations (load only when needed)
+    *   Add MongoDB compound indexes: `{shopId, status}`, `{shopId, vin}`, `{enterpriseId, createdAt}`
+    *   Server-side data loading: render pages with data pre-loaded to eliminate loading spinners
+*   **Medium Priority**:
+    *   Combine dashboard API calls into batched requests
+    *   Add caching: stale-while-revalidate for vehicle/customer lists, cache feature flags
+    *   Use Next.js Image component for hero images, preload primary fonts
+*   **Observability**: Add Next.js bundle analyzer, track real-user metrics
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
