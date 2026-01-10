@@ -62,7 +62,7 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
   },
   protractor: { 
     name: 'Protractor',
-    rateLimit: { perSecond: 5 },
+    rateLimit: { perMinute: 200, perSecond: 5 },
     warningThreshold: 0.75,
     criticalThreshold: 0.85
   },
