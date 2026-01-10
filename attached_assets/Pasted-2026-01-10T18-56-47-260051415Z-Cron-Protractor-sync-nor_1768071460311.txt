@@ -1,0 +1,52 @@
+2026-01-10T18:56:47.260051415Z [Cron] Protractor sync normalized: shop 51, WOs: 0/0/55, payments: 0, inspections: 0, recommendations: 0
+2026-01-10T18:56:47.260239216Z [Cron] Protractor sync completed in 224195ms: [
+2026-01-10T18:56:47.260247947Z   { shopId: 25, synced: 50, removed: 0, vehiclesUpdated: 44 },
+2026-01-10T18:56:47.260251877Z   { shopId: 28, synced: 3, removed: 0, vehiclesUpdated: 3 },
+2026-01-10T18:56:47.260255647Z   { shopId: 29, synced: 51, removed: 0, vehiclesUpdated: 46 },
+2026-01-10T18:56:47.260259248Z   { shopId: 35, synced: 52, removed: 0, vehiclesUpdated: 35 },
+2026-01-10T18:56:47.260263008Z   { shopId: 50, synced: 48, removed: 0, vehiclesUpdated: 41 },
+2026-01-10T18:56:47.260266598Z   { shopId: 51, synced: 63, removed: 0, vehiclesUpdated: 55 }
+2026-01-10T18:56:47.263662487Z [2026-01-10T18:53:03.059Z] Sync complete: {
+2026-01-10T18:56:47.263699499Z       "synced": 50,
+2026-01-10T18:56:47.26372179Z       "synced": 3,
+2026-01-10T18:56:47.263743952Z       "synced": 51,
+2026-01-10T18:56:47.263774604Z       "synced": 52,
+2026-01-10T18:56:47.263788725Z       "synced": 48,
+2026-01-10T18:56:47.263803255Z       "synced": 63,
+2026-01-10T18:56:47.37891223Z [Cron] Protractor sync normalized: shop 51, WOs: 0/0/55, payments: 0, inspections: 0, recommendations: 0
+2026-01-10T18:56:47.379661746Z [Cron] Protractor sync completed in 224116ms: [
+2026-01-10T18:56:47.379668746Z   { shopId: 25, synced: 50, removed: 0, vehiclesUpdated: 44 },
+2026-01-10T18:56:47.379672607Z   { shopId: 28, synced: 3, removed: 0, vehiclesUpdated: 3 },
+2026-01-10T18:56:47.379676017Z   { shopId: 29, synced: 51, removed: 0, vehiclesUpdated: 46 },
+2026-01-10T18:56:47.379679617Z   { shopId: 35, synced: 52, removed: 0, vehiclesUpdated: 35 },
+2026-01-10T18:56:47.379683157Z   { shopId: 50, synced: 48, removed: 0, vehiclesUpdated: 41 },
+2026-01-10T18:56:47.379686637Z   { shopId: 51, synced: 63, removed: 0, vehiclesUpdated: 55 }
+2026-01-10T18:56:47.382733824Z [2026-01-10T18:53:03.255Z] Sync complete: {
+2026-01-10T18:56:47.382769715Z       "synced": 50,
+2026-01-10T18:56:47.382794835Z       "synced": 3,
+2026-01-10T18:56:47.382816976Z       "synced": 51,
+2026-01-10T18:56:47.382838126Z       "synced": 52,
+2026-01-10T18:56:47.382861907Z       "synced": 48,
+2026-01-10T18:56:47.382874187Z       "synced": 63,
+2026-01-10T18:56:48.17122941Z [Cron] Protractor sync normalized: shop 51, WOs: 0/0/55, payments: 0, inspections: 0, recommendations: 0
+2026-01-10T18:56:48.171416915Z [Cron] Protractor sync completed in 224959ms: [
+2026-01-10T18:56:48.171426615Z   { shopId: 25, synced: 50, removed: 0, vehiclesUpdated: 44 },
+2026-01-10T18:56:48.171431176Z   { shopId: 28, synced: 3, removed: 0, vehiclesUpdated: 3 },
+2026-01-10T18:56:48.171532199Z   { shopId: 29, synced: 51, removed: 0, vehiclesUpdated: 46 },
+2026-01-10T18:56:48.171541419Z   { shopId: 35, synced: 52, removed: 0, vehiclesUpdated: 35 },
+2026-01-10T18:56:48.17157769Z   { shopId: 50, synced: 48, removed: 0, vehiclesUpdated: 41 },
+2026-01-10T18:56:48.17158222Z   { shopId: 51, synced: 63, removed: 0, vehiclesUpdated: 55 }
+2026-01-10T18:56:48.181640692Z [2026-01-10T18:53:03.208Z] Sync complete: {
+2026-01-10T18:56:48.181682694Z       "synced": 50,
+2026-01-10T18:56:48.181712125Z       "synced": 3,
+2026-01-10T18:56:48.181739945Z       "synced": 51,
+2026-01-10T18:56:48.181753156Z       "synced": 52,
+2026-01-10T18:56:48.181765916Z       "synced": 48,
+2026-01-10T18:56:48.181778656Z       "synced": 63,
+2026-01-10T18:56:56.600658883Z [Cron] Protractor sync normalized: shop 35, WOs: 0/0/35, payments: 0, inspections: 0, recommendations: 0
+2026-01-10T18:56:56.984743659Z [2026-01-10T18:56:56.984Z] Running Protractor sync...
+2026-01-10T18:56:57.270744715Z [2026-01-10T18:56:57.270Z] Running Protractor sync...
+2026-01-10T18:56:57.389550878Z [2026-01-10T18:56:57.389Z] Running Protractor sync...
+2026-01-10T18:56:58.183923918Z [2026-01-10T18:56:58.183Z] Running Protractor sync...
+2026-01-10T18:57:17.881659328Z [2026-01-10T18:57:17.881Z] Running Tekmetric sync...
+2026-01-10T18:57:19.858192934Z [2026-01-10T18:57:19.856Z] Running Tekmetric sync...
