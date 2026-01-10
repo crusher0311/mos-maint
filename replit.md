@@ -69,7 +69,8 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Adaptive delays with exponential backoff when approaching limits.
     *   Retry logic for 429 (rate limit) and 5xx errors with jitter.
     *   `sourceWorker` field tracks requests from 'render' vs 'replit' workers.
-    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables sync on specific deployments.
+    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables Protractor sync on specific deployments.
+    *   `DISABLE_TEKMETRIC_SYNC=true` env var disables Tekmetric sync on specific deployments.
     *   **v1.8.0 Enhancements**:
         *   Integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode) displayed on cards.
         *   Drag-and-drop card reordering with localStorage persistence.
