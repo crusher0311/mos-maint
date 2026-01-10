@@ -358,6 +358,91 @@ export function shouldThrottleProvider(provider: ApiProvider): { throttle: boole
   return { throttle: false };
 }
 
+/**
+ * Shared rate limiter that uses MongoDB to coordinate across multiple workers.
+ * This queries the api_usage collection for recent requests from ALL workers.
+ */
+export async function shouldThrottleProviderShared(provider: ApiProvider): Promise<{ throttle: boolean; reason?: string; currentMinute?: number; lastSecond?: number }> {
+  const config = API_PROVIDER_CONFIGS[provider];
+  
+  // Quick local check first (avoids DB query if we're clearly under limit)
+  const localCheck = shouldThrottleProvider(provider);
+  if (localCheck.throttle) {
+    return localCheck;
+  }
+  
+  // If no rate limits defined, no need to check DB
+  if (!config.rateLimit?.perMinute && !config.rateLimit?.perSecond) {
+    return { throttle: false };
+  }
+
+  try {
+    const db = await getDb();
+    const now = new Date();
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+    const fiveSecondsAgo = new Date(now.getTime() - 5 * 1000);
+
+    // Count requests in the last minute and last 5 seconds from DB
+    const [minuteCount, recentCount] = await Promise.all([
+      config.rateLimit?.perMinute 
+        ? db.collection(COLLECTION_NAME).countDocuments({ 
+            provider, 
+            timestamp: { $gte: oneMinuteAgo } 
+          })
+        : Promise.resolve(0),
+      config.rateLimit?.perSecond 
+        ? db.collection(COLLECTION_NAME).countDocuments({ 
+            provider, 
+            timestamp: { $gte: fiveSecondsAgo } 
+          })
+        : Promise.resolve(0)
+    ]);
+
+    // Add in-memory buffer counts (not yet flushed to DB)
+    const inMemoryMinute = inMemoryBuffer.filter(
+      r => r.provider === provider && r.timestamp >= oneMinuteAgo
+    ).length;
+    const inMemoryRecent = inMemoryBuffer.filter(
+      r => r.provider === provider && r.timestamp >= fiveSecondsAgo
+    ).length;
+
+    const totalMinute = minuteCount + inMemoryMinute;
+    const totalRecent = recentCount + inMemoryRecent;
+
+    // Check per-second limit (use 5-second window / 5 for average)
+    if (config.rateLimit?.perSecond) {
+      const avgPerSecond = totalRecent / 5;
+      if (avgPerSecond >= config.rateLimit.perSecond) {
+        return { 
+          throttle: true, 
+          reason: `Shared burst limit: ${avgPerSecond.toFixed(1)}/${config.rateLimit.perSecond} req/s (5s avg)`,
+          currentMinute: totalMinute,
+          lastSecond: totalRecent
+        };
+      }
+    }
+
+    // Check per-minute limit
+    if (config.rateLimit?.perMinute) {
+      const usage = totalMinute / config.rateLimit.perMinute;
+      if (usage >= config.criticalThreshold) {
+        return { 
+          throttle: true, 
+          reason: `Shared limit: ${totalMinute}/${config.rateLimit.perMinute} req/min (${Math.round(usage * 100)}%)`,
+          currentMinute: totalMinute,
+          lastSecond: totalRecent
+        };
+      }
+    }
+
+    return { throttle: false, currentMinute: totalMinute, lastSecond: totalRecent };
+  } catch (err) {
+    // If DB check fails, fall back to local check only
+    console.error('[ApiUsageTracker] Shared throttle check failed:', err);
+    return { throttle: false };
+  }
+}
+
 export interface ErrorRecord {
   _id?: string;
   timestamp: Date;

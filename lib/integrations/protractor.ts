@@ -2,18 +2,47 @@
 import crypto from "node:crypto";
 import https from "node:https";
 import { getDb } from "@/lib/mongo";
-import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { trackApiRequest, shouldThrottleProvider, shouldThrottleProviderShared } from "@/lib/api-usage-tracker";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
-// Rate limiter: 5 requests per second for Protractor API
+// Rate limiter: 5 requests per second for Protractor API (local process limiter)
 const RATE_LIMIT_RPS = 5;
 const RATE_LIMIT_INTERVAL_MS = 1000 / RATE_LIMIT_RPS; // 200ms between requests
 let lastRequestTime = 0;
 const rateLimitQueue: (() => void)[] = [];
 let isProcessingQueue = false;
 
+// Adaptive throttle state - backs off when approaching limits
+let adaptiveDelayMs = 0;
+const MAX_ADAPTIVE_DELAY_MS = 5000;
+const ADAPTIVE_DECAY_RATE = 0.9;
+
 async function acquireRateLimitSlot(): Promise<void> {
+  // Check local throttle first (fast, no DB query)
+  const localCheck = shouldThrottleProvider('protractor');
+  if (localCheck.throttle) {
+    adaptiveDelayMs = Math.min(adaptiveDelayMs + 500, MAX_ADAPTIVE_DELAY_MS);
+    console.log(`[Protractor Throttle] ${localCheck.reason}, waiting ${adaptiveDelayMs}ms`);
+    await new Promise(r => setTimeout(r, adaptiveDelayMs + Math.random() * 200));
+  } else {
+    // Check shared throttle (queries MongoDB for cross-worker coordination)
+    try {
+      const sharedCheck = await shouldThrottleProviderShared('protractor');
+      if (sharedCheck.throttle) {
+        adaptiveDelayMs = Math.min(adaptiveDelayMs + 1000, MAX_ADAPTIVE_DELAY_MS);
+        console.log(`[Protractor Throttle] ${sharedCheck.reason}, waiting ${adaptiveDelayMs}ms (shared)`);
+        await new Promise(r => setTimeout(r, adaptiveDelayMs + Math.random() * 500));
+      } else {
+        // Decay adaptive delay when not throttled
+        adaptiveDelayMs = Math.floor(adaptiveDelayMs * ADAPTIVE_DECAY_RATE);
+      }
+    } catch (err) {
+      // If shared check fails, continue with local-only throttling
+      adaptiveDelayMs = Math.floor(adaptiveDelayMs * ADAPTIVE_DECAY_RATE);
+    }
+  }
+
   return new Promise((resolve) => {
     rateLimitQueue.push(resolve);
     processRateLimitQueue();
@@ -321,11 +350,26 @@ export async function protractorFetch<T>(
     const body = options.body ? String(options.body) : undefined;
     const res = await httpsRequest(url, method, headers, body);
 
-    trackApiRequest('protractor', endpoint, method, res.statusCode, Date.now() - startTime, shopId).catch(() => {});
+    const latencyMs = Date.now() - startTime;
+    const isServerError = res.statusCode >= 500;
+    const isRateLimited = res.statusCode === 429;
+    
+    trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
+      retryCount: retryCount > 0 ? retryCount : undefined,
+      errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
+      sourceWorker: process.env.RENDER ? 'render' : 'replit'
+    }).catch(() => {});
 
-    if (res.statusCode === 429 && retryCount < 3) {
-      const waitMs = Math.pow(2, retryCount + 1) * 1000;
-      console.log(`[Protractor] Rate limited, retrying in ${waitMs}ms (attempt ${retryCount + 1}/3)`);
+    // Retry on rate limit (429) or server errors (5xx) with exponential backoff + jitter
+    if ((isRateLimited || isServerError) && retryCount < 3) {
+      const baseWaitMs = Math.pow(2, retryCount + 1) * 1000;
+      const jitter = Math.random() * 500; // Add up to 500ms jitter
+      const waitMs = baseWaitMs + jitter;
+      
+      // Increase adaptive delay on errors
+      adaptiveDelayMs = Math.min(adaptiveDelayMs + 1000, MAX_ADAPTIVE_DELAY_MS);
+      
+      console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
       await new Promise(r => setTimeout(r, waitMs));
       return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId);
     }
