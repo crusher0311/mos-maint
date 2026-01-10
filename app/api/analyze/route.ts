@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { logUsage, estimateTokens, estimateCost } from "@/lib/usage";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 function safeJsonParse<T = unknown>(text: string): T | null {
   try {
@@ -169,6 +170,7 @@ Instructions:
   }
 
   // Call OpenAI Chat Completions (works with gpt-4.1 / gpt-4o / 4.1-turbo etc.)
+  const startTime = Date.now();
   try {
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -188,8 +190,13 @@ Instructions:
 
     if (!resp.ok) {
       const t = await resp.text();
+      // Track failed request
+      trackApiRequest('openai', '/chat/completions', 'POST', resp.status, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
       return Response.json({ ok: false, error: `OpenAI error: ${resp.status} ${t}` }, { status: 500 });
     }
+
+    // Track successful request
+    trackApiRequest('openai', '/chat/completions', 'POST', 200, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
 
     const data = await resp.json();
     const raw =

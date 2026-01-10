@@ -5,6 +5,7 @@ import { getOpenAI, DEFAULT_MODEL, MODELS } from "@/lib/ai";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost } from "@/lib/usage";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 // small utils
 function parseCarfaxDate(d?: string | null): Date | null {
@@ -281,6 +282,7 @@ export async function POST(req: NextRequest) {
       oem: oemSummary,
     };
 
+    const startTime = Date.now();
     const openai = getOpenAI();
     const resp = await openai.chat.completions.create({
       model: chosenModel,
@@ -292,6 +294,9 @@ export async function POST(req: NextRequest) {
         { role: "user", content: JSON.stringify(user) },
       ],
     });
+    
+    // Track API request for traffic monitoring
+    trackApiRequest('openai', '/chat/completions', 'POST', 200, Date.now() - startTime, Number(shopId)).catch(() => {});
 
     const raw = resp.choices?.[0]?.message?.content || "{}";
     let parsed: any = {};

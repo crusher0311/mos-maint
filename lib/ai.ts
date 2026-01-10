@@ -1,4 +1,5 @@
 // lib/ai.ts
+import OpenAI from "openai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 // Available OpenAI models via Replit AI Integrations
@@ -51,44 +52,18 @@ export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } 
   return { apiKey: config.apiKey, source: config.source };
 }
 
-// OpenAI client wrapper
-export function getOpenAI() {
+// OpenAI SDK client - returns the official OpenAI SDK instance
+export function getOpenAI(): OpenAI {
   const config = getOpenAIConfig();
   
   if (!config) {
     throw new Error("No OpenAI API key configured. Set OPENAI_API_KEY or use Replit's AI integration.");
   }
   
-  const { apiKey, baseUrl, source } = config;
-  
-  return {
-    apiKey,
-    baseUrl,
-    source,
-    async chat(messages: any[], model = DEFAULT_MODEL) {
-      const startTime = Date.now();
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens: 1000,
-        }),
-      });
-      
-      trackApiRequest('openai', '/chat/completions', 'POST', response.status, Date.now() - startTime).catch(() => {});
-      
-      if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.statusText}`);
-      }
-      
-      return response.json();
-    }
-  };
+  return new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseUrl,
+  });
 }
 
 export async function runResponse(model: string, input: string): Promise<{
