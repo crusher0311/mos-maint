@@ -28,6 +28,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems (e.g., Protractor, Tekmetric).
 *   **Normalized Data Layer**: SMS-agnostic data schema with provenance tracking, 7 normalized collections, bidirectional adapters, dual-write ingestion, content hash-based change detection, and a normalized-only query API with enterprise support and caching. Raw API payloads are preserved.
 *   **My Oil Sticker Integration**:
+    *   **Automatic QR Provisioning**: New shops automatically receive a HoverCode dynamic QR code upon creation via `lib/hovercode.ts`.
     *   QR Code Generation using HoverCode API for dynamic, tracked QR codes.
     *   Sticker image generation using `node-html-to-image`.
     *   API endpoints for dynamic QR redirects, styled QR code generation, sticker PNG generation, and sticker configuration management.

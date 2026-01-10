@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getDb } from "@/lib/mongo";
 import { getNextShopId } from "@/lib/ids";
+import { createHovercodeQR } from "@/lib/hovercode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,30 @@ export async function POST(req: NextRequest) {
 
       try {
         await shops.insertOne(doc);
+        
+        // Provision HoverCode QR code (fire-and-forget)
+        createHovercodeQR({ shopId: numericId, shopName: doc.name }).then(async (result) => {
+          if (result.success && result.hovercodeId) {
+            try {
+              await shops.updateOne(
+                { shopId: numericId },
+                { 
+                  $set: { 
+                    "stickerConfig.hovercodeQRId": result.hovercodeId,
+                    "stickerConfig.hovercodeShortUrl": result.shortUrl,
+                    "stickerConfig.hovercodeProvisionedAt": new Date(),
+                  } 
+                }
+              );
+              console.log(`[Shops] HoverCode QR ${result.hovercodeId} linked to shop ${numericId}`);
+            } catch (updateErr) {
+              console.error(`[Shops] Failed to save HoverCode ID to shop ${numericId}:`, updateErr);
+            }
+          }
+        }).catch(err => {
+          console.error(`[Shops] HoverCode provisioning error for shop ${numericId}:`, err);
+        });
+
         return NextResponse.json({
           shop: { shopId: numericId, name: doc.name, webhookToken },
         });
