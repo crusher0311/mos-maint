@@ -5,6 +5,9 @@ import { getDb } from "@/lib/mongo";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+let cachedStats: { totalRequests: number; totalCost: number; cachedAt: number } | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -17,18 +20,10 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const [totalShops, totalUsers, usageTotals, recentShops] = await Promise.all([
-      db.collection("shops").countDocuments(),
-      db.collection("users").countDocuments(),
-      db.collection("usage_logs").aggregate([
-        {
-          $group: {
-            _id: null,
-            totalRequests: { $sum: 1 },
-            totalCost: { $sum: "$estimatedCost" },
-          }
-        }
-      ]).toArray(),
+    // Fast queries that use indexes
+    const [totalShops, totalUsers, recentShops] = await Promise.all([
+      db.collection("shops").estimatedDocumentCount(),
+      db.collection("users").estimatedDocumentCount(),
       db.collection("shops")
         .find()
         .sort({ createdAt: -1 })
@@ -37,7 +32,28 @@ export async function GET() {
         .toArray()
     ]);
     
-    const usage = usageTotals[0] || { totalRequests: 0, totalCost: 0 };
+    // Use cached usage stats or compute in background
+    let usage = { totalRequests: 0, totalCost: 0 };
+    const now = Date.now();
+    
+    if (cachedStats && (now - cachedStats.cachedAt) < CACHE_TTL_MS) {
+      usage = { totalRequests: cachedStats.totalRequests, totalCost: cachedStats.totalCost };
+    } else {
+      // Use estimated count for requests (instant) and skip expensive cost aggregation
+      const estimatedRequests = await db.collection("usage_logs").estimatedDocumentCount();
+      usage = { totalRequests: estimatedRequests, totalCost: cachedStats?.totalCost || 0 };
+      
+      // Update cost in background (don't block response)
+      db.collection("usage_logs").aggregate([
+        { $group: { _id: null, totalCost: { $sum: "$estimatedCost" } } }
+      ]).toArray().then(result => {
+        cachedStats = {
+          totalRequests: estimatedRequests,
+          totalCost: result[0]?.totalCost || 0,
+          cachedAt: Date.now()
+        };
+      }).catch(err => console.error("Background stats error:", err));
+    }
     
     return NextResponse.json({
       ok: true,
