@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { 
-  title: "MOS Maintenance",
+  title: "MOS Tools",
   description: "Automotive maintenance management system",
   icons: {
     icon: "/icon.png",

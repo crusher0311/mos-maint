@@ -1,0 +1,350 @@
+2026-01-10T18:39:59.871872649Z   "duration": "4500ms",
+2026-01-10T18:39:59.87191562Z   "summary": {
+2026-01-10T18:39:59.87191955Z     "totalShops": 7,
+2026-01-10T18:39:59.87192317Z     "totalSynced": 0,
+2026-01-10T18:39:59.8719266Z     "totalRemoved": 0,
+2026-01-10T18:39:59.87193002Z     "fromCache": {
+2026-01-10T18:39:59.87193349Z       "vehicles": 0,
+2026-01-10T18:39:59.8719369Z       "customers": 0
+2026-01-10T18:39:59.87194052Z     },
+2026-01-10T18:39:59.871944Z     "pagesQueued": 0,
+2026-01-10T18:39:59.87194752Z     "errors": 0,
+2026-01-10T18:39:59.87195092Z     "skipped": 0
+2026-01-10T18:39:59.87195438Z   },
+2026-01-10T18:39:59.87195796Z   "shops": [
+2026-01-10T18:39:59.871961451Z     {
+2026-01-10T18:39:59.871965041Z       "shopId": 1,
+2026-01-10T18:39:59.871968981Z       "tekmetricShopId": 14956,
+2026-01-10T18:39:59.871972461Z       "synced": 0,
+2026-01-10T18:39:59.871975951Z       "removed": 0,
+2026-01-10T18:39:59.871995911Z       "fromCache": {
+2026-01-10T18:39:59.872000021Z         "vehicles": 0,
+2026-01-10T18:39:59.872003461Z         "customers": 0
+2026-01-10T18:39:59.872006952Z       },
+2026-01-10T18:39:59.872010352Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872013962Z       "terminalSwept": false
+2026-01-10T18:39:59.872017522Z     },
+2026-01-10T18:39:59.872021082Z     {
+2026-01-10T18:39:59.872024462Z       "shopId": 28,
+2026-01-10T18:39:59.872027922Z       "tekmetricShopId": 14956,
+2026-01-10T18:39:59.872031292Z       "synced": 0,
+2026-01-10T18:39:59.872034862Z       "removed": 0,
+2026-01-10T18:39:59.872051513Z       "fromCache": {
+2026-01-10T18:39:59.872053753Z         "vehicles": 0,
+2026-01-10T18:39:59.872055743Z         "customers": 0
+2026-01-10T18:39:59.872057843Z       },
+2026-01-10T18:39:59.872059933Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872076743Z       "terminalSwept": false
+2026-01-10T18:39:59.872079043Z     },
+2026-01-10T18:39:59.872081093Z     {
+2026-01-10T18:39:59.872083223Z       "shopId": 32,
+2026-01-10T18:39:59.872085383Z       "tekmetricShopId": 469,
+2026-01-10T18:39:59.872087423Z       "synced": 0,
+2026-01-10T18:39:59.872089443Z       "removed": 0,
+2026-01-10T18:39:59.872091474Z       "fromCache": {
+2026-01-10T18:39:59.872093463Z         "vehicles": 0,
+2026-01-10T18:39:59.872095494Z         "customers": 0
+2026-01-10T18:39:59.872097504Z       },
+2026-01-10T18:39:59.872099684Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872101744Z       "terminalSwept": false
+2026-01-10T18:39:59.872103834Z     },
+2026-01-10T18:39:59.872105844Z     {
+2026-01-10T18:39:59.872107914Z       "shopId": 36,
+2026-01-10T18:39:59.872109984Z       "tekmetricShopId": 470,
+2026-01-10T18:39:59.872112084Z       "synced": 0,
+2026-01-10T18:39:59.872114134Z       "removed": 0,
+2026-01-10T18:39:59.872116264Z       "fromCache": {
+2026-01-10T18:39:59.872118304Z         "vehicles": 0,
+2026-01-10T18:39:59.872120324Z         "customers": 0
+2026-01-10T18:39:59.872122364Z       },
+2026-01-10T18:39:59.872124324Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872126334Z       "terminalSwept": false
+2026-01-10T18:39:59.872128384Z     },
+2026-01-10T18:39:59.872130454Z     {
+2026-01-10T18:39:59.872132474Z       "shopId": 37,
+2026-01-10T18:39:59.872134524Z       "tekmetricShopId": 471,
+2026-01-10T18:39:59.872136595Z       "synced": 0,
+2026-01-10T18:39:59.872138604Z       "removed": 0,
+2026-01-10T18:39:59.872140564Z       "fromCache": {
+2026-01-10T18:39:59.872142565Z         "vehicles": 0,
+2026-01-10T18:39:59.872156965Z         "customers": 0
+2026-01-10T18:39:59.872159095Z       },
+2026-01-10T18:39:59.872161115Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872163145Z       "terminalSwept": false
+2026-01-10T18:39:59.872165195Z     },
+2026-01-10T18:39:59.872167205Z     {
+2026-01-10T18:39:59.872169225Z       "shopId": 54,
+2026-01-10T18:39:59.872171235Z       "tekmetricShopId": 275,
+2026-01-10T18:39:59.872173205Z       "synced": 0,
+2026-01-10T18:39:59.872175255Z       "removed": 0,
+2026-01-10T18:39:59.872177345Z       "fromCache": {
+2026-01-10T18:39:59.872179345Z         "vehicles": 0,
+2026-01-10T18:39:59.872181425Z         "customers": 0
+2026-01-10T18:39:59.872183476Z       },
+2026-01-10T18:39:59.872185496Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872187566Z       "terminalSwept": false
+2026-01-10T18:39:59.872189556Z     },
+2026-01-10T18:39:59.872191606Z     {
+2026-01-10T18:39:59.872193696Z       "shopId": 57,
+2026-01-10T18:39:59.872195706Z       "tekmetricShopId": 11803,
+2026-01-10T18:39:59.872197786Z       "synced": 0,
+2026-01-10T18:39:59.872199786Z       "removed": 0,
+2026-01-10T18:39:59.872201876Z       "fromCache": {
+2026-01-10T18:39:59.872203926Z         "vehicles": 0,
+2026-01-10T18:39:59.872205976Z         "customers": 0
+2026-01-10T18:39:59.872207936Z       },
+2026-01-10T18:39:59.872210016Z       "pagesQueued": 0,
+2026-01-10T18:39:59.872212056Z       "terminalSwept": false
+2026-01-10T18:39:59.872243177Z     }
+2026-01-10T18:39:59.872245357Z   ]
+2026-01-10T18:39:59.872247487Z }
+2026-01-10T18:40:41.685615582Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.685641033Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0f11276c-71b8-427d-a427-b6d9254c3693
+2026-01-10T18:40:41.685643943Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.685646983Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:41.853780075Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.853811147Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/595841a5-2429-4f7f-beb8-6411b90815f5
+2026-01-10T18:40:41.853814977Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.853818677Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:41.885699627Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.885721538Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/595841a5-2429-4f7f-beb8-6411b90815f5
+2026-01-10T18:40:41.885730538Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.885733898Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.085275677Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.085294648Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e4dd3341-9081-4c5c-ada7-c21c93855c76
+2026-01-10T18:40:42.085298028Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.085301258Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.285770765Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.285785765Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7d788fc9-6069-4de6-b91d-3ae0c3ddd09f
+2026-01-10T18:40:42.285788695Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.285791636Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:41.693295336Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.693326486Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0f11276c-71b8-427d-a427-b6d9254c3693
+2026-01-10T18:40:41.693329506Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.693332507Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:41.694771296Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.694800538Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/613a0ef7-c044-41e8-b92f-6ee180f7d506
+2026-01-10T18:40:41.694804318Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.694807818Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:41.892018991Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.892045691Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/595841a5-2429-4f7f-beb8-6411b90815f5
+2026-01-10T18:40:41.892048681Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.892051752Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:41.894891246Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:41.894918228Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/f7e50d16-072b-4f69-864b-19571237f8c8
+2026-01-10T18:40:41.894921188Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:41.894924248Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.095552058Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.095565989Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1bd07390-0925-4eca-a76f-88344c5bf5a0
+2026-01-10T18:40:42.095567989Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.095573809Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.100686064Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.100714595Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e4dd3341-9081-4c5c-ada7-c21c93855c76
+2026-01-10T18:40:42.100717475Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.100720095Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.291891724Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.291913735Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7d788fc9-6069-4de6-b91d-3ae0c3ddd09f
+2026-01-10T18:40:42.291917115Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.291919855Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.296266173Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.296296735Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0f11276c-71b8-427d-a427-b6d9254c3693
+2026-01-10T18:40:42.296300325Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.296303405Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.491644022Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.491662912Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/519582f1-95b4-4644-ac0e-c46e1010e43e
+2026-01-10T18:40:42.491666023Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.491668443Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.496259206Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.497685239Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/595841a5-2429-4f7f-beb8-6411b90815f5
+2026-01-10T18:40:42.497691839Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.497694489Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.692571145Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.692586236Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/71d6933e-bbf3-4f92-8310-d6479eb136ba
+2026-01-10T18:40:42.692588996Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.692591786Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.696815962Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.696839563Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e4dd3341-9081-4c5c-ada7-c21c93855c76
+2026-01-10T18:40:42.696847993Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.696850954Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.054645644Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.054670145Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e4dd3341-9081-4c5c-ada7-c21c93855c76
+2026-01-10T18:40:42.054673455Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.054676915Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.254526262Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.254547093Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7d788fc9-6069-4de6-b91d-3ae0c3ddd09f
+2026-01-10T18:40:42.254549744Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.254552404Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.45423522Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.454258491Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/519582f1-95b4-4644-ac0e-c46e1010e43e
+2026-01-10T18:40:42.454262002Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.454265902Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.485688575Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.485717236Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/519582f1-95b4-4644-ac0e-c46e1010e43e
+2026-01-10T18:40:42.485720306Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.485723096Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.653836421Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.653858593Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/71d6933e-bbf3-4f92-8310-d6479eb136ba
+2026-01-10T18:40:42.653926287Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.6541402Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.685307026Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.685330167Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/71d6933e-bbf3-4f92-8310-d6479eb136ba
+2026-01-10T18:40:42.685333437Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.685336957Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.855276055Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.855299317Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/65459bf6-aee8-4d59-b6b9-a7f213a07564
+2026-01-10T18:40:42.855302457Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.855305627Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.885468564Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.885506895Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/65459bf6-aee8-4d59-b6b9-a7f213a07564
+2026-01-10T18:40:42.885510475Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.885513655Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.055324734Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.055360046Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8d538990-9f11-4f3d-8761-bd854f0b5b5e
+2026-01-10T18:40:43.055363557Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.055367027Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.085725124Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.085744345Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8d538990-9f11-4f3d-8761-bd854f0b5b5e
+2026-01-10T18:40:43.085747425Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.085750525Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.285742467Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.285782438Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5899f92a-a078-48e0-8d81-9d6d804bf79b
+2026-01-10T18:40:43.285785258Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.285788158Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.485167602Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.485186063Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/16e0d292-4e80-476b-b436-7caf14721e13
+2026-01-10T18:40:43.485188823Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.485191573Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.891912314Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.892513157Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/65459bf6-aee8-4d59-b6b9-a7f213a07564
+2026-01-10T18:40:42.892691211Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.892696572Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:42.897750059Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:42.897775031Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7d788fc9-6069-4de6-b91d-3ae0c3ddd09f
+2026-01-10T18:40:42.897778001Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:42.897781241Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.092064211Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.092083141Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8d538990-9f11-4f3d-8761-bd854f0b5b5e
+2026-01-10T18:40:43.092086101Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.092089061Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.098345567Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.098360368Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/519582f1-95b4-4644-ac0e-c46e1010e43e
+2026-01-10T18:40:43.098363588Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.098366808Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.292187367Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.292512704Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5899f92a-a078-48e0-8d81-9d6d804bf79b
+2026-01-10T18:40:43.29281599Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.293133237Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.298716462Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.298738833Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/71d6933e-bbf3-4f92-8310-d6479eb136ba
+2026-01-10T18:40:43.298741113Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.298743544Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.492811134Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.492826424Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/16e0d292-4e80-476b-b436-7caf14721e13
+2026-01-10T18:40:43.492828974Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.492831634Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.49862745Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.498656922Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/65459bf6-aee8-4d59-b6b9-a7f213a07564
+2026-01-10T18:40:43.498660432Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.498665152Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.692383737Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.692400088Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e5ed5a86-bfdc-46e1-bf99-11d63b0c9665
+2026-01-10T18:40:43.692408018Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.692411408Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.698192739Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.69822072Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8d538990-9f11-4f3d-8761-bd854f0b5b5e
+2026-01-10T18:40:43.69822353Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.698226701Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.892039743Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.892060133Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ea719925-dd64-405f-b678-bcb8f8094fa1
+2026-01-10T18:40:43.892062803Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.892065904Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.254954777Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.254984619Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5899f92a-a078-48e0-8d81-9d6d804bf79b
+2026-01-10T18:40:43.254988119Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.254991489Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.456091793Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.456177058Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/16e0d292-4e80-476b-b436-7caf14721e13
+2026-01-10T18:40:43.456180828Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.456184178Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.655321811Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.655341672Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e5ed5a86-bfdc-46e1-bf99-11d63b0c9665
+2026-01-10T18:40:43.655345012Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.655348093Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.855488867Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.855515979Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ea719925-dd64-405f-b678-bcb8f8094fa1
+2026-01-10T18:40:43.855519619Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.855523139Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.055612641Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.055636822Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/62f64748-4598-4e0d-a0a8-cee4a4bc0f98
+2026-01-10T18:40:44.055639612Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.055642442Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.255005439Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.25502598Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/205148b6-25b9-4147-a6d5-001c88b96dca
+2026-01-10T18:40:44.25503002Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.255047611Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.68567148Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.685695201Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e5ed5a86-bfdc-46e1-bf99-11d63b0c9665
+2026-01-10T18:40:43.685701951Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.685723642Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.885144977Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.885173488Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ea719925-dd64-405f-b678-bcb8f8094fa1
+2026-01-10T18:40:43.885176418Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.885179728Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:43.897843972Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:43.897869223Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5899f92a-a078-48e0-8d81-9d6d804bf79b
+2026-01-10T18:40:43.897872063Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:43.897875064Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.085636355Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.085658095Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/62f64748-4598-4e0d-a0a8-cee4a4bc0f98
+2026-01-10T18:40:44.085660415Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.085662825Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.092328972Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.092354983Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/62f64748-4598-4e0d-a0a8-cee4a4bc0f98
+2026-01-10T18:40:44.092357283Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.092359503Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.098120171Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.098148283Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/16e0d292-4e80-476b-b436-7caf14721e13
+2026-01-10T18:40:44.098151833Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.098155513Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.285931506Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.285956227Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/205148b6-25b9-4147-a6d5-001c88b96dca
+2026-01-10T18:40:44.285958537Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.285960717Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.292248944Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.292270604Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/205148b6-25b9-4147-a6d5-001c88b96dca
+2026-01-10T18:40:44.292276544Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.292279255Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.298650965Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.298667836Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e5ed5a86-bfdc-46e1-bf99-11d63b0c9665
+2026-01-10T18:40:44.298670606Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.298673546Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.486113234Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.486134335Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/32fc5f88-aa79-4166-a609-e49fe8c2994d
+2026-01-10T18:40:44.486137345Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.486140355Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.491831578Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.491853098Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/32fc5f88-aa79-4166-a609-e49fe8c2994d
+2026-01-10T18:40:44.491858328Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.491862779Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.498277877Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.498302899Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ea719925-dd64-405f-b678-bcb8f8094fa1
+2026-01-10T18:40:44.498305968Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.498309249Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.698326913Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.698345114Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/62f64748-4598-4e0d-a0a8-cee4a4bc0f98
+2026-01-10T18:40:44.698347474Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.698351575Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.897989007Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.898013758Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/205148b6-25b9-4147-a6d5-001c88b96dca
+2026-01-10T18:40:44.898018559Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.898023229Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:44.454980483Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:44.455006355Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/32fc5f88-aa79-4166-a609-e49fe8c2994d
+2026-01-10T18:40:44.455009365Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:44.455011775Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:45.097929297Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-10T18:40:45.097948778Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/32fc5f88-aa79-4166-a609-e49fe8c2994d
+2026-01-10T18:40:45.097953278Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-10T18:40:45.097957778Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-10T18:40:46Z clientIP="143.198.80.205" requestID="87ad9cad-1528-49a7" responseTimeMS=63 responseBytes=3116 userAgent="python-requests/2.27.1"
+2026-01-10T18:40:45Z clientIP="143.198.80.205" requestID="" responseTimeMS=0 responseBytes=145 userAgent="python-requests/2.27.1"

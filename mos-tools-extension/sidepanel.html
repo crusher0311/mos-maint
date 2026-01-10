@@ -83,8 +83,10 @@
       <!-- Tab navigation -->
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="plan">Plan</button>
-        <button class="tab-btn" data-tab="lookup">Job Lookup</button>
-        <button class="tab-btn" data-tab="canned">Canned Jobs</button>
+        <button class="tab-btn" data-tab="failures">Failures</button>
+        <button class="tab-btn" data-tab="lookup">Lookup</button>
+        <button class="tab-btn" data-tab="canned">Canned</button>
+        <button class="tab-btn" data-tab="sticker">Sticker</button>
       </nav>
 
       <!-- Tab content -->
@@ -111,6 +113,21 @@
               <h3 class="section-title section-recommended">→ Upcoming</h3>
               <ul id="recommended-list" class="service-list"></ul>
             </section>
+          </div>
+        </div>
+
+        <!-- Common Failures tab -->
+        <div id="tab-failures" class="tab-panel hidden">
+          <div id="failures-loading" class="panel-loading hidden">
+            <div class="spinner-small"></div>
+            <span>Analyzing common failures...</span>
+          </div>
+          <div id="failures-empty" class="panel-empty">
+            <p>Navigate to a vehicle to see common failures based on your shop's history.</p>
+          </div>
+          <div id="failures-content" class="hidden">
+            <div id="failures-source" class="failures-source-badge"></div>
+            <ul id="failures-list" class="failures-list"></ul>
           </div>
         </div>
 
@@ -149,6 +166,63 @@
             <p>No canned jobs available.</p>
           </div>
           <ul id="canned-list" class="job-list hidden"></ul>
+        </div>
+
+        <!-- Sticker tab -->
+        <div id="tab-sticker" class="tab-panel hidden">
+          <div id="sticker-loading" class="panel-loading hidden">
+            <div class="spinner-small"></div>
+            <span>Generating sticker...</span>
+          </div>
+          <div id="sticker-form" class="sticker-form">
+            <div class="form-group">
+              <label for="sticker-mileage">Current Reading</label>
+              <div class="input-with-unit">
+                <input type="text" id="sticker-mileage" placeholder="e.g. 125,000">
+                <select id="sticker-unit">
+                  <option value="mi">Miles</option>
+                  <option value="km">Kilometers</option>
+                  <option value="hrs">Hours</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="sticker-interval">Service Interval</label>
+              <select id="sticker-interval">
+                <option value="conventional">Conventional</option>
+                <option value="synthetic" selected>Synthetic</option>
+                <option value="euro">European</option>
+                <option value="diesel">Diesel</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div id="custom-interval-fields" class="custom-interval hidden">
+              <div class="form-group">
+                <label for="custom-months">Months</label>
+                <input type="number" id="custom-months" value="6" min="1" max="24">
+              </div>
+              <div class="form-group">
+                <label for="custom-mileage">Distance/Hours</label>
+                <input type="text" id="custom-mileage" value="5,000" placeholder="e.g. 5,000">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="sticker-tagline">Tagline (optional)</label>
+              <input type="text" id="sticker-tagline" placeholder="e.g. Thanks for your business!">
+            </div>
+            <button id="sticker-print-btn" class="btn-primary btn-print">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+              Print Sticker
+            </button>
+            <p id="sticker-error" class="error-text hidden"></p>
+          </div>
+          <div id="sticker-disabled" class="panel-empty hidden">
+            <p>Oil Sticker feature is not enabled for your shop. Contact your administrator to enable it.</p>
+          </div>
         </div>
       </main>
     </div>

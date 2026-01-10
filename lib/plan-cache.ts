@@ -45,21 +45,29 @@ export async function checkAndTrackVin(
   db: Db, 
   shopId: number, 
   vin: string, 
-  limit: number
+  limit: number,
+  roId?: string | null
 ): Promise<{ count: number; isNew: boolean; allowed: boolean }> {
   const normalizedVin = vin.toUpperCase();
+  const normalizedRoNumber = roId?.trim() || null;
   
-  const existing = await db.collection("viewed_vins").findOne({ shopId, vin: normalizedVin });
+  // Track by VIN + RO combination - each visit counts as a new view
+  // Use roNumber to match the existing MongoDB index (shopId_vin_roNumber)
+  const query: any = { shopId, vin: normalizedVin, roNumber: normalizedRoNumber };
+  
+  const existing = await db.collection("viewed_vins").findOne(query);
   
   if (existing) {
+    // Same VIN + RO already viewed - doesn't count again
     const count = await db.collection("viewed_vins").countDocuments({ shopId });
     await db.collection("viewed_vins").updateOne(
-      { shopId, vin: normalizedVin },
+      query,
       { $set: { lastViewedAt: new Date() }, $inc: { viewCount: 1 } }
     );
     return { count, isNew: false, allowed: true };
   }
   
+  // New VIN + RO combination - counts as a new view
   const count = await db.collection("viewed_vins").countDocuments({ shopId });
   
   if (count >= limit) {
@@ -67,38 +75,71 @@ export async function checkAndTrackVin(
   }
   
   const now = new Date();
-  await db.collection("viewed_vins").insertOne({
-    shopId,
-    vin: normalizedVin,
-    firstViewedAt: now,
-    lastViewedAt: now,
-    viewCount: 1,
-  });
   
-  return { count: count + 1, isNew: true, allowed: true };
+  try {
+    await db.collection("viewed_vins").insertOne({
+      shopId,
+      vin: normalizedVin,
+      roNumber: normalizedRoNumber,
+      firstViewedAt: now,
+      lastViewedAt: now,
+      viewCount: 1,
+    });
+    return { count: count + 1, isNew: true, allowed: true };
+  } catch (err: any) {
+    // Handle duplicate key error gracefully (race condition or null roNumber conflict)
+    if (err.code === 11000) {
+      // Already exists - just update and return as existing
+      await db.collection("viewed_vins").updateOne(
+        query,
+        { $set: { lastViewedAt: now }, $inc: { viewCount: 1 } }
+      );
+      const updatedCount = await db.collection("viewed_vins").countDocuments({ shopId });
+      return { count: updatedCount, isNew: false, allowed: true };
+    }
+    throw err;
+  }
 }
 
-export async function trackViewedVin(db: Db, shopId: number, vin: string): Promise<{ count: number; isNew: boolean }> {
+export async function trackViewedVin(db: Db, shopId: number, vin: string, roId?: string | null): Promise<{ count: number; isNew: boolean }> {
   const now = new Date();
-  const result = await db.collection("viewed_vins").updateOne(
-    { shopId, vin: vin.toUpperCase() },
-    {
-      $setOnInsert: {
-        firstViewedAt: now,
+  const normalizedVin = vin.toUpperCase();
+  const normalizedRoNumber = roId?.trim() || null;
+  
+  // Use roNumber to match the existing MongoDB index (shopId_vin_roNumber)
+  const query: any = { shopId, vin: normalizedVin, roNumber: normalizedRoNumber };
+  
+  try {
+    const result = await db.collection("viewed_vins").updateOne(
+      query,
+      {
+        $setOnInsert: {
+          firstViewedAt: now,
+        },
+        $set: {
+          lastViewedAt: now,
+        },
+        $inc: { viewCount: 1 },
       },
-      $set: {
-        lastViewedAt: now,
-      },
-      $inc: { viewCount: 1 },
-    },
-    { upsert: true }
-  );
-  
-  const isNew = result.upsertedCount > 0;
-  
-  const count = await db.collection("viewed_vins").countDocuments({ shopId });
-  
-  return { count, isNew };
+      { upsert: true }
+    );
+    
+    const isNew = result.upsertedCount > 0;
+    const count = await db.collection("viewed_vins").countDocuments({ shopId });
+    
+    return { count, isNew };
+  } catch (err: any) {
+    // Handle duplicate key error gracefully
+    if (err.code === 11000) {
+      await db.collection("viewed_vins").updateOne(
+        query,
+        { $set: { lastViewedAt: now }, $inc: { viewCount: 1 } }
+      );
+      const count = await db.collection("viewed_vins").countDocuments({ shopId });
+      return { count, isNew: false };
+    }
+    throw err;
+  }
 }
 
 export async function getViewedVinCount(db: Db, shopId: number): Promise<number> {

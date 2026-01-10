@@ -1,7 +1,7 @@
 modules = ["nodejs-20", "postgresql-16"]
 [agent]
 expertMode = true
-integrations = ["javascript_openai_ai_integrations:2.0.0"]
+integrations = ["javascript_openai_ai_integrations:2.0.0", "javascript_object_storage:2.0.0"]
 
 [workflows]
 runButton = "Project"
@@ -15,18 +15,6 @@ author = "agent"
 task = "workflow.run"
 args = "MOS Maintenance MVP"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Protractor Sync Worker"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Tekmetric Sync Worker"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Protractor Backfill Worker"
-
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -39,38 +27,9 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
-[[workflows.workflow]]
-name = "Protractor Sync Worker"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/protractor-sync-worker.ts"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "Tekmetric Sync Worker"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/tekmetric-sync-worker.ts"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "Protractor Backfill Worker"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx scripts/protractor-backfill-worker.ts"
-
-[workflows.workflow.metadata]
-outputType = "console"
+[[ports]]
+localPort = 3000
+externalPort = 3000
 
 [[ports]]
 localPort = 5000
@@ -78,12 +37,13 @@ externalPort = 80
 
 [nix]
 channel = "stable-25_05"
-packages = ["mongodb", "unzip"]
+packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["npm", "run", "start"]
+deploymentTarget = "gce"
+run = ["npx", "tsx", "scripts/protractor-sync-standalone.ts"]
 build = ["npm", "run", "build"]
+ignorePorts = true
 
 [userenv]
 
@@ -91,8 +51,12 @@ build = ["npm", "run", "build"]
 DATAONE_API_URL = "http://3.144.191.161:3000"
 CARFAX_POST_URL = "https://servicesocket.carfax.com/data/1"
 CARFAX_PDI = "207625C61DD1C38E"
+EMAIL_FROM = "MOS Tools <noreply@mos.tools>"
+CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium"
 
 [userenv.development]
 DEV_AUTO_LOGIN = "true"
 DEV_SHOP_ID = "1"
 DEV_USER_EMAIL = "brandoncrusha+1@gmail.com"
+E2E_TEST_SECRET = "e2e-test-secret-at-least-16-chars"
+NEXT_PUBLIC_BASE_URL = "https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev"

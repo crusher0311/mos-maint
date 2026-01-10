@@ -5,6 +5,9 @@ let isAuthenticated = false;
 let currentContext = null;
 let currentTab = 'plan';
 let cannedJobSource = 'sms';
+let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
+let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
+let lookupJobsDataMap = new Map(); // Store lookup job objects by ID to avoid JSON in HTML
 
 // ==================== DOM ELEMENTS ====================
 const elements = {
@@ -56,7 +59,28 @@ const elements = {
   cannedTabBtns: document.querySelectorAll('.canned-tab-btn'),
   cannedLoading: document.getElementById('canned-loading'),
   cannedEmpty: document.getElementById('canned-empty'),
-  cannedList: document.getElementById('canned-list')
+  cannedList: document.getElementById('canned-list'),
+  
+  // Common Failures
+  failuresLoading: document.getElementById('failures-loading'),
+  failuresEmpty: document.getElementById('failures-empty'),
+  failuresContent: document.getElementById('failures-content'),
+  failuresSource: document.getElementById('failures-source'),
+  failuresList: document.getElementById('failures-list'),
+  
+  // Sticker
+  stickerLoading: document.getElementById('sticker-loading'),
+  stickerForm: document.getElementById('sticker-form'),
+  stickerDisabled: document.getElementById('sticker-disabled'),
+  stickerMileage: document.getElementById('sticker-mileage'),
+  stickerUnit: document.getElementById('sticker-unit'),
+  stickerInterval: document.getElementById('sticker-interval'),
+  customIntervalFields: document.getElementById('custom-interval-fields'),
+  customMonths: document.getElementById('custom-months'),
+  customMileage: document.getElementById('custom-mileage'),
+  stickerTagline: document.getElementById('sticker-tagline'),
+  stickerPrintBtn: document.getElementById('sticker-print-btn'),
+  stickerError: document.getElementById('sticker-error')
 };
 
 // ==================== INITIALIZATION ====================
@@ -108,12 +132,40 @@ function setupEventListeners() {
     if (e.key === 'Enter') handleJobSearch();
   });
   
+  // Sticker form
+  elements.stickerInterval.addEventListener('change', () => {
+    const isCustom = elements.stickerInterval.value === 'custom';
+    elements.customIntervalFields.classList.toggle('hidden', !isCustom);
+  });
+  
+  elements.stickerMileage.addEventListener('input', (e) => {
+    e.target.value = formatMileageInput(e.target.value);
+  });
+  
+  elements.customMileage.addEventListener('input', (e) => {
+    e.target.value = formatMileageInput(e.target.value);
+  });
+  
+  elements.stickerPrintBtn.addEventListener('click', handleStickerPrint);
+  
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
       updateContext(message.context);
     }
+    if (message.action === 'SWITCH_TO_STICKER_TAB') {
+      if (message.context) {
+        updateContext(message.context);
+      }
+      switchTab('sticker');
+    }
   });
+}
+
+function formatMileageInput(value) {
+  const numericValue = value.replace(/[^\d]/g, '');
+  if (!numericValue) return '';
+  return parseInt(numericValue, 10).toLocaleString();
 }
 
 // ==================== STATE MANAGEMENT ====================
@@ -150,8 +202,12 @@ function switchTab(tab) {
   // Load tab data
   if (tab === 'plan' && currentContext) {
     loadPlan();
+  } else if (tab === 'failures' && currentContext) {
+    loadCommonFailures();
   } else if (tab === 'canned' && currentContext) {
     loadCannedJobs();
+  } else if (tab === 'sticker') {
+    loadStickerConfig();
   }
 }
 
@@ -179,9 +235,11 @@ function updateContext(context) {
       elements.mileageDisplay.classList.add('hidden');
     }
     
-    // Load plan data
+    // Load tab data
     if (currentTab === 'plan') {
       loadPlan();
+    } else if (currentTab === 'failures') {
+      loadCommonFailures();
     } else if (currentTab === 'canned') {
       loadCannedJobs();
     }
@@ -534,6 +592,149 @@ function createServiceItemHTML(item, type) {
   `;
 }
 
+// ==================== COMMON FAILURES ====================
+async function loadCommonFailures() {
+  if (!currentContext || !currentContext.vehicle) {
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresContent.classList.add('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'Navigate to a vehicle to see common failures.';
+    return;
+  }
+  
+  const { year, make, model, engine } = currentContext.vehicle;
+  const mileage = currentContext.mileage;
+  
+  if (!year || !make || !model || !mileage) {
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresContent.classList.add('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'Vehicle year, make, model, and mileage are required.';
+    return;
+  }
+  
+  elements.failuresLoading.classList.remove('hidden');
+  elements.failuresEmpty.classList.add('hidden');
+  elements.failuresContent.classList.add('hidden');
+  
+  try {
+    const params = new URLSearchParams({
+      year: String(year),
+      make: make,
+      model: model,
+      mileage: String(mileage),
+      enterprise: 'true'
+    });
+    if (engine) params.set('engine', engine);
+    
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/vehicle/common-failures?${params}`
+    });
+    
+    if (result.error) throw new Error(result.error);
+    
+    renderCommonFailures(result);
+  } catch (err) {
+    console.error('[MOS] Error loading common failures:', err);
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = err.message || 'Failed to load common failures.';
+  }
+}
+
+function renderCommonFailures(data) {
+  elements.failuresLoading.classList.add('hidden');
+  
+  const failures = data.failures || [];
+  
+  if (failures.length === 0) {
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'No common failures found for this vehicle at this mileage.';
+    return;
+  }
+  
+  elements.failuresContent.classList.remove('hidden');
+  
+  // Source badge
+  const source = data.source || 'shop';
+  let sourceClass, sourceText;
+  if (source === 'shop') {
+    sourceClass = 'source-shop';
+    sourceText = '📊 Based on Your Shop Data';
+  } else if (source === 'ai') {
+    sourceClass = 'source-ai';
+    sourceText = '🤖 AI Predictions';
+  } else {
+    sourceClass = 'source-mixed';
+    sourceText = '📊 Mixed: Shop + AI Data';
+  }
+  
+  elements.failuresSource.className = `failures-source-badge ${sourceClass}`;
+  elements.failuresSource.textContent = sourceText;
+  
+  // Clear previous failure data and render new items
+  failuresDataMap.clear();
+  elements.failuresList.innerHTML = failures.map((failure, index) => {
+    const failureId = `failure-${index}`;
+    failuresDataMap.set(failureId, failure);
+    return createFailureItemHTML(failure, failureId);
+  }).join('');
+  
+  // Setup add button handlers
+  setupFailureHandlers();
+}
+
+function createFailureItemHTML(failure, failureId) {
+  const confidenceClass = failure.confidence === 'high' ? 'confidence-high' : 
+                          failure.confidence === 'medium' ? 'confidence-medium' : 'confidence-low';
+  const confidenceText = failure.confidence === 'high' ? 'High Confidence' : 
+                         failure.confidence === 'medium' ? 'Medium' : 'Low';
+  
+  const occurrences = failure.occurrences || 0;
+  const avgTotal = failure.avgTotal || 0;
+  const avgHours = failure.avgHours || 0;
+  const mileageBucket = failure.mileageBucket ? `${failure.mileageBucket}k-${failure.mileageBucket + 5}k mi` : '';
+  
+  return `
+    <li class="failure-item">
+      <div class="failure-header">
+        <div class="failure-title">${escapeHtml(failure.jobTitle || failure.title)}</div>
+        <button class="btn-add btn-add-failure" data-failure-id="${failureId}">
+          + Add
+        </button>
+      </div>
+      <div class="failure-badges">
+        <span class="confidence-badge ${confidenceClass}">${confidenceText}</span>
+        ${occurrences > 0 ? `<span class="occurrence-badge">${occurrences} times</span>` : ''}
+        ${mileageBucket ? `<span class="mileage-badge">${mileageBucket}</span>` : ''}
+      </div>
+      <div class="failure-details">
+        ${avgTotal > 0 ? `<div class="failure-stat"><span class="failure-stat-label">Avg Cost:</span> <span class="failure-stat-value">$${avgTotal.toFixed(0)}</span></div>` : ''}
+        ${avgHours > 0 ? `<div class="failure-stat"><span class="failure-stat-label">Avg Hours:</span> <span class="failure-stat-value">${avgHours.toFixed(1)}h</span></div>` : ''}
+      </div>
+    </li>
+  `;
+}
+
+function setupFailureHandlers() {
+  document.querySelectorAll('.btn-add-failure').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      // Lookup failure from Map by ID (avoids JSON in HTML attributes)
+      const failureId = btn.dataset.failureId;
+      const failure = failuresDataMap.get(failureId);
+      if (!failure) {
+        console.error('[MOS] Failure not found:', failureId);
+        return;
+      }
+      // Search for this job in history
+      switchTab('lookup');
+      elements.jobSearch.value = failure.jobTitle || failure.title;
+      await handleJobSearch();
+    });
+  });
+}
+
 // ==================== JOB LOOKUP ====================
 async function handleJobSearch() {
   const query = elements.jobSearch.value.trim();
@@ -580,8 +781,14 @@ function renderJobResults(jobs) {
     return;
   }
   
+  // Clear previous data and build new list with Map storage
+  lookupJobsDataMap.clear();
   elements.lookupResults.classList.remove('hidden');
-  elements.lookupResults.innerHTML = jobs.map(job => createJobItemHTML(job)).join('');
+  elements.lookupResults.innerHTML = jobs.map((job, index) => {
+    const jobId = `lookup-${index}`;
+    lookupJobsDataMap.set(jobId, job);
+    return createJobItemHTML(job, jobId);
+  }).join('');
   
   // Add toggle and action handlers
   setupJobItemHandlers();
@@ -596,7 +803,7 @@ function getBandStyle(band) {
   }
 }
 
-function createJobItemHTML(job) {
+function createJobItemHTML(job, lookupId) {
   const vehicle = job.vehicle ? 
     `${job.vehicle.year || ''} ${job.vehicle.make || ''} ${job.vehicle.model || ''}`.trim() : '';
   const engine = job.vehicle?.engine ? ` | ${job.vehicle.engine}` : '';
@@ -662,7 +869,7 @@ function createJobItemHTML(job) {
         ` : ''}
         <div class="job-footer">
           <div class="job-meta">WO #${job.workOrderNumber || 'N/A'}</div>
-          <button class="btn-add btn-add-job" data-job='${JSON.stringify(job)}'>
+          <button class="btn-add btn-add-job" data-lookup-id="${lookupId}">
             + Add to RO
           </button>
         </div>
@@ -682,8 +889,13 @@ function setupJobItemHandlers() {
   document.querySelectorAll('.btn-add-job').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const job = JSON.parse(btn.dataset.job);
-      handleAddJob(job);
+      const lookupId = btn.dataset.lookupId;
+      const job = lookupJobsDataMap.get(lookupId);
+      if (job) {
+        handleAddJob(job);
+      } else {
+        console.error('[MOS] Lookup job not found:', lookupId);
+      }
     });
   });
 }
@@ -751,24 +963,35 @@ function renderCannedJobs(jobs) {
     return;
   }
   
+  // Clear previous data and build new list with Map storage
+  cannedJobsDataMap.clear();
   elements.cannedList.classList.remove('hidden');
-  elements.cannedList.innerHTML = jobs.map(job => `
-    <li class="job-item">
-      <div class="job-header" style="cursor: default;">
-        <div>
-          <div class="job-title">${escapeHtml(job.name)}</div>
-          ${job.description ? `<div class="job-meta">${escapeHtml(job.description)}</div>` : ''}
+  elements.cannedList.innerHTML = jobs.map((job, index) => {
+    const cannedId = `canned-${index}`;
+    cannedJobsDataMap.set(cannedId, job);
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escapeHtml(job.name)}</div>
+            ${job.description ? `<div class="job-meta">${escapeHtml(job.description)}</div>` : ''}
+          </div>
+          <button class="btn-add btn-add-canned" data-canned-id="${cannedId}">+ Add</button>
         </div>
-        <button class="btn-add" data-canned='${JSON.stringify(job)}'>+ Add</button>
-      </div>
-    </li>
-  `).join('');
+      </li>
+    `;
+  }).join('');
   
-  // Add click handlers
-  document.querySelectorAll('.btn-add[data-canned]').forEach(btn => {
+  // Add click handlers using Map lookup
+  document.querySelectorAll('.btn-add-canned').forEach(btn => {
     btn.addEventListener('click', () => {
-      const job = JSON.parse(btn.dataset.canned);
-      handleAddCannedJob(job);
+      const cannedId = btn.dataset.cannedId;
+      const job = cannedJobsDataMap.get(cannedId);
+      if (job) {
+        handleAddCannedJob(job);
+      } else {
+        console.error('[MOS] Canned job not found:', cannedId);
+      }
     });
   });
 }
@@ -864,6 +1087,196 @@ async function handleAddCannedJob(job) {
   } else {
     // MOS enriched job - convert to custom job
     await handleAddJob(job);
+  }
+}
+
+// ==================== STICKER ====================
+let stickerConfig = null;
+
+async function loadStickerConfig() {
+  try {
+    // Build endpoint with shop context if available
+    let endpoint = '/api/extension/sticker';
+    if (currentContext && currentContext.shopId) {
+      const provider = currentContext.provider || 'tekmetric';
+      endpoint += `?shopId=${currentContext.shopId}&provider=${provider}`;
+    }
+    
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint
+    });
+    
+    if (result.error) {
+      console.error('[MOS] Sticker config error:', result.error);
+      elements.stickerForm.classList.add('hidden');
+      elements.stickerDisabled.classList.remove('hidden');
+      return;
+    }
+    
+    stickerConfig = result.config;
+    
+    if (!result.enabled) {
+      elements.stickerForm.classList.add('hidden');
+      elements.stickerDisabled.classList.remove('hidden');
+      return;
+    }
+    
+    elements.stickerForm.classList.remove('hidden');
+    elements.stickerDisabled.classList.add('hidden');
+    
+    // Set default unit based on config
+    if (stickerConfig.useKilometers) {
+      elements.stickerUnit.value = 'km';
+    }
+    
+    // Pre-fill mileage from current context if available
+    if (currentContext && currentContext.mileage) {
+      elements.stickerMileage.value = currentContext.mileage.toLocaleString();
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to load sticker config:', err);
+  }
+}
+
+async function handleStickerPrint() {
+  const mileageStr = elements.stickerMileage.value.replace(/,/g, '');
+  const currentMileage = parseInt(mileageStr, 10);
+  
+  if (!currentMileage || currentMileage <= 0) {
+    elements.stickerError.textContent = 'Please enter a valid reading';
+    elements.stickerError.classList.remove('hidden');
+    return;
+  }
+  
+  elements.stickerError.classList.add('hidden');
+  elements.stickerLoading.classList.remove('hidden');
+  elements.stickerPrintBtn.disabled = true;
+  
+  try {
+    const intervalType = elements.stickerInterval.value;
+    const unit = elements.stickerUnit.value;
+    
+    const body = {
+      currentMileage,
+      intervalType,
+      unit
+    };
+    
+    // Add shop context if available
+    if (currentContext && currentContext.shopId) {
+      body.smsShopId = currentContext.shopId;
+      body.provider = currentContext.provider || 'tekmetric';
+    }
+    
+    // Add optional tagline
+    const tagline = elements.stickerTagline?.value?.trim();
+    if (tagline) {
+      body.tagline = tagline;
+    }
+    
+    if (intervalType === 'custom') {
+      body.customMonths = parseInt(elements.customMonths.value, 10) || 6;
+      body.customMileage = parseInt(elements.customMileage.value.replace(/,/g, ''), 10) || 5000;
+    }
+    
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/sticker',
+      options: {
+        method: 'POST',
+        body: JSON.stringify(body)
+      }
+    });
+    
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    
+    if (!result.success || !result.sticker) {
+      throw new Error('Failed to generate sticker');
+    }
+    
+    // Print the sticker using an iframe
+    printStickerImage(result.sticker);
+    
+    showNotification('Sticker generated!', 'success');
+  } catch (err) {
+    console.error('[MOS] Sticker print error:', err);
+    elements.stickerError.textContent = err.message || 'Failed to generate sticker';
+    elements.stickerError.classList.remove('hidden');
+  } finally {
+    elements.stickerLoading.classList.add('hidden');
+    elements.stickerPrintBtn.disabled = false;
+  }
+}
+
+function printStickerImage(sticker) {
+  console.log('[MOS] Sending sticker to content script for printing');
+  
+  // Send to content script via background - content script can print from the actual page
+  chrome.runtime.sendMessage({
+    action: 'PRINT_STICKER_VIA_CONTENT',
+    sticker: sticker
+  }, (response) => {
+    if (response?.success) {
+      console.log('[MOS] Print initiated via content script');
+    } else {
+      console.log('[MOS] Content script print failed, falling back to window.open');
+      printStickerViaWindow(sticker);
+    }
+  });
+}
+
+function printStickerViaWindow(sticker) {
+  // Fallback: Open a popup window for printing
+  const printWindow = window.open('', '_blank', 'width=400,height=500');
+  if (!printWindow) {
+    console.error('[MOS] Failed to open print window - popup blocked?');
+    showNotification('Please allow popups to print', 'error');
+    return;
+  }
+  
+  printWindow.document.open();
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Print Sticker</title>
+      <style>
+        @page { margin: 0; size: auto; }
+        @media print { @page { margin: 0; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        img { 
+          width: ${sticker.widthInches};
+          height: ${sticker.heightInches};
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <img id="sticker" src="${sticker.dataUrl}" />
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  
+  const img = printWindow.document.getElementById('sticker');
+  if (img) {
+    const doPrint = () => {
+      console.log('[MOS] Triggering print dialog via window');
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 100);
+    };
+    
+    if (img.complete) {
+      doPrint();
+    } else {
+      img.onload = doPrint;
+    }
   }
 }
 

@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2 } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
+import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
@@ -23,6 +24,7 @@ type DashboardData = {
   pagination?: PaginationInfo;
   user: any;
   smsType?: string;
+  distanceUnit?: "miles" | "kilometers";
 };
 
 const PAGE_SIZE = 100;
@@ -96,7 +98,395 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     workOrderId?: string;
     displayName?: string;
   } | null>(null);
+  const [commonFailuresVehicle, setCommonFailuresVehicle] = useState<{
+    vin: string;
+    year?: number;
+    make?: string;
+    model?: string;
+    engine?: string;
+    mileage?: number;
+    displayName?: string;
+  } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [printingSticker, setPrintingSticker] = useState<string | null>(null);
+  const [stickerContextMenu, setStickerContextMenu] = useState<{
+    vin: string;
+    mileage: number;
+    x: number;
+    y: number;
+    intervals: Record<string, { mileage: number; months: number }>;
+    useKilometers: boolean;
+  } | null>(null);
+  const [customStickerModal, setCustomStickerModal] = useState<{
+    vin: string;
+    mileage: number;
+  } | null>(null);
+  const [customDate, setCustomDate] = useState('');
+  const [customMileage, setCustomMileage] = useState('');
+  const stickerContextRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutsideContext(e: MouseEvent) {
+      if (stickerContextRef.current && !stickerContextRef.current.contains(e.target as Node)) {
+        setStickerContextMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutsideContext);
+    return () => document.removeEventListener("mousedown", handleClickOutsideContext);
+  }, []);
+
+  const handleStickerRightClick = async (e: React.MouseEvent, vin: string, currentMileage: number | null) => {
+    e.preventDefault();
+    if (!currentMileage) {
+      alert("Mileage is required to print a sticker");
+      return;
+    }
+    
+    // Fetch sticker settings to get intervals
+    try {
+      const settingsRes = await fetch('/api/sticker/settings');
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const config = settingsData.config || {};
+        const defaultIntervals = {
+          conventional: { mileage: 3000, months: 3 },
+          synthetic: { mileage: 5000, months: 6 },
+          euro: { mileage: 10000, months: 12 },
+          diesel: { mileage: 7500, months: 6 },
+        };
+        setStickerContextMenu({
+          vin,
+          mileage: currentMileage,
+          x: e.clientX,
+          y: e.clientY,
+          intervals: config.intervals || defaultIntervals,
+          useKilometers: config.useKilometers || false,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch sticker settings', err);
+    }
+  };
+
+  const handlePrintWithInterval = (intervalType: string) => {
+    if (!stickerContextMenu) return;
+    const interval = stickerContextMenu.intervals[intervalType];
+    if (!interval) return;
+    
+    const nextDate = new Date();
+    nextDate.setMonth(nextDate.getMonth() + interval.months);
+    const nextServiceDate = nextDate.toISOString().split('T')[0];
+    const nextServiceMileage = stickerContextMenu.mileage + interval.mileage;
+    
+    setStickerContextMenu(null);
+    handleQuickPrintStickerWithValues(
+      stickerContextMenu.vin,
+      stickerContextMenu.mileage,
+      nextServiceMileage,
+      nextServiceDate
+    );
+  };
+
+  const handleOpenCustomModal = () => {
+    if (!stickerContextMenu) return;
+    const nextDate = new Date();
+    nextDate.setMonth(nextDate.getMonth() + 3);
+    setCustomDate(nextDate.toISOString().split('T')[0]);
+    setCustomMileage(String(stickerContextMenu.mileage + 5000));
+    setCustomStickerModal({
+      vin: stickerContextMenu.vin,
+      mileage: stickerContextMenu.mileage,
+    });
+    setStickerContextMenu(null);
+  };
+
+  const handlePrintCustom = () => {
+    if (!customStickerModal) return;
+    handleQuickPrintStickerWithValues(
+      customStickerModal.vin,
+      customStickerModal.mileage,
+      parseInt(customMileage) || customStickerModal.mileage + 5000,
+      customDate
+    );
+    setCustomStickerModal(null);
+  };
+
+  const handleQuickPrintStickerWithValues = async (
+    vin: string,
+    currentMileage: number,
+    nextServiceMileage: number,
+    nextServiceDate: string
+  ) => {
+    setPrintingSticker(vin);
+    try {
+      let stickerSize = '2x2';
+      let includeQR = true;
+      
+      try {
+        const settingsRes = await fetch('/api/sticker/settings');
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          const config = settingsData.config;
+          if (config?.defaultSize) stickerSize = config.defaultSize;
+          if (config?.showQRCode !== undefined) includeQR = config.showQRCode;
+        }
+      } catch (e) {
+        console.log('Using default settings');
+      }
+      
+      const response = await fetch('/api/sticker/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vin,
+          currentMileage,
+          nextServiceMileage,
+          nextServiceDate,
+          size: stickerSize,
+          includeQR,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate sticker');
+      }
+      
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const sizeMap: Record<string, { width: string; height: string }> = {
+          '2x2': { width: '2in', height: '2in' },
+          '2x2.5': { width: '2in', height: '2.5in' },
+          '2x3': { width: '2in', height: '3in' },
+          '2x3.5': { width: '2in', height: '3.5in' },
+        };
+        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
+        
+        const existingFrame = document.getElementById('sticker-print-frame');
+        if (existingFrame) existingFrame.remove();
+        
+        const iframe = document.createElement('iframe');
+        iframe.id = 'sticker-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body><img src="${dataUrl}" /></body>
+            </html>
+          `);
+          iframeDoc.close();
+          
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }, 250);
+        }
+      };
+      
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Failed to print sticker:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate sticker.');
+    } finally {
+      setPrintingSticker(null);
+    }
+  };
+
+  const handleQuickPrintSticker = async (vin: string, currentMileage: number | null) => {
+    if (!currentMileage) {
+      alert("Mileage is required to print a sticker");
+      return;
+    }
+    
+    setPrintingSticker(vin);
+    try {
+      // Fetch shop sticker settings to get interval preferences and size
+      let intervalMileage = 5000;
+      let intervalMonths = 3;
+      let stickerSize = '2x2';
+      let includeQR = true;
+      let usePredictiveDate = false;
+      
+      try {
+        const settingsRes = await fetch('/api/sticker/settings');
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          const config = settingsData.config;
+          const intervals = config?.intervals;
+          
+          // Use shop's configured sticker size
+          if (config?.defaultSize) {
+            stickerSize = config.defaultSize;
+          }
+          
+          // Use shop's QR code preference
+          if (config?.showQRCode !== undefined) {
+            includeQR = config.showQRCode;
+          }
+          
+          // Check if predictive date is enabled
+          if (config?.usePredictiveDate) {
+            usePredictiveDate = true;
+          }
+          
+          // Use synthetic oil as default interval (most common)
+          if (intervals?.synthetic) {
+            intervalMileage = intervals.synthetic.mileage || 5000;
+            intervalMonths = intervals.synthetic.months || 3;
+          } else if (intervals?.conventional) {
+            intervalMileage = intervals.conventional.mileage || 3000;
+            intervalMonths = intervals.conventional.months || 3;
+          }
+        }
+      } catch (e) {
+        console.log('Using default intervals');
+      }
+      
+      // Calculate next service mileage based on shop interval
+      const nextServiceMileage = currentMileage + intervalMileage;
+      
+      // Calculate next service date - use "shortest interval wins" logic
+      let nextServiceDate: string;
+      
+      // Fixed interval date (always calculate as baseline)
+      const fixedDate = new Date();
+      fixedDate.setMonth(fixedDate.getMonth() + intervalMonths);
+      
+      if (usePredictiveDate) {
+        try {
+          const statsRes = await fetch(`/api/vehicle/driving-stats?vin=${encodeURIComponent(vin)}`);
+          if (statsRes.ok) {
+            const stats = await statsRes.json();
+            if (stats.milesPerDay && stats.milesPerDay > 0) {
+              // Calculate days until next service based on driving habits
+              const daysUntilService = Math.ceil(intervalMileage / stats.milesPerDay);
+              const predictiveDate = new Date();
+              predictiveDate.setDate(predictiveDate.getDate() + daysUntilService);
+              
+              // Use the SHORTER of the two intervals (earliest date)
+              if (predictiveDate < fixedDate) {
+                nextServiceDate = predictiveDate.toISOString().split('T')[0];
+              } else {
+                nextServiceDate = fixedDate.toISOString().split('T')[0];
+              }
+            } else {
+              // No driving data, use fixed interval
+              nextServiceDate = fixedDate.toISOString().split('T')[0];
+            }
+          } else {
+            nextServiceDate = fixedDate.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          nextServiceDate = fixedDate.toISOString().split('T')[0];
+        }
+      } else {
+        nextServiceDate = fixedDate.toISOString().split('T')[0];
+      }
+      
+      // Generate the sticker image
+      const response = await fetch('/api/sticker/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vin,
+          currentMileage,
+          nextServiceMileage,
+          nextServiceDate,
+          size: stickerSize,
+          includeQR,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate sticker');
+      }
+      
+      // Get the image blob and convert to data URL
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        
+        const sizeMap: Record<string, { width: string; height: string }> = {
+          '2x2': { width: '2in', height: '2in' },
+          '2x2.5': { width: '2in', height: '2.5in' },
+          '2x3': { width: '2in', height: '3in' },
+          '2x3.5': { width: '2in', height: '3.5in' },
+        };
+        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
+        
+        const existingFrame = document.getElementById('sticker-print-frame');
+        if (existingFrame) existingFrame.remove();
+        
+        const iframe = document.createElement('iframe');
+        iframe.id = 'sticker-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body><img src="${dataUrl}" /></body>
+            </html>
+          `);
+          iframeDoc.close();
+          
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }, 250);
+        }
+      };
+      
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Failed to print sticker:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
+    } finally {
+      setPrintingSticker(null);
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -275,32 +665,33 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Car className="w-6 h-6 text-gray-600" />
-            <h1 className="text-xl font-semibold text-gray-900">Vehicles</h1>
-            <span className="text-sm text-gray-500">({pagination.totalCount} total)</span>
+      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Car className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600 flex-shrink-0" />
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Vehicles</h1>
+            <span className="text-xs sm:text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={handleToggleArchived}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                 showArchived 
                   ? 'bg-gray-800 text-white hover:bg-gray-700' 
                   : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
               }`}
             >
-              <Archive className="w-4 h-4" />
-              {showArchived ? "Showing Archived" : "Show Archived"}
+              <Archive className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">{showArchived ? "Showing Archived" : "Show Archived"}</span>
+              <span className="sm:hidden">{showArchived ? "Archived" : "Archive"}</span>
             </button>
             <button
               onClick={refreshData}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? "Refreshing..." : "Refresh"}
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
             <div className="flex items-center gap-2">
               <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
@@ -335,59 +726,59 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Car className="w-6 h-6 text-blue-600" />
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <Car className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Vehicles</p>
-                <p className="text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">DVI Complete (this page)</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">Total Vehicles</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-yellow-600" />
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
               </div>
-              <div>
-                <p className="text-sm text-gray-500">No DVI (this page)</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.inProgress}</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">DVI Complete (this page)</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">No DVI (this page)</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.inProgress}</p>
               </div>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="relative">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="relative flex-1 sm:flex-none">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search vehicles..."
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              <div className="flex items-center gap-4 text-sm text-gray-500">
+              <div className="flex items-center gap-4 text-xs sm:text-sm text-gray-500">
                 <span>
                   Showing {((pagination.page - 1) * pagination.pageSize) + 1}-{Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
                 </span>
@@ -396,17 +787,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 text-left text-sm text-gray-600">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-gray-50 text-left text-xs sm:text-sm text-gray-600">
                 <tr>
                   <SortHeader column="customer">Customer</SortHeader>
-                  <SortHeader column="vehicle">Vehicle</SortHeader>
+                  <SortHeader column="vehicle"><span className="hidden sm:inline">Vehicle</span><span className="sm:hidden">Veh.</span></SortHeader>
                   <SortHeader column="vin">VIN</SortHeader>
                   <SortHeader column="ro">RO #</SortHeader>
-                  <SortHeader column="status">{data.smsType === 'protractor' ? 'Workflow Stage' : 'Status'}</SortHeader>
+                  <SortHeader column="status">{data.smsType === 'protractor' ? 'Stage' : 'Status'}</SortHeader>
                   <SortHeader column="dvi">DVI</SortHeader>
-                  <SortHeader column="mileage">Mileage</SortHeader>
-                  <th className="px-6 py-3 font-medium"></th>
+                  <SortHeader column="mileage"><span className="hidden sm:inline">{data.distanceUnit === "kilometers" ? "Odometer" : "Mileage"}</span><span className="sm:hidden">Mi.</span></SortHeader>
+                  <th className="px-3 sm:px-6 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -417,27 +808,27 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   
                   return (
                     <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <Link href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <Link href={VEHICLE_HREF(vin)} className="text-gray-900 font-medium hover:text-blue-600 transition-colors text-sm">
                           {r.displayName || "Unknown"}
                         </Link>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-gray-600 text-sm">
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
                       </td>
-                      <td className="px-6 py-4">
-                        <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono text-gray-700">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <code className="text-xs bg-gray-100 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono text-gray-700">
                           {vin}
                         </code>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.displayRo ? (
-                          <span className="text-gray-600">{r.displayRo}</span>
+                          <span className="text-gray-600 text-sm">{r.displayRo}</span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {(() => {
                           const { label, color, icon } = formatWorkflowStage(statusText);
                           return (
@@ -448,24 +839,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.dviDone ? (
-                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-100 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
                           </div>
                         ) : (
-                          <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                            <Clock className="w-4 h-4 text-gray-400" />
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                            <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 font-mono text-sm text-gray-600">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-xs sm:text-sm text-gray-600">
                         {r.displayMiles != null
                           ? Number(r.displayMiles).toLocaleString()
                           : "—"}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           {r.displayMiles != null && r.displayMiles > 0 ? (
                             <Link
                               href={VEHICLE_HREF(vin)}
@@ -514,6 +905,54 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                             title="Job Lookup"
                           >
                             <Wrench className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              let year = r.vehicle?.year;
+                              let make = r.vehicle?.make;
+                              let model = r.vehicle?.model;
+                              
+                              if (!year && !make && !model && r.displayVehicle) {
+                                const vehicleStr = r.displayVehicle || "";
+                                const yearMatch = vehicleStr.match(/^(\d{4})/);
+                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                                const parts = afterYear.split(" ").filter(Boolean);
+                                make = parts[0] || undefined;
+                                model = parts.slice(1).join(" ") || undefined;
+                              }
+                              
+                              setCommonFailuresVehicle({
+                                vin,
+                                year,
+                                make,
+                                model,
+                                engine: r.vehicle?.engine || r.engine || undefined,
+                                mileage: r.displayMiles,
+                                displayName: r.displayName,
+                              });
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Common Failures"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleQuickPrintSticker(vin, r.displayMiles)}
+                            onContextMenu={(e) => handleStickerRightClick(e, vin, r.displayMiles)}
+                            disabled={printingSticker === vin || !r.displayMiles}
+                            className={`p-1.5 rounded transition-colors ${
+                              !r.displayMiles 
+                                ? "text-gray-300 cursor-not-allowed" 
+                                : "text-gray-400 hover:text-green-600 hover:bg-green-50"
+                            }`}
+                            title={r.displayMiles ? "Quick Print Oil Sticker (Right-click for options)" : "Mileage required for sticker"}
+                          >
+                            {printingSticker === vin ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Printer className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -638,6 +1077,150 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   refreshData();
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {commonFailuresVehicle && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                  Common Failures
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {commonFailuresVehicle.displayName} - {commonFailuresVehicle.year} {commonFailuresVehicle.make} {commonFailuresVehicle.model}
+                </p>
+              </div>
+              <button
+                onClick={() => setCommonFailuresVehicle(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <CommonFailuresPanel
+                vehicle={{
+                  year: commonFailuresVehicle.year,
+                  make: commonFailuresVehicle.make,
+                  model: commonFailuresVehicle.model,
+                  engine: commonFailuresVehicle.engine,
+                  mileage: commonFailuresVehicle.mileage,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stickerContextMenu && (
+        <div
+          ref={stickerContextRef}
+          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[200px]"
+          style={{ 
+            left: Math.min(stickerContextMenu.x, window.innerWidth - 280),
+            top: Math.min(stickerContextMenu.y, window.innerHeight - 250),
+          }}
+        >
+          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
+            Oil Type Presets
+          </div>
+          <button
+            onClick={() => handlePrintWithInterval('conventional')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>Conventional</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.conventional?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.conventional?.months} mo
+            </span>
+          </button>
+          <button
+            onClick={() => handlePrintWithInterval('synthetic')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>Synthetic</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.synthetic?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.synthetic?.months} mo
+            </span>
+          </button>
+          <button
+            onClick={() => handlePrintWithInterval('euro')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>European</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.euro?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.euro?.months} mo
+            </span>
+          </button>
+          <button
+            onClick={() => handlePrintWithInterval('diesel')}
+            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+          >
+            <span>Diesel</span>
+            <span className="text-gray-400">
+              {stickerContextMenu.intervals.diesel?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.diesel?.months} mo
+            </span>
+          </button>
+          <div className="border-t border-gray-100 mt-1 pt-1">
+            <button
+              onClick={handleOpenCustomModal}
+              className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 font-medium"
+            >
+              Custom Date/Mileage...
+            </button>
+          </div>
+        </div>
+      )}
+
+      {customStickerModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Custom Sticker Values</h2>
+              <button
+                onClick={() => setCustomStickerModal(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next Service Date</label>
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next Service Mileage</label>
+                <input
+                  type="number"
+                  value={customMileage}
+                  onChange={(e) => setCustomMileage(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setCustomStickerModal(null)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePrintCustom}
+                  className="flex-1 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Print Sticker
+                </button>
+              </div>
             </div>
           </div>
         </div>

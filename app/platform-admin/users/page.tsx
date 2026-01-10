@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Search, RefreshCw } from "lucide-react";
+import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2 } from "lucide-react";
 
 interface User {
   _id: string;
@@ -9,8 +9,27 @@ interface User {
   role: string;
   shopId: number;
   shopName: string;
+  shopIds?: string[];
   createdAt: string;
   isPlatformAdmin?: boolean;
+}
+
+interface Shop {
+  shopId: string;
+  name: string;
+  location?: string;
+}
+
+interface UserModalData {
+  _id: string;
+  email: string;
+  role: string;
+  shopId: string;
+  shopIds: string[];
+  shopNames: { shopId: string; name: string }[];
+  isPlatformAdmin: boolean;
+  createdAt: string;
+  lastLogin?: string;
 }
 
 export default function PlatformUsersPage() {
@@ -18,9 +37,17 @@ export default function PlatformUsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [selectedUser, setSelectedUser] = useState<UserModalData | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [allShops, setAllShops] = useState<Shop[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [editedRole, setEditedRole] = useState("");
+  const [editedShopIds, setEditedShopIds] = useState<string[]>([]);
+  const [editedIsPlatformAdmin, setEditedIsPlatformAdmin] = useState(false);
 
   useEffect(() => {
     loadUsers();
+    fetchAllShops();
   }, []);
 
   const loadUsers = async () => {
@@ -37,6 +64,99 @@ export default function PlatformUsersPage() {
       setLoading(false);
     }
   };
+
+  async function fetchAllShops() {
+    try {
+      const res = await fetch("/api/shops/list?scope=all");
+      if (res.ok) {
+        const data = await res.json();
+        setAllShops(data.shops || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch shops:", err);
+    }
+  }
+
+  async function handleUserClick(userId: string) {
+    setModalLoading(true);
+    try {
+      const res = await fetch(`/api/platform-admin/users/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedUser(data.user);
+        setEditedRole(data.user.role);
+        setEditedShopIds(data.user.shopIds || []);
+        setEditedIsPlatformAdmin(data.user.isPlatformAdmin || false);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user details:", err);
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  async function handleSaveUser() {
+    if (!selectedUser) return;
+    
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/platform-admin/users/${selectedUser._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: editedRole,
+          shopIds: editedShopIds,
+          isPlatformAdmin: editedIsPlatformAdmin,
+        }),
+      });
+      
+      if (res.ok) {
+        setSelectedUser(null);
+        loadUsers();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+      alert("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!selectedUser) return;
+    if (!confirm(`Are you sure you want to delete ${selectedUser.email}? This cannot be undone.`)) return;
+    
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/platform-admin/users/${selectedUser._id}`, {
+        method: "DELETE",
+      });
+      
+      if (res.ok) {
+        setSelectedUser(null);
+        loadUsers();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete");
+      }
+    } catch (err) {
+      console.error("Failed to delete:", err);
+      alert("Failed to delete user");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleShopSelection(shopId: string) {
+    setEditedShopIds(prev => 
+      prev.includes(shopId)
+        ? prev.filter(id => id !== shopId)
+        : [...prev, shopId]
+    );
+  }
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = 
@@ -70,7 +190,7 @@ export default function PlatformUsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">All Users</h1>
-          <p className="text-gray-600">View all users across all shops</p>
+          <p className="text-gray-600">View and manage all users across all shops</p>
         </div>
         <button
           onClick={loadUsers}
@@ -112,19 +232,24 @@ export default function PlatformUsersPage() {
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">User</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Shop</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Role</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Locations</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                   {search || roleFilter !== "all" ? "No users match your filters" : "No users yet"}
                 </td>
               </tr>
             ) : (
               filteredUsers.map((user) => (
-                <tr key={user._id} className="hover:bg-gray-50">
+                <tr 
+                  key={user._id} 
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => handleUserClick(user._id)}
+                >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
@@ -135,7 +260,10 @@ export default function PlatformUsersPage() {
                       <div>
                         <div className="font-medium text-gray-900">{user.email}</div>
                         {user.isPlatformAdmin && (
-                          <span className="text-xs text-purple-600">Platform Admin</span>
+                          <span className="text-xs text-purple-600 flex items-center gap-1">
+                            <Shield className="w-3 h-3" />
+                            Platform Admin
+                          </span>
                         )}
                       </div>
                     </div>
@@ -148,6 +276,16 @@ export default function PlatformUsersPage() {
                     <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${roleColors[user.role] || roleColors.user}`}>
                       {user.role}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {user.shopIds && user.shopIds.length > 0 ? (
+                      <span className="flex items-center gap-1 text-sm text-gray-600">
+                        <MapPin className="w-3 h-3" />
+                        {user.shopIds.length + 1}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-gray-400">1</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
@@ -162,6 +300,157 @@ export default function PlatformUsersPage() {
       <div className="text-sm text-gray-500">
         Showing {filteredUsers.length} of {users.length} users
       </div>
+
+      {(selectedUser || modalLoading) && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden">
+            {modalLoading ? (
+              <div className="p-12 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+              </div>
+            ) : selectedUser && (
+              <>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Edit User</h2>
+                    <p className="text-sm text-gray-500">{selectedUser.email}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedUser(null)}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="p-6 space-y-5 max-h-[55vh] overflow-y-auto">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Role
+                    </label>
+                    <select
+                      value={editedRole}
+                      onChange={(e) => setEditedRole(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="admin">Admin</option>
+                      <option value="manager">Manager</option>
+                      <option value="user">User</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editedIsPlatformAdmin}
+                        onChange={(e) => setEditedIsPlatformAdmin(e.target.checked)}
+                        className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900 flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-purple-600" />
+                          Platform Admin
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Can access the platform admin panel
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Primary Location
+                    </label>
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center gap-2">
+                        <Building className="w-4 h-4 text-gray-500" />
+                        <span className="font-medium">
+                          {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.name || `Shop ${selectedUser.shopId}`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Additional Location Access
+                    </label>
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto border border-gray-200 rounded-lg p-2">
+                      {allShops
+                        .filter(shop => String(shop.shopId) !== String(selectedUser.shopId))
+                        .map(shop => (
+                          <label
+                            key={shop.shopId}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={editedShopIds.includes(String(shop.shopId))}
+                              onChange={() => toggleShopSelection(String(shop.shopId))}
+                              className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 text-sm truncate">{shop.name}</div>
+                              {shop.location && (
+                                <div className="text-xs text-gray-500 truncate">{shop.location}</div>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-400">ID: {shop.shopId}</div>
+                          </label>
+                        ))}
+                      {allShops.filter(shop => String(shop.shopId) !== String(selectedUser.shopId)).length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          No other locations available
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <div className="text-xs text-gray-500 space-y-1">
+                      <div>Created: {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : "Unknown"}</div>
+                      {selectedUser.lastLogin && (
+                        <div>Last login: {new Date(selectedUser.lastLogin).toLocaleString()}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                  <button
+                    onClick={handleDeleteUser}
+                    disabled={saving}
+                    className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSelectedUser(null)}
+                      className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveUser}
+                      disabled={saving}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

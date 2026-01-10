@@ -8,6 +8,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
+import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -16,6 +17,15 @@ export const dynamic = "force-dynamic";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(req: NextRequest) {
+  // Check if Protractor sync is disabled (e.g., on Render where IP isn't whitelisted)
+  if (process.env.DISABLE_PROTRACTOR_SYNC === "true") {
+    return NextResponse.json({ 
+      ok: true, 
+      message: "Protractor sync disabled via DISABLE_PROTRACTOR_SYNC environment variable",
+      disabled: true 
+    });
+  }
+
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,6 +45,7 @@ export async function GET(req: NextRequest) {
     }).toArray();
 
     const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
+    const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
@@ -62,6 +73,7 @@ export async function GET(req: NextRequest) {
         console.log(`[Cron] Shop ${shopId} - WorkflowStage counts:`, stageCounts);
 
         let vehiclesUpdated = 0;
+        const shopSyncedVins: string[] = [];
         const limit = pLimit(3);
 
         const detailedWOs = await Promise.all(
@@ -171,6 +183,7 @@ export async function GET(req: NextRequest) {
                 });
               }
               vehiclesUpdated++;
+              shopSyncedVins.push(vin);
             }
             
             if (INVOICED_STAGES.some(s => stage.toLowerCase().includes(s.toLowerCase()))) {
@@ -221,6 +234,33 @@ export async function GET(req: NextRequest) {
         }
 
         results.push({ shopId, synced: detailedWOs.length, removed: removedCount, vehiclesUpdated });
+        
+        if (shopSyncedVins.length > 0) {
+          syncedVinsPerShop.push({ shopId, vins: shopSyncedVins });
+        }
+        
+        // Dual-write to normalized collections (pass full work order payloads)
+        try {
+          const workOrdersForNormalized = detailedWOs.filter(wo => wo.ServiceItem?.VIN);
+          
+          if (workOrdersForNormalized.length > 0) {
+            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+            const enterpriseId = shop?.enterpriseId as string | undefined;
+            
+            const ingestionService = new NormalizedIngestionService(
+              db,
+              'protractor',
+              shopId,
+              enterpriseId,
+              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true }
+            );
+            
+            const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);
+            console.log(`[Cron] Protractor sync normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, payments: ${result.payments.created}, inspections: ${result.inspections.created}, recommendations: ${result.recommendations.created}`);
+          }
+        } catch (normErr: any) {
+          console.log(`[Cron] Protractor sync normalized ingestion error for shop ${shopId}:`, normErr.message);
+        }
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
       }
@@ -228,6 +268,25 @@ export async function GET(req: NextRequest) {
 
     const duration = Date.now() - startTime;
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
+
+    // Fire-and-forget plan pre-generation for synced vehicles
+    if (syncedVinsPerShop.length > 0 && CRON_SECRET) {
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : 'http://localhost:5000';
+      
+      for (const { shopId, vins } of syncedVinsPerShop) {
+        fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${CRON_SECRET}`,
+          },
+          body: JSON.stringify({ shopId, vins: vins.slice(0, 10) }),
+        }).catch(err => console.log(`[Cron] Plan pregenerate fire-and-forget failed for shop ${shopId}:`, err.message));
+      }
+      console.log(`[Cron] Triggered plan pre-generation for ${syncedVinsPerShop.length} shops`);
+    }
 
     return NextResponse.json({
       ok: true,

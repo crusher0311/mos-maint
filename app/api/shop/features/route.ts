@@ -3,7 +3,8 @@
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getEnabledFeatures, FEATURES, FeatureId } from "@/lib/features";
+import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
+import { FEATURES } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,19 @@ export async function GET() {
   }
 
   const shopId = Number(session.shopId);
-  const enabledFeatureIds = await getEnabledFeatures(shopId);
+  const entitlements = await getFeatureEntitlements(shopId);
+  
+  const enabledFeatureIds: string[] = [];
+  const featureKeys: FeatureKey[] = ["maintenance", "job_lookup", "oil_sticker", "part_xref", "dvi_tracking"];
+  
+  for (const key of featureKeys) {
+    if (entitlements.effectiveFeatures[key]) {
+      enabledFeatureIds.push(key);
+    }
+  }
   
   const enabledFeatures = FEATURES.filter(f => 
-    enabledFeatureIds.includes(f.id as FeatureId)
+    enabledFeatureIds.includes(f.id)
   ).map(f => ({
     id: f.id,
     name: f.name,

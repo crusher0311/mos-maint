@@ -23,16 +23,27 @@ import {
   Check,
   BarChart3,
   LogOut,
-  RefreshCw
+  RefreshCw,
+  X,
+  Printer
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
+
+interface NavChild {
+  name: string;
+  href: string;
+  featureId?: string;
+  isModal?: boolean;
+  children?: { name: string; href: string; featureId?: string; isModal?: boolean }[];
+}
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ReactNode;
   featureId?: string;
-  children?: { name: string; href: string; featureId?: string }[];
+  isModal?: boolean;
+  children?: NavChild[];
 }
 
 interface ShopOption {
@@ -53,12 +64,27 @@ interface SidebarProps {
   currentShopId?: number;
   enterpriseId?: string | null;
   enabledFeatures?: string[];
+  onClose?: () => void;
+  onQuickStickerClick?: () => void;
 }
 
-export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"] }: SidebarProps) {
+function getInitialExpandedSections(pathname: string | null): Set<string> {
+  const sections = new Set<string>();
+  if (pathname?.startsWith("/dashboard/settings")) {
+    sections.add("Settings");
+  }
+  if (pathname?.startsWith("/dashboard/settings/branding") || 
+      pathname?.startsWith("/dashboard/settings/stickers") ||
+      pathname?.startsWith("/dashboard/settings/preferences")) {
+    sections.add("Preferences");
+  }
+  return sections;
+}
+
+export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose, onQuickStickerClick }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["Settings"]));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => getInitialExpandedSections(pathname));
   const [searchQuery, setSearchQuery] = useState("");
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false);
   const [shops, setShops] = useState<ShopOption[]>([]);
@@ -105,6 +131,28 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
     }
   }, [shopDropdownOpen]);
 
+  useEffect(() => {
+    if (!pathname) return;
+    
+    setExpandedSections(prev => {
+      const newExpanded = new Set(prev);
+      let changed = false;
+      
+      if (pathname.startsWith("/dashboard/settings") && !newExpanded.has("Settings")) {
+        newExpanded.add("Settings");
+        changed = true;
+      }
+      if ((pathname.startsWith("/dashboard/settings/branding") || 
+           pathname.startsWith("/dashboard/settings/stickers") ||
+           pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
+        newExpanded.add("Preferences");
+        changed = true;
+      }
+      
+      return changed ? newExpanded : prev;
+    });
+  }, [pathname]);
+
   async function switchShop(shopId: number) {
     if (switching || shopId === currentShopId) {
       setShopDropdownOpen(false);
@@ -150,10 +198,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       icon: <LayoutDashboard className="w-5 h-5" />
     },
     {
-      name: "Reporting",
-      href: "/dashboard/reporting",
-      icon: <BarChart3 className="w-5 h-5" />
+      name: "Quick Sticker",
+      href: "#quick-sticker",
+      icon: <Printer className="w-5 h-5" />,
+      featureId: "oil_sticker",
+      isModal: true
     },
+    // Reporting page hidden until we have enough data to verify with live users
+    // {
+    //   name: "Reporting",
+    //   href: "/dashboard/reporting",
+    //   icon: <BarChart3 className="w-5 h-5" />
+    // },
     {
       name: "Part Cross-Ref",
       href: "/dashboard/parts",
@@ -161,18 +217,20 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       featureId: "part_xref",
     },
     {
-      name: "Shop Onboarding",
-      href: "/dashboard/onboarding",
-      icon: <ClipboardCheck className="w-5 h-5" />
-    },
-    {
       name: "Settings",
       href: "/dashboard/settings",
       icon: <Settings className="w-5 h-5" />,
       children: [
-        { name: "Preferences", href: "/dashboard/settings/preferences" },
-        { name: "Shop Branding", href: "/dashboard/settings/branding" },
-        { name: "Billing", href: "/dashboard/settings/billing" },
+        { 
+          name: "Preferences", 
+          href: "/dashboard/settings/preferences",
+          children: [
+            { name: "Shop Branding", href: "/dashboard/settings/branding" },
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
+          ]
+        },
+        // Billing page hidden until we have enough data to verify with live users
+        // { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
@@ -193,6 +251,20 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         children: item.children.filter(child => {
           if (!child.featureId) return true;
           return enabledFeatures.includes(child.featureId);
+        }).map(child => {
+          if (child.children) {
+            return {
+              ...child,
+              children: child.children.filter(grandchild => {
+                if (!grandchild.featureId) return true;
+                return enabledFeatures.includes(grandchild.featureId);
+              }),
+            };
+          }
+          return child;
+        }).filter(child => {
+          if (child.children && child.children.length === 0) return false;
+          return true;
         }),
       };
     }
@@ -200,7 +272,17 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   });
 
   return (
-    <aside className="w-64 min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
+    <aside className="w-full h-full min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
+      {/* Mobile close button */}
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg z-10"
+          aria-label="Close menu"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      )}
       <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
         <button 
           onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
@@ -208,18 +290,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
           }`}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             {shopLogo && (
               <img 
                 src={shopLogo} 
                 alt="" 
-                className="h-6 w-auto max-w-[32px] object-contain flex-shrink-0"
+                className="h-10 w-auto max-w-[48px] object-contain flex-shrink-0"
               />
             )}
-            <div className="min-w-0">
-              <span className="font-medium truncate block">{shopName}</span>
+            <div className="min-w-0 flex-1">
+              <span className="font-medium text-sm leading-tight block break-words">{shopName}</span>
               {locationIdentifier && (
-                <span className="text-xs text-white/70 truncate block">{locationIdentifier}</span>
+                <span className="text-xs text-white/70 block break-words">{locationIdentifier}</span>
               )}
             </div>
           </div>
@@ -322,21 +404,97 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                     <ul className="mt-1 ml-4 space-y-1 border-l border-white/20 pl-4">
                       {item.children.map((child) => (
                         <li key={child.name}>
-                          <Link
-                            href={child.href}
-                            className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                              isActive(child.href)
-                                ? "bg-white/20 text-white font-medium"
-                                : "text-white/70 hover:bg-white/10 hover:text-white"
-                            }`}
-                          >
-                            {child.name}
-                          </Link>
+                          {child.children && child.children.length > 0 ? (
+                            <div>
+                              <div className="flex items-center">
+                                <Link
+                                  href={child.href}
+                                  className={`flex-1 px-3 py-2 rounded-l-lg text-sm transition-colors ${
+                                    isActive(child.href) && !child.children.some(gc => isActive(gc.href))
+                                      ? "bg-white/20 text-white font-medium"
+                                      : child.children.some(gc => isActive(gc.href))
+                                        ? "bg-white/10 text-white"
+                                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                                  }`}
+                                >
+                                  {child.name}
+                                </Link>
+                                <button
+                                  onClick={() => toggleSection(child.name)}
+                                  className={`px-2 py-2 rounded-r-lg text-sm transition-colors ${
+                                    child.children.some(gc => isActive(gc.href))
+                                      ? "bg-white/10 text-white"
+                                      : "text-white/70 hover:bg-white/10 hover:text-white"
+                                  }`}
+                                >
+                                  {expandedSections.has(child.name) ? (
+                                    <ChevronDown className="w-3 h-3" />
+                                  ) : (
+                                    <ChevronRight className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                              {expandedSections.has(child.name) && (
+                                <ul className="mt-1 ml-3 space-y-1 border-l border-white/15 pl-3">
+                                  {child.children.map((grandchild) => (
+                                    <li key={grandchild.name}>
+                                      {grandchild.isModal ? (
+                                        <button
+                                          onClick={() => {
+                                            if (grandchild.href === "#quick-sticker" && onQuickStickerClick) {
+                                              onQuickStickerClick();
+                                            }
+                                          }}
+                                          className="w-full text-left block px-3 py-1.5 rounded-lg text-sm transition-colors text-white/60 hover:bg-white/10 hover:text-white"
+                                        >
+                                          {grandchild.name}
+                                        </button>
+                                      ) : (
+                                        <Link
+                                          href={grandchild.href}
+                                          className={`block px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                            isActive(grandchild.href)
+                                              ? "bg-white/20 text-white font-medium"
+                                              : "text-white/60 hover:bg-white/10 hover:text-white"
+                                          }`}
+                                        >
+                                          {grandchild.name}
+                                        </Link>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ) : (
+                            <Link
+                              href={child.href}
+                              className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                                isActive(child.href)
+                                  ? "bg-white/20 text-white font-medium"
+                                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                              }`}
+                            >
+                              {child.name}
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
+              ) : item.isModal ? (
+                <button
+                  onClick={() => {
+                    if (item.href === "#quick-sticker" && onQuickStickerClick) {
+                      onQuickStickerClick();
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  {item.icon}
+                  <span>{item.name}</span>
+                </button>
               ) : (
                 <Link
                   href={item.href}

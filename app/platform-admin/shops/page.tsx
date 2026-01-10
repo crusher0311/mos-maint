@@ -39,13 +39,17 @@ interface IntegrationDetails {
 interface BackfillStatus {
   completed: boolean;
   totalJobsIndexed: number;
-  currentChunkStart: string | null;
+  currentChunkDate: string | null;
+  source?: "protractor" | "tekmetric";
 }
 
 interface Shop {
   _id: string;
   shopId: number | string;
   name: string;
+  locationIdentifier?: string | null;
+  enterpriseId?: string | null;
+  enterpriseName?: string | null;
   createdAt: string;
   userCount: number;
   vehicleCount: number;
@@ -55,6 +59,8 @@ interface Shop {
   integrationDetails?: IntegrationDetails;
   enabledFeatures?: ShopFeatures;
   backfill?: BackfillStatus | null;
+  stickerCount?: number;
+  stickerCountThisMonth?: number;
 }
 
 export default function PlatformShopsPage() {
@@ -70,6 +76,7 @@ export default function PlatformShopsPage() {
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
   const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
+  const [groupByEnterprise, setGroupByEnterprise] = useState(false);
 
   const accessShop = async (shopId: number | string) => {
     if (impersonating) return;
@@ -220,10 +227,48 @@ export default function PlatformShopsPage() {
     }
   };
 
+  const searchLower = search.toLowerCase();
   const filteredShops = shops.filter(shop => 
-    shop.name?.toLowerCase().includes(search.toLowerCase()) ||
+    shop.name?.toLowerCase().includes(searchLower) ||
+    (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchLower)) ||
+    (shop.enterpriseName && shop.enterpriseName.toLowerCase().includes(searchLower)) ||
     String(shop.shopId).includes(search)
   );
+  
+  // Group shops by enterprise if enabled
+  const groupedShops = groupByEnterprise 
+    ? (() => {
+        const groups: { enterprise: string | null; shops: Shop[] }[] = [];
+        const enterpriseMap = new Map<string | null, Shop[]>();
+        
+        filteredShops.forEach(shop => {
+          const key = shop.enterpriseId || null;
+          if (!enterpriseMap.has(key)) {
+            enterpriseMap.set(key, []);
+          }
+          enterpriseMap.get(key)!.push(shop);
+        });
+        
+        // Sort: enterprises first (alphabetically), then standalone shops
+        const enterpriseKeys = Array.from(enterpriseMap.keys()).sort((a, b) => {
+          if (a === null) return 1;
+          if (b === null) return -1;
+          const nameA = enterpriseMap.get(a)?.[0]?.enterpriseName || '';
+          const nameB = enterpriseMap.get(b)?.[0]?.enterpriseName || '';
+          return nameA.localeCompare(nameB);
+        });
+        
+        enterpriseKeys.forEach(key => {
+          const shopsInGroup = enterpriseMap.get(key)!;
+          groups.push({
+            enterprise: key ? (shopsInGroup[0]?.enterpriseName || `Enterprise ${key}`) : null,
+            shops: shopsInGroup.sort((a, b) => (a.locationIdentifier || a.name).localeCompare(b.locationIdentifier || b.name))
+          });
+        });
+        
+        return groups;
+      })()
+    : null;
 
   if (loading) {
     return (
@@ -251,15 +296,26 @@ export default function PlatformShopsPage() {
         </button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search shops by name or ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        />
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search shops by name, location, or ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap cursor-pointer">
+          <input
+            type="checkbox"
+            checked={groupByEnterprise}
+            onChange={(e) => setGroupByEnterprise(e.target.checked)}
+            className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+          />
+          Group by Enterprise
+        </label>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -271,6 +327,7 @@ export default function PlatformShopsPage() {
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Users</th>
               <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Vehicles</th>
               <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">VIN Usage</th>
+              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Stickers</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Integrations</th>
               <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Backfill</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
@@ -284,25 +341,51 @@ export default function PlatformShopsPage() {
                   {search ? "No shops match your search" : "No shops yet"}
                 </td>
               </tr>
-            ) : (
-              filteredShops.flatMap((shop) => [
+            ) : groupByEnterprise && groupedShops ? (
+              groupedShops.flatMap((group, groupIndex) => [
+                <tr key={`group-${groupIndex}`} className="bg-gray-100">
+                  <td colSpan={9} className="px-4 py-2">
+                    <div className="flex items-center gap-2 font-medium text-gray-700">
+                      <Building2 className="w-4 h-4" />
+                      {group.enterprise || "Standalone Shops"}
+                      <span className="text-xs text-gray-500 font-normal">({group.shops.length} location{group.shops.length !== 1 ? 's' : ''})</span>
+                    </div>
+                  </td>
+                </tr>,
+                ...group.shops.flatMap((shop) => [
                 <tr key={`${shop._id}-row`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : "bg-purple-100"}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-purple-100"}`}>
                         {shop.isLocked ? (
                           <Lock className="w-4 h-4 text-red-600" />
                         ) : (
-                          <Building2 className="w-4 h-4 text-purple-600" />
+                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-purple-600"}`} />
                         )}
                       </div>
                       <div>
-                        <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
-                        {shop.isLocked && (
-                          <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
-                        )}
-                        {shop.billing.isPaid && (
-                          <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Paid</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
+                          )}
+                          {shop.isLocked && (
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
+                          )}
+                          {shop.billing.plan === "demo" ? (
+                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Demo</span>
+                          ) : shop.billing.plan === "enterprise" ? (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
+                          ) : shop.billing.plan === "professional" ? (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Pro</span>
+                          ) : shop.billing.plan === "starter" ? (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Starter</span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Trial</span>
+                          )}
+                        </div>
+                        {shop.enterpriseName && !groupByEnterprise && (
+                          <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
                         )}
                       </div>
                     </div>
@@ -311,45 +394,43 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-right text-gray-900">{shop.userCount}</td>
                   <td className="px-4 py-3 text-right text-gray-900">{shop.vehicleCount}</td>
                   <td className="px-4 py-3">
-                    {shop.billing.isPaid ? (
-                      <div className="text-center text-green-600 text-sm">Unlimited</div>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="text-center">
-                          <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : "text-gray-900"}`}>
-                            {shop.billing.vinViewCount} / {shop.billing.vinLimit}
-                          </div>
-                          <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : "bg-purple-500"}`}
-                              style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
-                            />
-                          </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="text-center">
+                        <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : shop.billing.isPaid ? "text-green-600" : "text-gray-900"}`}>
+                          {shop.billing.vinViewCount} / {shop.billing.vinLimit}
+                          {shop.billing.isPaid && <span className="ml-1 text-green-500 text-xs">(Paid)</span>}
                         </div>
-                        <div className="flex gap-0.5">
-                          <button
-                            onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
-                            title="Add VINs"
-                            className="p-1 text-green-600 hover:bg-green-50 rounded"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
-                            title="Set Custom Limit"
-                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
-                            title="Reset to Default Limit"
-                            className="p-1 text-gray-500 hover:bg-gray-50 rounded"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { if(confirm(`Reset all viewed VINs for ${shop.name}? This will start their trial fresh.`)) vinAction(shop.shopId, "resetViews"); }}
+                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-purple-500"}`}
+                            style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-0.5">
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
+                          title="Add VINs"
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
+                          title="Set Custom Limit"
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
+                          title="Reset to Default Limit"
+                          className="p-1 text-gray-500 hover:bg-gray-50 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { if(confirm(`Reset all viewed VINs for ${shop.name}? This will start their trial fresh.`)) vinAction(shop.shopId, "resetViews"); }}
                             title="Reset Viewed VINs (Start Fresh)"
                             disabled={actionLoading === `${shop.shopId}-resetViews`}
                             className="p-1 text-orange-600 hover:bg-orange-50 rounded disabled:opacity-50"
@@ -362,7 +443,13 @@ export default function PlatformShopsPage() {
                           </button>
                         </div>
                       </div>
-                    )}
+                    </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="text-sm">
+                      <span className="font-medium text-gray-900">{shop.stickerCountThisMonth || 0}</span>
+                      <span className="text-gray-400 text-xs ml-1">/ {shop.stickerCount || 0}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">this month / total</div>
                   </td>
                   <td className="px-4 py-3">
                     {shop.integrations?.length > 0 ? (
@@ -370,12 +457,31 @@ export default function PlatformShopsPage() {
                         onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
                         className="flex items-center gap-1 text-left hover:bg-gray-50 rounded px-1 -mx-1"
                       >
-                        <div className="flex gap-1 flex-wrap">
-                          {shop.integrations.map(int => (
-                            <span key={int} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
-                              {int}
-                            </span>
-                          ))}
+                        <div className="flex gap-1 flex-wrap items-center">
+                          {shop.integrations.map(int => {
+                            const iconMap: Record<string, string> = {
+                              "Protractor": "/protractor-icon.png",
+                              "Tekmetric": "/tekmetric-logo.png",
+                              "CARFAX": "/icons/carfax.png",
+                              "AutoFlow": "/icons/autoflow.png",
+                            };
+                            const icon = iconMap[int];
+                            return icon ? (
+                              <img 
+                                key={int}
+                                src={icon}
+                                alt={int}
+                                title={int}
+                                className="w-6 h-6 rounded object-contain"
+                              />
+                            ) : (
+                              <span key={int} className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                int === "AutoVitals" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"
+                              }`}>
+                                {int}
+                              </span>
+                            );
+                          })}
                         </div>
                         {expandedShop === shop._id ? (
                           <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -390,13 +496,13 @@ export default function PlatformShopsPage() {
                   <td className="px-4 py-3 text-center">
                     {shop.backfill ? (
                       shop.backfill.completed ? (
-                        <div className="flex items-center justify-center gap-1" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed`}>
+                        <div className="flex items-center justify-center gap-1" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
                           <span className="text-xs text-green-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs so far`}>
-                          <Clock4 className="w-4 h-4 text-amber-500" />
+                        <div className="flex items-center justify-center gap-1" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'} (${shop.backfill.source || 'unknown'})`}>
+                          <Clock4 className="w-4 h-4 text-amber-500 animate-pulse" />
                           <span className="text-xs text-amber-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
                       )
@@ -528,6 +634,217 @@ export default function PlatformShopsPage() {
                   </tr>
                 ) : null,
               ])
+              ])
+            ) : (
+              filteredShops.flatMap((shop) => [
+                <tr key={`${shop._id}-row-flat`} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-purple-100"}`}>
+                        {shop.isLocked ? (
+                          <Lock className="w-4 h-4 text-red-600" />
+                        ) : (
+                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-purple-600"}`} />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
+                          )}
+                          {shop.isLocked && (
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
+                          )}
+                          {shop.billing.plan === "demo" ? (
+                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Demo</span>
+                          ) : shop.billing.plan === "enterprise" ? (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
+                          ) : shop.billing.plan === "professional" ? (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Pro</span>
+                          ) : shop.billing.plan === "starter" ? (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Starter</span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Trial</span>
+                          )}
+                        </div>
+                        {shop.enterpriseName && (
+                          <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-600">{shop.shopId}</td>
+                  <td className="px-4 py-3 text-right text-gray-900">{shop.userCount}</td>
+                  <td className="px-4 py-3 text-right text-gray-900">{shop.vehicleCount}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="text-center">
+                        <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : shop.billing.isPaid ? "text-green-600" : "text-gray-900"}`}>
+                          {shop.billing.vinViewCount} / {shop.billing.vinLimit}
+                          {shop.billing.isPaid && <span className="ml-1 text-green-500 text-xs">(Paid)</span>}
+                        </div>
+                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-purple-500"}`}
+                            style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-0.5">
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
+                          title="Add VINs"
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
+                          title="Set Custom Limit"
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
+                          title="Reset to Default"
+                          className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="text-sm">
+                      <span className="font-medium text-gray-900">{shop.stickerCountThisMonth || 0}</span>
+                      <span className="text-gray-400 text-xs ml-1">/ {shop.stickerCount || 0}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">this month / total</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {shop.integrations.map(int => {
+                        const iconMap: Record<string, string> = {
+                          "Protractor": "/protractor-icon.png",
+                          "Tekmetric": "/tekmetric-logo.png",
+                          "CARFAX": "/icons/carfax.png",
+                          "AutoFlow": "/icons/autoflow.png",
+                        };
+                        const icon = iconMap[int];
+                        return icon ? (
+                          <img 
+                            key={int}
+                            src={icon}
+                            alt={int}
+                            title={int}
+                            onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
+                            className={`w-6 h-6 rounded object-contain ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
+                          />
+                        ) : (
+                          <span 
+                            key={int} 
+                            onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
+                            className={`px-2 py-0.5 text-xs rounded ${
+                              int === "AutoVitals" ? "bg-orange-100 text-orange-700" :
+                              "bg-gray-100 text-gray-700"
+                            } ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
+                          >
+                            {int}
+                          </span>
+                        );
+                      })}
+                      {shop.integrations.length === 0 && (
+                        <span className="text-gray-400 text-sm">None</span>
+                      )}
+                      {shop.integrationDetails && (
+                        <button
+                          onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
+                          className="p-0.5 text-gray-400 hover:text-gray-600"
+                        >
+                          {expandedShop === shop._id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {shop.backfill ? (
+                      shop.backfill.completed ? (
+                        <div className="flex items-center justify-center gap-1 text-green-600" title={`${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1 text-amber-600" title={`In progress - ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'} (${shop.backfill.source || 'unknown'})`}>
+                          <Clock4 className="w-4 h-4 text-amber-500 animate-pulse" />
+                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      )
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-sm">
+                    {new Date(shop.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => openFeatureModal(shop)}
+                        disabled={actionLoading !== null}
+                        title="Manage billing & features"
+                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
+                        disabled={actionLoading !== null}
+                        title={shop.isLocked ? "Unlock shop" : "Lock shop"}
+                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                          shop.isLocked 
+                            ? "text-green-600 hover:bg-green-50" 
+                            : "text-orange-600 hover:bg-orange-50"
+                        }`}
+                      >
+                        {actionLoading === `${shop.shopId}-lock` || actionLoading === `${shop.shopId}-unlock` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : shop.isLocked ? (
+                          <Unlock className="w-4 h-4" />
+                        ) : (
+                          <Lock className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => deleteShop(shop)}
+                        disabled={actionLoading !== null}
+                        title="Delete shop permanently"
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading === `${shop.shopId}-delete` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => accessShop(shop.shopId)}
+                        disabled={impersonating !== null || shop.isLocked}
+                        title={shop.isLocked ? "Shop is locked" : "Access this shop"}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {impersonating === shop.shopId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <LogIn className="w-4 h-4" />
+                        )}
+                        Access
+                      </button>
+                    </div>
+                  </td>
+                </tr>,
+              ])
             )}
           </tbody>
         </table>
@@ -618,13 +935,27 @@ export default function PlatformShopsPage() {
                     <label className="block text-xs text-gray-500 mb-1">Plan</label>
                     <select
                       value={billingEdits.plan}
-                      onChange={(e) => setBillingEdits({ ...billingEdits, plan: e.target.value })}
+                      onChange={(e) => {
+                        const newPlan = e.target.value;
+                        setBillingEdits({ ...billingEdits, plan: newPlan });
+                        if (newPlan === "demo") {
+                          setVinInput("999999");
+                          setFeatureEdits({
+                            maintenance: true,
+                            job_lookup: true,
+                            oil_sticker: true,
+                            part_xref: true,
+                            dvi_tracking: true,
+                          });
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
                     >
                       <option value="trial">Trial</option>
                       <option value="starter">Starter</option>
                       <option value="professional">Professional</option>
                       <option value="enterprise">Enterprise</option>
+                      <option value="demo">Demo</option>
                     </select>
                   </div>
                   <div>
@@ -638,6 +969,7 @@ export default function PlatformShopsPage() {
                       <option value="active">Active</option>
                       <option value="past_due">Past Due</option>
                       <option value="canceled">Canceled</option>
+                      <option value="demo">Demo</option>
                     </select>
                   </div>
                 </div>

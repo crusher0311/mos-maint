@@ -31,6 +31,18 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
+// Connection pool options for scaling
+const MONGO_OPTIONS = {
+  maxPoolSize: 50,
+  minPoolSize: 5,
+  maxIdleTimeMS: 30000,
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  serverSelectionTimeoutMS: 10000,
+  retryWrites: true,
+  retryReads: true,
+};
+
 // Lazily create the client when first needed (avoids throwing during import)
 export async function getMongoClient(): Promise<MongoClient> {
   if (clientPromise) return clientPromise;
@@ -39,11 +51,11 @@ export async function getMongoClient(): Promise<MongoClient> {
 
   if (process.env.NODE_ENV === "development") {
     if (!global._mongoClientPromise) {
-      global._mongoClientPromise = new MongoClient(uri).connect();
+      global._mongoClientPromise = new MongoClient(uri, MONGO_OPTIONS).connect();
     }
     clientPromise = global._mongoClientPromise;
   } else {
-    clientPromise = new MongoClient(uri).connect();
+    clientPromise = new MongoClient(uri, MONGO_OPTIONS).connect();
   }
   return clientPromise!;
 }

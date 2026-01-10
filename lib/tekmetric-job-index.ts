@@ -345,17 +345,26 @@ export async function checkAndRunBackfillForNewShops(): Promise<void> {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
   
   const shops = await db.collection("shops").find({
-    "tekmetric.shopId": { $exists: true, $ne: null },
-    "tekmetric.jobIndexBackfillCompleted": { $exists: false },
-    $or: [
-      { "tekmetric.jobIndexBackfillStartedAt": { $exists: false } },
-      { "tekmetric.jobIndexBackfillStartedAt": { $lt: oneHourAgo } }
+    $and: [
+      {
+        $or: [
+          { "tekmetric.shopId": { $exists: true, $ne: null } },
+          { tekmetricShopId: { $exists: true, $ne: null } }
+        ]
+      },
+      { "tekmetric.jobIndexBackfillCompleted": { $exists: false } },
+      {
+        $or: [
+          { "tekmetric.jobIndexBackfillStartedAt": { $exists: false } },
+          { "tekmetric.jobIndexBackfillStartedAt": { $lt: oneHourAgo } }
+        ]
+      }
     ]
   }).toArray();
   
   for (const shop of shops) {
     const shopId = Number(shop.shopId);
-    const tekmetricShopId = shop.tekmetric?.shopId;
+    const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
     
     if (!tekmetricShopId) continue;
     

@@ -13,6 +13,7 @@ import {
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
 } from "@/lib/tekmetric-job-index";
+import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,16 +124,20 @@ export async function GET(req: NextRequest) {
 
   try {
     const shops = await db.collection("shops").find({
-      "tekmetric.shopId": { $exists: true, $ne: null }
+      $or: [
+        { "tekmetric.shopId": { $exists: true, $ne: null } },
+        { tekmetricShopId: { $exists: true, $ne: null } }
+      ]
     }).toArray();
 
     const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; error?: string }[] = [];
+    const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
     
     await checkAndRunBackfillForNewShops();
 
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
-      const tekmetricShopId = shop.tekmetric?.shopId;
+      const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
       
       if (!tekmetricShopId) continue;
 
@@ -140,6 +145,7 @@ export async function GET(req: NextRequest) {
         const activeWOs: TekmetricRepairOrderFull[] = [];
         const vehicleCache = new Map<number, TekmetricVehicle>();
         const customerCache = new Map<number, TekmetricCustomer>();
+        const shopSyncedVins: string[] = [];
         
         let page = 0;
         let hasMore = true;
@@ -193,6 +199,7 @@ export async function GET(req: NextRequest) {
           
           if (vehicle?.vin) {
             await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, []);
+            shopSyncedVins.push(vehicle.vin.toUpperCase());
           }
         }
 
@@ -276,6 +283,44 @@ export async function GET(req: NextRequest) {
           removed: removedCount,
           jobsIndexed: indexedJobsCount
         });
+        
+        if (shopSyncedVins.length > 0) {
+          const uniqueVins = [...new Set(shopSyncedVins)];
+          syncedVinsPerShop.push({ shopId, vins: uniqueVins });
+        }
+        
+        // Dual-write to normalized collections (enrich ROs with cached vehicle/customer data)
+        try {
+          const workOrdersForNormalized = activeWOs
+            .filter(ro => vehicleCache.has(ro.vehicleId) && vehicleCache.get(ro.vehicleId)?.vin)
+            .map(ro => {
+              const vehicle = vehicleCache.get(ro.vehicleId);
+              const customer = customerCache.get(ro.customerId);
+              return {
+                ...ro,
+                vehicle: vehicle,
+                customer: customer,
+              };
+            });
+          
+          if (workOrdersForNormalized.length > 0) {
+            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+            const enterpriseId = shop?.enterpriseId as string | undefined;
+            
+            const ingestionService = new NormalizedIngestionService(
+              db,
+              'tekmetric',
+              shopId,
+              enterpriseId,
+              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true }
+            );
+            
+            const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);
+            console.log(`[Cron] Tekmetric sync normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, payments: ${result.payments.created}, inspections: ${result.inspections.created}, recommendations: ${result.recommendations.created}`);
+          }
+        } catch (normErr: any) {
+          console.log(`[Cron] Tekmetric sync normalized ingestion error for shop ${shopId}:`, normErr.message);
+        }
       } catch (err: any) {
         console.error(`[Tekmetric] Shop ${shopId} sync error:`, err.message);
         results.push({ 
@@ -290,6 +335,25 @@ export async function GET(req: NextRequest) {
 
     const duration = Date.now() - startTime;
     console.log(`[Cron] Tekmetric sync completed in ${duration}ms:`, results);
+
+    // Fire-and-forget plan pre-generation for synced vehicles
+    if (syncedVinsPerShop.length > 0 && CRON_SECRET) {
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : 'http://localhost:5000';
+      
+      for (const { shopId, vins } of syncedVinsPerShop) {
+        fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${CRON_SECRET}`,
+          },
+          body: JSON.stringify({ shopId, vins: vins.slice(0, 10) }),
+        }).catch(err => console.log(`[Cron] Plan pregenerate fire-and-forget failed for shop ${shopId}:`, err.message));
+      }
+      console.log(`[Cron] Triggered plan pre-generation for ${syncedVinsPerShop.length} shops`);
+    }
 
     return NextResponse.json({
       ok: true,

@@ -1,8 +1,60 @@
-import "server-only";
+// Note: "server-only" import removed to allow standalone script usage
 import crypto from "node:crypto";
+import https from "node:https";
 import { getDb } from "@/lib/mongo";
+import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
+
+// Local rate limiter: 5 requests per second (enforced per-process)
+const RATE_LIMIT_RPS = 5;
+const RATE_LIMIT_INTERVAL_MS = 1000 / RATE_LIMIT_RPS; // 200ms between requests
+let lastRequestTime = 0;
+const rateLimitQueue: (() => void)[] = [];
+let isProcessingQueue = false;
+
+/**
+ * Acquire rate limit slot with both local (5 rps) and distributed (300 rpm) enforcement.
+ * The distributed limiter uses MongoDB for cross-worker coordination.
+ */
+async function acquireRateLimitSlot(): Promise<void> {
+  // First: acquire distributed slot (blocks if global limit exceeded)
+  const distributed = await acquireDistributedRateLimitSlot('protractor');
+  if (!distributed.acquired) {
+    console.warn(`[Protractor] Rate limit slot not acquired, proceeding anyway after ${distributed.waitedMs}ms`);
+  }
+  
+  // Then: local per-process queue (ensures 5 rps within this process)
+  return new Promise((resolve) => {
+    rateLimitQueue.push(resolve);
+    processRateLimitQueue();
+  });
+}
+
+function processRateLimitQueue(): void {
+  if (isProcessingQueue || rateLimitQueue.length === 0) return;
+  isProcessingQueue = true;
+  
+  const processNext = () => {
+    if (rateLimitQueue.length === 0) {
+      isProcessingQueue = false;
+      return;
+    }
+    
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    const waitTime = Math.max(0, RATE_LIMIT_INTERVAL_MS - timeSinceLastRequest);
+    
+    setTimeout(() => {
+      lastRequestTime = Date.now();
+      const resolve = rateLimitQueue.shift();
+      if (resolve) resolve();
+      processNext();
+    }, waitTime);
+  };
+  
+  processNext();
+}
 
 export type ProtractorConfig = {
   connectionId: string;
@@ -190,37 +242,122 @@ export async function resolveProtractorConfig(shopId: number | string): Promise<
   };
 }
 
+function httpsRequest(
+  urlString: string,
+  method: string,
+  headers: Record<string, string>,
+  body?: string
+): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    
+    const options: https.RequestOptions = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method: method,
+      headers: headers,
+    };
+    
+    const authHash = headers.authentication 
+      ? crypto.createHash('md5').update(headers.authentication).digest('hex').slice(0, 8)
+      : 'none';
+    const connIdHash = headers.connectionid
+      ? crypto.createHash('md5').update(headers.connectionid).digest('hex').slice(0, 8)
+      : 'none';
+    
+    console.log(`[Protractor Debug] Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
+    console.log(`[Protractor Debug] ${method} ${url.pathname}`);
+    console.log(`[Protractor Debug] Headers: ${Object.keys(headers).join(', ')}`);
+    console.log(`[Protractor Debug] ConnId hash: ${connIdHash}, Auth hash: ${authHash}`);
+    
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        resolve({ statusCode: res.statusCode || 0, body: data });
+      });
+    });
+    
+    req.on("error", (err) => {
+      reject(err);
+    });
+    
+    req.setTimeout(30000, () => {
+      req.destroy();
+      reject(new Error("Request timeout"));
+    });
+    
+    if (body) {
+      req.write(body);
+    }
+    
+    req.end();
+  });
+}
+
 export async function protractorFetch<T>(
   endpoint: string,
   config: ProtractorConfig,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retryCount = 0,
+  shopId?: number
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
 
+  await acquireRateLimitSlot();
+
   const url = `${BASE_URL}${endpoint}`;
+  const startTime = Date.now();
+  const method = (options.method || "GET").toUpperCase();
   
   try {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        connectionId: config.connectionId,
-        apiKey: config.apiKey,
-        authentication: config.authentication,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      cache: "no-store",
-    });
+    const headers: Record<string, string> = {
+      "connectionid": config.connectionId,
+      "apikey": config.apiKey,
+      "authentication": config.authentication,
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+    };
+    
+    if (options.headers) {
+      const optHeaders = options.headers as Record<string, string>;
+      Object.entries(optHeaders).forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    }
+    
+    const body = options.body ? String(options.body) : undefined;
+    const res = await httpsRequest(url, method, headers, body);
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return { ok: false, error: `HTTP ${res.status}: ${text || res.statusText}` };
+    const latencyMs = Date.now() - startTime;
+    const isServerError = res.statusCode >= 500;
+    const isRateLimited = res.statusCode === 429;
+    
+    trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
+      retryCount: retryCount > 0 ? retryCount : undefined,
+      errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
+      sourceWorker: process.env.RENDER ? 'render' : 'replit'
+    }).catch(() => {});
+
+    // Retry on rate limit (429) or server errors (5xx) with exponential backoff + jitter
+    if ((isRateLimited || isServerError) && retryCount < 3) {
+      const baseWaitMs = Math.pow(2, retryCount + 1) * 1000;
+      const jitter = Math.random() * 500; // Add up to 500ms jitter
+      const waitMs = baseWaitMs + jitter;
+      
+      console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
+      await new Promise(r => setTimeout(r, waitMs));
+      return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId);
     }
 
-    const data = await res.json().catch(() => null);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return { ok: false, error: `HTTP ${res.statusCode}: ${res.body || "Unknown error"}` };
+    }
+
+    const data = res.body ? JSON.parse(res.body) : null;
     return { ok: true, data: data as T };
   } catch (err: any) {
     return { ok: false, error: err.message || "Network error" };
@@ -238,7 +375,10 @@ export async function fetchVehicleByVin(
 
   const result = await protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
     `/ServiceItem/Search/${encodeURIComponent(vin)}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -268,7 +408,10 @@ export async function fetchVehicleById(
 
   const result = await protractorFetch<ProtractorVehicle>(
     `/ServiceItem/${serviceItemId}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -305,7 +448,10 @@ export async function fetchActiveWorkOrders(
     const queryStr = `?${params.toString()}`;
     const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
       `/WorkOrder/${queryStr}`,
-      config
+      config,
+      {},
+      0,
+      shopId
     );
 
     if (!result.ok) {
@@ -347,9 +493,13 @@ export async function fetchWorkOrderById(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const numShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
   const result = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${workOrderId}`,
-    config
+    config,
+    {},
+    0,
+    numShopId
   );
 
   if (!result.ok) {
@@ -392,10 +542,14 @@ export async function fetchActiveInspections(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const numShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
   // Try /WorkOrder/Inspections with workOrderId filter
   const result = await protractorFetch<{ ItemCollection?: ProtractorActiveInspection[] }>(
     `/WorkOrder/Inspections?workOrderId=${workOrderId}`,
-    config
+    config,
+    {},
+    0,
+    numShopId
   );
 
   if (!result.ok) {
@@ -416,10 +570,14 @@ export async function fetchAllActiveInspections(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
+  const numShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
   // Try /WorkOrder/Inspections endpoint
   const result = await protractorFetch<{ ItemCollection?: ProtractorActiveInspection[] }>(
     `/WorkOrder/Inspections`,
-    config
+    config,
+    {},
+    0,
+    numShopId
   );
 
   if (!result.ok) {
@@ -442,7 +600,10 @@ export async function fetchInvoiceById(
 
   const result = await protractorFetch<ProtractorInvoice>(
     `/Invoice/${invoiceId}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -469,7 +630,10 @@ export async function fetchInvoicesForVehicle(
   const queryStr = params.toString() ? `?${params.toString()}` : "";
   const result = await protractorFetch<{ ItemCollection?: ProtractorInvoice[] }>(
     `/ServiceItem/${serviceItemId}/Invoice${queryStr}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -496,7 +660,10 @@ export async function fetchDeferredWork(
 
   const result = await protractorFetch<{ ItemCollection?: ProtractorDeferredWork[] }>(
     `/ServicePackage/DeferredWorks?${params.toString()}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -672,6 +839,7 @@ export async function upsertProtractorWorkOrderSnapshot(
         },
         fetchedAt: now,
         source: "protractor",
+        rawPayload: workOrder,
       },
       $setOnInsert: { createdAt: now },
     },
@@ -703,6 +871,7 @@ export async function upsertProtractorInvoiceSnapshot(
         servicePackages: invoice.ServicePackages ?? [],
         fetchedAt: now,
         source: "protractor",
+        rawPayload: invoice,
       },
       $setOnInsert: { createdAt: now },
     },
@@ -852,7 +1021,10 @@ export async function fetchCannedJobs(
   console.log(`[Protractor] Trying GET /ServicePackageTemplate...`);
   const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
     "/ServicePackageTemplate",
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (getResult.ok && getResult.data?.ItemCollection?.length) {
@@ -885,7 +1057,9 @@ export async function fetchCannedJobs(
     }>(
       endpoint,
       config,
-      { method: "POST", body: JSON.stringify(body) }
+      { method: "POST", body: JSON.stringify(body) },
+      0,
+      shopId
     );
 
     const items = result.data?.ItemCollection || 
@@ -919,7 +1093,10 @@ export async function fetchCannedJobById(
 
   const result = await protractorFetch<ProtractorCannedJob>(
     `/ServicePackage/CannedJob/${cannedJobId}`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (!result.ok) {
@@ -991,7 +1168,10 @@ export async function fetchServicePackageTemplates(
     console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorServicePackageTemplate[] }>(
       endpoint,
-      config
+      config,
+      {},
+      0,
+      shopId
     );
 
     console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}`);
@@ -1029,7 +1209,10 @@ export async function fetchServicePackageTemplateDetail(
     console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
       endpoint,
-      config
+      config,
+      {},
+      0,
+      shopId
     );
 
     console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}`);
@@ -1242,7 +1425,9 @@ export async function applyCannedJobToWorkOrder(
         {
           method: "POST",
           body: JSON.stringify(updatedWorkOrder)
-        }
+        },
+        0,
+        shopId
       );
       
       console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
@@ -1336,7 +1521,9 @@ export async function applyCannedJobToWorkOrder(
         {
           method: "POST",
           body: JSON.stringify(timeClockPayload)
-        }
+        },
+        0,
+        shopId
       );
       
       if (timeClockResult.ok) {
@@ -1496,7 +1683,9 @@ export async function applyCannedJobToWorkOrder(
       {
         method: "POST",
         body: JSON.stringify(payload)
-      }
+      },
+      0,
+      shopId
     );
     
     console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
@@ -1556,7 +1745,10 @@ export async function fetchWorkOrdersForVehicle(
   // Try API first
   const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
     `/ServiceItem/${serviceItemId}/WorkOrder`,
-    config
+    config,
+    {},
+    0,
+    shopId
   );
 
   if (result.ok) {
@@ -1694,17 +1886,28 @@ export async function enrichCannedJobsWithDetails(
     );
     
     // Filter and add to results
+    // Shop 35 (Precision Auto Service) uses non-standard codes, skip alphanumeric filter for them
+    const skipAlphanumericFilter = shopId === 35;
+    
     for (const job of batchResults) {
       if (filterEmpty) {
-        // Only keep jobs where code contains BOTH a letter AND a number
-        // Real codes: O8, T15, BG1, SUB4, A200, etc.
-        const code = (job.Code || "").trim();
-        const hasLetter = /[a-zA-Z]/.test(code);
-        const hasNumber = /[0-9]/.test(code);
         const hasContent = job._hasTitle || job._hasLines;
         
-        if (hasLetter && hasNumber && hasContent) {
-          enrichedJobs.push(job);
+        if (skipAlphanumericFilter) {
+          // For Shop 35: only require content (title or lines), no code pattern check
+          if (hasContent) {
+            enrichedJobs.push(job);
+          }
+        } else {
+          // Default: require code with BOTH a letter AND a number
+          // Real codes: O8, T15, BG1, SUB4, A200, etc.
+          const code = (job.Code || "").trim();
+          const hasLetter = /[a-zA-Z]/.test(code);
+          const hasNumber = /[0-9]/.test(code);
+          
+          if (hasLetter && hasNumber && hasContent) {
+            enrichedJobs.push(job);
+          }
         }
       } else {
         enrichedJobs.push(job);
@@ -1764,9 +1967,9 @@ export async function fetchCannedJobsWithCache(
     };
   }
 
-  // If no enriched cache exists, auto-run deep sync
+  // If no enriched cache exists, return basic list immediately and run enrichment in background
   if (!isEnriched || !hasItems) {
-    console.log(`[Protractor] No enriched cache found for shop ${shopId}, running auto deep sync...`);
+    console.log(`[Protractor] No enriched cache found for shop ${shopId}, fetching basic list...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
@@ -1781,33 +1984,47 @@ export async function fetchCannedJobsWithCache(
       return { ok: false, error: listResult.error };
     }
 
-    // Run enrichment
-    const enrichedJobs = await enrichCannedJobsWithDetails(
-      shopId,
-      listResult.cannedJobs,
-      { filterEmptyTitles: true }
-    );
-
-    // Save enriched cache with "enriched" source marker
+    // Save basic list immediately so page loads fast
     const now = new Date();
     await db.collection("protractor_canned_jobs").updateOne(
       { shopId },
       {
         $set: {
-          items: enrichedJobs,
+          items: listResult.cannedJobs,
           fetchedAt: now,
-          source: "enriched",
+          source: "api",
         },
         $setOnInsert: { createdAt: now },
       },
       { upsert: true }
     );
 
-    console.log(`[Protractor] Auto deep sync complete: ${enrichedJobs.length} enriched jobs saved`);
+    // Run enrichment in background (fire and forget) - don't block the response
+    console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs...`);
+    enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, { filterEmptyTitles: true })
+      .then(async (enrichedJobs) => {
+        const enrichedNow = new Date();
+        await db.collection("protractor_canned_jobs").updateOne(
+          { shopId },
+          {
+            $set: {
+              items: enrichedJobs,
+              fetchedAt: enrichedNow,
+              source: "enriched",
+            },
+          }
+        );
+        console.log(`[Protractor] Background enrichment complete: ${enrichedJobs.length} jobs saved`);
+      })
+      .catch((err) => {
+        console.error(`[Protractor] Background enrichment failed:`, err);
+      });
+
+    // Return basic list immediately
     return {
       ok: true,
-      cannedJobs: normalizeCachedItems(enrichedJobs),
-      source: "enriched",
+      cannedJobs: normalizeCachedItems(listResult.cannedJobs),
+      source: "api",
     };
   }
 

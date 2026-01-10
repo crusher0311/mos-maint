@@ -158,6 +158,36 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
     }).format(amount);
   };
 
+  // Compute totals from line items when job.totals is missing or zero
+  const getJobTotals = (job: any) => {
+    const storedTotal = job.totals?.totalAmount || 0;
+    const storedLabor = job.totals?.laborHours || 0;
+    const storedParts = job.totals?.partsAmount || 0;
+    
+    // If stored totals exist, use them
+    if (storedTotal > 0) {
+      return { totalAmount: storedTotal, laborHours: storedLabor, partsAmount: storedParts };
+    }
+    
+    // Otherwise, compute from line items
+    let totalAmount = 0;
+    let laborHours = 0;
+    let partsAmount = 0;
+    
+    for (const line of job.lines || []) {
+      const lineTotal = line.extendedPrice || (line.unitPrice || 0) * (line.quantity || 1);
+      totalAmount += lineTotal;
+      
+      if (line.lineType === "labor") {
+        laborHours += line.quantity || 0;
+      } else if (line.lineType === "part") {
+        partsAmount += lineTotal;
+      }
+    }
+    
+    return { totalAmount, laborHours, partsAmount };
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
@@ -180,7 +210,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -189,21 +219,21 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Search jobs (e.g., oil change, brake pads, timing belt)..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Search jobs..."
+            className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
         <button
           onClick={handleSearch}
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 sm:gap-2 text-sm sm:text-base"
         >
           {loading ? (
             <span className="animate-spin">...</span>
           ) : (
             <>
               <Search className="w-4 h-4" />
-              Search
+              <span className="hidden sm:inline">Search</span>
             </>
           )}
         </button>
@@ -260,22 +290,22 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
               className="border border-gray-200 rounded-lg overflow-hidden bg-white"
             >
               <div
-                className="p-4 cursor-pointer hover:bg-gray-50"
+                className="p-3 sm:p-4 cursor-pointer hover:bg-gray-50"
                 onClick={() => setExpandedJob(expandedJob === job._id ? null : job._id)}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <Wrench className="w-4 h-4 text-gray-400" />
-                      <span className="font-medium text-gray-900">{job.job.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${getBandStyle(job.matchBand)}`}>
-                        {job.matchBandLabel || `${job.matchScore}%`}
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                      <Wrench className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
+                      <span className="font-medium text-gray-900 text-sm sm:text-base truncate">{job.job.title}</span>
+                      <span className={`text-xs px-1.5 sm:px-2 py-0.5 rounded-full border ${getBandStyle(job.matchBand)}`}>
+                        {job.matchBandLabel}
                       </span>
-                      <span className="text-xs text-gray-400">{job.matchScore}%</span>
+                      <span className="text-xs sm:text-sm font-semibold text-blue-600">{job.matchScore}%</span>
                     </div>
-                    <div className="mt-1 text-sm text-gray-500 flex items-center gap-2">
+                    <div className="mt-1 text-xs sm:text-sm text-gray-500 flex flex-wrap items-center gap-1 sm:gap-2">
                       <span>{job.vehicle.year} {job.vehicle.make} {job.vehicle.model}</span>
-                      {job.vehicle.engine && <span className="text-gray-400">| {job.vehicle.engine}</span>}
+                      {job.vehicle.engine && <span className="text-gray-400 hidden sm:inline">| {job.vehicle.engine}</span>}
                       {job.locationName && (
                         <span className={`text-xs px-1.5 py-0.5 rounded ${
                           job.isCurrentLocation 
@@ -286,7 +316,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 text-xs text-gray-400">
+                    <div className="mt-1 text-xs text-gray-400 hidden sm:block">
                       {job.matchReason}
                     </div>
                   </div>
@@ -294,10 +324,10 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(job.totals.totalAmount)}
+                        {formatCurrency(getJobTotals(job).totalAmount)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {job.lines.length} line{job.lines.length !== 1 ? "s" : ""}
+                        {job.lines?.length || 0} line{(job.lines?.length || 0) !== 1 ? "s" : ""}
                       </div>
                     </div>
 
@@ -316,17 +346,17 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Labor:</span>
-                      <span className="font-medium">{job.totals.laborHours}h</span>
+                      <span className="font-medium">{getJobTotals(job).laborHours}h</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Package className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Parts:</span>
-                      <span className="font-medium">{formatCurrency(job.totals.partsAmount)}</span>
+                      <span className="font-medium">{formatCurrency(getJobTotals(job).partsAmount)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">Total:</span>
-                      <span className="font-medium">{formatCurrency(job.totals.totalAmount)}</span>
+                      <span className="font-medium">{formatCurrency(getJobTotals(job).totalAmount)}</span>
                     </div>
                   </div>
 
@@ -342,7 +372,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                       </tr>
                     </thead>
                     <tbody>
-                      {job.lines.map((line, idx) => (
+                      {(job.lines || []).map((line, idx) => (
                         <tr key={idx} className="border-b border-gray-100">
                           <td className="py-2">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${

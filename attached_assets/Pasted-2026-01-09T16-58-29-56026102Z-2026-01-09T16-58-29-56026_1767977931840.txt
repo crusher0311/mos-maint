@@ -1,0 +1,400 @@
+2026-01-09T16:58:29.56026102Z     }
+2026-01-09T16:58:29.5602627Z   ]
+2026-01-09T16:58:29.56026441Z }
+2026-01-09T16:58:30.105943372Z [Startup] Waiting for server... (attempt 14/30)
+2026-01-09T16:58:30.109609566Z [Startup] Server is ready! (status: 200)
+2026-01-09T16:58:30.276856401Z [Startup] Waiting for server... (attempt 14/30)
+2026-01-09T16:58:30.27983937Z [Startup] Server is ready! (status: 200)
+2026-01-09T16:58:30.508814462Z [2026-01-09T16:58:30.508Z] Running Protractor sync...
+2026-01-09T16:58:31.010308429Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:31.01033085Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:31.010345741Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:31.010353482Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-09T16:58:31.31058436Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:31.310611592Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:31.310625003Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:31.310633944Z [Protractor Debug] ConnId hash: f610446a, Auth hash: e0d51d14
+2026-01-09T16:58:31.510854338Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:31.510916932Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:31.510921123Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:31.510923913Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+2026-01-09T16:58:31.60741184Z [2026-01-09T16:58:31.607Z] Running Protractor sync...
+2026-01-09T16:58:31.711385373Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:31.711411515Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:31.711414846Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:31.711417156Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-09T16:58:31.91348076Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:31.913501062Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:31.913510312Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:31.913559046Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-09T16:58:32.024502571Z [2026-01-09T16:58:32.024Z] Running Protractor sync...
+2026-01-09T16:58:32.113689643Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:32.113720956Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:32.113724286Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:32.113726606Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-09T16:58:32.16782917Z [Cron] Protractor sync completed in 1653ms: [
+2026-01-09T16:58:32.167843031Z   {
+2026-01-09T16:58:32.167845611Z     shopId: 25,
+2026-01-09T16:58:32.167847511Z     synced: 0,
+2026-01-09T16:58:32.167852021Z     removed: 0,
+2026-01-09T16:58:32.167853841Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:32.167856071Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:32.167858421Z       '<body>\r\n' +
+2026-01-09T16:58:32.167860102Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:32.167861822Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:32.167863462Z       '</body>\r\n' +
+2026-01-09T16:58:32.167865142Z       '</html>\r\n'
+2026-01-09T16:58:32.167866802Z   },
+2026-01-09T16:58:32.167868482Z   {
+2026-01-09T16:58:32.167870272Z     shopId: 28,
+2026-01-09T16:58:32.167871982Z     synced: 0,
+2026-01-09T16:58:32.167873642Z     removed: 0,
+2026-01-09T16:58:32.167875313Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:32.167877033Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:32.167878693Z       '<body>\r\n' +
+2026-01-09T16:58:32.167880343Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:32.167882063Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:32.167883823Z       '</body>\r\n' +
+2026-01-09T16:58:32.167885483Z       '</html>\r\n'
+2026-01-09T16:58:32.167887154Z   },
+2026-01-09T16:58:32.167888804Z   {
+2026-01-09T16:58:32.167890434Z     shopId: 29,
+2026-01-09T16:58:32.167892144Z     synced: 0,
+2026-01-09T16:58:32.167893794Z     removed: 0,
+2026-01-09T16:58:32.167895434Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:32.167897084Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:32.167898734Z       '<body>\r\n' +
+2026-01-09T16:58:32.167900375Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:32.167902025Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:32.167903675Z       '</body>\r\n' +
+2026-01-09T16:58:32.167905335Z       '</html>\r\n'
+2026-01-09T16:58:32.167907235Z   },
+2026-01-09T16:58:32.167908875Z   {
+2026-01-09T16:58:32.167923336Z     shopId: 35,
+2026-01-09T16:58:32.167925206Z     synced: 0,
+2026-01-09T16:58:32.167926856Z     removed: 0,
+2026-01-09T16:58:32.167928526Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:32.167930177Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:32.167931847Z       '<body>\r\n' +
+2026-01-09T16:58:32.167933497Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:32.167935187Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:32.167936817Z       '</body>\r\n' +
+2026-01-09T16:58:32.167938457Z       '</html>\r\n'
+2026-01-09T16:58:32.167940117Z   },
+2026-01-09T16:58:32.167941727Z   {
+2026-01-09T16:58:32.167943367Z     shopId: 50,
+2026-01-09T16:58:32.167945038Z     synced: 0,
+2026-01-09T16:58:32.167946698Z     removed: 0,
+2026-01-09T16:58:32.167948338Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:32.167950008Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:32.167951668Z       '<body>\r\n' +
+2026-01-09T16:58:32.167953318Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:32.167954968Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:32.167956608Z       '</body>\r\n' +
+2026-01-09T16:58:32.167958259Z       '</html>\r\n'
+2026-01-09T16:58:32.167959889Z   },
+2026-01-09T16:58:32.167961529Z   {
+2026-01-09T16:58:32.167963149Z     shopId: 51,
+2026-01-09T16:58:32.167964779Z     synced: 0,
+2026-01-09T16:58:32.167966419Z     removed: 0,
+2026-01-09T16:58:32.167968079Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:32.16797Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:32.167971729Z       '<body>\r\n' +
+2026-01-09T16:58:32.16797341Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:32.16797506Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:32.16797671Z       '</body>\r\n' +
+2026-01-09T16:58:32.16797843Z       '</html>\r\n'
+2026-01-09T16:58:32.16798008Z   }
+2026-01-09T16:58:32.16798172Z ]
+2026-01-09T16:58:32.169586474Z [2026-01-09T16:58:30.508Z] Sync complete: {
+2026-01-09T16:58:32.169599745Z   "ok": true,
+2026-01-09T16:58:32.169602445Z   "duration": "1653ms",
+2026-01-09T16:58:32.169604516Z   "shops": [
+2026-01-09T16:58:32.169606266Z     {
+2026-01-09T16:58:32.169608026Z       "shopId": 25,
+2026-01-09T16:58:32.169609996Z       "synced": 0,
+2026-01-09T16:58:32.169611646Z       "removed": 0,
+2026-01-09T16:58:32.169614136Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:32.169615866Z     },
+2026-01-09T16:58:32.169617797Z     {
+2026-01-09T16:58:32.169619546Z       "shopId": 28,
+2026-01-09T16:58:32.169621287Z       "synced": 0,
+2026-01-09T16:58:32.169622947Z       "removed": 0,
+2026-01-09T16:58:32.169624637Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:32.169626297Z     },
+2026-01-09T16:58:32.169628067Z     {
+2026-01-09T16:58:32.169629717Z       "shopId": 29,
+2026-01-09T16:58:32.169631337Z       "synced": 0,
+2026-01-09T16:58:32.169633007Z       "removed": 0,
+2026-01-09T16:58:32.169634648Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:32.169636298Z     },
+2026-01-09T16:58:32.169646499Z     {
+2026-01-09T16:58:32.169649359Z       "shopId": 35,
+2026-01-09T16:58:32.169652479Z       "synced": 0,
+2026-01-09T16:58:32.169655549Z       "removed": 0,
+2026-01-09T16:58:32.169658249Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:32.16966108Z     },
+2026-01-09T16:58:32.16966377Z     {
+2026-01-09T16:58:32.16966635Z       "shopId": 50,
+2026-01-09T16:58:32.16966927Z       "synced": 0,
+2026-01-09T16:58:32.16967182Z       "removed": 0,
+2026-01-09T16:58:32.16967467Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:32.169677181Z     },
+2026-01-09T16:58:32.169678911Z     {
+2026-01-09T16:58:32.169680581Z       "shopId": 51,
+2026-01-09T16:58:32.169682421Z       "synced": 0,
+2026-01-09T16:58:32.169684071Z       "removed": 0,
+2026-01-09T16:58:32.169685791Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:32.169687511Z     }
+2026-01-09T16:58:32.169689262Z   ]
+2026-01-09T16:58:32.169690962Z }
+2026-01-09T16:58:41.23039414Z       '</html>\r\n'
+2026-01-09T16:58:41.23039578Z   },
+2026-01-09T16:58:41.23039744Z   {
+2026-01-09T16:58:41.23039906Z     shopId: 29,
+2026-01-09T16:58:41.2304007Z     synced: 0,
+2026-01-09T16:58:41.23040235Z     removed: 0,
+2026-01-09T16:58:41.23040407Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:41.23040579Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:41.23040747Z       '<body>\r\n' +
+2026-01-09T16:58:41.230409581Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:41.230411341Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:41.230413011Z       '</body>\r\n' +
+2026-01-09T16:58:41.230414671Z       '</html>\r\n'
+2026-01-09T16:58:41.230416291Z   },
+2026-01-09T16:58:41.230417901Z   {
+2026-01-09T16:58:41.230419581Z     shopId: 35,
+2026-01-09T16:58:41.230421231Z     synced: 0,
+2026-01-09T16:58:41.230422862Z     removed: 0,
+2026-01-09T16:58:41.230424622Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:41.230426312Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:41.230428172Z       '<body>\r\n' +
+2026-01-09T16:58:41.230429812Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:41.230431512Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:41.230433182Z       '</body>\r\n' +
+2026-01-09T16:58:41.230434822Z       '</html>\r\n'
+2026-01-09T16:58:41.230436422Z   },
+2026-01-09T16:58:41.230438043Z   {
+2026-01-09T16:58:41.230439703Z     shopId: 50,
+2026-01-09T16:58:41.230441353Z     synced: 0,
+2026-01-09T16:58:41.230442993Z     removed: 0,
+2026-01-09T16:58:41.230444713Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:41.230446493Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:41.230458004Z       '<body>\r\n' +
+2026-01-09T16:58:41.230459844Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:41.230461594Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:41.230463274Z       '</body>\r\n' +
+2026-01-09T16:58:41.230464934Z       '</html>\r\n'
+2026-01-09T16:58:41.230466584Z   },
+2026-01-09T16:58:41.230468254Z   {
+2026-01-09T16:58:41.230469954Z     shopId: 51,
+2026-01-09T16:58:41.230471615Z     synced: 0,
+2026-01-09T16:58:41.230473275Z     removed: 0,
+2026-01-09T16:58:41.230474935Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:41.230476615Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:41.230478315Z       '<body>\r\n' +
+2026-01-09T16:58:41.230479965Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:41.230481615Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:41.230483315Z       '</body>\r\n' +
+2026-01-09T16:58:41.230484986Z       '</html>\r\n'
+2026-01-09T16:58:41.230486666Z   }
+2026-01-09T16:58:41.230488326Z ]
+2026-01-09T16:58:41.232388196Z [2026-01-09T16:58:39.563Z] Sync complete: {
+2026-01-09T16:58:41.232398076Z   "ok": true,
+2026-01-09T16:58:41.232401027Z   "duration": "1663ms",
+2026-01-09T16:58:41.232402927Z   "shops": [
+2026-01-09T16:58:41.232404827Z     {
+2026-01-09T16:58:41.232406577Z       "shopId": 25,
+2026-01-09T16:58:41.232408247Z       "synced": 0,
+2026-01-09T16:58:41.232409877Z       "removed": 0,
+2026-01-09T16:58:41.232414217Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:41.232416067Z     },
+2026-01-09T16:58:41.232417748Z     {
+2026-01-09T16:58:41.232419448Z       "shopId": 28,
+2026-01-09T16:58:41.232421438Z       "synced": 0,
+2026-01-09T16:58:41.232423108Z       "removed": 0,
+2026-01-09T16:58:41.232424798Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:41.232426458Z     },
+2026-01-09T16:58:41.232428098Z     {
+2026-01-09T16:58:41.232429728Z       "shopId": 29,
+2026-01-09T16:58:41.232431358Z       "synced": 0,
+2026-01-09T16:58:41.232433018Z       "removed": 0,
+2026-01-09T16:58:41.232434669Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:41.232436299Z     },
+2026-01-09T16:58:41.232437919Z     {
+2026-01-09T16:58:41.232439589Z       "shopId": 35,
+2026-01-09T16:58:41.232441219Z       "synced": 0,
+2026-01-09T16:58:41.232442989Z       "removed": 0,
+2026-01-09T16:58:41.232444709Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:41.232446409Z     },
+2026-01-09T16:58:41.232448019Z     {
+2026-01-09T16:58:41.23244965Z       "shopId": 50,
+2026-01-09T16:58:41.23245137Z       "synced": 0,
+2026-01-09T16:58:41.23245301Z       "removed": 0,
+2026-01-09T16:58:41.23245469Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:41.23245636Z     },
+2026-01-09T16:58:41.23245801Z     {
+2026-01-09T16:58:41.232468601Z       "shopId": 51,
+2026-01-09T16:58:41.232470421Z       "synced": 0,
+2026-01-09T16:58:41.232472081Z       "removed": 0,
+2026-01-09T16:58:41.232473761Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:41.232475501Z     }
+2026-01-09T16:58:41.232477181Z   ]
+2026-01-09T16:58:41.232478841Z }
+2026-01-09T16:58:42.124488449Z [Startup] Waiting for server... (attempt 17/30)
+2026-01-09T16:58:42.127858173Z [Startup] Server is ready! (status: 200)
+2026-01-09T16:58:42.177304572Z [2026-01-09T16:58:42.177Z] Running Protractor sync...
+2026-01-09T16:58:42.29321884Z [Startup] Waiting for server... (attempt 17/30)
+2026-01-09T16:58:42.296464035Z [Startup] Server is ready! (status: 200)
+2026-01-09T16:58:42.68080751Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:42.680832432Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:42.680837682Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:42.680850843Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-09T16:58:42.977486826Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:42.977592694Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:42.977604864Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:42.977610565Z [Protractor Debug] ConnId hash: f610446a, Auth hash: e0d51d14
+2026-01-09T16:58:43.176931695Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:43.176961567Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:43.176967557Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:43.176977288Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+2026-01-09T16:58:43.376604369Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:43.376631581Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:43.376636451Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:43.376646632Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-09T16:58:43.57734525Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:43.577367761Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:43.577378022Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:43.577399724Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-09T16:58:43.782335332Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-09T16:58:43.782402707Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-09T16:58:43.782407747Z [Protractor Debug] Headers: ConnectionId, ApiKey, Authentication, Accept, Content-Type
+2026-01-09T16:58:43.782410177Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-09T16:58:43.865371921Z [Cron] Protractor sync completed in 1682ms: [
+2026-01-09T16:58:43.865392172Z   {
+2026-01-09T16:58:43.865395083Z     shopId: 25,
+2026-01-09T16:58:43.865397373Z     synced: 0,
+2026-01-09T16:58:43.865399543Z     removed: 0,
+2026-01-09T16:58:43.865401663Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:43.865404093Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:43.865406824Z       '<body>\r\n' +
+2026-01-09T16:58:43.865408953Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:43.865411124Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:43.865413254Z       '</body>\r\n' +
+2026-01-09T16:58:43.865415364Z       '</html>\r\n'
+2026-01-09T16:58:43.865417494Z   },
+2026-01-09T16:58:43.865419624Z   {
+2026-01-09T16:58:43.865432435Z     shopId: 28,
+2026-01-09T16:58:43.865434726Z     synced: 0,
+2026-01-09T16:58:43.865436835Z     removed: 0,
+2026-01-09T16:58:43.865438896Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:43.865441206Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:43.865443356Z       '<body>\r\n' +
+2026-01-09T16:58:43.865445476Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:43.865447546Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:43.865449647Z       '</body>\r\n' +
+2026-01-09T16:58:43.865451677Z       '</html>\r\n'
+2026-01-09T16:58:43.865453717Z   },
+2026-01-09T16:58:43.865455777Z   {
+2026-01-09T16:58:43.865457857Z     shopId: 29,
+2026-01-09T16:58:43.865459897Z     synced: 0,
+2026-01-09T16:58:43.865462007Z     removed: 0,
+2026-01-09T16:58:43.865464097Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:43.865466178Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:43.865468218Z       '<body>\r\n' +
+2026-01-09T16:58:43.865470268Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:43.865472308Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:43.865474338Z       '</body>\r\n' +
+2026-01-09T16:58:43.865476418Z       '</html>\r\n'
+2026-01-09T16:58:43.865478469Z   },
+2026-01-09T16:58:43.865480499Z   {
+2026-01-09T16:58:43.865482539Z     shopId: 35,
+2026-01-09T16:58:43.865484839Z     synced: 0,
+2026-01-09T16:58:43.865487069Z     removed: 0,
+2026-01-09T16:58:43.865489169Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:43.86549161Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:43.86549375Z       '<body>\r\n' +
+2026-01-09T16:58:43.86549583Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:43.86549789Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:43.86549997Z       '</body>\r\n' +
+2026-01-09T16:58:43.86550206Z       '</html>\r\n'
+2026-01-09T16:58:43.86550413Z   },
+2026-01-09T16:58:43.865506171Z   {
+2026-01-09T16:58:43.865508251Z     shopId: 50,
+2026-01-09T16:58:43.865510341Z     synced: 0,
+2026-01-09T16:58:43.865512431Z     removed: 0,
+2026-01-09T16:58:43.865548643Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:43.865567445Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:43.865569715Z       '<body>\r\n' +
+2026-01-09T16:58:43.865572195Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:43.865574345Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:43.865576476Z       '</body>\r\n' +
+2026-01-09T16:58:43.865578576Z       '</html>\r\n'
+2026-01-09T16:58:43.865580756Z   },
+2026-01-09T16:58:43.865582906Z   {
+2026-01-09T16:58:43.865584996Z     shopId: 51,
+2026-01-09T16:58:43.865587116Z     synced: 0,
+2026-01-09T16:58:43.865589206Z     removed: 0,
+2026-01-09T16:58:43.865591297Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:43.865593417Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:43.865595467Z       '<body>\r\n' +
+2026-01-09T16:58:43.865597587Z       '<center><h1>403 Forbidden</h1></center>\r\n' +
+2026-01-09T16:58:43.865599667Z       '<hr><center>nginx</center>\r\n' +
+2026-01-09T16:58:43.865601737Z       '</body>\r\n' +
+2026-01-09T16:58:43.865603907Z       '</html>\r\n'
+2026-01-09T16:58:43.865606027Z   }
+2026-01-09T16:58:43.865608148Z ]
+2026-01-09T16:58:43.867869478Z [2026-01-09T16:58:42.177Z] Sync complete: {
+2026-01-09T16:58:43.86788538Z   "ok": true,
+2026-01-09T16:58:43.8678892Z   "duration": "1682ms",
+2026-01-09T16:58:43.86789192Z   "shops": [
+2026-01-09T16:58:43.86789496Z     {
+2026-01-09T16:58:43.86789757Z       "shopId": 25,
+2026-01-09T16:58:43.867900461Z       "synced": 0,
+2026-01-09T16:58:43.867903421Z       "removed": 0,
+2026-01-09T16:58:43.867909111Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:43.867912161Z     },
+2026-01-09T16:58:43.867914851Z     {
+2026-01-09T16:58:43.867917712Z       "shopId": 28,
+2026-01-09T16:58:43.867920302Z       "synced": 0,
+2026-01-09T16:58:43.867922972Z       "removed": 0,
+2026-01-09T16:58:43.867925512Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:43.867928283Z     },
+2026-01-09T16:58:43.867930793Z     {
+2026-01-09T16:58:43.867933503Z       "shopId": 29,
+2026-01-09T16:58:43.867936013Z       "synced": 0,
+2026-01-09T16:58:43.867938773Z       "removed": 0,
+2026-01-09T16:58:43.867941353Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:43.867944164Z     },
+2026-01-09T16:58:43.867946644Z     {
+2026-01-09T16:58:43.867949424Z       "shopId": 35,
+2026-01-09T16:58:43.867952204Z       "synced": 0,
+2026-01-09T16:58:43.867954754Z       "removed": 0,
+2026-01-09T16:58:43.867957695Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:43.867960715Z     },
+2026-01-09T16:58:43.867963165Z     {
+2026-01-09T16:58:43.867966155Z       "shopId": 50,
+2026-01-09T16:58:43.867968665Z       "synced": 0,
+2026-01-09T16:58:43.867971475Z       "removed": 0,
+2026-01-09T16:58:43.867974016Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:43.867976986Z     },
+2026-01-09T16:58:43.867979856Z     {
+2026-01-09T16:58:43.867993087Z       "shopId": 51,
+2026-01-09T16:58:43.867996017Z       "synced": 0,
+2026-01-09T16:58:43.867998708Z       "removed": 0,
+2026-01-09T16:58:43.868001568Z       "error": "HTTP 403: <html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+2026-01-09T16:58:43.868004228Z     }
+2026-01-09T16:58:43.868007018Z   ]
+2026-01-09T16:58:43.868009498Z }
+2026-01-09T16:58:44.475444792Z [Startup] Waiting for server... (attempt 18/30)
+2026-01-09T16:58:44.479051607Z [Startup] Server is ready! (status: 200)
+2026-01-09T16:58:35.249956731Z [2026-01-09T16:58:35.249Z] Running Protractor sync...
+2026-01-09T16:58:36.922486528Z [Cron] Protractor sync completed in 1670ms: [
+2026-01-09T16:58:36.922510289Z   {
+2026-01-09T16:58:36.922516349Z     shopId: 25,
+2026-01-09T16:58:36.922522679Z     synced: 0,
+2026-01-09T16:58:36.922526419Z     removed: 0,
+2026-01-09T16:58:36.92253002Z     error: 'HTTP 403: <html>\r\n' +
+2026-01-09T16:58:36.92253432Z       '<head><title>403 Forbidden</title></head>\r\n' +
+2026-01-09T16:58:36.9225386Z       '<body>\r\n' +
+2026-01-09T16:58:36.9225421Z       '<center><h1>403 Forbidden</h1></center>\r\n' +

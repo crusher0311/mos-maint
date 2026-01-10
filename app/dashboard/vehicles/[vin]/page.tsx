@@ -193,7 +193,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   // If still not found, try to fetch from Tekmetric API using direct VIN search
   if (!vehicle) {
     const shop = await db.collection("shops").findOne({});
-    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_API_TOKEN) {
+    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_CLIENT_ID) {
       try {
         // Direct VIN search - single API call
         const vehicleResponse = await searchVehiclesByVin(shop.tekmetric.shopId, vin);
@@ -345,7 +345,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   let tekmetricDvi: any = null;
   if (vehicle.tekmetric?.repairOrderId || vehicle.tekmetric?.vehicleId) {
     const shop = await db.collection("shops").findOne({});
-    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_API_TOKEN) {
+    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_CLIENT_ID) {
       try {
         // Get latest RO for this vehicle from Tekmetric
         const roResponse = await getRepairOrders(shop.tekmetric.shopId, {

@@ -1,0 +1,97 @@
+ET]
+mos.tools/api/extension/plan?shopId=14956&roId=286373495&provider=tekmetric&refresh=true clientIP="72.198.61.82" requestID="7854e75f-b745-45eb" responseTimeMS=582 responseBytes=420 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[Extension] Found shop 28 for Tekmetric shop 14956
+[Extension] Tekmetric WO lookup: mosShopId=28, roId=286373495, found=true
+[Extension] WO data: vin=5N1AR2MN5DC684071, odometer=138641
+[Extension Plan] Error: MongoServerError: E11000 duplicate key error collection: mos-maintenance-mvp.viewed_vins index: shopId_vin_roNumber dup key: { shopId: 28, vin: "5N1AR2MN5DC684071", roNumber: null }
+    at InsertOneOperation.handleOk (/opt/render/project/src/node_modules/mongodb/lib/operations/insert.js:51:19)
+    at tryOperation (/opt/render/project/src/node_modules/mongodb/lib/operations/execute_operation.js:214:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async executeOperation (/opt/render/project/src/node_modules/mongodb/lib/operations/execute_operation.js:78:16)
+    at async Collection.insertOne (/opt/render/project/src/node_modules/mongodb/lib/collection.js:153:16)
+    at async i (/opt/render/project/src/.next/server/app/api/trial/view-vin/route.js:1:5231)
+    at async w (/opt/render/project/src/.next/server/app/api/extension/plan/route.js:1:8270)
+    at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+    at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+    at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512) {
+  errorLabelSet: Set(0) {},
+  errorResponse: {
+    index: 0,
+    code: 11000,
+    errmsg: 'E11000 duplicate key error collection: mos-maintenance-mvp.viewed_vins index: shopId_vin_roNumber dup key: { shopId: 28, vin: "5N1AR2MN5DC684071", roNumber: null }',
+    keyPattern: { shopId: 1, vin: 1, roNumber: 1 },
+    keyValue: { shopId: 28, vin: '5N1AR2MN5DC684071', roNumber: null }
+  },
+  index: 0,
+  code: 11000,
+  keyPattern: { shopId: 1, vin: 1, roNumber: 1 },
+  keyValue: { shopId: 28, vin: '5N1AR2MN5DC684071', roNumber: null }
+}
+[Extension] Found shop 28 for Tekmetric shop 14956
+[Extension] Tekmetric WO lookup: mosShopId=28, roId=286373495, found=true
+[Extension] WO data: vin=5N1AR2MN5DC684071, odometer=138641
+[Extension Plan] Error: MongoServerError: E11000 duplicate key error collection: mos-maintenance-mvp.viewed_vins index: shopId_vin_roNumber dup key: { shopId: 28, vin: "5N1AR2MN5DC684071", roNumber: null }
+    at InsertOneOperation.handleOk (/opt/render/project/src/node_modules/mongodb/lib/operations/insert.js:51:19)
+    at tryOperation (/opt/render/project/src/node_modules/mongodb/lib/operations/execute_operation.js:214:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async executeOperation (/opt/render/project/src/node_modules/mongodb/lib/operations/execute_operation.js:78:16)
+    at async Collection.insertOne (/opt/render/project/src/node_modules/mongodb/lib/collection.js:153:16)
+    at async i (/opt/render/project/src/.next/server/app/api/trial/view-vin/route.js:1:5231)
+    at async w (/opt/render/project/src/.next/server/app/api/extension/plan/route.js:1:8270)
+    at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+    at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+    at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512) {
+  errorLabelSet: Set(0) {},
+  errorResponse: {
+    index: 0,
+    code: 11000,
+    errmsg: 'E11000 duplicate key error collection: mos-maintenance-mvp.viewed_vins index: shopId_vin_roNumber dup key: { shopId: 28, vin: "5N1AR2MN5DC684071", roNumber: null }',
+    keyPattern: { shopId: 1, vin: 1, roNumber: 1 },
+    keyValue: { shopId: 28, vin: '5N1AR2MN5DC684071', roNumber: null }
+  },
+  index: 0,
+  code: 11000,
+  keyPattern: { shopId: 1, vin: 1, roNumber: 1 },
+  keyValue: { shopId: 28, vin: '5N1AR2MN5DC684071', roNumber: null }
+}
+[OPTIONS]
+mos.tools/api/extension/plan?shopId=14956&roId=286373495&provider=tekmetric&refresh=true clientIP="72.198.61.82" requestID="72579af7-504d-4694" responseTimeMS=3 responseBytes=306 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[GET]
+mos.tools/api/extension/plan?shopId=14956&roId=286373495&provider=tekmetric&refresh=true clientIP="72.198.61.82" requestID="377b53f5-86f5-42a4" responseTimeMS=581 responseBytes=420 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[OPTIONS]
+mos.tools/api/extension/plan?shopId=14956&roId=286373495&provider=tekmetric&refresh=true clientIP="72.198.61.82" requestID="f4951059-ea7b-4af5" responseTimeMS=3 responseBytes=306 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[POST]
+mos.tools/api/vehicles/check-closed-orders clientIP="72.198.61.82" requestID="c34e6229-c69e-4d80" responseTimeMS=132 responseBytes=297 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[GET]
+mos.tools/api/extension/plan?shopId=14956&roId=286373495&provider=tekmetric&refresh=true clientIP="72.198.61.82" requestID="09e6de59-736b-4349" responseTimeMS=578 responseBytes=420 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[Extension] Found shop 28 for Tekmetric shop 14956
+[Extension] Tekmetric WO lookup: mosShopId=28, roId=286373495, found=true
+[Extension] WO data: vin=5N1AR2MN5DC684071, odometer=138641
+[Extension Plan] Error: MongoServerError: E11000 duplicate key error collection: mos-maintenance-mvp.viewed_vins index: shopId_vin_roNumber dup key: { shopId: 28, vin: "5N1AR2MN5DC684071", roNumber: null }
+    at InsertOneOperation.handleOk (/opt/render/project/src/node_modules/mongodb/lib/operations/insert.js:51:19)
+    at tryOperation (/opt/render/project/src/node_modules/mongodb/lib/operations/execute_operation.js:214:34)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async executeOperation (/opt/render/project/src/node_modules/mongodb/lib/operations/execute_operation.js:78:16)
+    at async Collection.insertOne (/opt/render/project/src/node_modules/mongodb/lib/collection.js:153:16)
+    at async i (/opt/render/project/src/.next/server/app/api/trial/view-vin/route.js:1:5231)
+    at async w (/opt/render/project/src/.next/server/app/api/extension/plan/route.js:1:8270)
+    at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+    at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+    at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512) {
+  errorLabelSet: Set(0) {},
+  errorResponse: {
+    index: 0,
+    code: 11000,
+    errmsg: 'E11000 duplicate key error collection: mos-maintenance-mvp.viewed_vins index: shopId_vin_roNumber dup key: { shopId: 28, vin: "5N1AR2MN5DC684071", roNumber: null }',
+    keyPattern: { shopId: 1, vin: 1, roNumber: 1 },
+    keyValue: { shopId: 28, vin: '5N1AR2MN5DC684071', roNumber: null }
+  },
+  index: 0,
+  code: 11000,
+  keyPattern: { shopId: 1, vin: 1, roNumber: 1 },
+  keyValue: { shopId: 28, vin: '5N1AR2MN5DC684071', roNumber: null }
+}
+[GET]
+mos.tools/api/dashboard/data?page=1&pageSize=100 clientIP="72.198.61.82" requestID="5689da73-f0d2-4428" responseTimeMS=563 responseBytes=1064 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+[GET]
+mos.tools/sw.js clientIP="72.198.61.82" requestID="e6e4ea00-55af-4e28" responseTimeMS=14 responseBytes=3113 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"

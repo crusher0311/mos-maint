@@ -87,7 +87,6 @@ export default function CannedJobsSettingsPage() {
   const [activeIntegration, setActiveIntegration] = useState<IntegrationType>(null);
   const [integrationName, setIntegrationName] = useState<string>("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [expandedService, setExpandedService] = useState<string | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualId, setManualId] = useState("");
   const [manualTitle, setManualTitle] = useState("");
@@ -548,10 +547,6 @@ export default function CannedJobsSettingsPage() {
             const selectedJobs = selectedJobIds
               .map((id) => cannedJobs.find((j) => j.id === id))
               .filter(Boolean) as CannedJob[];
-            const isExpanded = expandedService === key;
-            const availableJobs = cannedJobs.filter(
-              (job) => !selectedJobIds.includes(job.id)
-            );
 
             return (
               <div key={key} className="p-4">
@@ -570,77 +565,27 @@ export default function CannedJobsSettingsPage() {
                     ) : (
                       <XCircle className="w-5 h-5 text-gray-300" />
                     )}
-                    <button
-                      onClick={() => setExpandedService(isExpanded ? null : key)}
-                      className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
-                    >
-                      {isExpanded ? "Hide" : "Edit"}
-                    </button>
                   </div>
                 </div>
 
-                {selectedJobs.length > 0 && !isExpanded && (
+                {selectedJobs.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {selectedJobs.map((job) => (
                       <span
                         key={job.id}
-                        className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded group"
                       >
                         {job.title}
                         {job.code ? ` (${job.code})` : ""}
+                        <button
+                          onClick={() => removeCannedJobFromService(key, job.id)}
+                          className="ml-1 p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove mapping"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </span>
                     ))}
-                  </div>
-                )}
-
-                {isExpanded && (
-                  <div className="mt-3 space-y-3">
-                    {selectedJobs.length > 0 && (
-                      <div className="space-y-2">
-                        <span className="text-xs text-gray-500 uppercase tracking-wide">
-                          Mapped Canned Jobs
-                        </span>
-                        {selectedJobs.map((job) => (
-                          <div
-                            key={job.id}
-                            className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded-lg"
-                          >
-                            <div>
-                              <span className="text-sm font-medium text-gray-900">
-                                {job.title}
-                              </span>
-                              {job.code && (
-                                <span className="ml-2 text-xs text-gray-500">
-                                  ({job.code})
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => removeCannedJobFromService(key, job.id)}
-                              className="p-1 text-red-600 hover:bg-red-100 rounded"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <select
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                        value=""
-                        onChange={(e) => addCannedJobToService(key, e.target.value)}
-                      >
-                        <option value="">+ Add a canned job...</option>
-                        {availableJobs.map((job) => (
-                          <option key={job.id} value={job.id}>
-                            {job.title}
-                            {job.code ? ` (${job.code})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 )}
               </div>
@@ -684,10 +629,10 @@ export default function CannedJobsSettingsPage() {
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-medium text-blue-900 mb-2">How it works</h3>
         <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-          <li>Click &quot;Edit&quot; to add multiple canned jobs to each service type</li>
+          <li>Click a canned job card below to assign it to a service type</li>
+          <li>Hover over a mapped job above and click X to remove it</li>
           <li>When multiple options exist, advisors will see a dropdown to choose which canned job applies</li>
           <li>If only one canned job is mapped, it will be used automatically</li>
-          <li>Clicking &quot;Add to RO&quot; on the Plan page adds the selected canned job to the vehicle&apos;s open work order</li>
         </ul>
       </div>
 

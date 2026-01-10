@@ -1,32 +1,55 @@
+import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
+import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
+
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
-function getApiToken(): string {
-  const token = process.env.TEKMETRIC_API_TOKEN;
-  if (!token) {
-    throw new Error('TEKMETRIC_API_TOKEN not configured');
+async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
+  // Acquire distributed rate limit slot (blocks if limit exceeded)
+  const rateLimitResult = await acquireDistributedRateLimitSlot('tekmetric');
+  if (!rateLimitResult.acquired) {
+    console.warn(`[Tekmetric] Rate limit slot not acquired after ${rateLimitResult.waitedMs}ms, proceeding anyway`);
   }
-  return token;
-}
 
-async function tekmetricRequest(endpoint: string, options: RequestInit = {}) {
-  const token = getApiToken();
+  const token = await getValidToken();
+  const method = options.method || 'GET';
+  const startTime = Date.now();
   
-  const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
-    ...options,
-    cache: 'no-store',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  let statusCode = 0;
+  try {
+    const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
+      ...options,
+      cache: 'no-store',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
+    statusCode = response.status;
+    const latencyMs = Date.now() - startTime;
+    
+    trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
+
+    // Handle 401 Unauthorized - attempt token refresh
+    if (response.status === 401 && !isRetry) {
+      console.log('[Tekmetric] Received 401, refreshing token and retrying...');
+      clearCachedToken();
+      await refreshToken();
+      return tekmetricRequest(endpoint, options, shopId, true);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
+    }
+
+    return response.json();
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    trackApiRequest('tekmetric', endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
+    throw err;
   }
-
-  return response.json();
 }
 
 export interface TekmetricShop {
@@ -147,7 +170,7 @@ export interface PaginatedResponse<T> {
 }
 
 export async function getShop(shopId: number): Promise<TekmetricShop> {
-  return tekmetricRequest(`/shops/${shopId}`);
+  return tekmetricRequest(`/shops/${shopId}`, {}, shopId);
 }
 
 export async function getShops(): Promise<TekmetricShop[]> {
@@ -171,7 +194,7 @@ export async function getCustomers(
   if (params.updatedDateStart) queryParams.set('updatedDateStart', params.updatedDateStart);
   if (params.updatedDateEnd) queryParams.set('updatedDateEnd', params.updatedDateEnd);
   
-  return tekmetricRequest(`/customers?${queryParams}`);
+  return tekmetricRequest(`/customers?${queryParams}`, {}, shopId);
 }
 
 export async function getCustomer(customerId: number): Promise<TekmetricCustomer> {
@@ -197,11 +220,11 @@ export async function getVehicles(
   if (params.updatedDateStart) queryParams.set('updatedDateStart', params.updatedDateStart);
   if (params.updatedDateEnd) queryParams.set('updatedDateEnd', params.updatedDateEnd);
   
-  return tekmetricRequest(`/vehicles?${queryParams}`);
+  return tekmetricRequest(`/vehicles?${queryParams}`, {}, shopId);
 }
 
-export async function getVehicle(vehicleId: number): Promise<TekmetricVehicle> {
-  return tekmetricRequest(`/vehicles/${vehicleId}`);
+export async function getVehicle(vehicleId: number, shopId?: number): Promise<TekmetricVehicle> {
+  return tekmetricRequest(`/vehicles/${vehicleId}`, {}, shopId);
 }
 
 export async function searchVehiclesByVin(shopId: number, vin: string): Promise<PaginatedResponse<TekmetricVehicle>> {
@@ -209,7 +232,7 @@ export async function searchVehiclesByVin(shopId: number, vin: string): Promise<
     shop: shopId.toString(),
     search: vin
   });
-  return tekmetricRequest(`/vehicles?${queryParams}`);
+  return tekmetricRequest(`/vehicles?${queryParams}`, {}, shopId);
 }
 
 export interface TekmetricInspectionItem {
@@ -306,7 +329,7 @@ export async function getRepairOrders(
   if (params.sort) queryParams.set('sort', params.sort);
   if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
   
-  return tekmetricRequest(`/repair-orders?${queryParams}`);
+  return tekmetricRequest(`/repair-orders?${queryParams}`, {}, shopId);
 }
 
 export async function getRepairOrder(roId: number): Promise<TekmetricRepairOrder> {

@@ -6,6 +6,38 @@ import Stripe from "stripe";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function logWebhookEvent(
+  db: any,
+  event: Stripe.Event,
+  status: "received" | "processed" | "failed",
+  error?: string
+) {
+  try {
+    await db.collection("stripe_webhook_events").updateOne(
+      { eventId: event.id },
+      {
+        $set: {
+          eventId: event.id,
+          type: event.type,
+          status,
+          error: error || null,
+          processedAt: status !== "received" ? new Date() : null,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+          payload: event.data.object,
+          retryCount: 0
+        },
+        $inc: status === "failed" ? { retryCount: 1 } : {}
+      },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error("[Stripe Webhook] Failed to log event:", err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -35,28 +67,62 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
+  
+  const existingEvent = await db.collection("stripe_webhook_events").findOne({
+    eventId: event.id,
+    status: "processed"
+  });
+  
+  if (existingEvent) {
+    console.log(`[Stripe Webhook] Event ${event.id} already processed, skipping`);
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+  
+  await logWebhookEvent(db, event, "received");
 
   try {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const shopId = Number(session.metadata?.shopId);
-        const plan = session.metadata?.plan || "professional";
+        const plan = session.metadata?.plan || "pro";
+        const skippedTrial = session.metadata?.skippedTrial === "true";
+        const bonusVins = Number(session.metadata?.bonusVins) || 0;
         
         if (shopId) {
+          const updateData: Record<string, any> = {
+            "billing.plan": plan,
+            "billing.status": "active",
+            "billing.stripeSubscriptionId": session.subscription,
+            "billing.stripeCustomerId": session.customer,
+            "billing.updatedAt": new Date(),
+            "billing.pendingCheckoutSessionId": null,
+          };
+          
+          // If they skipped trial and got bonus VINs, ensure their VIN limit is set correctly
+          if (skippedTrial) {
+            // Get the billing settings to calculate total VINs
+            const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
+            const baseVins = billingSettings?.mosProIncludedVins || 300;
+            const bonus = billingSettings?.skipTrialBonusVins || 50;
+            updateData["billing.vinLimit"] = baseVins + bonus;
+            updateData["billing.skippedTrialBonus"] = bonus;
+            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus}`);
+          }
+          
+          // Auto-enable all features for paid shops
+          updateData["enabledFeatures.maintenance"] = true;
+          updateData["enabledFeatures.job_lookup"] = true;
+          updateData["enabledFeatures.oil_sticker"] = true;
+          updateData["enabledFeatures.part_xref"] = true;
+          updateData["enabledFeatures.dvi_tracking"] = true;
+          console.log(`[Stripe] Shop ${shopId} - enabling all features for paid plan`);
+          
           await db.collection("shops").updateOne(
             { shopId },
-            {
-              $set: {
-                "billing.plan": plan,
-                "billing.status": "active",
-                "billing.stripeSubscriptionId": session.subscription,
-                "billing.stripeCustomerId": session.customer,
-                "billing.updatedAt": new Date(),
-              },
-            }
+            { $set: updateData }
           );
-          console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}`);
+          console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skip trial bonus applied)" : ""}`);
         }
         break;
       }
@@ -157,9 +223,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await logWebhookEvent(db, event, "processed");
     return NextResponse.json({ received: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Webhook processing error:", error);
+    await logWebhookEvent(db, event, "failed", error.message);
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

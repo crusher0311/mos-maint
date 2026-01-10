@@ -574,13 +574,15 @@ export async function GET(request: NextRequest) {
     const paginatedRows = allRows.slice(startIndex, endIndex);
 
     // Determine which SMS integration is active for this shop
-    const shop = await db.collection("shops").findOne({ shopId: String(user.shopId) });
+    const shop = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
     let smsType = "autoflow"; // default
     if (shop?.protractor?.configured) {
       smsType = "protractor";
     } else if (shop?.tekmetric?.configured) {
       smsType = "tekmetric";
     }
+    
+    const distanceUnit = shop?.preferences?.distanceUnit || "miles";
 
     // Add cache-control headers to prevent browser caching
     const response = NextResponse.json({
@@ -598,7 +600,8 @@ export async function GET(request: NextRequest) {
         role: user.role,
         shopId: user.shopId
       },
-      smsType
+      smsType,
+      distanceUnit
     });
     
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');

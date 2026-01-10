@@ -1,6 +1,7 @@
 // app/api/jobs/search/route.ts
 // Job Lookup / Parts Intelligence - Search API
 // Uses two-stage matching: Hard gates + Weighted scoring
+// Queries both legacy job_index and normalized collections for SMS migration support
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
@@ -55,9 +56,10 @@ function parseEngineString(engine: string): EngineInfo {
   return { cylinders, displacement, aspiration, fuelType };
 }
 
-function getScoreBand(score: number): ScoreBand {
-  if (score >= 85) return "exact";
-  if (score >= 70) return "likely";
+function getScoreBand(score: number, yearDiff?: number): ScoreBand {
+  // "Exact" requires high score AND close year match (within 1 year)
+  if (score >= 90 && (yearDiff === undefined || yearDiff <= 1)) return "exact";
+  if (score >= 75) return "likely";
   if (score >= 50) return "possible";
   return "poor";
 }
@@ -65,9 +67,117 @@ function getScoreBand(score: number): ScoreBand {
 function getBandLabel(band: ScoreBand): string {
   switch (band) {
     case "exact": return "Exact Fit";
-    case "likely": return "Likely Fit";
-    case "possible": return "Possible Match";
+    case "likely": return "Great Match";
+    case "possible": return "Good Match";
     case "poor": return "Low Match";
+  }
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function searchNormalizedCollections(
+  db: any,
+  searchShopIds: number[],
+  coreTokens: string[],
+  vehicleMake?: string,
+  limit: number = 50
+): Promise<any[]> {
+  if (coreTokens.length === 0) return [];
+
+  try {
+    const shopMatch = searchShopIds.length === 1 
+      ? { shopId: searchShopIds[0] }
+      : { shopId: { $in: searchShopIds } };
+
+    // Build regex match conditions - each token must match in at least one of the text fields
+    // Using $and to require ALL tokens, with $or to allow matching in any field
+    const tokenConditions = coreTokens.map(t => {
+      const regex = { $regex: new RegExp(escapeRegex(t), 'i') };
+      return {
+        $or: [
+          { title: regex },
+          { description: regex },
+          { cannedJobName: regex },
+        ]
+      };
+    });
+
+    const serviceJobsPipeline: any[] = [
+      {
+        $match: {
+          ...shopMatch,
+          deletedAt: null,
+          $and: tokenConditions
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit * 2 },
+      {
+        $lookup: {
+          from: 'normalized_work_orders',
+          localField: 'workOrderId',
+          foreignField: '_id',
+          as: 'workOrder'
+        }
+      },
+      { $unwind: { path: '$workOrder', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'normalized_vehicles',
+          localField: 'workOrder.vehicleId',
+          foreignField: '_id',
+          as: 'vehicle'
+        }
+      },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
+    ];
+
+    if (vehicleMake) {
+      serviceJobsPipeline.push({
+        $match: { 'vehicle.make': { $regex: new RegExp(escapeRegex(vehicleMake), 'i') } }
+      });
+    }
+
+    serviceJobsPipeline.push({ $limit: limit });
+
+    const normalizedJobs = await db.collection('normalized_service_jobs')
+      .aggregate(serviceJobsPipeline)
+      .toArray();
+
+    return normalizedJobs.map((nj: any) => ({
+      _id: nj._id,
+      shopId: nj.shopId,
+      vin: nj.vehicle?.vin,
+      vehicle: {
+        vin: nj.vehicle?.vin,
+        year: nj.vehicle?.year,
+        make: nj.vehicle?.make,
+        model: nj.vehicle?.model,
+        engine: nj.vehicle?.engine?.description,
+      },
+      job: {
+        title: nj.title,
+        description: nj.description,
+        name: nj.cannedJobName || nj.title,
+        keywords: [],
+      },
+      lines: (nj.lineItems || []).map((li: any) => ({
+        lineType: li.itemType,
+        description: li.description,
+        partNumber: li.partNumber,
+        qty: li.quantity,
+        unitPrice: li.unitPrice,
+        total: li.totalPrice,
+      })),
+      performedAt: nj.workOrder?.completedDate || nj.createdAt,
+      workOrderId: nj.workOrderId,
+      sourceSystem: nj.provenance?.sourceSystem || 'normalized',
+    }));
+  } catch (err) {
+    console.log('[Jobs Search] Normalized search error:', (err as Error).message);
+    return [];
   }
 }
 
@@ -139,19 +249,22 @@ export async function GET(req: NextRequest) {
     "change", "perform", "complete", "top", "off", "the", "and", "for"
   ]);
   
+  let useTextSearch = false;
+  let textSearchQuery = "";
+  
   if (query) {
     const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     // Core tokens: remove stopwords to get the essential service identifiers
     const coreTokens = allTokens.filter(w => !stopwords.has(w));
     
-    // If we have core tokens, require ALL of them to match in keywords or title
-    // If all tokens were stopwords, use original tokens but match ANY
     if (coreTokens.length > 0) {
-      // Require ALL core tokens to appear in keywords or title
-      matchStage.$or = [
-        { "job.keywords": { $all: coreTokens } },
-        { "job.title": { $regex: coreTokens.map(t => `(?=.*${t})`).join(""), $options: "i" } },
-      ];
+      // Use keywords array match (uses compound index shopId_keywords)
+      // This is fast with the index and more precise than text search
+      matchStage["job.keywords"] = { $all: coreTokens };
+      
+      // Also enable text search as alternative query strategy
+      useTextSearch = true;
+      textSearchQuery = coreTokens.join(" ");
     } else if (allTokens.length > 0) {
       // Fallback: if only stopwords, match any token in keywords
       matchStage["job.keywords"] = { $in: allTokens };
@@ -159,20 +272,58 @@ export async function GET(req: NextRequest) {
   }
   
   if (vehicleMake) {
-    matchStage["vehicle.make"] = { $regex: new RegExp(vehicleMake, "i") };
+    matchStage["vehicle.make"] = { $regex: new RegExp(escapeRegex(vehicleMake), "i") };
   }
   
-  if (vehicleModel) {
-    matchStage["vehicle.model"] = { $regex: new RegExp(vehicleModel, "i") };
-  }
+  // NOTE: Model is NOT used as a hard filter - it's used for scoring only.
+  // This allows "oil change on HHR" to find results from other Chevrolet models
+  // (Trax, Cruze, etc.) when no exact HHR jobs exist in history.
 
   const pipeline: any[] = [
     { $match: matchStage },
     { $sort: { performedAt: -1 } },
     { $limit: limit * 5 },
+    { $project: {
+      shopId: 1,
+      vin: 1,
+      vehicle: 1,
+      job: 1,
+      lines: 1,
+      performedAt: 1,
+      workOrderId: 1,
+    }},
   ];
 
-  const jobs = await db.collection("job_index").aggregate(pipeline).toArray();
+  // Query both legacy job_index and normalized collections in parallel
+  const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const coreTokensForNormalized = allTokens.filter(w => !stopwords.has(w));
+  
+  const [jobIndexResults, normalizedResults] = await Promise.all([
+    db.collection("job_index").aggregate(pipeline).toArray(),
+    searchNormalizedCollections(db, searchShopIds, coreTokensForNormalized, vehicleMake || undefined, limit * 2)
+  ]);
+  
+  // Merge results from both sources, deduping by workOrderId + job title
+  const seenKeys = new Set<string>();
+  const jobs: any[] = [];
+  
+  for (const job of jobIndexResults) {
+    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-legacy`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      jobs.push({ ...job, dataSource: 'job_index' });
+    }
+  }
+  
+  for (const job of normalizedResults) {
+    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      jobs.push({ ...job, dataSource: 'normalized' });
+    }
+  }
+  
+  console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
   
   const targetEngine = parseEngineString(vehicleEngine || "");
   const targetYear = vehicleYear ? parseInt(vehicleYear) : null;
@@ -289,12 +440,20 @@ export async function GET(req: NextRequest) {
       matchDetails.push("Has part numbers");
     }
     
-    const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSincePerformed < 90) {
-      evidenceScore += 4;
-      matchDetails.push("Recent job");
-    } else if (daysSincePerformed < 365) {
-      evidenceScore += 2;
+    // Recency scoring - exponential decay with 180-day half-life (max +10 points)
+    // Recent jobs likely have more up-to-date pricing
+    let recencyScore = 0;
+    if (job.performedAt) {
+      const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
+      // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
+      recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
+      recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
+      
+      if (recencyScore >= 8) {
+        matchDetails.push("Very recent job");
+      } else if (recencyScore >= 5) {
+        matchDetails.push("Recent job");
+      }
     }
     
     // Location bonus: prefer jobs from current shop
@@ -306,9 +465,12 @@ export async function GET(req: NextRequest) {
     const shopInfo = shopLookup.get(jobShopId);
     const locationName = shopInfo?.locationIdentifier || shopInfo?.name || `Shop ${jobShopId}`;
     
-    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + locationBonus;
+    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore + locationBonus;
     const normalizedScore = Math.max(0, Math.min(100, totalScore));
-    const band = getScoreBand(normalizedScore);
+    
+    // Calculate year difference for band determination
+    const yearDiffForBand = (targetYear && jobYear) ? Math.abs(targetYear - jobYear) : undefined;
+    const band = getScoreBand(normalizedScore, yearDiffForBand);
     
     return {
       ...job,
@@ -326,6 +488,7 @@ export async function GET(req: NextRequest) {
         year: yearScore,
         constraints: constraintScore,
         evidence: evidenceScore,
+        recency: recencyScore,
         locationBonus,
       },
     };
@@ -334,7 +497,15 @@ export async function GET(req: NextRequest) {
   // Lower threshold to 40 to include more results - let user decide relevance
   const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
   
-  eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
+  // Sort by score descending, then by band quality (exact > likely > possible > poor)
+  const bandOrder: Record<string, number> = { exact: 0, likely: 1, possible: 2, poor: 3 };
+  eligibleJobs.sort((a, b) => {
+    if (b.matchScore !== a.matchScore) {
+      return b.matchScore - a.matchScore;
+    }
+    // When scores are equal, prioritize by band (Exact Fit before Great Match)
+    return (bandOrder[a.matchBand] ?? 3) - (bandOrder[b.matchBand] ?? 3);
+  });
 
   const uniqueJobs = new Map<string, typeof eligibleJobs[0]>();
   for (const job of eligibleJobs) {
@@ -357,6 +528,8 @@ export async function GET(req: NextRequest) {
     results,
     stats: {
       totalFound: jobs.length,
+      fromJobIndex: jobIndexResults.length,
+      fromNormalized: normalizedResults.length,
       gatesFailed: gateFailCount,
       belowThreshold: belowThresholdCount,
       returned: results.length,

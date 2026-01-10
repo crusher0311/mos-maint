@@ -52,9 +52,10 @@ export function parseEngineString(engine: string): EngineInfo {
   return { cylinders, displacement, aspiration, fuelType };
 }
 
-export function getScoreBand(score: number): ScoreBand {
-  if (score >= 85) return "exact";
-  if (score >= 70) return "likely";
+export function getScoreBand(score: number, yearDiff?: number): ScoreBand {
+  // "Exact" requires high score AND close year match (within 1 year)
+  if (score >= 90 && (yearDiff === undefined || yearDiff <= 1)) return "exact";
+  if (score >= 75) return "likely";
   if (score >= 50) return "possible";
   return "poor";
 }
@@ -62,8 +63,8 @@ export function getScoreBand(score: number): ScoreBand {
 export function getBandLabel(band: ScoreBand): string {
   switch (band) {
     case "exact": return "Exact Fit";
-    case "likely": return "Likely Fit";
-    case "possible": return "Possible Match";
+    case "likely": return "Great Match";
+    case "possible": return "Good Match";
     case "poor": return "Low Match";
   }
 }
@@ -87,6 +88,7 @@ export interface ScoredJob {
     year: number;
     constraints: number;
     evidence: number;
+    recency: number;
   };
   [key: string]: any;
 }
@@ -214,19 +216,28 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
     matchDetails.push("Has part numbers");
   }
   
+  // Recency scoring - exponential decay with 180-day half-life (max +10 points)
+  // Recent jobs likely have more up-to-date pricing
+  let recencyScore = 0;
   if (job.performedAt) {
     const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSincePerformed < 90) {
-      evidenceScore += 4;
+    // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
+    recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
+    recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
+    
+    if (recencyScore >= 8) {
+      matchDetails.push("Very recent job");
+    } else if (recencyScore >= 5) {
       matchDetails.push("Recent job");
-    } else if (daysSincePerformed < 365) {
-      evidenceScore += 2;
     }
   }
   
-  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore;
+  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore;
   const normalizedScore = Math.max(0, Math.min(100, totalScore));
-  const band = getScoreBand(normalizedScore);
+  
+  // Calculate year difference for band determination
+  const yearDiffForBand = (targetYear && jobYear) ? Math.abs(targetYear - jobYear) : undefined;
+  const band = getScoreBand(normalizedScore, yearDiffForBand);
   
   return {
     ...job,
@@ -241,6 +252,7 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
       year: yearScore,
       constraints: constraintScore,
       evidence: evidenceScore,
+      recency: recencyScore,
     },
   };
 }

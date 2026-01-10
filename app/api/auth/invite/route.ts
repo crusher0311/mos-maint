@@ -49,14 +49,16 @@ export async function POST(req: NextRequest) {
     `https://${req.headers.get("host") || "localhost:3000"}`;
   const setupUrl = `${base}/setup?shopId=${sess.shopId}&token=${token}`;
 
+  let emailSent = false;
   try {
     const msg = makeInviteEmail(setupUrl, sess.shopId, inviteRole);
     await sendEmail({ to: emailInput, ...msg });
-  } catch {
-    // Swallow email errors to avoid blocking invites in dev
+    emailSent = true;
+  } catch (err) {
+    console.error("Failed to send invite email:", err);
   }
 
-  return NextResponse.json({ ok: true, setupUrl });
+  return NextResponse.json({ ok: true, setupUrl, emailSent, email: emailInput });
 }
 
 async function safeJson(req: NextRequest) {

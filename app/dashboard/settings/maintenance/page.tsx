@@ -15,11 +15,12 @@ async function getMaintenanceSettings(shopId: number) {
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
     { shopId },
-    { projection: { maintenance: 1 } }
+    { projection: { maintenance: 1, preferences: 1 } }
   );
   return {
     dueSoonMiles: shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES,
     dueSoonDays: shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS,
+    distanceUnit: (shop?.preferences?.distanceUnit as "miles" | "kilometers") || "miles",
   };
 }
 
@@ -78,8 +79,14 @@ export default async function MaintenanceSettingsPage() {
               <Car className="w-4 h-4 text-gray-500" />
               <span className="text-sm font-medium text-gray-700">Mileage Threshold</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{current.dueSoonMiles.toLocaleString()}</p>
-            <p className="text-xs text-gray-500 mt-1">miles before due</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {current.distanceUnit === "kilometers" 
+                ? Math.round(current.dueSoonMiles * 1.60934).toLocaleString()
+                : current.dueSoonMiles.toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {current.distanceUnit === "kilometers" ? "km" : "miles"} before due
+            </p>
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -100,7 +107,7 @@ export default async function MaintenanceSettingsPage() {
           </p>
         </div>
         <div className="px-6 py-4">
-          <MaintenanceForm initial={current} action={save} />
+          <MaintenanceForm initial={current} action={save} distanceUnit={current.distanceUnit} />
         </div>
       </div>
 

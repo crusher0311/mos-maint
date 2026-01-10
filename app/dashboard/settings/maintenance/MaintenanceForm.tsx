@@ -9,17 +9,32 @@ type Props = {
     dueSoonDays: number;
   };
   action: (formData: FormData) => Promise<void>;
+  distanceUnit: "miles" | "kilometers";
 };
 
-const PRESETS = [
+const MILES_TO_KM = 1.60934;
+const KM_TO_MILES = 0.621371;
+
+const PRESETS_MILES = [
   { label: "Conservative", miles: 1000, days: 30, description: "Alert at 1,000 miles / 30 days" },
   { label: "Standard", miles: 3000, days: 90, description: "Alert at 3,000 miles / 90 days" },
   { label: "Extended", miles: 5000, days: 180, description: "Alert at 5,000 miles / 6 months" },
 ];
 
-export default function MaintenanceForm({ initial, action }: Props) {
+const PRESETS_KM = [
+  { label: "Conservative", miles: 1000, km: 1600, days: 30, description: "Alert at 1,600 km / 30 days" },
+  { label: "Standard", miles: 3000, km: 4800, days: 90, description: "Alert at 4,800 km / 90 days" },
+  { label: "Extended", miles: 5000, km: 8000, days: 180, description: "Alert at 8,000 km / 6 months" },
+];
+
+export default function MaintenanceForm({ initial, action, distanceUnit }: Props) {
+  const isKm = distanceUnit === "kilometers";
+  const PRESETS = isKm ? PRESETS_KM : PRESETS_MILES;
+  
   const [miles, setMiles] = useState(initial.dueSoonMiles);
   const [days, setDays] = useState(initial.dueSoonDays);
+  
+  const displayDistance = isKm ? Math.round(miles * MILES_TO_KM) : miles;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -79,7 +94,7 @@ export default function MaintenanceForm({ initial, action }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label htmlFor="dueSoonMiles" className="block text-sm font-medium text-gray-700 mb-1">
-            Miles Before Due
+            {isKm ? "Kilometers" : "Miles"} Before Due
           </label>
           <div className="relative">
             <input
@@ -87,16 +102,19 @@ export default function MaintenanceForm({ initial, action }: Props) {
               id="dueSoonMiles"
               name="dueSoonMiles"
               min="0"
-              max="50000"
-              step="500"
-              value={miles}
-              onChange={(e) => setMiles(Math.max(0, parseInt(e.target.value) || 0))}
+              max={isKm ? 80000 : 50000}
+              step="100"
+              value={displayDistance}
+              onChange={(e) => {
+                const val = Math.max(0, parseInt(e.target.value) || 0);
+                setMiles(isKm ? Math.round(val * KM_TO_MILES) : val);
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">mi</span>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">{isKm ? "km" : "mi"}</span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Items will show as "Due Soon" when within this many miles
+            Items will show as "Due Soon" when within this many {isKm ? "kilometers" : "miles"}
           </p>
         </div>
 

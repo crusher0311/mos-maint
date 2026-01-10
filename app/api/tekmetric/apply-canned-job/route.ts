@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { addCannedJobsToRepairOrder } from "@/lib/tekmetric";
 import { logRecommendationEvent } from "@/lib/enterprise";
+import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,6 +106,15 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[Tekmetric Apply Canned Job] Failed to log recommendation event:", err);
     }
+
+    trackPushToRO({
+      shopId,
+      userId: session.email,
+      vin: vin?.toUpperCase(),
+      jobTitle: cannedJobTitle || `Canned Job ${cannedJobId}`,
+      jobSource: "canned",
+      repairOrderId: String(targetRepairOrderId),
+    }).catch(err => console.error("[Tekmetric Apply Canned Job] Analytics tracking failed:", err));
 
     return NextResponse.json({
       success: true,

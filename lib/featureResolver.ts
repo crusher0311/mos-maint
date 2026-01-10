@@ -2,9 +2,9 @@ import { getDb } from "./mongo";
 
 export type FeatureKey = "maintenance" | "job_lookup" | "oil_sticker" | "part_xref" | "dvi_tracking";
 
-export type BillingStatus = "trial" | "active" | "past_due" | "canceled" | "enterprise";
+export type BillingStatus = "trial" | "active" | "past_due" | "canceled" | "enterprise" | "demo";
 
-export type BillingPlan = "trial" | "starter" | "professional" | "enterprise";
+export type BillingPlan = "trial" | "starter" | "professional" | "enterprise" | "demo";
 
 export interface FeatureSettings {
   maintenance: boolean;
@@ -67,6 +67,13 @@ const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: true,
     dvi_tracking: true,
   },
+  demo: {
+    maintenance: true,
+    job_lookup: true,
+    oil_sticker: true,
+    part_xref: true,
+    dvi_tracking: true,
+  },
 };
 
 export async function getFeatureEntitlements(shopId: number): Promise<FeatureEntitlements> {
@@ -112,7 +119,7 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   };
   
   const isBillingActive = () => {
-    return status === "active" || status === "trial" || status === "enterprise";
+    return status === "active" || status === "trial" || status === "enterprise" || status === "demo";
   };
   
   const isFeatureEnabled = (feature: FeatureKey) => {

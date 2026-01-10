@@ -88,18 +88,18 @@ function ServiceCard({ t, severity }: { t: TriagedItem; severity: "overdue" | "s
     severity === "overdue" ? "bg-red-600" : severity === "soon" ? "bg-amber-600" : "bg-emerald-600";
 
   return (
-    <Card className="rounded-xl border">
-      <CardHeader className="py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm">{t.title}</CardTitle>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-600">
-              {t.category && <Badge variant="secondary">{t.category}</Badge>}
-              <Badge className={`${badgeColor} text-white`}>{severity.toUpperCase()}</Badge>
-              {t.bump === "red" && <Badge className="bg-red-600 text-white">DVI 🔴</Badge>}
-              {t.bump === "yellow" && <Badge className="bg-amber-600 text-white">DVI 🟡</Badge>}
+    <Card className="rounded-lg sm:rounded-xl border">
+      <CardHeader className="py-2 sm:py-3 px-3 sm:px-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-sm truncate">{t.title}</CardTitle>
+            <div className="mt-1 flex flex-wrap items-center gap-1 sm:gap-2 text-xs text-neutral-600">
+              {t.category && <Badge variant="secondary" className="text-xs">{t.category}</Badge>}
+              <Badge className={`${badgeColor} text-white text-xs`}>{severity.toUpperCase()}</Badge>
+              {t.bump === "red" && <Badge className="bg-red-600 text-white text-xs">DVI 🔴</Badge>}
+              {t.bump === "yellow" && <Badge className="bg-amber-600 text-white text-xs">DVI 🟡</Badge>}
               {(t.intervalMiles || t.intervalMonths) && (
-                <Badge variant="outline">
+                <Badge variant="outline" className="text-xs hidden sm:inline-flex">
                   OEM: {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : ""}
                   {t.intervalMiles && t.intervalMonths ? " / " : ""}
                   {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
@@ -107,16 +107,17 @@ function ServiceCard({ t, severity }: { t: TriagedItem; severity: "overdue" | "s
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <Button
               variant="secondary"
               size="sm"
               onClick={() => navigator.clipboard.writeText(lineForClipboard)}
               title="Copy line for RO"
+              className="h-7 sm:h-8 px-2 sm:px-3 text-xs"
             >
-              <Clipboard className="h-4 w-4 mr-1" /> Copy
+              <Clipboard className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1" /> <span className="hidden sm:inline">Copy</span>
             </Button>
-            <Button variant="default" size="sm" title="Add to RO (stub)">
+            <Button variant="default" size="sm" title="Add to RO (stub)" className="h-7 sm:h-8 px-2 sm:px-3 text-xs">
               + RO
             </Button>
           </div>
@@ -182,43 +183,47 @@ export function PlanUI({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Sticky summary */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
-        <div className="mx-auto max-w-5xl px-6 py-3 flex items-center justify-between">
-          <div className="text-sm">
-            <div className="font-semibold">Plan for VIN {vin}</div>
-            <div className="text-neutral-600">
-              {currentMiles != null && <>Current: {fmtMiles(currentMiles)} mi</>}
-              {mpdBlended != null && <> • ~{mpdBlended.toFixed(1)} mi/day</>}
+        <div className="mx-auto max-w-5xl px-3 sm:px-6 py-2 sm:py-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="text-xs sm:text-sm">
+              <div className="font-semibold truncate">Plan for VIN {vin}</div>
+              <div className="text-neutral-600">
+                {currentMiles != null && <>Current: {fmtMiles(currentMiles)} mi</>}
+                {mpdBlended != null && <> • ~{mpdBlended.toFixed(1)} mi/day</>}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-2">
-              <Badge className="bg-red-600 text-white">Overdue {counts.o}</Badge>
-              <Badge className="bg-amber-600 text-white">Due Soon {counts.s}</Badge>
-              <Badge className="bg-emerald-600 text-white">Upcoming {counts.u}</Badge>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => window.print()}>
-              <Printer className="h-4 w-4 mr-1" /> Print
-            </Button>
-            <Button variant="secondary" size="sm" title="Share (stub)">
-              <Share2 className="h-4 w-4 mr-1" /> Share
-            </Button>
-            <div className="ml-2">
-              <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
-                <TabsList>
-                  <TabsTrigger value="advisor">Advisor</TabsTrigger>
-                  <TabsTrigger value="client">Client</TabsTrigger>
-                </TabsList>
-              </Tabs>
+            <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Badge className="bg-red-600 text-white text-xs px-1.5 sm:px-2">{counts.o} Overdue</Badge>
+                <Badge className="bg-amber-600 text-white text-xs px-1.5 sm:px-2">{counts.s} Soon</Badge>
+                <Badge className="bg-emerald-600 text-white text-xs px-1.5 sm:px-2">{counts.u} Later</Badge>
+              </div>
+              <div className="hidden sm:flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => window.print()}>
+                  <Printer className="h-4 w-4 mr-1" /> Print
+                </Button>
+                <Button variant="secondary" size="sm" title="Share (stub)">
+                  <Share2 className="h-4 w-4 mr-1" /> Share
+                </Button>
+              </div>
+              <div className="ml-1 sm:ml-2">
+                <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+                  <TabsList className="h-7 sm:h-8">
+                    <TabsTrigger value="advisor" className="text-xs sm:text-sm px-2 sm:px-3">Advisor</TabsTrigger>
+                    <TabsTrigger value="client" className="text-xs sm:text-sm px-2 sm:px-3">Client</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Buckets */}
-      <div className="mx-auto max-w-5xl px-6">
+      <div className="mx-auto max-w-5xl px-3 sm:px-6">
         <Tabs defaultValue="overdue">
           <TabsList className="mb-3">
             <TabsTrigger value="overdue">Overdue ({counts.o})</TabsTrigger>

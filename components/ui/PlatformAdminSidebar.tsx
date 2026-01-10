@@ -9,14 +9,19 @@ import {
   LayoutDashboard,
   LogOut,
   Shield,
-  Settings
+  Settings,
+  QrCode,
+  Activity,
+  X
 } from "lucide-react";
 
 interface PlatformAdminSidebarProps {
   userEmail?: string;
+  isMobile?: boolean;
+  onClose?: () => void;
 }
 
-export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
+export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformAdminSidebarProps) {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
@@ -50,23 +55,50 @@ export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
       icon: <DollarSign className="w-5 h-5" />
     },
     {
+      name: "API Traffic",
+      href: "/platform-admin/api-usage",
+      icon: <Activity className="w-5 h-5" />
+    },
+    {
+      name: "HoverCode QRs",
+      href: "/platform-admin/hovercode",
+      icon: <QrCode className="w-5 h-5" />
+    },
+    {
       name: "Settings",
       href: "/platform-admin/settings",
       icon: <Settings className="w-5 h-5" />
     }
   ];
 
+  const handleNavClick = () => {
+    if (isMobile && onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="w-64 bg-slate-900 min-h-screen flex flex-col">
+    <aside className={`bg-slate-900 flex flex-col ${isMobile ? 'w-full h-full' : 'w-64 min-h-screen'}`}>
       <div className="p-4 border-b border-slate-700">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-            <Shield className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-white font-bold">MOS Admin</h1>
+              <p className="text-slate-400 text-xs">Platform Management</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-white font-bold">MOS Admin</h1>
-            <p className="text-slate-400 text-xs">Platform Management</p>
-          </div>
+          {isMobile && onClose && (
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              aria-label="Close menu"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -76,7 +108,8 @@ export function PlatformAdminSidebar({ userEmail }: PlatformAdminSidebarProps) {
             <li key={item.name}>
               <Link
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
                     ? "bg-purple-600 text-white"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"

@@ -2,6 +2,21 @@
 // Job Lookup / Parts Intelligence - Data Indexing Layer
 
 import { getDb } from "@/lib/mongo";
+import crypto from "crypto";
+
+// Compute a deterministic hash of job entry content for change detection
+export function computeJobHash(entry: JobIndexEntry): string {
+  // Only hash the content that matters for equality (exclude metadata.indexedAt)
+  const hashContent = {
+    workOrderId: entry.workOrderId,
+    servicePackageId: entry.servicePackageId,
+    vehicle: entry.vehicle,
+    job: entry.job,
+    lines: entry.lines,
+    totals: entry.totals,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
+}
 
 export type JobIndexEntry = {
   shopId: number;
@@ -157,8 +172,25 @@ export function extractJobIndexFromWorkOrder(
       for (const line of packageLines) {
         const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
         const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
-        const unitPrice = parseFloat(line.Price || line.UnitPrice || line.unitPrice || "0") || 0;
-        const extendedPrice = parseFloat(line.ExtendedPrice || line.ExtendedTotal || line.Total || line.total || "0") || (quantity * unitPrice);
+        
+        // Handle Protractor's nested PriceSummary structure and flat fields
+        const priceSummary = line.PriceSummary || {};
+        const unitPrice = parseFloat(
+          priceSummary.SellPrice || 
+          line.Price || 
+          line.UnitPrice || 
+          line.unitPrice || 
+          "0"
+        ) || 0;
+        const extendedPrice = parseFloat(
+          priceSummary.SellTotal || 
+          priceSummary.SellSubtotal ||
+          line.ExtendedPrice || 
+          line.ExtendedTotal || 
+          line.Total || 
+          line.total || 
+          "0"
+        ) || (quantity * unitPrice);
         
         lines.push({
           lineType,
@@ -171,7 +203,9 @@ export function extractJobIndexFromWorkOrder(
         });
         
         if (lineType === "labor") {
-          const hours = parseFloat(line.EstimatedHours || line.Hours || line.Quantity || line.quantity || "0") || quantity;
+          // Check for explicit hours field first, only fallback to quantity if no hours specified
+          const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
+          const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
           laborHours += hours;
           laborAmount += extendedPrice;
         } else if (lineType === "part") {
@@ -264,8 +298,25 @@ export function extractJobIndexFromCachedWorkOrder(
       for (const line of packageLines) {
         const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
         const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
-        const unitPrice = parseFloat(line.Price || line.UnitPrice || line.unitPrice || "0") || 0;
-        const extendedPrice = parseFloat(line.ExtendedPrice || line.ExtendedTotal || line.Total || line.total || "0") || (quantity * unitPrice);
+        
+        // Handle Protractor's nested PriceSummary structure and flat fields
+        const priceSummary = line.PriceSummary || {};
+        const unitPrice = parseFloat(
+          priceSummary.SellPrice || 
+          line.Price || 
+          line.UnitPrice || 
+          line.unitPrice || 
+          "0"
+        ) || 0;
+        const extendedPrice = parseFloat(
+          priceSummary.SellTotal || 
+          priceSummary.SellSubtotal ||
+          line.ExtendedPrice || 
+          line.ExtendedTotal || 
+          line.Total || 
+          line.total || 
+          "0"
+        ) || (quantity * unitPrice);
         
         lines.push({
           lineType,
@@ -278,7 +329,9 @@ export function extractJobIndexFromCachedWorkOrder(
         });
         
         if (lineType === "labor") {
-          const hours = parseFloat(line.EstimatedHours || line.Hours || line.Quantity || line.quantity || "0") || quantity;
+          // Check for explicit hours field first, only fallback to quantity if no hours specified
+          const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
+          const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
           laborHours += hours;
           laborAmount += extendedPrice;
         } else if (lineType === "part") {
