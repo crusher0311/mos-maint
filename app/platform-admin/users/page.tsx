@@ -107,6 +107,7 @@ export default function PlatformUsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           role: editedRole,
+          shopId: selectedUser.shopId,
           shopIds: editedShopIds,
           isPlatformAdmin: editedIsPlatformAdmin,
         }),
@@ -367,14 +368,28 @@ export default function PlatformUsersPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Primary Location
                     </label>
-                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                      <div className="flex items-center gap-2">
-                        <Building className="w-4 h-4 text-purple-600" />
-                        <span className="font-medium text-purple-900">
-                          {allShops.find(s => s.isUserPrimary)?.name || `Shop ${selectedUser.shopId}`}
-                        </span>
-                      </div>
-                    </div>
+                    <select
+                      value={String(selectedUser.shopId)}
+                      onChange={(e) => {
+                        const newPrimaryId = e.target.value;
+                        const oldPrimaryId = String(selectedUser.shopId);
+                        setSelectedUser({...selectedUser, shopId: newPrimaryId});
+                        // Move old primary to shopIds if not already there
+                        if (!editedShopIds.includes(oldPrimaryId)) {
+                          setEditedShopIds(prev => [...prev, oldPrimaryId]);
+                        }
+                        // Remove new primary from shopIds
+                        setEditedShopIds(prev => prev.filter(id => id !== newPrimaryId));
+                      }}
+                      className="w-full p-3 bg-purple-50 rounded-lg border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {allShops.map(shop => (
+                        <option key={shop.shopId} value={shop.shopId}>
+                          {shop.name}{shop.locationIdentifier ? ` (${shop.locationIdentifier})` : ''} - ID: {shop.shopId}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">This is the user's main shop for login</p>
                   </div>
 
                   {userEnterprise && (
@@ -397,7 +412,12 @@ export default function PlatformUsersPage() {
                                 className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
                               />
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium text-gray-900 text-sm truncate">{shop.name}</div>
+                                <div className="font-medium text-gray-900 text-sm truncate">
+                                  {shop.name}
+                                  {shop.locationIdentifier && (
+                                    <span className="ml-1 text-gray-500">({shop.locationIdentifier})</span>
+                                  )}
+                                </div>
                               </div>
                               {editedShopIds.includes(shop.shopId) && (
                                 <button
@@ -459,7 +479,12 @@ export default function PlatformUsersPage() {
                                   className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-gray-900 text-sm truncate">{shop.name}</div>
+                                  <div className="font-medium text-gray-900 text-sm truncate">
+                                    {shop.name}
+                                    {shop.locationIdentifier && (
+                                      <span className="ml-1 text-gray-500">({shop.locationIdentifier})</span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="text-xs text-gray-400">ID: {shop.shopId}</div>
                                 {editedShopIds.includes(shop.shopId) && (
