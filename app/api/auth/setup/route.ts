@@ -4,6 +4,7 @@ import { getNextShopId } from "@/lib/ids";
 import { sendEmail, makeWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings, getBaseUrl } from "@/lib/stripe";
 import { validateShopAccess } from "@/lib/tekmetric";
+import { createHovercodeQR } from "@/lib/hovercode";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
@@ -138,6 +139,29 @@ export async function POST(req: NextRequest) {
     }
 
     await shops.insertOne(shopDoc);
+
+    // Provision HoverCode QR code for sticker feature (fire-and-forget)
+    createHovercodeQR({ shopId, shopName }).then(async (result) => {
+      if (result.success && result.hovercodeId) {
+        try {
+          await shops.updateOne(
+            { shopId },
+            { 
+              $set: { 
+                "stickerConfig.hovercodeQRId": result.hovercodeId,
+                "stickerConfig.hovercodeShortUrl": result.shortUrl,
+                "stickerConfig.hovercodeProvisionedAt": new Date(),
+              } 
+            }
+          );
+          console.log(`[Setup] HoverCode QR ${result.hovercodeId} linked to shop ${shopId}`);
+        } catch (updateErr) {
+          console.error(`[Setup] Failed to save HoverCode ID to shop ${shopId}:`, updateErr);
+        }
+      }
+    }).catch(err => {
+      console.error(`[Setup] HoverCode provisioning error for shop ${shopId}:`, err);
+    });
 
     // Hash password
     const passwordHash = await bcrypt.hash(adminPassword, 12);
