@@ -173,7 +173,7 @@ function BillingContent() {
       name: "Professional",
       price: "$149.95",
       period: "/month",
-      description: "Making Operations Simple",
+      description: "Maintenance - Optimization - Stickers",
       features: [
         { name: "Auto Booking", included: true },
         { name: "CarFax Integration", included: true },
