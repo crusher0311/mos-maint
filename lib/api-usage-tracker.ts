@@ -85,6 +85,12 @@ let inMemoryBuffer: ApiUsageRecord[] = [];
 let lastFlush = Date.now();
 const FLUSH_INTERVAL_MS = 10000;
 
+const circuitBreakerState: Record<ApiProvider, {
+  consecutiveFailures: number;
+  openUntil: number;
+  isOpen: boolean;
+}> = {} as any;
+
 function getMinuteBucket(date: Date): string {
   const d = new Date(date);
   d.setSeconds(0, 0);
@@ -92,14 +98,57 @@ function getMinuteBucket(date: Date): string {
 }
 
 /**
- * Atomic distributed rate limiter using MongoDB.
+ * Check if circuit breaker is open for a provider.
+ */
+function isCircuitBreakerOpen(provider: ApiProvider): boolean {
+  const state = circuitBreakerState[provider];
+  if (!state) return false;
+  
+  if (state.isOpen && Date.now() > state.openUntil) {
+    state.isOpen = false;
+    state.consecutiveFailures = 0;
+    console.log(`[CircuitBreaker] ${provider} circuit closed, resuming requests`);
+  }
+  
+  return state.isOpen;
+}
+
+/**
+ * Record a rate limit failure for circuit breaker tracking.
+ */
+function recordRateLimitFailure(provider: ApiProvider): void {
+  if (!circuitBreakerState[provider]) {
+    circuitBreakerState[provider] = { consecutiveFailures: 0, openUntil: 0, isOpen: false };
+  }
+  
+  const state = circuitBreakerState[provider];
+  state.consecutiveFailures++;
+  
+  if (state.consecutiveFailures >= 10) {
+    state.isOpen = true;
+    state.openUntil = Date.now() + 60000;
+    console.warn(`[CircuitBreaker] ${provider} circuit OPEN - pausing requests for 60s after ${state.consecutiveFailures} consecutive failures`);
+  }
+}
+
+/**
+ * Record a successful slot acquisition, resetting circuit breaker.
+ */
+function recordRateLimitSuccess(provider: ApiProvider): void {
+  if (circuitBreakerState[provider]) {
+    circuitBreakerState[provider].consecutiveFailures = 0;
+  }
+}
+
+/**
+ * Atomic distributed rate limiter using MongoDB with exponential backoff and circuit breaker.
  * Claims a slot before making an API request. If limit is exceeded, waits and retries.
  * This ensures global rate limits are enforced across all workers.
  */
 export async function acquireDistributedRateLimitSlot(
   provider: ApiProvider,
-  maxRetries: number = 10
-): Promise<{ acquired: boolean; waitedMs: number; currentCount: number }> {
+  maxRetries: number = 8
+): Promise<{ acquired: boolean; waitedMs: number; currentCount: number; circuitOpen?: boolean }> {
   const config = API_PROVIDER_CONFIGS[provider];
   const limitPerMinute = config.rateLimit?.perMinute;
   
@@ -107,10 +156,18 @@ export async function acquireDistributedRateLimitSlot(
     return { acquired: true, waitedMs: 0, currentCount: 0 };
   }
   
+  if (isCircuitBreakerOpen(provider)) {
+    const state = circuitBreakerState[provider];
+    const remainingMs = state.openUntil - Date.now();
+    console.log(`[CircuitBreaker] ${provider} circuit open, skipping request (${Math.round(remainingMs/1000)}s remaining)`);
+    return { acquired: false, waitedMs: 0, currentCount: limitPerMinute, circuitOpen: true };
+  }
+  
   const db = await getDb();
   const collection = db.collection(RATE_LIMIT_COLLECTION);
   
   let totalWaitedMs = 0;
+  const baseWaitMs = 2000;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const now = new Date();
@@ -135,6 +192,7 @@ export async function acquireDistributedRateLimitSlot(
     const currentCount = result?.count || 1;
     
     if (currentCount <= limitPerMinute) {
+      recordRateLimitSuccess(provider);
       return { acquired: true, waitedMs: totalWaitedMs, currentCount };
     }
     
@@ -143,19 +201,23 @@ export async function acquireDistributedRateLimitSlot(
       { $inc: { count: -1 } }
     );
     
+    const exponentialWait = baseWaitMs * Math.pow(2, attempt);
+    const jitter = Math.random() * 1000;
     const secondsUntilNextMinute = 60 - now.getSeconds();
     const waitMs = Math.min(
-      (secondsUntilNextMinute * 1000) + Math.random() * 500,
-      5000
+      exponentialWait + jitter,
+      (secondsUntilNextMinute * 1000) + 500,
+      30000
     );
     
-    console.log(`[RateLimit] ${provider} at ${currentCount}/${limitPerMinute}, waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+    console.log(`[RateLimit] ${provider} at ${currentCount}/${limitPerMinute}, waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}, exponential backoff)`);
     
     await new Promise(r => setTimeout(r, waitMs));
     totalWaitedMs += waitMs;
   }
   
-  console.warn(`[RateLimit] ${provider} failed to acquire slot after ${maxRetries} attempts`);
+  recordRateLimitFailure(provider);
+  console.warn(`[RateLimit] ${provider} failed to acquire slot after ${maxRetries} attempts (circuit breaker: ${circuitBreakerState[provider]?.consecutiveFailures || 0}/10)`);
   return { acquired: false, waitedMs: totalWaitedMs, currentCount: limitPerMinute };
 }
 
