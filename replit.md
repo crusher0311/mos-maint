@@ -62,6 +62,13 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Dashboard shows top shops by usage, error rates, hourly trends per provider.
     *   MongoDB collection `api_usage` with 7-day TTL auto-cleanup.
     *   API endpoint: `/api/platform-admin/api-usage` (all providers) or `?provider=tekmetric` for specific.
+*   **Protractor Rate Limiting**:
+    *   Two-tier throttling: local in-memory (5 req/s) + shared MongoDB (200 req/min).
+    *   Shared limiter queries `api_usage` collection for cross-worker coordination.
+    *   Adaptive delays with exponential backoff when approaching limits.
+    *   Retry logic for 429 (rate limit) and 5xx errors with jitter.
+    *   `sourceWorker` field tracks requests from 'render' vs 'replit' workers.
+    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables sync on specific deployments.
     *   **v1.8.0 Enhancements**:
         *   Integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode) displayed on cards.
         *   Drag-and-drop card reordering with localStorage persistence.
