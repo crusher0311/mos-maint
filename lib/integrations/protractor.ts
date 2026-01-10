@@ -1,10 +1,14 @@
 // Note: "server-only" import removed to allow standalone script usage
 import crypto from "node:crypto";
 import https from "node:https";
+import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
+
+// Concurrency limiter: max 3 concurrent Protractor requests per process
+const protractorConcurrencyLimit = pLimit(3);
 
 // Local rate limiter: 5 requests per second (enforced per-process)
 const RATE_LIMIT_RPS = 5;
@@ -16,19 +20,27 @@ let isProcessingQueue = false;
 /**
  * Acquire rate limit slot with both local (5 rps) and distributed (300 rpm) enforcement.
  * The distributed limiter uses MongoDB for cross-worker coordination.
+ * Returns false if circuit breaker is open.
  */
-async function acquireRateLimitSlot(): Promise<void> {
+async function acquireRateLimitSlot(): Promise<{ acquired: boolean }> {
   // First: acquire distributed slot (blocks if global limit exceeded)
   const distributed = await acquireDistributedRateLimitSlot('protractor');
   if (!distributed.acquired) {
-    console.warn(`[Protractor] Rate limit slot not acquired, proceeding anyway after ${distributed.waitedMs}ms`);
+    if (distributed.circuitOpen) {
+      console.warn(`[Protractor] Circuit breaker open, skipping request`);
+      return { acquired: false };
+    }
+    console.warn(`[Protractor] Rate limit slot not acquired after ${distributed.waitedMs}ms, skipping request`);
+    return { acquired: false };
   }
   
   // Then: local per-process queue (ensures 5 rps within this process)
-  return new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     rateLimitQueue.push(resolve);
     processRateLimitQueue();
   });
+  
+  return { acquired: true };
 }
 
 function processRateLimitQueue(): void {
@@ -307,11 +319,15 @@ export async function protractorFetch<T>(
     return { ok: false, error: "Protractor not configured" };
   }
 
-  await acquireRateLimitSlot();
+  return protractorConcurrencyLimit(async () => {
+    const rateSlot = await acquireRateLimitSlot();
+    if (!rateSlot.acquired) {
+      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
+    }
 
-  const url = `${BASE_URL}${endpoint}`;
-  const startTime = Date.now();
-  const method = (options.method || "GET").toUpperCase();
+    const url = `${BASE_URL}${endpoint}`;
+    const startTime = Date.now();
+    const method = (options.method || "GET").toUpperCase();
   
   try {
     const headers: Record<string, string> = {
@@ -362,6 +378,7 @@ export async function protractorFetch<T>(
   } catch (err: any) {
     return { ok: false, error: err.message || "Network error" };
   }
+  });
 }
 
 export async function fetchVehicleByVin(
