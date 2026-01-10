@@ -104,6 +104,13 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Use Next.js Image component for hero images, preload primary fonts
 *   **Observability**: Add Next.js bundle analyzer, track real-user metrics
 
+## Deployment
+To deploy to Render (QA environment):
+```bash
+git push --force
+```
+This pushes the current `qa` branch to trigger a Render deploy.
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
