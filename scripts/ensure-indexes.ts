@@ -101,34 +101,6 @@ async function ensureIndexes() {
       // reset_tokens - password reset
       { collection: "reset_tokens", index: { token: 1 } },
       { collection: "reset_tokens", index: { expiresAt: 1 } },
-
-      // sticker_generations - billing tracking
-      { collection: "sticker_generations", index: { shopId: 1 } },
-      { collection: "sticker_generations", index: { shopId: 1, generatedAt: -1 } },
-
-      // api_usage - API traffic monitoring
-      { collection: "api_usage", index: { provider: 1, timestamp: -1 } },
-      { collection: "api_usage", index: { shopId: 1, timestamp: -1 } },
-      { collection: "api_usage", index: { timestamp: -1 } },
-
-      // recommendation_events - shop analytics
-      { collection: "recommendation_events", index: { shopId: 1, createdAt: -1 } },
-
-      // protractor_work_orders - dashboard
-      { collection: "protractor_work_orders", index: { shopId: 1 } },
-      { collection: "protractor_work_orders", index: { shopId: 1, status: 1 } },
-
-      // tekmetric_work_orders - dashboard
-      { collection: "tekmetric_work_orders", index: { shopId: 1 } },
-      { collection: "tekmetric_work_orders", index: { shopId: 1, status: 1 } },
-
-      // normalized collections
-      { collection: "normalized_work_orders", index: { shopId: 1 } },
-      { collection: "normalized_work_orders", index: { shopId: 1, status: 1 } },
-      { collection: "normalized_work_orders", index: { vin: 1 } },
-      { collection: "normalized_vehicles", index: { shopId: 1 } },
-      { collection: "normalized_vehicles", index: { vin: 1 } },
-      { collection: "normalized_customers", index: { shopId: 1 } },
     ];
 
     for (const { collection, index, options } of indexes) {

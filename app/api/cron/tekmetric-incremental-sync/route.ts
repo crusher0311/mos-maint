@@ -7,15 +7,6 @@ export const dynamic = "force-dynamic";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(req: NextRequest) {
-  // Check if sync is disabled for this deployment
-  if (process.env.DISABLE_TEKMETRIC_SYNC === "true") {
-    return NextResponse.json({
-      ok: true,
-      message: "Tekmetric sync disabled via DISABLE_TEKMETRIC_SYNC environment variable",
-      disabled: true
-    });
-  }
-
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -25,32 +25,20 @@ export async function GET() {
     const shopIds = [...new Set(users.map(u => u.shopId).filter(Boolean))];
     const shops = await db.collection("shops")
       .find({ shopId: { $in: shopIds } })
-      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+      .project({ shopId: 1, name: 1 })
       .toArray();
     
-    // Build lookup maps with both numeric and string keys
-    const shopDataMap = new Map<string, { name: string; locationIdentifier?: string }>();
-    for (const s of shops) {
-      const key = String(s.shopId);
-      shopDataMap.set(key, { 
-        name: s.name || `Shop ${s.shopId}`,
-        locationIdentifier: s.locationIdentifier || null
-      });
-    }
+    const shopNameMap = new Map(shops.map(s => [s.shopId, s.name]));
     
-    const enrichedUsers = users.map(user => {
-      const shopData = shopDataMap.get(String(user.shopId));
-      return {
-        _id: user._id,
-        email: user.email,
-        role: user.role || "user",
-        shopId: user.shopId,
-        shopName: shopData?.name || `Shop ${user.shopId}`,
-        locationIdentifier: shopData?.locationIdentifier || null,
-        createdAt: user.createdAt || user._id.getTimestamp?.() || null,
-        isPlatformAdmin: user.isPlatformAdmin || false,
-      };
-    });
+    const enrichedUsers = users.map(user => ({
+      _id: user._id,
+      email: user.email,
+      role: user.role || "user",
+      shopId: user.shopId,
+      shopName: shopNameMap.get(user.shopId) || `Shop ${user.shopId}`,
+      createdAt: user.createdAt || user._id.getTimestamp?.() || null,
+      isPlatformAdmin: user.isPlatformAdmin || false,
+    }));
     
     return NextResponse.json({
       ok: true,

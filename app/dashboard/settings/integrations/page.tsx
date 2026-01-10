@@ -64,8 +64,7 @@ export default function IntegrationsPage() {
         },
         protractor: { 
           configured: Boolean(protractorData.configured), 
-          connectionId: protractorData.connectionId,
-          webhookToken: protractorData.webhookToken,
+          connectionId: protractorData.connectionId 
         },
         tekmetric: {
           configured: Boolean(tekmetricData.configured),
@@ -456,7 +455,7 @@ function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; lo
   );
 }
 
-function ProtractorSection({ status, onUpdate }: { status: { configured: boolean; connectionId?: string; webhookToken?: string }; onUpdate: () => void }) {
+function ProtractorSection({ status, onUpdate }: { status: { configured: boolean; connectionId?: string }; onUpdate: () => void }) {
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -464,19 +463,6 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
   const [disconnecting, setDisconnecting] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [copied, setCopied] = useState(false);
-  
-  const webhookUrl = status.webhookToken 
-    ? `https://mos.tools/api/webhooks/protractor/${status.webhookToken}`
-    : null;
-    
-  const copyWebhookUrl = async () => {
-    if (webhookUrl) {
-      await navigator.clipboard.writeText(webhookUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
 
   async function handleRequestApiAccess() {
     if (!confirm("This will send an email to Protractor support (support@protractor.com) requesting API access for your shop. The shop owner will be CC'd. Continue?")) {
@@ -578,27 +564,6 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
             <span>Connected to Protractor</span>
           </div>
         </div>
-        
-        {webhookUrl && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <p className="text-xs font-medium text-gray-700 mb-2">Callback URL</p>
-            <p className="text-xs text-gray-500 mb-2">Add this URL to Protractor to receive real-time updates</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={webhookUrl}
-                readOnly
-                className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-lg bg-white font-mono"
-              />
-              <button
-                onClick={copyWebhookUrl}
-                className="px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-          </div>
-        )}
         
         {message && (
           <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${

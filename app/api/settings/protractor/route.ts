@@ -2,7 +2,6 @@ import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { testConnection, resolveProtractorConfig } from "@/lib/integrations/protractor";
-import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,17 +19,8 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { protractor: 1, protractorWebhookToken: 1 } }
+      { projection: { protractor: 1 } }
     );
-
-    let webhookToken = shop?.protractorWebhookToken;
-    if (config.configured && !webhookToken) {
-      webhookToken = crypto.randomBytes(16).toString("hex");
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: { protractorWebhookToken: webhookToken } }
-      );
-    }
 
     return NextResponse.json({
       configured: config.configured,
@@ -38,7 +28,6 @@ export async function GET(req: NextRequest) {
       hasApiKey: Boolean(config.apiKey),
       updateWorkOrderPackage: shop?.protractor?.updateWorkOrderPackage ?? false,
       updateWorkOrderLine: shop?.protractor?.updateWorkOrderLine ?? false,
-      webhookToken: config.configured ? webhookToken : null,
     });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
@@ -76,15 +65,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const webhookToken = crypto.randomBytes(16).toString("hex");
-    
     await db.collection("shops").updateOne(
       { shopId },
       {
         $set: {
           protractorConnectionId: cleanConnectionId,
           protractorApiKey: cleanApiKey,
-          protractorWebhookToken: webhookToken,
           "protractor.configured": true,
           "protractor.configuredAt": new Date(),
           "protractor.locations": testResult.locations,
