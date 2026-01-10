@@ -455,9 +455,9 @@ function BillingContent() {
                 <div
                   key={plan.name}
                   className={`relative bg-white rounded-xl border-2 p-5 transition-all ${
-                    plan.highlight
+                    plan.current && !plan.trial
                       ? "border-green-500 shadow-lg shadow-green-100"
-                      : plan.current 
+                      : plan.current
                         ? "border-blue-500" 
                         : plan.popular 
                           ? "border-blue-300" 
@@ -471,7 +471,7 @@ function BillingContent() {
                       </span>
                     </div>
                   )}
-                  {plan.highlight && (
+                  {plan.current && !plan.trial && (
                     <div className="absolute -top-3 left-4">
                       <span className="bg-green-600 text-white text-xs font-medium px-3 py-1 rounded-full">
                         Current Plan
