@@ -62,7 +62,7 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
   },
   protractor: { 
     name: 'Protractor',
-    rateLimit: { perMinute: 200, perSecond: 5 },
+    rateLimit: { perMinute: 300, perSecond: 5 },
     warningThreshold: 0.75,
     criticalThreshold: 0.85
   },
@@ -79,6 +79,7 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
 };
 
 const COLLECTION_NAME = 'api_usage';
+const RATE_LIMIT_COLLECTION = 'api_rate_limits';
 
 let inMemoryBuffer: ApiUsageRecord[] = [];
 let lastFlush = Date.now();
@@ -88,6 +89,74 @@ function getMinuteBucket(date: Date): string {
   const d = new Date(date);
   d.setSeconds(0, 0);
   return d.toISOString();
+}
+
+/**
+ * Atomic distributed rate limiter using MongoDB.
+ * Claims a slot before making an API request. If limit is exceeded, waits and retries.
+ * This ensures global rate limits are enforced across all workers.
+ */
+export async function acquireDistributedRateLimitSlot(
+  provider: ApiProvider,
+  maxRetries: number = 10
+): Promise<{ acquired: boolean; waitedMs: number; currentCount: number }> {
+  const config = API_PROVIDER_CONFIGS[provider];
+  const limitPerMinute = config.rateLimit?.perMinute;
+  
+  if (!limitPerMinute) {
+    return { acquired: true, waitedMs: 0, currentCount: 0 };
+  }
+  
+  const db = await getDb();
+  const collection = db.collection(RATE_LIMIT_COLLECTION);
+  
+  let totalWaitedMs = 0;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const now = new Date();
+    const minuteBucket = getMinuteBucket(now);
+    const key = `${provider}:${minuteBucket}`;
+    
+    const result = await collection.findOneAndUpdate(
+      { _id: key as any },
+      { 
+        $inc: { count: 1 },
+        $setOnInsert: { 
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + 120000)
+        }
+      },
+      { 
+        upsert: true, 
+        returnDocument: 'after'
+      }
+    );
+    
+    const currentCount = result?.count || 1;
+    
+    if (currentCount <= limitPerMinute) {
+      return { acquired: true, waitedMs: totalWaitedMs, currentCount };
+    }
+    
+    await collection.updateOne(
+      { _id: key as any },
+      { $inc: { count: -1 } }
+    );
+    
+    const secondsUntilNextMinute = 60 - now.getSeconds();
+    const waitMs = Math.min(
+      (secondsUntilNextMinute * 1000) + Math.random() * 500,
+      5000
+    );
+    
+    console.log(`[RateLimit] ${provider} at ${currentCount}/${limitPerMinute}, waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+    
+    await new Promise(r => setTimeout(r, waitMs));
+    totalWaitedMs += waitMs;
+  }
+  
+  console.warn(`[RateLimit] ${provider} failed to acquire slot after ${maxRetries} attempts`);
+  return { acquired: false, waitedMs: totalWaitedMs, currentCount: limitPerMinute };
 }
 
 export async function trackApiRequest(
