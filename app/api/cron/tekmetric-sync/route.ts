@@ -20,11 +20,6 @@ export const dynamic = "force-dynamic";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-// Early exit if Tekmetric sync is disabled for this deployment
-function isSyncDisabled() {
-  return process.env.DISABLE_TEKMETRIC_SYNC === "true";
-}
-
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
 
@@ -119,15 +114,6 @@ async function upsertTekmetricWorkOrderSnapshot(
 }
 
 export async function GET(req: NextRequest) {
-  // Check if sync is disabled for this deployment
-  if (isSyncDisabled()) {
-    return NextResponse.json({
-      ok: true,
-      message: "Tekmetric sync disabled via DISABLE_TEKMETRIC_SYNC environment variable",
-      disabled: true
-    });
-  }
-
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
