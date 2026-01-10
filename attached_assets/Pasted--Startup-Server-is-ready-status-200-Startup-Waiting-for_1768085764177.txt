@@ -1,0 +1,299 @@
+[Startup] Server is ready! (status: 200)
+[Startup] Waiting for server... (attempt 27/30)
+[Startup] Server is ready! (status: 200)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[Startup] Waiting for server... (attempt 28/30)
+[Startup] Server is ready! (status: 200)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[Startup] Waiting for server... (attempt 29/30)
+[Startup] Server is ready! (status: 200)
+[Startup] Waiting for server... (attempt 30/30)
+[Startup] Server is ready! (status: 200)
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b3e0e35b-6772-4915-b8b6-c2d91e69779a
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/16735800-4e45-4702-ade4-af84253bfbd4
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8566f37f-5077-42b0-816f-fe4f8f85edfa
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e7aa60dd-4f6b-431d-8e83-37c16678dbc8
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/86effb93-e9df-46f4-a639-16c171f23c77
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: f610446a, Auth hash: e0d51d14
+[Protractor] Fetched work orders page: skip=0, got 3, total so far: 3
+[Cron] Shop 28 - WorkflowStage counts: { InspectionInProgress: 1, WorkAuthorized: 1, EstimateCompleted: 1 }
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/3b3052be-e3d2-4116-ae26-52cd50090412
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: f610446a, Auth hash: e0d51d14
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9e2a4bd6-3486-43ed-90aa-c11095ef2803
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: f610446a, Auth hash: e0d51d14
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/13fb7954-2d9b-4af1-aa9c-bdfeb69832c3
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: f610446a, Auth hash: e0d51d14
+[Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/300225d5-e2ec-4d3b-afef-cf3a5ab5d2e5
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/cfb3c247-c7a1-4296-9341-dab934c21733
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+ If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c305f04c-805d-4e41-8a3b-b3b1e32d7f05
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/88e3bed6-374f-4766-9933-05a8e2fe98be
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 54bc3955, Auth hash: 43df969e
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/daa78fb5-7035-4dc3-85c7-56a6cad83998
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/983e9669-6997-46bf-8355-ee27cffde90d
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9c81cb40-410b-4b50-a196-9e618fbb81de
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6d3cf9a6-2ed7-49ab-b36c-bde06c3e762e
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a7b28b06-f865-4cbb-98c9-d915ecab2b35
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[POST]
+mos.tools/api/stripe/webhook clientIP="52.15.183.38" requestID="758edb0c-4338-4be0" responseTimeMS=84 responseBytes=279 userAgent="Stripe/1.0 (+https://stripe.com/docs/webhooks)"
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/21231323-2219-478a-a74f-d3e29eb5eb92
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/379a97db-f3e1-4dda-ba17-3a3a500647aa
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c8ef823e-bf94-4458-b44d-1030fcce47b1
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/4416c746-92d0-443b-a2b2-fc72d5e21323
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5afb6fe1-8ba6-4d25-a6a6-b1104a1169f6
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[2026-01-10T22:55:26.183Z] Running Tekmetric sync...
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/4362f9b9-0dec-4045-953f-0e1984ac95c2
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5426b8c1-1225-4693-9a08-052518a1baa2
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b513dbcb-22d9-4df9-b8d4-cece66936400
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a2766746-9227-4ad0-8e73-8bedbdc0523f
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:52.588Z)
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/fd44f8bb-58d6-49e1-b6a3-3ab02fa65aa6
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:52.947Z)
+[Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:53.518Z)
+[Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:53.907Z)
+[Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:54.327Z)
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/604e9e05-2510-44a7-874b-2e884c08ef5a
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9b22c177-583c-4c6e-ad5c-fa002e2f03e4
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e45facc3-027e-4e4c-951c-2ccbf8d24b36
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/da062a29-2124-46c0-bb37-1635ad8fc653
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/22f27d7d-c4f6-4641-b9d2-e23e8bfb8aac
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:55.810Z)
+[Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-10T22:53:56.061Z)
+[Cron] Tekmetric incremental sync completed in 4745ms: 0 synced, 0 removed, 0/0 from cache, 0 pages queued, 0 errors, 0 skipped
+[2026-01-10T22:55:26.183Z] Sync complete: {
+  "ok": true,
+  "duration": "4745ms",
+  "summary": {
+    "totalShops": 7,
+    "totalSynced": 0,
+    "totalRemoved": 0,
+    "fromCache": {
+      "vehicles": 0,
+      "customers": 0
+    },
+    "pagesQueued": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "shops": [
+    {
+      "shopId": 1,
+      "tekmetricShopId": 14956,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 28,
+      "tekmetricShopId": 14956,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 32,
+      "tekmetricShopId": 469,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 36,
+      "tekmetricShopId": 470,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 37,
+      "tekmetricShopId": 471,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 54,
+      "tekmetricShopId": 275,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 57,
+      "tekmetricShopId": 11803,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    }
+  ]
+}
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8566f37f-5077-42b0-816f-fe4f8f85edfa
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b3e0e35b-6772-4915-b8b6-c2d91e69779a
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/16735800-4e45-4702-ade4-af84253bfbd4
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e7aa60dd-4f6b-431d-8e83-37c16678dbc8
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/86effb93-e9df-46f4-a639-16c171f23c77
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1f822545-379a-4c1a-adc1-12f8231e1073
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/295688a9-e418-4dd3-82af-d3eda10afc86
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[RateLimit] protractor at 301/300, waiting 2764ms (attempt 1/8, exponential backoff)
+[Protractor Debug] Node: v22.16.0, Env: Render
+[Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5b603cd7-78e2-452f-950e-2dcae98698fc
+[Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+[Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+[RateLimit] protractor at 301/300, waiting 2444ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4623ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4590ms (attempt 2/8, exponential backoff)
