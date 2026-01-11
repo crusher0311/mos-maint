@@ -30,6 +30,10 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     - **Booking Queue UI**: Sidebar link with pending count badge for quick access to bookings awaiting review.
 *   **Manual Vehicle Management**: Standalone shops can manually add vehicles via VIN decode with strict validation (year 1900-current, mileage 0-2M). Admin-controlled `allowManualClose` preference enables close/archive functionality for both manual entries and integration vehicles. Closed VINs are filtered from dashboard.
 
+## Planned Features
+*   **Key Tag Printing**: Printable key tags with customer name, vehicle info (Year/Make/Model), VIN, license plate, RO#, color. Data fields already exist in normalized schema (exteriorColor, licensePlate, licensePlateState).
+*   **Customer Concern Tool**: Tool for capturing and managing customer-reported vehicle concerns.
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
