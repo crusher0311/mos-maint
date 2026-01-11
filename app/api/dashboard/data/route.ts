@@ -516,6 +516,38 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray();
 
+    // Fetch manually added vehicles (source: "manual")
+    const manualVehicles = await db.collection("vehicles").find({
+      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+      source: "manual"
+    }).toArray();
+
+    const manualRows = manualVehicles.map((v: any) => ({
+      updatedAt: v.updatedAt || v.createdAt || new Date(),
+      displayName: v.customer 
+        ? [v.customer.firstName, v.customer.lastName].filter(Boolean).join(' ') || 'No Customer'
+        : 'No Customer',
+      displayVehicle: [v.year, v.make, v.model].filter(Boolean).join(' ') || 'Unknown Vehicle',
+      displayVin: v.vin,
+      displayMiles: v.mileage || v.lastMileage || 0,
+      displayRo: null,
+      workOrderGuid: null,
+      dviDone: false,
+      source: "manual",
+      displayStatus: "Manual Entry",
+      af: {
+        status: "Manual Entry",
+        createdAt: v.createdAt,
+        miles: v.mileage || v.lastMileage || 0
+      },
+      vehicle: {
+        year: v.year,
+        make: v.make,
+        model: v.model,
+        engine: null
+      }
+    }));
+
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
@@ -523,9 +555,10 @@ export async function GET(request: NextRequest) {
     // When Protractor is primary, use Protractor rows (which have workflowStage as status)
     // When only AutoFlow is configured, use AutoFlow rows directly
     // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
+    // Always include manual vehicles regardless of integration status
     const rowSources = isProtractorPrimary 
-      ? [...protractorRows, ...tekmetricRows]
-      : [...autoflowRows, ...protractorRows, ...tekmetricRows];
+      ? [...protractorRows, ...tekmetricRows, ...manualRows]
+      : [...autoflowRows, ...protractorRows, ...tekmetricRows, ...manualRows];
     
     for (const row of rowSources) {
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
@@ -537,9 +570,11 @@ export async function GET(request: NextRequest) {
 
     // Filter to only show vehicles with mileage data (if preference is enabled)
     // This ensures advisors know to enter mileage before the vehicle appears
+    // Manual entries are always shown regardless of mileage preference
     const showOnlyWithMileage = shopPrefs?.preferences?.showOnlyWithMileage !== false; // default true
     if (showOnlyWithMileage) {
       allRows = allRows.filter((row: any) => {
+        if (row.source === "manual") return true; // Always show manual entries
         const miles = row.displayMiles ?? row.af?.miles;
         return miles != null && miles > 0;
       });
