@@ -98,6 +98,12 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   Push API: `app/api/settings/auto-booking/push/route.ts` - Send confirmed bookings to SMS systems
     *   Appointment Pusher: `lib/auto-booking/appointment-pusher.ts` - Creates appointments via SMS adapters
     *   SMS Adapter: `createAppointment` method on `ISMSAdapter` interface, implemented for Protractor and AutoFlow
+    *   **Dynamic Holiday System** (`lib/auto-booking/holidays.ts`):
+        *   Rule-based holiday definitions: `fixed`, `nth_weekday`, `last_weekday`, `day_after`, `day_before`
+        *   Automatic yearly calculation - no manual date updates needed
+        *   Per-holiday toggles - shops can opt out of specific federal holidays (e.g., MLK Day)
+        *   Preset custom recurring holidays: Black Friday, Christmas Eve, Day After Christmas, New Year's Eve
+        *   Observed date handling for holidays falling on weekends
     *   **Flow**: Sticker generated → `queueBooking()` → Queue UI → Confirm → Push to SMS → Appointment created
     *   **Next steps**: Connect `queueBooking()` to sticker generation with vehicleId/customerId, implement Tekmetric `createAppointment`
 

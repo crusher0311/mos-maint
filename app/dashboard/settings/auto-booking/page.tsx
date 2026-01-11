@@ -36,6 +36,29 @@ interface UpcomingHoliday {
   year: number;
 }
 
+interface HolidayRule {
+  type: "fixed" | "nth_weekday" | "last_weekday" | "day_after" | "day_before";
+  month?: number;
+  day?: number;
+  weekday?: number;
+  n?: number;
+  baseHolidayId?: string;
+  daysAfter?: number;
+  daysBefore?: number;
+}
+
+interface CustomRecurringHoliday {
+  id: string;
+  name: string;
+  rule: HolidayRule;
+}
+
+interface PresetHolidayOption {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface AutoBookingSettings {
   enabled: boolean;
   leadTimeDays: number;
@@ -44,6 +67,7 @@ interface AutoBookingSettings {
   blockHolidays: boolean;
   enabledHolidays: Record<string, boolean>;
   customHolidays: Holiday[];
+  customRecurringHolidays: CustomRecurringHoliday[];
   businessHours: {
     start: string;
     end: string;
@@ -62,10 +86,12 @@ export default function AutoBookingSettingsPage() {
   const [settings, setSettings] = useState<AutoBookingSettings | null>(null);
   const [holidayDefinitions, setHolidayDefinitions] = useState<HolidayDefinition[]>([]);
   const [upcomingHolidays, setUpcomingHolidays] = useState<UpcomingHoliday[]>([]);
+  const [presetOptions, setPresetOptions] = useState<PresetHolidayOption[]>([]);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [newHolidayDate, setNewHolidayDate] = useState("");
   const [newHolidayName, setNewHolidayName] = useState("");
   const [showHolidays, setShowHolidays] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState("");
 
   useEffect(() => {
     fetchSettings();
@@ -81,6 +107,7 @@ export default function AutoBookingSettingsPage() {
         setSettings(data.settings);
         setHolidayDefinitions(data.holidayDefinitions || []);
         setUpcomingHolidays(data.upcomingHolidays || []);
+        setPresetOptions(data.presetHolidayOptions || []);
       } else {
         setAvailable(false);
         setUnavailableReason(data.reason);
@@ -100,6 +127,44 @@ export default function AutoBookingSettingsPage() {
         ...settings.enabledHolidays,
         [holidayId]: enabled,
       },
+    });
+  }
+
+  function addRecurringHoliday() {
+    if (!settings || !selectedPreset) return;
+    
+    const preset = presetOptions.find(p => p.id === selectedPreset);
+    if (!preset) return;
+    
+    if (settings.customRecurringHolidays?.some(h => h.id === selectedPreset)) {
+      return;
+    }
+    
+    const presetRules: Record<string, HolidayRule> = {
+      black_friday: { type: "day_after", baseHolidayId: "thanksgiving", daysAfter: 1 },
+      day_after_christmas: { type: "day_after", baseHolidayId: "christmas", daysAfter: 1 },
+      christmas_eve: { type: "day_before", baseHolidayId: "christmas", daysBefore: 1 },
+      new_years_eve: { type: "fixed", month: 12, day: 31 },
+    };
+    
+    const rule = presetRules[selectedPreset];
+    if (!rule) return;
+    
+    setSettings({
+      ...settings,
+      customRecurringHolidays: [
+        ...(settings.customRecurringHolidays || []),
+        { id: selectedPreset, name: preset.name, rule },
+      ],
+    });
+    setSelectedPreset("");
+  }
+
+  function removeRecurringHoliday(id: string) {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      customRecurringHolidays: (settings.customRecurringHolidays || []).filter(h => h.id !== id),
     });
   }
 
@@ -489,9 +554,61 @@ export default function AutoBookingSettingsPage() {
                 </div>
               )}
 
+              {settings.blockHolidays && presetOptions.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Recurring Custom Holidays</h4>
+                  <p className="text-xs text-gray-500 mb-3">Add holidays that automatically update each year (like Black Friday)</p>
+                  
+                  <div className="flex gap-2 mb-3">
+                    <select
+                      value={selectedPreset}
+                      onChange={(e) => setSelectedPreset(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select a recurring holiday...</option>
+                      {presetOptions
+                        .filter(p => !settings.customRecurringHolidays?.some(h => h.id === p.id))
+                        .map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} - {p.description}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      onClick={addRecurringHoliday}
+                      disabled={!selectedPreset}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {(settings.customRecurringHolidays?.length || 0) > 0 ? (
+                    <div className="space-y-2">
+                      {settings.customRecurringHolidays.map((h) => (
+                        <div key={h.id} className="flex items-center justify-between p-2 bg-purple-50 rounded-lg">
+                          <div className="text-sm">
+                            <span className="font-medium text-purple-900">{h.name}</span>
+                            <span className="text-purple-500 ml-2 text-xs">(updates yearly)</span>
+                          </div>
+                          <button
+                            onClick={() => removeRecurringHoliday(h.id)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">No recurring custom holidays added</p>
+                  )}
+                </div>
+              )}
+
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Custom Blocked Dates</h4>
-                <p className="text-xs text-gray-500 mb-3">Add shop-specific dates when you're closed</p>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">One-Time Blocked Dates</h4>
+                <p className="text-xs text-gray-500 mb-3">Add specific dates when you're closed (doesn't repeat yearly)</p>
                 
                 <div className="flex gap-2 mb-3">
                   <input
@@ -534,7 +651,7 @@ export default function AutoBookingSettingsPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 italic">No custom blocked dates</p>
+                  <p className="text-sm text-gray-400 italic">No one-time blocked dates</p>
                 )}
               </div>
             </>

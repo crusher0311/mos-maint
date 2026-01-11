@@ -4,11 +4,34 @@ import { getSession } from "@/lib/auth";
 import { 
   getUpcomingHolidays, 
   getHolidayDefinitionsWithStatus,
-  DEFAULT_HOLIDAY_DEFINITIONS 
+  DEFAULT_HOLIDAY_DEFINITIONS,
+  PRESET_CUSTOM_HOLIDAYS,
+  getPresetHolidayOptions,
+  type CustomRecurringHoliday,
+  type HolidayRule,
 } from "@/lib/auto-booking/holidays";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function isValidHolidayRule(rule: any): rule is HolidayRule {
+  if (!rule || typeof rule !== "object" || !rule.type) return false;
+  
+  switch (rule.type) {
+    case "fixed":
+      return typeof rule.month === "number" && typeof rule.day === "number";
+    case "nth_weekday":
+      return typeof rule.month === "number" && typeof rule.weekday === "number" && typeof rule.n === "number";
+    case "last_weekday":
+      return typeof rule.month === "number" && typeof rule.weekday === "number";
+    case "day_after":
+      return typeof rule.baseHolidayId === "string" && typeof rule.daysAfter === "number";
+    case "day_before":
+      return typeof rule.baseHolidayId === "string" && typeof rule.daysBefore === "number";
+    default:
+      return false;
+  }
+}
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -18,6 +41,7 @@ export interface AutoBookingSettings {
   blockHolidays: boolean;
   enabledHolidays: Record<string, boolean>;
   customHolidays: Array<{ date: string; name: string }>;
+  customRecurringHolidays: CustomRecurringHoliday[];
   businessHours: {
     start: string;
     end: string;
@@ -40,6 +64,7 @@ const DEFAULT_SETTINGS: AutoBookingSettings = {
   blockHolidays: true,
   enabledHolidays: DEFAULT_ENABLED_HOLIDAYS,
   customHolidays: [],
+  customRecurringHolidays: [],
   businessHours: {
     start: "08:00",
     end: "17:00",
@@ -93,16 +118,22 @@ export async function GET(req: NextRequest) {
         ...DEFAULT_ENABLED_HOLIDAYS,
         ...(savedSettings.enabledHolidays || {}),
       },
+      customRecurringHolidays: savedSettings.customRecurringHolidays || [],
     };
 
     const holidayDefinitions = getHolidayDefinitionsWithStatus(mergedSettings.enabledHolidays);
-    const upcomingHolidays = getUpcomingHolidays(mergedSettings.enabledHolidays);
+    const upcomingHolidays = getUpcomingHolidays(
+      mergedSettings.enabledHolidays, 
+      mergedSettings.customRecurringHolidays
+    );
+    const presetHolidayOptions = getPresetHolidayOptions();
 
     return NextResponse.json({
       available: true,
       settings: mergedSettings,
       holidayDefinitions,
       upcomingHolidays,
+      presetHolidayOptions,
     });
   } catch (err: any) {
     console.error("[Auto Booking Settings] Error:", err);
@@ -166,6 +197,22 @@ export async function POST(req: NextRequest) {
       settings.customHolidays = body.customHolidays.filter(
         (h: any) => h.date && h.name && typeof h.date === "string" && typeof h.name === "string"
       );
+    }
+    if (Array.isArray(body.customRecurringHolidays)) {
+      const validPresetIds = new Set(PRESET_CUSTOM_HOLIDAYS.map(p => p.id));
+      settings.customRecurringHolidays = body.customRecurringHolidays
+        .filter((h: any) => h.id && h.name && h.rule)
+        .map((h: any) => {
+          if (validPresetIds.has(h.id)) {
+            const preset = PRESET_CUSTOM_HOLIDAYS.find(p => p.id === h.id);
+            return { id: h.id, name: h.name || preset?.name, rule: preset?.rule };
+          }
+          if (h.rule && isValidHolidayRule(h.rule)) {
+            return { id: h.id, name: h.name, rule: h.rule };
+          }
+          return null;
+        })
+        .filter(Boolean) as CustomRecurringHoliday[];
     }
     if (body.businessHours?.start && body.businessHours?.end) {
       settings.businessHours = {
