@@ -82,13 +82,11 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">Works with the tools you already use</p>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap justify-center items-center gap-4 sm:gap-8 md:gap-12">
-            <div className="flex items-center justify-center gap-2 text-gray-700">
-              <img src="/logos/protractor.png" alt="Protractor" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
-              <span className="font-semibold text-sm sm:text-base">Protractor</span>
+            <div className="flex items-center justify-center text-gray-700">
+              <img src="/logos/protractor-logo.png" alt="Protractor" className="h-8 sm:h-10 object-contain" />
             </div>
-            <div className="flex items-center justify-center gap-2 text-gray-700">
-              <img src="/logos/tekmetric.png" alt="Tekmetric" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
-              <span className="font-semibold text-sm sm:text-base">Tekmetric</span>
+            <div className="flex items-center justify-center text-gray-700">
+              <img src="/logos/tekmetric-logo.png" alt="Tekmetric" className="h-8 sm:h-10 object-contain" />
             </div>
             <div className="flex items-center justify-center text-gray-700">
               <img src="/logos/carfax-logo.png" alt="CARFAX" className="h-8 sm:h-10 object-contain" />
