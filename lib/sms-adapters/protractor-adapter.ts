@@ -10,6 +10,8 @@ import {
   SMSVehicle,
   SMSCannedJob,
   SMSAdapterRegistry,
+  SMSAppointment,
+  CreateAppointmentRequest,
 } from "@/lib/sms-adapter";
 import {
   resolveProtractorConfig,
@@ -361,6 +363,65 @@ class ProtractorAdapter implements ISMSAdapter {
         customerId: v.CustomerID,
       },
     };
+  }
+
+  async createAppointment(
+    shopId: number,
+    request: CreateAppointmentRequest
+  ): Promise<{ ok: boolean; appointment?: SMSAppointment; error?: string }> {
+    const config = await resolveProtractorConfig(shopId);
+    if (!config.configured) {
+      return { ok: false, error: "Protractor not configured" };
+    }
+
+    try {
+      const scheduledDateTime = `${request.scheduledDate}T${request.scheduledTime}:00`;
+      
+      const appointmentPayload = {
+        Type: "Appointment",
+        Status: "Open",
+        ServiceItemID: request.vehicleId,
+        CustomerID: request.customerId,
+        ScheduledTime: scheduledDateTime,
+        Header: {
+          Notes: request.notes || `Auto-booked appointment: ${request.serviceDescription || "Oil Change Service"}`,
+        },
+      };
+
+      console.log(`[Protractor] Creating appointment for vehicle ${request.vehicleId} on ${request.scheduledDate} at ${request.scheduledTime}`);
+
+      const result = await protractorFetch<any>(
+        `/WorkOrder`,
+        config,
+        {
+          method: "POST",
+          body: JSON.stringify(appointmentPayload),
+        }
+      );
+
+      if (!result.ok) {
+        return { ok: false, error: result.error || "Failed to create appointment" };
+      }
+
+      const appointmentId = result.data?.ID || result.data?.id;
+      
+      return {
+        ok: true,
+        appointment: {
+          id: appointmentId,
+          scheduledDate: request.scheduledDate,
+          scheduledTime: request.scheduledTime,
+          vehicleId: request.vehicleId,
+          customerId: request.customerId,
+          serviceDescription: request.serviceDescription,
+          notes: request.notes,
+          status: "scheduled",
+        },
+      };
+    } catch (error) {
+      console.error("[Protractor] Error creating appointment:", error);
+      return { ok: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
   }
 }
 

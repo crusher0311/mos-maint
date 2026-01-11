@@ -60,6 +60,27 @@ export type SMSCannedJob = {
   lines: SMSLineItem[];
 };
 
+export type SMSAppointment = {
+  id: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  vehicleId: string;
+  customerId: string;
+  serviceDescription?: string;
+  notes?: string;
+  status: "scheduled" | "confirmed" | "cancelled" | "completed" | "no_show";
+};
+
+export type CreateAppointmentRequest = {
+  vehicleId: string;
+  customerId: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  serviceDescription?: string;
+  notes?: string;
+  estimatedDuration?: number;
+};
+
 export interface ISMSAdapter {
   provider: SMSProvider;
   
@@ -100,6 +121,15 @@ export interface ISMSAdapter {
   getVehicleByVin(shopId: number, vin: string): Promise<{ 
     ok: boolean; 
     vehicle?: SMSVehicle; 
+    error?: string 
+  }>;
+  
+  createAppointment?(
+    shopId: number,
+    request: CreateAppointmentRequest
+  ): Promise<{ 
+    ok: boolean; 
+    appointment?: SMSAppointment; 
     error?: string 
   }>;
 }

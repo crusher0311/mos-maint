@@ -91,6 +91,64 @@ export default function BookingQueuePage() {
     }
   }
 
+  async function handlePush(bookingId: string, isRetry: boolean = false) {
+    setProcessingId(bookingId);
+    setMessage(null);
+    
+    try {
+      const res = await fetch("/api/settings/auto-booking/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          action: isRetry ? "retry" : "push_single", 
+          bookingId 
+        }),
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: "success", text: "Appointment sent to shop schedule" });
+        fetchBookings();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to send appointment" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to send appointment" });
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function handlePushAll() {
+    setProcessingId("push-all");
+    setMessage(null);
+    
+    try {
+      const res = await fetch("/api/settings/auto-booking/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "push_all" }),
+      });
+      
+      const data = await res.json();
+      if (data.successful > 0) {
+        setMessage({ 
+          type: "success", 
+          text: `Sent ${data.successful} of ${data.total} appointments to shop schedule` 
+        });
+      } else if (data.total === 0) {
+        setMessage({ type: "error", text: "No confirmed bookings to send" });
+      } else {
+        setMessage({ type: "error", text: `Failed to send ${data.failed} appointments` });
+      }
+      fetchBookings();
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to send appointments" });
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
   function formatDate(dateStr: string): string {
     const date = new Date(dateStr);
     return date.toLocaleDateString("en-US", { 
@@ -207,17 +265,33 @@ export default function BookingQueuePage() {
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900">Queued Bookings</h2>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-            >
-              <option value="pending">Pending Only</option>
-              <option value="pending,confirmed">Pending & Confirmed</option>
-              <option value="sent">Sent</option>
-              <option value="failed,cancelled">Failed & Cancelled</option>
-              <option value="pending,confirmed,sent,failed,cancelled">All</option>
-            </select>
+            <div className="flex items-center gap-3">
+              {confirmedCount > 0 && (
+                <button
+                  onClick={handlePushAll}
+                  disabled={processingId === "push-all"}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {processingId === "push-all" ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  Push All ({confirmedCount})
+                </button>
+              )}
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+              >
+                <option value="pending">Pending Only</option>
+                <option value="pending,confirmed">Pending & Confirmed</option>
+                <option value="sent">Sent</option>
+                <option value="failed,cancelled">Failed & Cancelled</option>
+                <option value="pending,confirmed,sent,failed,cancelled">All</option>
+              </select>
+            </div>
           </div>
 
           {loading ? (
@@ -317,12 +391,41 @@ export default function BookingQueuePage() {
                     {booking.status === "confirmed" && (
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
+                          onClick={() => handlePush(booking._id)}
+                          disabled={processingId === booking._id}
+                          className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+                          title="Send to Shop Schedule"
+                        >
+                          {processingId === booking._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
                           onClick={() => handleAction(booking._id, "cancel")}
                           disabled={processingId === booking._id}
                           className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
                           title="Cancel"
                         >
                           <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {booking.status === "failed" && (
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handlePush(booking._id, true)}
+                          disabled={processingId === booking._id}
+                          className="p-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50"
+                          title="Retry"
+                        >
+                          {processingId === booking._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     )}
