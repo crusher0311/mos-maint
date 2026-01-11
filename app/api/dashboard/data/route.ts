@@ -516,10 +516,11 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray();
 
-    // Fetch manually added vehicles (source: "manual")
+    // Fetch manually added vehicles (source: "manual") - only active ones
     const manualVehicles = await db.collection("vehicles").find({
       shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-      source: "manual"
+      source: "manual",
+      "status.active": { $ne: false }
     }).toArray();
 
     const manualRows = manualVehicles.map((v: any) => ({
