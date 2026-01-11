@@ -27,12 +27,14 @@ export interface RenderService {
   dashboardUrl: string;
   repo?: string;
   branch?: string;
+  ownerId?: string;
 }
 
 export interface RenderEnvironment {
   name: string;
   apiKey: string;
   serviceIds: string[];
+  ownerId?: string;
 }
 
 const RENDER_API_BASE = 'https://api.render.com/v1';
@@ -102,6 +104,7 @@ export async function fetchRenderLogs(
   apiKey: string,
   options: {
     serviceIds?: string[];
+    ownerId?: string;
     startTime: string;
     endTime: string;
     level?: string;
@@ -110,43 +113,95 @@ export async function fetchRenderLogs(
     environment?: string;
   }
 ): Promise<RenderLogsResponse> {
-  const params: Record<string, string> = {
-    startTime: options.startTime,
-    endTime: options.endTime,
-  };
-
+  const url = new URL(`${RENDER_API_BASE}/logs`);
+  
+  url.searchParams.set('startTime', options.startTime);
+  url.searchParams.set('endTime', options.endTime);
+  url.searchParams.set('direction', 'backward');
+  
+  if (options.ownerId) {
+    url.searchParams.set('ownerId', options.ownerId);
+  }
   if (options.serviceIds?.length) {
-    params.resourceIds = options.serviceIds.join(',');
+    options.serviceIds.forEach(id => url.searchParams.append('resource', id));
   }
   if (options.level) {
-    params.level = options.level;
+    url.searchParams.append('level', options.level);
   }
   if (options.text) {
-    params.text = options.text;
+    url.searchParams.append('text', options.text);
   }
   if (options.limit) {
-    params.limit = options.limit.toString();
+    url.searchParams.set('limit', options.limit.toString());
   }
 
-  const response = await makeRenderRequest<{
-    logs: Array<{
-      id: string;
-      timestamp: string;
-      level: string;
-      message: string;
-      instanceId?: string;
-    }>;
-    hasMore?: boolean;
-    nextStartTime?: string;
-    nextEndTime?: string;
-  }>('/logs', apiKey, params, options.environment);
+  const startTime = Date.now();
+  
+  try {
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
 
-  return {
-    logs: response.logs || [],
-    hasMore: response.hasMore || false,
-    nextStartTime: response.nextStartTime,
-    nextEndTime: response.nextEndTime,
-  };
+    const latencyMs = Date.now() - startTime;
+
+    await trackApiRequest(
+      'render',
+      '/logs',
+      'GET',
+      response.status,
+      latencyMs,
+      0,
+      { sourceWorker: options.environment }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Render API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    const logs: RenderLogEntry[] = (data.logs || []).map((log: any) => {
+      const labels = log.labels || [];
+      const getLabel = (name: string) => labels.find((l: any) => l.name === name)?.value;
+      
+      return {
+        id: log.id,
+        timestamp: log.timestamp,
+        level: getLabel('level') || 'info',
+        message: log.message,
+        instanceId: getLabel('instance'),
+        serviceId: getLabel('resource'),
+      };
+    });
+
+    return {
+      logs,
+      hasMore: data.hasMore || false,
+      nextStartTime: data.nextStartTime,
+      nextEndTime: data.nextEndTime,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    
+    await trackApiRequest(
+      'render',
+      '/logs',
+      'GET',
+      500,
+      latencyMs,
+      0,
+      { 
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        sourceWorker: options.environment 
+      }
+    );
+
+    throw error;
+  }
 }
 
 export async function fetchRenderServices(
@@ -164,6 +219,7 @@ export async function fetchRenderServices(
       dashboardUrl: string;
       repo?: string;
       branch?: string;
+      ownerId?: string;
     };
     cursor: string;
   }>>('/services?limit=100', apiKey, undefined, environment);
@@ -178,6 +234,7 @@ export async function fetchRenderServices(
     dashboardUrl: item.service.dashboardUrl,
     repo: item.service.repo,
     branch: item.service.branch,
+    ownerId: item.service.ownerId,
   }));
 }
 
@@ -221,6 +278,7 @@ export function getRenderEnvironments(): RenderEnvironment[] {
       name: 'Production',
       apiKey: process.env.RENDER_API_KEY_PROD,
       serviceIds: process.env.RENDER_SERVICE_IDS_PROD.split(',').map(s => s.trim()),
+      ownerId: process.env.RENDER_OWNER_ID_PROD,
     });
   }
 
@@ -229,6 +287,7 @@ export function getRenderEnvironments(): RenderEnvironment[] {
       name: 'QA',
       apiKey: process.env.RENDER_API_KEY_QA,
       serviceIds: process.env.RENDER_SERVICE_IDS_QA.split(',').map(s => s.trim()),
+      ownerId: process.env.RENDER_OWNER_ID_QA,
     });
   }
 
@@ -237,6 +296,7 @@ export function getRenderEnvironments(): RenderEnvironment[] {
       name: 'Default',
       apiKey: process.env.RENDER_API_KEY,
       serviceIds: process.env.RENDER_SERVICE_IDS.split(',').map(s => s.trim()),
+      ownerId: process.env.RENDER_OWNER_ID,
     });
   }
 
