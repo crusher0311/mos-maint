@@ -83,27 +83,19 @@ export default function LandingPage() {
           <p className="text-center text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">Works with the tools you already use</p>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap justify-center items-center gap-4 sm:gap-8 md:gap-12">
             <div className="flex items-center justify-center gap-2 text-gray-700">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-blue-600 text-xs sm:text-sm">P</span>
-              </div>
+              <img src="/logos/protractor.png" alt="Protractor" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
               <span className="font-semibold text-sm sm:text-base">Protractor</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-gray-700">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-orange-600 text-xs sm:text-sm">T</span>
-              </div>
+              <img src="/logos/tekmetric.png" alt="Tekmetric" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
               <span className="font-semibold text-sm sm:text-base">Tekmetric</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-gray-700">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-green-600 text-xs sm:text-sm">C</span>
-              </div>
+              <img src="/logos/carfax.png" alt="CARFAX" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
               <span className="font-semibold text-sm sm:text-base">CARFAX</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-gray-700">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-purple-600 text-xs sm:text-sm">A</span>
-              </div>
+              <img src="/logos/autoflow.png" alt="AutoFlow" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
               <span className="font-semibold text-sm sm:text-base">AutoFlow</span>
             </div>
           </div>
