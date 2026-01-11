@@ -77,6 +77,10 @@ interface AutoBookingSettings {
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
+  reminderTime: string;
+  reminderDays: number[];
+  skipReminderHolidays: boolean;
+  queueExpiryDays: number;
 }
 
 export default function AutoBookingSettingsPage() {
@@ -674,6 +678,105 @@ export default function AutoBookingSettingsPage() {
               </div>
             </>
           )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+          <div className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-gray-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Email Reminders</h2>
+          </div>
+          <p className="text-sm text-gray-600">
+            Get daily email reminders about pending bookings that need your review.
+          </p>
+
+          <div className="grid sm:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Send Reminder At
+              </label>
+              <input
+                type="time"
+                value={settings.reminderTime || "08:00"}
+                onChange={(e) => setSettings({ ...settings, reminderTime: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Time of day to send reminder emails (in your timezone)
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Queue Expiry (Days)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={settings.queueExpiryDays || 14}
+                onChange={(e) => setSettings({ ...settings, queueExpiryDays: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Pending bookings expire and disappear after this many days
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Send Reminders On
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { day: 0, label: "Sun" },
+                { day: 1, label: "Mon" },
+                { day: 2, label: "Tue" },
+                { day: 3, label: "Wed" },
+                { day: 4, label: "Thu" },
+                { day: 5, label: "Fri" },
+                { day: 6, label: "Sat" }
+              ].map(({ day, label }) => {
+                const isSelected = (settings.reminderDays || [1, 2, 3, 4, 5]).includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => {
+                      const current = settings.reminderDays || [1, 2, 3, 4, 5];
+                      const updated = isSelected
+                        ? current.filter(d => d !== day)
+                        : [...current, day].sort();
+                      setSettings({ ...settings, reminderDays: updated });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      isSelected
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between py-3 border-t border-gray-100">
+            <div>
+              <h4 className="font-medium text-gray-900">Skip Reminders on Holidays</h4>
+              <p className="text-sm text-gray-500">Don't send reminder emails on blocked holidays</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.skipReminderHolidays ?? true}
+                onChange={(e) => setSettings({ ...settings, skipReminderHolidays: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
