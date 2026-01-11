@@ -236,6 +236,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
+        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
