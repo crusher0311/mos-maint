@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     const hasOilSticker = Array.isArray(rawFeatures) 
       ? rawFeatures.includes("oil_sticker")
       : (rawFeatures && typeof rawFeatures === "object" && rawFeatures.oil_sticker === true);
-    const isPaid = shop?.billingStatus === "active" || shop?.plan === "professional" || shop?.plan === "enterprise";
+    const isPaid = shop?.billingStatus === "active" || shop?.plan === "professional" || shop?.plan === "enterprise" || shop?.plan === "demo";
     
     if (!isPaid || !hasOilSticker) {
       return NextResponse.json({
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     const hasOilSticker = Array.isArray(rawFeatures) 
       ? rawFeatures.includes("oil_sticker")
       : (rawFeatures && typeof rawFeatures === "object" && rawFeatures.oil_sticker === true);
-    const isPaid = shop?.billingStatus === "active" || shop?.plan === "professional" || shop?.plan === "enterprise";
+    const isPaid = shop?.billingStatus === "active" || shop?.plan === "professional" || shop?.plan === "enterprise" || shop?.plan === "demo";
     
     if (!isPaid || !hasOilSticker) {
       return NextResponse.json(
