@@ -33,7 +33,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 ## Planned Features
 *   **Digital Wallet Pass**: Dynamic oil change reminder passes for Apple Wallet and Google Wallet. Replaces traditional windshield stickers with always-available phone reminders. Features include: remote updates when service date/mileage changes, push notifications when service is due, geo-fencing to show on lock screen near the shop, and "Book Now" integration with Auto Booking. Customer adds pass via QR scan or link after service. **Marketing tagline**: "Finally, an oil sticker that never falls off, never fades, never expires — and is smarter than ever."
 *   **Key Tag Printing**: Printable key tags with customer name, vehicle info (Year/Make/Model), VIN, license plate, RO#, color. Data fields already exist in normalized schema (exteriorColor, licensePlate, licensePlateState).
-*   **Customer Concern Tool**: Tool for capturing and managing customer-reported vehicle concerns.
+*   **Customer Concern Tool**: Structured symptom-based intake system for capturing customer-reported vehicle issues. Features system-specific question flows (brakes, cooling, transmission, steering/suspension, A/C, emissions, etc.) that guide advisors through gathering detailed diagnostic information. Includes smart prompts like "Tell me the story about your [issue]" instead of assumptive questions. Captures warning light status, symptom duration, conditions when symptoms occur, and relevant history. Data feeds into vehicle records for technician review and AI-powered diagnostic suggestions.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
