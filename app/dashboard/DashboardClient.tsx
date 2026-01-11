@@ -110,6 +110,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
+  const [closingVehicle, setClosingVehicle] = useState<string | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -487,6 +488,32 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
     } finally {
       setPrintingSticker(null);
+    }
+  };
+
+  const handleCloseVehicle = async (vinOrId: string) => {
+    if (!confirm("Close this vehicle? It will be moved to the archived view.")) {
+      return;
+    }
+    
+    setClosingVehicle(vinOrId);
+    try {
+      const res = await fetch(`/api/vehicles/${encodeURIComponent(vinOrId)}/close`, {
+        method: "POST"
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to close vehicle");
+      }
+      
+      // Refresh dashboard data
+      await refreshData();
+    } catch (error) {
+      console.error("Failed to close vehicle:", error);
+      alert(error instanceof Error ? error.message : "Failed to close vehicle");
+    } finally {
+      setClosingVehicle(null);
     }
   };
 
@@ -964,6 +991,20 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <Printer className="w-4 h-4" />
                             )}
                           </button>
+                          {r.source === "manual" && (
+                            <button
+                              onClick={() => handleCloseVehicle(vin)}
+                              disabled={closingVehicle === vin}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Close/Archive Vehicle"
+                            >
+                              {closingVehicle === vin ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <X className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
