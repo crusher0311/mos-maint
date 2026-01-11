@@ -1078,8 +1078,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
           <p>Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : "—"}</p>
           <p className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            Auto-refreshes every 30 seconds
+            Use Refresh button for latest data
           </p>
         </div>
       </div>
