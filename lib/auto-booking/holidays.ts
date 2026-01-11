@@ -4,13 +4,22 @@
 export type HolidayRule = 
   | { type: "fixed"; month: number; day: number }
   | { type: "nth_weekday"; month: number; weekday: number; n: number }
-  | { type: "last_weekday"; month: number; weekday: number };
+  | { type: "last_weekday"; month: number; weekday: number }
+  | { type: "day_after"; baseHolidayId: string; daysAfter: number }
+  | { type: "day_before"; baseHolidayId: string; daysBefore: number };
 
 export interface HolidayDefinition {
   id: string;
   name: string;
   rule: HolidayRule;
   observedRule?: "nearest_weekday";
+  isCustom?: boolean;
+}
+
+export interface CustomRecurringHoliday {
+  id: string;
+  name: string;
+  rule: HolidayRule;
 }
 
 export const DEFAULT_HOLIDAY_DEFINITIONS: HolidayDefinition[] = [
@@ -100,21 +109,53 @@ function getObservedDate(date: Date): Date {
   return date;
 }
 
-export function calculateHolidayDate(definition: HolidayDefinition, year: number): { actual: Date; observed?: Date } {
+function getBaseHolidayDate(baseHolidayId: string, year: number): Date | null {
+  const baseDef = DEFAULT_HOLIDAY_DEFINITIONS.find(d => d.id === baseHolidayId);
+  if (!baseDef) return null;
+  const { actual } = calculateHolidayDateInternal(baseDef.rule, year);
+  return actual;
+}
+
+function calculateHolidayDateInternal(rule: HolidayRule, year: number): { actual: Date } {
   let actualDate: Date;
   
-  switch (definition.rule.type) {
+  switch (rule.type) {
     case "fixed":
-      actualDate = new Date(year, definition.rule.month - 1, definition.rule.day);
+      actualDate = new Date(year, rule.month - 1, rule.day);
       break;
     case "nth_weekday":
-      actualDate = getNthWeekdayOfMonth(year, definition.rule.month, definition.rule.weekday, definition.rule.n);
+      actualDate = getNthWeekdayOfMonth(year, rule.month, rule.weekday, rule.n);
       break;
     case "last_weekday":
-      actualDate = getLastWeekdayOfMonth(year, definition.rule.month, definition.rule.weekday);
+      actualDate = getLastWeekdayOfMonth(year, rule.month, rule.weekday);
       break;
+    case "day_after": {
+      const baseDate = getBaseHolidayDate(rule.baseHolidayId, year);
+      if (baseDate) {
+        actualDate = new Date(baseDate);
+        actualDate.setDate(actualDate.getDate() + rule.daysAfter);
+      } else {
+        actualDate = new Date(year, 0, 1);
+      }
+      break;
+    }
+    case "day_before": {
+      const baseDate = getBaseHolidayDate(rule.baseHolidayId, year);
+      if (baseDate) {
+        actualDate = new Date(baseDate);
+        actualDate.setDate(actualDate.getDate() - rule.daysBefore);
+      } else {
+        actualDate = new Date(year, 0, 1);
+      }
+      break;
+    }
   }
   
+  return { actual: actualDate };
+}
+
+export function calculateHolidayDate(definition: HolidayDefinition, year: number): { actual: Date; observed?: Date } {
+  const { actual: actualDate } = calculateHolidayDateInternal(definition.rule, year);
   const result: { actual: Date; observed?: Date } = { actual: actualDate };
   
   if (definition.observedRule === "nearest_weekday") {
@@ -127,6 +168,11 @@ export function calculateHolidayDate(definition: HolidayDefinition, year: number
   return result;
 }
 
+export function calculateCustomHolidayDate(rule: HolidayRule, year: number): Date {
+  const { actual } = calculateHolidayDateInternal(rule, year);
+  return actual;
+}
+
 export interface ComputedHoliday {
   id: string;
   name: string;
@@ -137,7 +183,8 @@ export interface ComputedHoliday {
 
 export function generateHolidaysForYears(
   years: number[],
-  enabledHolidays?: Record<string, boolean>
+  enabledHolidays?: Record<string, boolean>,
+  customRecurringHolidays?: CustomRecurringHoliday[]
 ): ComputedHoliday[] {
   const holidays: ComputedHoliday[] = [];
   
@@ -167,6 +214,19 @@ export function generateHolidaysForYears(
         });
       }
     }
+    
+    if (customRecurringHolidays) {
+      for (const custom of customRecurringHolidays) {
+        const date = calculateCustomHolidayDate(custom.rule, year);
+        holidays.push({
+          id: custom.id,
+          name: custom.name,
+          date: formatDate(date),
+          isObserved: false,
+          year,
+        });
+      }
+    }
   }
   
   return holidays.sort((a, b) => a.date.localeCompare(b.date));
@@ -179,10 +239,11 @@ export function getRelevantHolidayYears(): number[] {
 }
 
 export function getBlockedHolidayDates(
-  enabledHolidays?: Record<string, boolean>
+  enabledHolidays?: Record<string, boolean>,
+  customRecurringHolidays?: CustomRecurringHoliday[]
 ): Set<string> {
   const years = getRelevantHolidayYears();
-  const holidays = generateHolidaysForYears(years, enabledHolidays);
+  const holidays = generateHolidaysForYears(years, enabledHolidays, customRecurringHolidays);
   return new Set(holidays.map(h => h.date));
 }
 
@@ -205,13 +266,54 @@ function formatDate(date: Date): string {
 
 export function getUpcomingHolidays(
   enabledHolidays?: Record<string, boolean>,
+  customRecurringHolidays?: CustomRecurringHoliday[],
   limit: number = 12
 ): ComputedHoliday[] {
   const years = getRelevantHolidayYears();
-  const holidays = generateHolidaysForYears(years, enabledHolidays);
+  const holidays = generateHolidaysForYears(years, enabledHolidays, customRecurringHolidays);
   const today = formatDate(new Date());
   
   return holidays
     .filter(h => h.date >= today)
     .slice(0, limit);
+}
+
+export const PRESET_CUSTOM_HOLIDAYS: Array<{ id: string; name: string; description: string; rule: HolidayRule }> = [
+  {
+    id: "black_friday",
+    name: "Black Friday",
+    description: "Day after Thanksgiving",
+    rule: { type: "day_after", baseHolidayId: "thanksgiving", daysAfter: 1 },
+  },
+  {
+    id: "day_after_christmas",
+    name: "Day After Christmas",
+    description: "December 26th",
+    rule: { type: "day_after", baseHolidayId: "christmas", daysAfter: 1 },
+  },
+  {
+    id: "christmas_eve",
+    name: "Christmas Eve",
+    description: "December 24th",
+    rule: { type: "day_before", baseHolidayId: "christmas", daysBefore: 1 },
+  },
+  {
+    id: "new_years_eve",
+    name: "New Year's Eve",
+    description: "December 31st",
+    rule: { type: "fixed", month: 12, day: 31 },
+  },
+];
+
+export function getPresetHolidayOptions(): Array<{ id: string; name: string; description: string }> {
+  return PRESET_CUSTOM_HOLIDAYS.map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+  }));
+}
+
+export function getPresetHolidayRule(presetId: string): HolidayRule | null {
+  const preset = PRESET_CUSTOM_HOLIDAYS.find(p => p.id === presetId);
+  return preset?.rule || null;
 }

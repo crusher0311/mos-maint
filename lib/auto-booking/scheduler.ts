@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/mongo";
-import { getBlockedHolidayDates } from "./holidays";
+import { getBlockedHolidayDates, type CustomRecurringHoliday } from "./holidays";
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -9,6 +9,7 @@ export interface AutoBookingSettings {
   blockHolidays: boolean;
   enabledHolidays: Record<string, boolean>;
   customHolidays: Array<{ date: string; name: string }>;
+  customRecurringHolidays: CustomRecurringHoliday[];
   businessHours: {
     start: string;
     end: string;
@@ -52,7 +53,10 @@ function isWeekend(date: Date, settings: AutoBookingSettings): boolean {
 function isHoliday(dateStr: string, settings: AutoBookingSettings): boolean {
   if (!settings.blockHolidays) return false;
   
-  const blockedDates = getBlockedHolidayDates(settings.enabledHolidays);
+  const blockedDates = getBlockedHolidayDates(
+    settings.enabledHolidays,
+    settings.customRecurringHolidays
+  );
   if (blockedDates.has(dateStr)) {
     return true;
   }
