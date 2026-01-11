@@ -127,6 +127,25 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
   const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
+  const [shopPreferences, setShopPreferences] = useState<{
+    allowManualClose?: boolean;
+    allowManualVehicleEntry?: boolean;
+  }>({});
+
+  useEffect(() => {
+    async function fetchPreferences() {
+      try {
+        const res = await fetch('/api/shop/features');
+        if (res.ok) {
+          const data = await res.json();
+          setShopPreferences(data.preferences || {});
+        }
+      } catch (e) {
+        console.error('Failed to fetch shop preferences', e);
+      }
+    }
+    fetchPreferences();
+  }, []);
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -991,7 +1010,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <Printer className="w-4 h-4" />
                             )}
                           </button>
-                          {r.source === "manual" && (
+                          {(r.source === "manual" || shopPreferences.allowManualClose) && (
                             <button
                               onClick={() => handleCloseVehicle(vin)}
                               disabled={closingVehicle === vin}

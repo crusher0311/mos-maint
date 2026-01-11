@@ -549,6 +549,13 @@ export async function GET(request: NextRequest) {
       }
     }));
 
+    // Fetch VINs that have been manually closed (for filtering integration vehicles)
+    const closedVehicles = await db.collection("vehicles").find({
+      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+      "status.active": false
+    }).project({ vin: 1 }).toArray();
+    const closedVins = new Set(closedVehicles.map(v => v.vin?.toUpperCase()));
+
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
@@ -562,6 +569,11 @@ export async function GET(request: NextRequest) {
       : [...autoflowRows, ...protractorRows, ...tekmetricRows, ...manualRows];
     
     for (const row of rowSources) {
+      // Skip if this VIN has been manually closed (except for manual source which is already filtered)
+      if (row.source !== "manual" && closedVins.has(row.displayVin?.toUpperCase())) {
+        continue;
+      }
+      
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
       if (!seenWorkOrders.has(woKey)) {
         seenWorkOrders.add(woKey);

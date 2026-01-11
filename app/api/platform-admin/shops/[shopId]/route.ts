@@ -46,6 +46,7 @@ export async function GET(
           vinViewCount,
         },
         enabledFeatures: shop.enabledFeatures || {},
+        preferences: shop.preferences || {},
         createdAt: shop.createdAt,
         isLocked: shop.isLocked || false,
       },
@@ -68,7 +69,7 @@ export async function PATCH(
 
     const shopId = isNaN(Number(params.shopId)) ? params.shopId : Number(params.shopId);
     const body = await req.json();
-    const { action, billing, features } = body;
+    const { action, billing, features, preferences } = body;
 
     const db = await getDb();
     const shop = await db.collection("shops").findOne({ shopId });
@@ -147,7 +148,34 @@ export async function PATCH(
       });
     }
 
-    if (billing || features) {
+    if (preferences) {
+      const prefUpdate: Record<string, any> = {};
+      const validPrefs = ["allowManualClose", "allowManualVehicleEntry"];
+      
+      for (const key of validPrefs) {
+        if (preferences[key] !== undefined) {
+          prefUpdate[`preferences.${key}`] = preferences[key];
+        }
+      }
+      
+      if (Object.keys(prefUpdate).length > 0) {
+        await db.collection("shops").updateOne(
+          { shopId },
+          { $set: prefUpdate }
+        );
+        
+        await db.collection("audit_logs").insertOne({
+          type: "shop_preferences_updated",
+          shopId,
+          shopName: shop.name,
+          changes: preferences,
+          adminEmail: session.email,
+          createdAt: new Date(),
+        });
+      }
+    }
+
+    if (billing || features || preferences) {
       const updatedShop = await db.collection("shops").findOne({ shopId });
       return NextResponse.json({
         ok: true,
@@ -160,6 +188,7 @@ export async function PATCH(
             vinLimit: updatedShop?.trialVinLimit || 10,
           },
           enabledFeatures: updatedShop?.enabledFeatures || {},
+          preferences: updatedShop?.preferences || {},
         },
       });
     }
