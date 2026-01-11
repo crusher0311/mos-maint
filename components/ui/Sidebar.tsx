@@ -119,14 +119,26 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   useEffect(() => {
     if (!enabledFeatures.includes("oil_sticker")) return;
     
-    fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
-      .then((res) => res.json())
-      .then((data) => {
-        if (typeof data.pendingCount === "number") {
-          setPendingBookingsCount(data.pendingCount);
-        }
-      })
-      .catch(() => {});
+    const fetchPendingCount = () => {
+      fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
+        .then((res) => {
+          if (!res.ok) {
+            setPendingBookingsCount(0);
+            return null;
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (data && typeof data.pendingCount === "number") {
+            setPendingBookingsCount(data.pendingCount);
+          }
+        })
+        .catch(() => setPendingBookingsCount(0));
+    };
+
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 60000);
+    return () => clearInterval(interval);
   }, [enabledFeatures]);
 
   useEffect(() => {
