@@ -186,14 +186,27 @@ export async function POST(req: NextRequest) {
       settings.timezone = body.timezone;
     }
 
+    const updateFields: Record<string, any> = {
+      "autoBooking.updatedAt": new Date(),
+    };
+    
+    for (const [key, value] of Object.entries(settings)) {
+      if (key === "enabledHolidays" && typeof value === "object") {
+        for (const [holidayId, enabled] of Object.entries(value as Record<string, boolean>)) {
+          updateFields[`autoBooking.enabledHolidays.${holidayId}`] = enabled;
+        }
+      } else if (key === "businessHours" && typeof value === "object") {
+        const bh = value as { start: string; end: string };
+        updateFields["autoBooking.businessHours.start"] = bh.start;
+        updateFields["autoBooking.businessHours.end"] = bh.end;
+      } else {
+        updateFields[`autoBooking.${key}`] = value;
+      }
+    }
+
     await db.collection("shops").updateOne(
       { shopId },
-      {
-        $set: {
-          autoBooking: settings,
-          "autoBooking.updatedAt": new Date(),
-        },
-      }
+      { $set: updateFields }
     );
 
     return NextResponse.json({ ok: true, settings });
