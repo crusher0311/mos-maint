@@ -104,20 +104,33 @@ export async function GET(request: NextRequest) {
     const endTime = now.toISOString();
 
     const allLogs: Array<RenderLogEntry & { environment: string }> = [];
+    const errors: Array<{ environment: string; error: string }> = [];
 
     for (const env of environments) {
       if (environment && env.name !== environment) continue;
 
       const serviceIds = serviceId ? [serviceId] : env.serviceIds;
+      
+      let ownerId = env.ownerId;
+      if (!ownerId) {
+        try {
+          const services = await fetchRenderServices(env.apiKey, env.name);
+          const targetService = services.find(s => serviceIds.includes(s.id));
+          ownerId = targetService?.ownerId;
+        } catch (e) {
+          console.error(`Error fetching services for ownerId in ${env.name}:`, e);
+        }
+      }
 
       try {
         const logsResponse = await fetchRenderLogs(env.apiKey, {
           serviceIds,
+          ownerId,
           startTime,
           endTime,
           level,
           text,
-          limit: 500,
+          limit: 100,
           environment: env.name,
         });
 
@@ -128,7 +141,9 @@ export async function GET(request: NextRequest) {
           });
         }
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         console.error(`Error fetching logs for ${env.name}:`, error);
+        errors.push({ environment: env.name, error: errorMsg });
       }
     }
 
@@ -153,6 +168,7 @@ export async function GET(request: NextRequest) {
       stats,
       hasMore: allLogs.length > 500,
       timeRange: { startTime, endTime },
+      errors: errors.length > 0 ? errors : undefined,
     });
 
   } catch (error) {
