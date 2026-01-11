@@ -25,7 +25,8 @@ import {
   LogOut,
   RefreshCw,
   X,
-  Printer
+  Printer,
+  CalendarCheck
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -91,6 +92,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const [switching, setSwitching] = useState(false);
   const [shopSearch, setShopSearch] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
+  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +115,19 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!enabledFeatures.includes("oil_sticker")) return;
+    
+    fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.pendingCount === "number") {
+          setPendingBookingsCount(data.pendingCount);
+        }
+      })
+      .catch(() => {});
+  }, [enabledFeatures]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -196,6 +211,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       name: "Dashboard",
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />
+    },
+    {
+      name: "Booking Queue",
+      href: "/dashboard/settings/auto-booking/queue",
+      icon: <CalendarCheck className="w-5 h-5" />,
+      featureId: "oil_sticker"
     },
     {
       name: "Quick Sticker",
@@ -506,7 +527,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                   }`}
                 >
                   {item.icon}
-                  <span>{item.name}</span>
+                  <span className="flex-1">{item.name}</span>
+                  {item.name === "Booking Queue" && pendingBookingsCount > 0 && (
+                    <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      {pendingBookingsCount}
+                    </span>
+                  )}
                 </Link>
               )}
             </li>

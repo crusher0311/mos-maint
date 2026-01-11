@@ -18,12 +18,18 @@ export async function GET(req: NextRequest) {
 
     const shopId = Number(session.shopId);
     const status = req.nextUrl.searchParams.get("status");
+    const countOnly = req.nextUrl.searchParams.get("countOnly") === "true";
     
     const statusFilter = status 
       ? status.split(",") 
       : ["pending", "confirmed", "sent"];
     
     const bookings = await getQueuedBookings(shopId, statusFilter);
+
+    if (countOnly) {
+      const pendingCount = bookings.filter((b: any) => b.status === "pending").length;
+      return NextResponse.json({ pendingCount });
+    }
 
     return NextResponse.json({ bookings });
   } catch (err: any) {
