@@ -90,13 +90,18 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
 *   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach, utilizing pre-computed `shop_repair_patterns` and enterprise aggregation.
 
-## Work In Progress (Paused)
-*   **Auto Booking Feature** (Tasks 1-4 complete, 5-6 pending):
+*   **Auto Booking Feature** (Infrastructure Complete):
     *   Settings API: `app/api/settings/auto-booking/route.ts` - Feature-gated for paid plans + Oil Sticker
     *   Settings UI: `app/dashboard/settings/auto-booking/page.tsx` - Lead time, holidays, business hours, confirmation mode
-    *   Scheduler: `lib/auto-booking/scheduler.ts` - Finds slots respecting preferences
-    *   Queue UI: `app/dashboard/settings/auto-booking/queue/page.tsx` - Review and confirm bookings
-    *   **Next steps**: Integrate with SMS calendar (Tekmetric/Protractor) for real-time availability, connect to sticker generation
+    *   Scheduler: `lib/auto-booking/scheduler.ts` - Finds slots respecting preferences, queues bookings to MongoDB
+    *   Queue UI: `app/dashboard/settings/auto-booking/queue/page.tsx` - Review, confirm, and push bookings
+    *   Push API: `app/api/settings/auto-booking/push/route.ts` - Send confirmed bookings to SMS systems
+    *   Appointment Pusher: `lib/auto-booking/appointment-pusher.ts` - Creates appointments via SMS adapters
+    *   SMS Adapter: `createAppointment` method on `ISMSAdapter` interface, implemented for Protractor
+    *   **Flow**: Sticker generated → `queueBooking()` → Queue UI → Confirm → Push to SMS → Appointment created
+    *   **Next steps**: Connect `queueBooking()` to sticker generation with vehicleId/customerId, implement Tekmetric `createAppointment`
+
+## Work In Progress (Paused)
 
 ## Future Ideas (Saved for Later)
 *   **Districts Layer**: Add organizational groupings between enterprise and shops for large organizations. Would enable district managers, regional filtering in job history/analytics, and district-level repair pattern aggregations. Additive approach recommended (keep current enterprise model, add districts on top).
