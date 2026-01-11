@@ -1,6 +1,7 @@
 Feature ID,Feature Name,Category,Description,Requires Oil Sticker,Protractor,Tekmetric,AutoFlow,AutoVitals,Prerequisites,Billing Code,Notes
 multi_shop_management,Multi-Shop User Management,core,Manage multiple shop locations and users,no,yes,yes,yes,no,,CORE,Universal feature
 vehicle_dashboard,Vehicle/Customer Dashboard,core,View vehicle details and customer information,no,yes,yes,yes,no,,CORE,Universal feature
+manual_vehicle_entry,Manual Vehicle Entry,core,Add vehicles manually with VIN decode for standalone shops,no,yes,yes,yes,no,,CORE,For shops without SMS/DVI integration
 ai_analysis,AI-Powered Maintenance Analysis,core,AI recommendations using DataOne and CARFAX data,no,yes,yes,yes,no,,CORE,Universal feature
 maintenance_planning,Maintenance Planning & Prefetching,core,Plan upcoming maintenance with intelligent prefetching,no,yes,yes,yes,no,,CORE,Universal feature
 declined_services,Declined Services Tracking,core,Track and manage declined service recommendations,no,yes,yes,yes,no,,CORE,Universal feature

@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2 } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Plus } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
+import AddVehicleModal from "@/components/AddVehicleModal";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
 
@@ -124,6 +125,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
+  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -673,6 +675,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <span className="text-xs sm:text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              onClick={() => setShowAddVehicleModal(true)}
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Add Vehicle</span>
+              <span className="sm:hidden">Add</span>
+            </button>
             <button
               onClick={handleToggleArchived}
               className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
@@ -1224,6 +1234,16 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             </div>
           </div>
         </div>
+      )}
+
+      {showAddVehicleModal && (
+        <AddVehicleModal
+          onClose={() => setShowAddVehicleModal(false)}
+          onSuccess={() => {
+            setShowAddVehicleModal(false);
+            refreshData();
+          }}
+        />
       )}
     </div>
   );
