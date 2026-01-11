@@ -14,6 +14,7 @@ export default function AddVehicleModal({ onClose, onSuccess }: AddVehicleModalP
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [mileage, setMileage] = useState("");
+  const [roNumber, setRoNumber] = useState("");
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerLastName, setCustomerLastName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -74,6 +75,7 @@ export default function AddVehicleModal({ onClose, onSuccess }: AddVehicleModalP
           make: make || null,
           model: model || null,
           mileage: mileage || null,
+          roNumber: roNumber || null,
           customerFirstName: customerFirstName || null,
           customerLastName: customerLastName || null,
           customerEmail: customerEmail || null,
@@ -177,16 +179,28 @@ export default function AddVehicleModal({ onClose, onSuccess }: AddVehicleModalP
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mileage</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={mileage}
-              onChange={(e) => handleMileageChange(e.target.value)}
-              placeholder="Current mileage"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mileage</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={mileage}
+                onChange={(e) => handleMileageChange(e.target.value)}
+                placeholder="Current mileage"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">RO #</label>
+              <input
+                type="text"
+                value={roNumber}
+                onChange={(e) => setRoNumber(e.target.value)}
+                placeholder="Optional"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
 
           <div className="border-t pt-4">
