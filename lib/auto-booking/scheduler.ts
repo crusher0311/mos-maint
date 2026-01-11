@@ -14,6 +14,7 @@ export interface AutoBookingSettings {
     start: string;
     end: string;
   };
+  latestBookingTime?: string;
   maxBookingsPerDay: number;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
@@ -69,19 +70,37 @@ function isHoliday(dateStr: string, settings: AutoBookingSettings): boolean {
 }
 
 function getPreferredTime(settings: AutoBookingSettings): string {
-  const [startHour] = settings.businessHours.start.split(":").map(Number);
+  const [startHour, startMin = 0] = settings.businessHours.start.split(":").map(Number);
   const [endHour] = settings.businessHours.end.split(":").map(Number);
+  
+  let preferredTime: string;
   
   switch (settings.preferredTimeSlot) {
     case "morning":
-      return settings.businessHours.start;
+      preferredTime = settings.businessHours.start;
+      break;
     case "afternoon":
       const afternoonHour = Math.max(12, Math.floor((startHour + endHour) / 2));
-      return `${afternoonHour.toString().padStart(2, "0")}:00`;
+      preferredTime = `${afternoonHour.toString().padStart(2, "0")}:00`;
+      break;
     case "any":
     default:
-      return settings.businessHours.start;
+      preferredTime = settings.businessHours.start;
   }
+  
+  if (settings.latestBookingTime) {
+    const [latestHour, latestMin = 0] = settings.latestBookingTime.split(":").map(Number);
+    const [prefHour, prefMin = 0] = preferredTime.split(":").map(Number);
+    
+    const latestMinutes = latestHour * 60 + latestMin;
+    const prefMinutes = prefHour * 60 + prefMin;
+    
+    if (prefMinutes > latestMinutes) {
+      preferredTime = settings.latestBookingTime;
+    }
+  }
+  
+  return preferredTime;
 }
 
 export async function getAutoBookingSettings(shopId: number): Promise<AutoBookingSettings | null> {

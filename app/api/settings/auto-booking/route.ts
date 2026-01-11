@@ -46,6 +46,7 @@ export interface AutoBookingSettings {
     start: string;
     end: string;
   };
+  latestBookingTime: string;
   maxBookingsPerDay: number;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
@@ -69,6 +70,7 @@ const DEFAULT_SETTINGS: AutoBookingSettings = {
     start: "08:00",
     end: "17:00",
   },
+  latestBookingTime: "",
   maxBookingsPerDay: 10,
   confirmationMode: "review",
   preferredTimeSlot: "morning",
@@ -219,6 +221,11 @@ export async function POST(req: NextRequest) {
         start: body.businessHours.start,
         end: body.businessHours.end,
       };
+    }
+    if (typeof body.latestBookingTime === "string") {
+      if (body.latestBookingTime === "" || /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(body.latestBookingTime)) {
+        settings.latestBookingTime = body.latestBookingTime;
+      }
     }
     if (typeof body.maxBookingsPerDay === "number" && body.maxBookingsPerDay >= 1 && body.maxBookingsPerDay <= 100) {
       settings.maxBookingsPerDay = body.maxBookingsPerDay;

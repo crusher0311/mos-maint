@@ -72,6 +72,7 @@ interface AutoBookingSettings {
     start: string;
     end: string;
   };
+  latestBookingTime: string;
   maxBookingsPerDay: number;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
@@ -421,21 +422,38 @@ export default function AutoBookingSettingsPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Maximum Bookings Per Day
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={settings.maxBookingsPerDay}
-              onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
-              className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Limits auto-booked appointments per day (doesn't affect manual bookings)
-            </p>
+          <div className="grid sm:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                No Later Than (optional)
+              </label>
+              <input
+                type="time"
+                value={settings.latestBookingTime || ""}
+                onChange={(e) => setSettings({ ...settings, latestBookingTime: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Don't schedule appointments after this time (e.g., 10:00 AM). Leave empty for no limit.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Maximum Bookings Per Day
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={settings.maxBookingsPerDay}
+                onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Limits auto-booked appointments per day (doesn't affect manual bookings)
+              </p>
+            </div>
           </div>
         </div>
 
