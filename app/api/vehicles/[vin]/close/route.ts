@@ -9,37 +9,48 @@ export async function POST(
   try {
     const session = await requireSession();
     const shopId = String(session.shopId);
-    const vin = params.vin;
+    const vin = params.vin?.toUpperCase();
 
     if (!vin) {
       return NextResponse.json({ error: "VIN required" }, { status: 400 });
     }
 
     const db = await getDb();
+    const now = new Date();
 
-    const query: any = {
-      vin: vin.toUpperCase(),
+    const vehicleQuery = {
+      vin,
       $or: [{ shopId }, { shopId: Number(shopId) }]
     };
 
-    const vehicle = await db.collection("vehicles").findOne(query);
+    const existingVehicle = await db.collection("vehicles").findOne(vehicleQuery);
 
-    if (!vehicle) {
-      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
-    }
-
-    const now = new Date();
-    await db.collection("vehicles").updateOne(
-      { _id: vehicle._id },
-      {
-        $set: {
-          "status.active": false,
-          "status.closedAt": now,
-          "status.lastClosedAt": now,
-          updatedAt: now
+    if (existingVehicle) {
+      await db.collection("vehicles").updateOne(
+        { _id: existingVehicle._id },
+        {
+          $set: {
+            "status.active": false,
+            "status.closedAt": now,
+            "status.lastClosedAt": now,
+            updatedAt: now
+          }
         }
-      }
-    );
+      );
+    } else {
+      await db.collection("vehicles").insertOne({
+        vin,
+        shopId,
+        source: "integration",
+        status: {
+          active: false,
+          closedAt: now,
+          lastClosedAt: now
+        },
+        createdAt: now,
+        updatedAt: now
+      });
+    }
 
     return NextResponse.json({ ok: true, closedAt: now });
   } catch (error: any) {
