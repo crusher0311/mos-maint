@@ -22,13 +22,27 @@ interface Holiday {
   name: string;
 }
 
+interface HolidayDefinition {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+interface UpcomingHoliday {
+  id: string;
+  name: string;
+  date: string;
+  isObserved: boolean;
+  year: number;
+}
+
 interface AutoBookingSettings {
   enabled: boolean;
   leadTimeDays: number;
   blockSaturday: boolean;
   blockSunday: boolean;
   blockHolidays: boolean;
-  useDefaultHolidays: boolean;
+  enabledHolidays: Record<string, boolean>;
   customHolidays: Holiday[];
   businessHours: {
     start: string;
@@ -46,7 +60,8 @@ export default function AutoBookingSettingsPage() {
   const [available, setAvailable] = useState(false);
   const [unavailableReason, setUnavailableReason] = useState("");
   const [settings, setSettings] = useState<AutoBookingSettings | null>(null);
-  const [defaultHolidays, setDefaultHolidays] = useState<Holiday[]>([]);
+  const [holidayDefinitions, setHolidayDefinitions] = useState<HolidayDefinition[]>([]);
+  const [upcomingHolidays, setUpcomingHolidays] = useState<UpcomingHoliday[]>([]);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [newHolidayDate, setNewHolidayDate] = useState("");
   const [newHolidayName, setNewHolidayName] = useState("");
@@ -64,7 +79,8 @@ export default function AutoBookingSettingsPage() {
       if (data.available) {
         setAvailable(true);
         setSettings(data.settings);
-        setDefaultHolidays(data.defaultHolidays || []);
+        setHolidayDefinitions(data.holidayDefinitions || []);
+        setUpcomingHolidays(data.upcomingHolidays || []);
       } else {
         setAvailable(false);
         setUnavailableReason(data.reason);
@@ -74,6 +90,17 @@ export default function AutoBookingSettingsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function toggleHoliday(holidayId: string, enabled: boolean) {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      enabledHolidays: {
+        ...settings.enabledHolidays,
+        [holidayId]: enabled,
+      },
+    });
   }
 
   async function saveSettings() {
@@ -420,19 +447,45 @@ export default function AutoBookingSettingsPage() {
 
           {showHolidays && (
             <>
-              {settings.blockHolidays && settings.useDefaultHolidays && (
+              {settings.blockHolidays && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Default US Holidays</h4>
-                  <div className="bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
-                    <div className="grid gap-1 text-sm">
-                      {defaultHolidays.map((h, i) => (
-                        <div key={i} className="flex justify-between text-gray-600">
-                          <span>{h.name}</span>
-                          <span className="text-gray-400">{h.date}</span>
-                        </div>
-                      ))}
-                    </div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">US Federal Holidays</h4>
+                  <p className="text-xs text-gray-500 mb-3">Uncheck holidays your shop stays open for</p>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    {holidayDefinitions.map((h) => (
+                      <label 
+                        key={h.id} 
+                        className="flex items-center gap-3 cursor-pointer py-1 hover:bg-gray-100 px-2 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={settings.enabledHolidays[h.id] !== false}
+                          onChange={(e) => toggleHoliday(h.id, e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className={`text-sm ${settings.enabledHolidays[h.id] !== false ? "text-gray-900" : "text-gray-400 line-through"}`}>
+                          {h.name}
+                        </span>
+                      </label>
+                    ))}
                   </div>
+                  
+                  {upcomingHolidays.length > 0 && (
+                    <div className="mt-4">
+                      <h5 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Upcoming Blocked Dates</h5>
+                      <div className="text-sm text-gray-600 space-y-1">
+                        {upcomingHolidays
+                          .filter(h => settings.enabledHolidays[h.id] !== false)
+                          .slice(0, 6)
+                          .map((h, i) => (
+                            <div key={i} className="flex justify-between">
+                              <span>{h.name}</span>
+                              <span className="text-gray-400">{h.date}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

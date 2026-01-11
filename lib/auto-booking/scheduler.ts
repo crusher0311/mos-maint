@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongo";
+import { getBlockedHolidayDates } from "./holidays";
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -6,7 +7,7 @@ export interface AutoBookingSettings {
   blockSaturday: boolean;
   blockSunday: boolean;
   blockHolidays: boolean;
-  useDefaultHolidays: boolean;
+  enabledHolidays: Record<string, boolean>;
   customHolidays: Array<{ date: string; name: string }>;
   businessHours: {
     start: string;
@@ -17,13 +18,6 @@ export interface AutoBookingSettings {
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
 }
-
-const US_HOLIDAYS = new Set([
-  "2025-01-01", "2025-01-20", "2025-02-17", "2025-05-26", "2025-07-04",
-  "2025-09-01", "2025-10-13", "2025-11-11", "2025-11-27", "2025-12-25",
-  "2026-01-01", "2026-01-19", "2026-02-16", "2026-05-25", "2026-07-03",
-  "2026-07-04", "2026-09-07", "2026-10-12", "2026-11-11", "2026-11-26", "2026-12-25",
-]);
 
 export interface BookingSlot {
   date: string;
@@ -58,11 +52,12 @@ function isWeekend(date: Date, settings: AutoBookingSettings): boolean {
 function isHoliday(dateStr: string, settings: AutoBookingSettings): boolean {
   if (!settings.blockHolidays) return false;
   
-  if (settings.useDefaultHolidays && US_HOLIDAYS.has(dateStr)) {
+  const blockedDates = getBlockedHolidayDates(settings.enabledHolidays);
+  if (blockedDates.has(dateStr)) {
     return true;
   }
   
-  if (settings.customHolidays.some(h => h.date === dateStr)) {
+  if (settings.customHolidays?.some(h => h.date === dateStr)) {
     return true;
   }
   
