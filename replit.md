@@ -31,7 +31,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Manual Vehicle Management**: Standalone shops can manually add vehicles via VIN decode with strict validation (year 1900-current, mileage 0-2M). Admin-controlled `allowManualClose` preference enables close/archive functionality for both manual entries and integration vehicles. Closed VINs are filtered from dashboard.
 
 ## Planned Features
-*   **Digital Wallet Pass**: Dynamic oil change reminder passes for Apple Wallet and Google Wallet. Replaces traditional windshield stickers with always-available phone reminders. Features include: remote updates when service date/mileage changes, push notifications when service is due, geo-fencing to show on lock screen near the shop, and "Book Now" integration with Auto Booking. Customer adds pass via QR scan or link after service.
+*   **Digital Wallet Pass**: Dynamic oil change reminder passes for Apple Wallet and Google Wallet. Replaces traditional windshield stickers with always-available phone reminders. Features include: remote updates when service date/mileage changes, push notifications when service is due, geo-fencing to show on lock screen near the shop, and "Book Now" integration with Auto Booking. Customer adds pass via QR scan or link after service. **Marketing tagline**: "Finally, an oil sticker that never falls off, never fades, never expires — and is smarter than ever."
 *   **Key Tag Printing**: Printable key tags with customer name, vehicle info (Year/Make/Model), VIN, license plate, RO#, color. Data fields already exist in normalized schema (exteriorColor, licensePlate, licensePlateState).
 *   **Customer Concern Tool**: Tool for capturing and managing customer-reported vehicle concerns.
 
