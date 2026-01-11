@@ -530,7 +530,7 @@ export async function GET(request: NextRequest) {
       displayVehicle: [v.year, v.make, v.model].filter(Boolean).join(' ') || 'Unknown Vehicle',
       displayVin: v.vin,
       displayMiles: v.mileage || v.lastMileage || 0,
-      displayRo: null,
+      displayRo: v.roNumber || null,
       workOrderGuid: null,
       dviDone: false,
       source: "manual",

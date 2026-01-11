@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const shopId = String(session.shopId);
     
     const body = await request.json();
-    const { vin, year, make, model, customerFirstName, customerLastName, customerEmail, customerPhone, mileage } = body;
+    const { vin, year, make, model, customerFirstName, customerLastName, customerEmail, customerPhone, mileage, roNumber } = body;
     
     if (!vin || typeof vin !== "string") {
       return NextResponse.json({ error: "VIN is required" }, { status: 400 });
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       model: model?.trim() || null,
       mileage: parsedMileage,
       lastMileage: parsedMileage,
+      roNumber: roNumber?.trim() || null,
       source: "manual",
       createdAt: now,
       updatedAt: now,
