@@ -51,6 +51,10 @@ export interface AutoBookingSettings {
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
+  reminderTime: string;
+  reminderDays: number[];
+  skipReminderHolidays: boolean;
+  queueExpiryDays: number;
 }
 
 const DEFAULT_ENABLED_HOLIDAYS: Record<string, boolean> = Object.fromEntries(
@@ -75,6 +79,10 @@ const DEFAULT_SETTINGS: AutoBookingSettings = {
   confirmationMode: "review",
   preferredTimeSlot: "morning",
   timezone: "America/New_York",
+  reminderTime: "08:00",
+  reminderDays: [1, 2, 3, 4, 5],
+  skipReminderHolidays: true,
+  queueExpiryDays: 14,
 };
 
 export async function GET(req: NextRequest) {
@@ -238,6 +246,22 @@ export async function POST(req: NextRequest) {
     }
     if (typeof body.timezone === "string") {
       settings.timezone = body.timezone;
+    }
+    if (typeof body.reminderTime === "string") {
+      if (/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(body.reminderTime)) {
+        settings.reminderTime = body.reminderTime;
+      }
+    }
+    if (Array.isArray(body.reminderDays)) {
+      settings.reminderDays = body.reminderDays.filter(
+        (d: any) => typeof d === "number" && d >= 0 && d <= 6
+      );
+    }
+    if (typeof body.skipReminderHolidays === "boolean") {
+      settings.skipReminderHolidays = body.skipReminderHolidays;
+    }
+    if (typeof body.queueExpiryDays === "number" && body.queueExpiryDays >= 1 && body.queueExpiryDays <= 90) {
+      settings.queueExpiryDays = body.queueExpiryDays;
     }
 
     const updateFields: Record<string, any> = {
