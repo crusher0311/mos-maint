@@ -28,6 +28,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     - **Queue Expiry**: Pending bookings automatically expire after a configurable number of days (1-90), removing stale entries from the review queue.
     - **Cron Endpoint**: `/api/cron/auto-booking-reminders` for external scheduler integration (requires CRON_SECRET env var).
     - **Booking Queue UI**: Sidebar link with pending count badge for quick access to bookings awaiting review.
+*   **Manual Vehicle Management**: Standalone shops can manually add vehicles via VIN decode with strict validation (year 1900-current, mileage 0-2M). Admin-controlled `allowManualClose` preference enables close/archive functionality for both manual entries and integration vehicles. Closed VINs are filtered from dashboard.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
