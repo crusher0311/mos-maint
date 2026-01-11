@@ -19,6 +19,10 @@ export interface AutoBookingSettings {
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
+  reminderTime?: string;
+  reminderDays?: number[];
+  skipReminderHolidays?: boolean;
+  queueExpiryDays?: number;
 }
 
 export interface BookingSlot {
@@ -205,10 +209,11 @@ export interface QueuedBooking {
   serviceMileage?: number;
   scheduledDate: string;
   scheduledTime: string;
-  status: "pending" | "confirmed" | "sent" | "failed" | "cancelled";
+  status: "pending" | "confirmed" | "sent" | "failed" | "cancelled" | "expired";
   confirmationMode: "auto" | "review";
   stickerGeneratedAt: Date;
   createdAt: Date;
+  expiresAt?: Date;
   confirmedAt?: Date;
   sentAt?: Date;
   failedAt?: Date;
@@ -220,16 +225,22 @@ export interface QueuedBooking {
 export async function queueBooking(
   shopId: number,
   settings: AutoBookingSettings,
-  booking: Omit<QueuedBooking, "shopId" | "status" | "confirmationMode" | "createdAt">
+  booking: Omit<QueuedBooking, "shopId" | "status" | "confirmationMode" | "createdAt" | "expiresAt">
 ): Promise<{ success: boolean; bookingId?: string; error?: string }> {
   const db = await getDb();
+  
+  const createdAt = new Date();
+  const expiryDays = settings.queueExpiryDays || 14;
+  const expiresAt = new Date(createdAt);
+  expiresAt.setDate(expiresAt.getDate() + expiryDays);
   
   const queuedBooking: QueuedBooking = {
     ...booking,
     shopId,
     status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
     confirmationMode: settings.confirmationMode,
-    createdAt: new Date(),
+    createdAt,
+    expiresAt,
   };
   
   const result = await db.collection("auto_booking_queue").insertOne(queuedBooking);
@@ -242,13 +253,24 @@ export async function queueBooking(
 
 export async function getQueuedBookings(
   shopId: number,
-  status?: string | string[]
+  status?: string | string[],
+  includeExpired: boolean = false
 ): Promise<QueuedBooking[]> {
   const db = await getDb();
   
   const query: any = { shopId };
   if (status) {
     query.status = Array.isArray(status) ? { $in: status } : status;
+  }
+  
+  if (!includeExpired) {
+    query.$or = [
+      { expiresAt: { $exists: false } },
+      { expiresAt: { $gt: new Date() } }
+    ];
+    if (!query.status || (Array.isArray(query.status.$in) && !query.status.$in.includes("expired"))) {
+      query.status = query.status || { $nin: ["expired"] };
+    }
   }
   
   const bookings = await db
@@ -259,6 +281,26 @@ export async function getQueuedBookings(
     .toArray();
   
   return bookings as unknown as QueuedBooking[];
+}
+
+export async function markExpiredBookings(shopId?: number): Promise<number> {
+  const db = await getDb();
+  
+  const query: any = {
+    status: { $in: ["pending", "confirmed"] },
+    expiresAt: { $lt: new Date() }
+  };
+  
+  if (shopId) {
+    query.shopId = shopId;
+  }
+  
+  const result = await db.collection("auto_booking_queue").updateMany(
+    query,
+    { $set: { status: "expired" } }
+  );
+  
+  return result.modifiedCount;
 }
 
 export async function confirmBooking(bookingId: string): Promise<boolean> {
