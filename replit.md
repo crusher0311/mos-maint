@@ -23,7 +23,11 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Chrome Extension**: MOS Tools Chrome Extension integrates with Tekmetric for maintenance recommendations, common failures advisor, job lookup, canned jobs, and oil change sticker printing.
 *   **Job Management**: AI-scored job lookup with enterprise support and smart job autocomplete with historical data.
 *   **Common Failures Advisor**: Predicts common repairs based on shop data and AI fallback.
-*   **Auto Booking**: Infrastructure for automated appointment scheduling, including dynamic holiday system, scheduler, queue management, and integration with SMS systems via the `ISMSAdapter`.
+*   **Auto Booking**: Infrastructure for automated appointment scheduling, including dynamic holiday system, scheduler, queue management, and integration with SMS systems via the `ISMSAdapter`. Features include:
+    - **Daily Email Reminders**: Configurable scheduled reminders sent to shop staff about pending bookings. Shop owners can set reminder time (HH:MM), days of week to send (Mon-Sun), and whether to skip holidays.
+    - **Queue Expiry**: Pending bookings automatically expire after a configurable number of days (1-90), removing stale entries from the review queue.
+    - **Cron Endpoint**: `/api/cron/auto-booking-reminders` for external scheduler integration (requires CRON_SECRET env var).
+    - **Booking Queue UI**: Sidebar link with pending count badge for quick access to bookings awaiting review.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
