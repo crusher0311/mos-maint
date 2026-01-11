@@ -91,9 +91,8 @@ export default function LandingPage() {
             <div className="flex items-center justify-center text-gray-700">
               <img src="/logos/carfax-logo.png" alt="CARFAX" className="h-8 sm:h-10 object-contain" />
             </div>
-            <div className="flex items-center justify-center gap-2 text-gray-700">
-              <img src="/logos/autoflow.png" alt="AutoFlow" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
-              <span className="font-semibold text-sm sm:text-base">AutoFlow</span>
+            <div className="flex items-center justify-center text-gray-700">
+              <img src="/logos/autoflow-logo.png" alt="AutoFlow" className="h-8 sm:h-10 object-contain" />
             </div>
           </div>
         </div>
