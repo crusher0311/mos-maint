@@ -638,38 +638,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadData(currentPage, searchQuery, showArchived);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [currentPage, searchQuery, showArchived]);
-
-  useEffect(() => {
-    if (!data.user?.shopId) return;
-    
-    const checkClosedOrders = async () => {
-      try {
-        const response = await fetch('/api/vehicles/check-closed-orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shopId: data.user.shopId })
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          if (result.closed > 0) {
-            loadData(currentPage, searchQuery, showArchived);
-          }
-        }
-      } catch (err) {
-        console.error('Error checking closed orders:', err);
-      }
-    };
-
-    const pollInterval = setInterval(checkClosedOrders, 5000);
-    return () => clearInterval(pollInterval);
-  }, [data.user?.shopId, currentPage, searchQuery, showArchived]);
+  // Auto-refresh disabled - sync workers keep data up to date
+  // Users can manually refresh with the refresh button if needed
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
