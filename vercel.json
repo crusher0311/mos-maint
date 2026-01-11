@@ -15,10 +15,6 @@
     {
       "path": "/api/cron/data-quality",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/dashboard-refresh",
-      "schedule": "*/10 * * * *"
     }
   ],
   "env": {
