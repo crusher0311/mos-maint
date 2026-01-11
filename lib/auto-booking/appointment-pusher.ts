@@ -84,7 +84,7 @@ export async function pushConfirmedBooking(
       scheduledDate: booking.scheduledDate,
       scheduledTime: booking.scheduledTime,
       serviceDescription: booking.serviceType || "Oil Change Service",
-      notes: `Auto-booked via MOS Oil Sticker for ${vehicleDescription}. Customer: ${booking.customerName}`,
+      notes: `Auto-booked via MOS for ${vehicleDescription}. Customer: ${booking.customerName}`,
     });
 
     if (!result.ok || !result.appointment) {
