@@ -175,6 +175,51 @@ Need help? Contact support@mos.tools`;
   return { subject, html, text, to: ownerEmail };
 }
 
+export function makePendingBookingsReminderEmail(
+  shopName: string,
+  pendingCount: number,
+  queueUrl: string
+) {
+  const subject = `${pendingCount} appointment${pendingCount === 1 ? "" : "s"} awaiting review - ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:30px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <h1 style="color:#1f2937;font-size:24px;margin-bottom:16px">Appointments Awaiting Review</h1>
+      
+      <p style="color:#4b5563;font-size:16px">
+        <b>${shopName}</b> has <b style="color:#d97706">${pendingCount} pending appointment${pendingCount === 1 ? "" : "s"}</b> that need${pendingCount === 1 ? "s" : ""} your review.
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Auto-booked appointments are waiting for staff approval before being sent to your shop schedule.
+      </p>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${queueUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Review Appointments</a>
+      </div>
+      
+      <div style="background:#fef3c7;border-radius:8px;padding:16px;margin:20px 0">
+        <p style="color:#92400e;font-size:14px;margin:0">
+          <b>Tip:</b> You can change the confirmation mode to "Automatic" in Auto Booking settings to skip the review step.
+        </p>
+      </div>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      
+      <p style="color:#9ca3af;font-size:14px;text-align:center">
+        MOS Tools - Smarter Maintenance for Auto Shops<br />
+        <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
+      </p>
+    </div>`;
+  const text = `${shopName} has ${pendingCount} pending appointment${pendingCount === 1 ? "" : "s"} awaiting review.\n\nReview them here: ${queueUrl}`;
+  return { subject, html, text };
+}
+
 export function makeWelcomeEmail(shopName: string, loginUrl: string) {
   const subject = `Welcome to MOS Tools!`;
   const html = `
