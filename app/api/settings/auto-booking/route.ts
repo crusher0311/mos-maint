@@ -1,38 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { 
+  getUpcomingHolidays, 
+  getHolidayDefinitionsWithStatus,
+  DEFAULT_HOLIDAY_DEFINITIONS 
+} from "@/lib/auto-booking/holidays";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const US_HOLIDAYS_2025 = [
-  { date: "2025-01-01", name: "New Year's Day" },
-  { date: "2025-01-20", name: "Martin Luther King Jr. Day" },
-  { date: "2025-02-17", name: "Presidents' Day" },
-  { date: "2025-05-26", name: "Memorial Day" },
-  { date: "2025-07-04", name: "Independence Day" },
-  { date: "2025-09-01", name: "Labor Day" },
-  { date: "2025-10-13", name: "Columbus Day" },
-  { date: "2025-11-11", name: "Veterans Day" },
-  { date: "2025-11-27", name: "Thanksgiving Day" },
-  { date: "2025-12-25", name: "Christmas Day" },
-];
-
-const US_HOLIDAYS_2026 = [
-  { date: "2026-01-01", name: "New Year's Day" },
-  { date: "2026-01-19", name: "Martin Luther King Jr. Day" },
-  { date: "2026-02-16", name: "Presidents' Day" },
-  { date: "2026-05-25", name: "Memorial Day" },
-  { date: "2026-07-03", name: "Independence Day (Observed)" },
-  { date: "2026-07-04", name: "Independence Day" },
-  { date: "2026-09-07", name: "Labor Day" },
-  { date: "2026-10-12", name: "Columbus Day" },
-  { date: "2026-11-11", name: "Veterans Day" },
-  { date: "2026-11-26", name: "Thanksgiving Day" },
-  { date: "2026-12-25", name: "Christmas Day" },
-];
-
-const DEFAULT_HOLIDAYS = [...US_HOLIDAYS_2025, ...US_HOLIDAYS_2026];
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -40,7 +16,7 @@ export interface AutoBookingSettings {
   blockSaturday: boolean;
   blockSunday: boolean;
   blockHolidays: boolean;
-  useDefaultHolidays: boolean;
+  enabledHolidays: Record<string, boolean>;
   customHolidays: Array<{ date: string; name: string }>;
   businessHours: {
     start: string;
@@ -52,13 +28,17 @@ export interface AutoBookingSettings {
   timezone: string;
 }
 
+const DEFAULT_ENABLED_HOLIDAYS: Record<string, boolean> = Object.fromEntries(
+  DEFAULT_HOLIDAY_DEFINITIONS.map(h => [h.id, true])
+);
+
 const DEFAULT_SETTINGS: AutoBookingSettings = {
   enabled: false,
   leadTimeDays: 3,
   blockSaturday: false,
   blockSunday: true,
   blockHolidays: true,
-  useDefaultHolidays: true,
+  enabledHolidays: DEFAULT_ENABLED_HOLIDAYS,
   customHolidays: [],
   businessHours: {
     start: "08:00",
@@ -105,15 +85,24 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const settings = shop?.autoBooking || DEFAULT_SETTINGS;
+    const savedSettings = shop?.autoBooking || {};
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...savedSettings,
+      enabledHolidays: {
+        ...DEFAULT_ENABLED_HOLIDAYS,
+        ...(savedSettings.enabledHolidays || {}),
+      },
+    };
+
+    const holidayDefinitions = getHolidayDefinitionsWithStatus(mergedSettings.enabledHolidays);
+    const upcomingHolidays = getUpcomingHolidays(mergedSettings.enabledHolidays);
 
     return NextResponse.json({
       available: true,
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...settings,
-      },
-      defaultHolidays: DEFAULT_HOLIDAYS,
+      settings: mergedSettings,
+      holidayDefinitions,
+      upcomingHolidays,
     });
   } catch (err: any) {
     console.error("[Auto Booking Settings] Error:", err);
@@ -163,7 +152,16 @@ export async function POST(req: NextRequest) {
     if (typeof body.blockSaturday === "boolean") settings.blockSaturday = body.blockSaturday;
     if (typeof body.blockSunday === "boolean") settings.blockSunday = body.blockSunday;
     if (typeof body.blockHolidays === "boolean") settings.blockHolidays = body.blockHolidays;
-    if (typeof body.useDefaultHolidays === "boolean") settings.useDefaultHolidays = body.useDefaultHolidays;
+    if (body.enabledHolidays && typeof body.enabledHolidays === "object") {
+      const validHolidayIds = new Set(DEFAULT_HOLIDAY_DEFINITIONS.map(h => h.id));
+      const filtered: Record<string, boolean> = {};
+      for (const [key, value] of Object.entries(body.enabledHolidays)) {
+        if (validHolidayIds.has(key) && typeof value === "boolean") {
+          filtered[key] = value as boolean;
+        }
+      }
+      settings.enabledHolidays = filtered;
+    }
     if (Array.isArray(body.customHolidays)) {
       settings.customHolidays = body.customHolidays.filter(
         (h: any) => h.date && h.name && typeof h.date === "string" && typeof h.name === "string"
