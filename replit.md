@@ -21,7 +21,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Tekmetric Sync**: Automated initial sync, OAuth token management with auto-refresh, and an incremental sync system with per-shop state tracking and concurrent batch processing.
 *   **Core Features**: AI-powered vehicle analysis, customer dashboard, multi-shop management, maintenance planning with intelligent prefetching, component tracking, declined services logging, enterprise features (multi-location analytics, shared jobs), and a platform admin panel.
 *   **Chrome Extension**: MOS Tools Chrome Extension integrates with Tekmetric for maintenance recommendations, common failures advisor, job lookup, canned jobs, and oil change sticker printing.
-*   **Job Management**: AI-scored job lookup with enterprise support and smart job autocomplete with historical data.
+*   **Job Management**: AI-scored job lookup with enterprise support and smart job autocomplete with historical data. Multi-location users can set location priority order in Settings > Preferences > Job History, with drag-and-drop reordering. Priority scoring applies 20-15-10-5 points (min +5) and optional "exclude other locations" filtering.
 *   **Common Failures Advisor**: Predicts common repairs based on shop data and AI fallback.
 *   **Auto Booking**: Infrastructure for automated appointment scheduling, including dynamic holiday system, scheduler, queue management, and integration with SMS systems via the `ISMSAdapter`. Features include:
     - **Daily Email Reminders**: Configurable scheduled reminders sent to shop staff about pending bookings. Shop owners can set reminder time (HH:MM), days of week to send (Mon-Sun), and whether to skip holidays.
