@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2 } from "lucide-react";
+import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, Mail, Clock } from "lucide-react";
 
 interface User {
   _id: string;
@@ -32,6 +32,16 @@ interface UserModalData {
   lastLogin?: string;
 }
 
+interface PendingInvite {
+  _id: string;
+  emailLower: string;
+  role: string;
+  shopId: number;
+  shopName?: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export default function PlatformUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,10 +54,14 @@ export default function PlatformUsersPage() {
   const [editedRole, setEditedRole] = useState("");
   const [editedShopIds, setEditedShopIds] = useState<string[]>([]);
   const [editedIsPlatformAdmin, setEditedIsPlatformAdmin] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null);
+  const [showInvites, setShowInvites] = useState(false);
 
   useEffect(() => {
     loadUsers();
     fetchAllShops();
+    loadPendingInvites();
   }, []);
 
   const loadUsers = async () => {
@@ -74,6 +88,55 @@ export default function PlatformUsersPage() {
       }
     } catch (err) {
       console.error("Failed to fetch shops:", err);
+    }
+  }
+
+  async function loadPendingInvites() {
+    try {
+      const res = await fetch("/api/platform-admin/invites");
+      if (res.ok) {
+        const data = await res.json();
+        setPendingInvites(data.invites || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch invites:", err);
+    }
+  }
+
+  async function handleResendInvite(inviteId: string) {
+    setResendingInvite(inviteId);
+    try {
+      const res = await fetch(`/api/settings/invites/${inviteId}/resend`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        loadPendingInvites();
+        alert(data.emailSent 
+          ? `Invitation resent to ${data.email}` 
+          : `New invite link created, but email failed to send`);
+      } else {
+        alert(data.error || "Failed to resend invite");
+      }
+    } catch (err) {
+      console.error("Failed to resend invite:", err);
+      alert("Failed to resend invite");
+    } finally {
+      setResendingInvite(null);
+    }
+  }
+
+  async function handleCancelInvite(inviteId: string) {
+    if (!confirm("Cancel this pending invitation?")) return;
+    try {
+      const res = await fetch(`/api/settings/invites/${inviteId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setPendingInvites(prev => prev.filter(i => i._id !== inviteId));
+      }
+    } catch (err) {
+      console.error("Failed to cancel invite:", err);
     }
   }
 
@@ -224,6 +287,75 @@ export default function PlatformUsersPage() {
           <option value="viewer">Viewer</option>
         </select>
       </div>
+
+      {pendingInvites.length > 0 && (
+        <div className="bg-amber-50 rounded-xl border border-amber-200 overflow-hidden">
+          <button
+            onClick={() => setShowInvites(!showInvites)}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-amber-100 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-600" />
+              <span className="font-medium text-amber-800">
+                Pending Invitations ({pendingInvites.length})
+              </span>
+            </div>
+            <span className="text-amber-600 text-sm">
+              {showInvites ? "Hide" : "Show"}
+            </span>
+          </button>
+          {showInvites && (
+            <div className="border-t border-amber-200 divide-y divide-amber-100">
+              {pendingInvites.map((invite) => {
+                const isExpired = new Date(invite.expiresAt) < new Date();
+                return (
+                  <div key={invite._id} className="px-4 py-3 flex items-center justify-between bg-white">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                        <Mail className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{invite.emailLower}</div>
+                        <div className="text-xs text-gray-500 flex items-center gap-2">
+                          <span>{invite.shopName || `Shop ${invite.shopId}`}</span>
+                          <span>•</span>
+                          <span className={isExpired ? "text-red-600 font-medium" : ""}>
+                            {isExpired ? "Expired" : `Expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleColors[invite.role] || "bg-gray-100 text-gray-700"}`}>
+                        {invite.role}
+                      </span>
+                      <button
+                        onClick={() => handleResendInvite(invite._id)}
+                        disabled={resendingInvite === invite._id}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Resend invitation"
+                      >
+                        {resendingInvite === invite._id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleCancelInvite(invite._id)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Cancel invitation"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="w-full">
