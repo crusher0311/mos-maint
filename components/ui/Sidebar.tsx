@@ -76,7 +76,8 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   }
   if (pathname?.startsWith("/dashboard/settings/branding") || 
       pathname?.startsWith("/dashboard/settings/stickers") ||
-      pathname?.startsWith("/dashboard/settings/preferences")) {
+      pathname?.startsWith("/dashboard/settings/preferences") ||
+      pathname?.startsWith("/dashboard/settings/job-history")) {
     sections.add("Preferences");
   }
   return sections;
@@ -171,7 +172,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       }
       if ((pathname.startsWith("/dashboard/settings/branding") || 
            pathname.startsWith("/dashboard/settings/stickers") ||
-           pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
+           pathname.startsWith("/dashboard/settings/preferences") ||
+           pathname.startsWith("/dashboard/settings/job-history")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
         changed = true;
       }
@@ -259,7 +261,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           href: "/dashboard/settings/preferences",
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
-            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
+            { name: "Job History", href: "/dashboard/settings/job-history" }
           ]
         },
         // Billing page hidden until we have enough data to verify with live users
