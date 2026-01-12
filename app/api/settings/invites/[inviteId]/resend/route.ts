@@ -15,7 +15,8 @@ export async function POST(
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (sess.role !== "owner" && sess.role !== "admin") {
+  const canManageInvites = sess.role === "owner" || sess.role === "admin" || sess.isPlatformAdmin;
+  if (!canManageInvites) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -29,7 +30,7 @@ export async function POST(
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
   }
 
-  if (invite.shopId !== sess.shopId && sess.role !== "admin") {
+  if (invite.shopId !== sess.shopId && !sess.isPlatformAdmin) {
     return NextResponse.json({ error: "Cannot resend invite from another shop" }, { status: 403 });
   }
 
