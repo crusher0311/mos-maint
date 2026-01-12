@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, Mail, Clock } from "lucide-react";
+import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, Mail, Clock, Key } from "lucide-react";
 
 interface User {
   _id: string;
@@ -57,6 +57,7 @@ export default function PlatformUsersPage() {
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
   const [showInvites, setShowInvites] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -137,6 +138,31 @@ export default function PlatformUsersPage() {
       }
     } catch (err) {
       console.error("Failed to cancel invite:", err);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!selectedUser) return;
+    if (!confirm(`Send a password reset email to ${selectedUser.email}?`)) return;
+    
+    setResettingPassword(true);
+    try {
+      const res = await fetch(`/api/platform-admin/users/${selectedUser._id}/reset-password`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.emailSent 
+          ? `Password reset email sent to ${data.email}` 
+          : `Reset link created, but email failed to send`);
+      } else {
+        alert(data.error || "Failed to send password reset");
+      }
+    } catch (err) {
+      console.error("Failed to reset password:", err);
+      alert("Failed to send password reset email");
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -553,14 +579,28 @@ export default function PlatformUsersPage() {
                 </div>
 
                 <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                  <button
-                    onClick={handleDeleteUser}
-                    disabled={saving}
-                    className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDeleteUser}
+                      disabled={saving || resettingPassword}
+                      className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                    <button
+                      onClick={handleResetPassword}
+                      disabled={saving || resettingPassword}
+                      className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {resettingPassword ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Key className="w-4 h-4" />
+                      )}
+                      Reset Password
+                    </button>
+                  </div>
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setSelectedUser(null)}
