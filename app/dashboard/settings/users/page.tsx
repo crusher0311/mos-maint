@@ -26,6 +26,7 @@ interface Shop {
   shopId: string;
   name: string;
   location?: string;
+  locationIdentifier?: string | null;
 }
 
 interface UserModalData {
@@ -391,6 +392,11 @@ export default function UsersSettingsPage() {
                     <span className="font-medium">
                       {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.name || `Shop ${selectedUser.shopId}`}
                     </span>
+                    {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.locationIdentifier && (
+                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                        {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.locationIdentifier}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Primary location cannot be changed</p>
                 </div>
@@ -417,10 +423,12 @@ export default function UsersSettingsPage() {
                           onChange={() => toggleShopSelection(String(shop.shopId))}
                           className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                         />
-                        <div>
+                        <div className="flex items-center gap-2 flex-wrap">
                           <div className="font-medium text-gray-900">{shop.name}</div>
-                          {shop.location && (
-                            <div className="text-xs text-gray-500">{shop.location}</div>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                              {shop.locationIdentifier}
+                            </span>
                           )}
                         </div>
                       </label>

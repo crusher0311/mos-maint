@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     
     const shops = await db.collection("shops")
       .find(query)
-      .project({ shopId: 1, name: 1, city: 1, state: 1, enterpriseId: 1 })
+      .project({ shopId: 1, name: 1, city: 1, state: 1, enterpriseId: 1, locationIdentifier: 1 })
       .sort({ name: 1 })
       .toArray();
     
@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       shopId: shop.shopId,
       name: shop.name || `Shop ${shop.shopId}`,
       location: [shop.city, shop.state].filter(Boolean).join(", ") || null,
+      locationIdentifier: shop.locationIdentifier || null,
     }));
     
     return NextResponse.json({
