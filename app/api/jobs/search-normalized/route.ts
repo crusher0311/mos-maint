@@ -45,7 +45,18 @@ interface PaginatedResponse {
   };
 }
 
-function scoreJob(job: any, query: string, shopId: number): number {
+interface LocationPriorityPrefs {
+  enabled: boolean;
+  priorityShopIds: number[];
+  excludeOthers: boolean;
+}
+
+function scoreJob(
+  job: any, 
+  query: string, 
+  shopId: number,
+  locationPriority?: LocationPriorityPrefs
+): number {
   const queryLower = query.toLowerCase();
   const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
   
@@ -64,8 +75,18 @@ function scoreJob(job: any, query: string, shopId: number): number {
     if (description.includes(word)) score += 5;
   }
   
-  if (job.shopId === shopId) {
-    score += 20;
+  if (locationPriority?.enabled && locationPriority.priorityShopIds.length > 0) {
+    const priorityIndex = locationPriority.priorityShopIds.indexOf(Number(job.shopId));
+    if (priorityIndex !== -1) {
+      const priorityBonus = Math.max(5, 20 - (priorityIndex * 5));
+      score += priorityBonus;
+    } else if (!locationPriority.excludeOthers && job.shopId === shopId) {
+      score += 10;
+    }
+  } else {
+    if (job.shopId === shopId) {
+      score += 20;
+    }
   }
   
   if (job.closedDate) {
@@ -232,6 +253,12 @@ export async function GET(req: NextRequest) {
   const db = await getDb();
   const cache = getNormalizedCache();
   
+  const user = await db.collection("users").findOne(
+    { email: session.email },
+    { projection: { preferences: 1 } }
+  );
+  const locationPriority: LocationPriorityPrefs | undefined = user?.preferences?.jobHistory;
+  
   let enterpriseShopIds: number[] = [shopId];
   if (includeEnterprise) {
     const enterpriseCacheKey = { shopId };
@@ -285,7 +312,17 @@ export async function GET(req: NextRequest) {
   const hasMore = rawResults.length > BATCH_SIZE;
   const resultsToProcess = hasMore ? rawResults.slice(0, BATCH_SIZE) : rawResults;
   
-  const scoredResults: SearchResult[] = resultsToProcess.map((job: any) => ({
+  let filteredResults = resultsToProcess;
+  const shouldFilter = locationPriority?.enabled && 
+                       locationPriority.excludeOthers && 
+                       locationPriority.priorityShopIds.length > 0;
+  if (shouldFilter) {
+    filteredResults = resultsToProcess.filter((job: any) => 
+      locationPriority!.priorityShopIds.includes(Number(job.shopId))
+    );
+  }
+
+  const scoredResults: SearchResult[] = filteredResults.map((job: any) => ({
     _id: String(job._id),
     workOrderId: String(job.workOrderId),
     workOrderNumber: job.workOrderNumber || '',
@@ -303,7 +340,7 @@ export async function GET(req: NextRequest) {
     closedDate: job.closedDate,
     sourceSystem: job.sourceSystem,
     shopId: job.shopId,
-    score: scoreJob(job, query, shopId),
+    score: scoreJob(job, query, shopId, locationPriority),
   }));
 
   scoredResults.sort((a, b) => b.score - a.score);
