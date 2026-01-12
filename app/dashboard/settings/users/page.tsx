@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building, History } from "lucide-react";
+import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building, History, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 interface ShopUser {
@@ -54,6 +54,7 @@ export default function UsersSettingsPage() {
   const [allShops, setAllShops] = useState<Shop[]>([]);
   const [saving, setSaving] = useState(false);
   const [selectedShopIds, setSelectedShopIds] = useState<string[]>([]);
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -165,6 +166,29 @@ export default function UsersSettingsPage() {
       }
     } catch (err) {
       console.error("Failed to cancel invite:", err);
+    }
+  }
+
+  async function handleResendInvite(inviteId: string) {
+    setResendingInvite(inviteId);
+    try {
+      const res = await fetch(`/api/settings/invites/${inviteId}/resend`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchUsers();
+        alert(data.emailSent 
+          ? `Invitation resent to ${data.email}` 
+          : `New invite link created, but email failed to send`);
+      } else {
+        alert(data.error || "Failed to resend invite");
+      }
+    } catch (err) {
+      console.error("Failed to resend invite:", err);
+      alert("Failed to resend invite");
+    } finally {
+      setResendingInvite(null);
     }
   }
 
@@ -295,18 +319,32 @@ export default function UsersSettingsPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${roleColors[invite.role] || roleColors.viewer}`}>
                       {invite.role}
                     </span>
                     {canManageUsers && (
-                      <button
-                        onClick={() => handleCancelInvite(invite._id)}
-                        className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Cancel invite"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleResendInvite(invite._id)}
+                          disabled={resendingInvite === invite._id}
+                          className="p-2 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                          title="Resend invite"
+                        >
+                          {resendingInvite === invite._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleCancelInvite(invite._id)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Cancel invite"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
