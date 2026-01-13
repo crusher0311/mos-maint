@@ -1,0 +1,300 @@
+2026-01-13T22:22:27.2394775Z       "synced": 0,
+2026-01-13T22:22:27.2394799Z       "removed": 0,
+2026-01-13T22:22:27.23948236Z       "fromCache": {
+2026-01-13T22:22:27.23948516Z         "vehicles": 0,
+2026-01-13T22:22:27.23948778Z         "customers": 0
+2026-01-13T22:22:27.23949052Z       },
+2026-01-13T22:22:27.23949326Z       "pagesQueued": 0,
+2026-01-13T22:22:27.23949588Z       "terminalSwept": true
+2026-01-13T22:22:27.23949865Z     },
+2026-01-13T22:22:27.2395014Z     {
+2026-01-13T22:22:27.23950418Z       "shopId": 37,
+2026-01-13T22:22:27.239507221Z       "tekmetricShopId": 471,
+2026-01-13T22:22:27.239509611Z       "synced": 0,
+2026-01-13T22:22:27.239511361Z       "removed": 0,
+2026-01-13T22:22:27.239513151Z       "fromCache": {
+2026-01-13T22:22:27.239514831Z         "vehicles": 0,
+2026-01-13T22:22:27.239516521Z         "customers": 0
+2026-01-13T22:22:27.239518231Z       },
+2026-01-13T22:22:27.239519921Z       "pagesQueued": 0,
+2026-01-13T22:22:27.239521661Z       "terminalSwept": false
+2026-01-13T22:22:27.239523341Z     },
+2026-01-13T22:22:27.239525011Z     {
+2026-01-13T22:22:27.239526841Z       "shopId": 54,
+2026-01-13T22:22:27.239528501Z       "tekmetricShopId": 275,
+2026-01-13T22:22:27.239530221Z       "synced": 0,
+2026-01-13T22:22:27.239532021Z       "removed": 0,
+2026-01-13T22:22:27.239533751Z       "fromCache": {
+2026-01-13T22:22:27.239535391Z         "vehicles": 0,
+2026-01-13T22:22:27.239537121Z         "customers": 0
+2026-01-13T22:22:27.239538812Z       },
+2026-01-13T22:22:27.239540601Z       "pagesQueued": 0,
+2026-01-13T22:22:27.239542361Z       "terminalSwept": false
+2026-01-13T22:22:27.239544181Z     },
+2026-01-13T22:22:27.239545922Z     {
+2026-01-13T22:22:27.239547652Z       "shopId": 57,
+2026-01-13T22:22:27.239549342Z       "tekmetricShopId": 11803,
+2026-01-13T22:22:27.239550982Z       "synced": 1,
+2026-01-13T22:22:27.239553072Z       "removed": 0,
+2026-01-13T22:22:27.239554762Z       "fromCache": {
+2026-01-13T22:22:27.239556412Z         "vehicles": 2,
+2026-01-13T22:22:27.239558072Z         "customers": 2
+2026-01-13T22:22:27.239559742Z       },
+2026-01-13T22:22:27.239561392Z       "pagesQueued": 0,
+2026-01-13T22:22:27.239563122Z       "terminalSwept": false
+2026-01-13T22:22:27.239564782Z     }
+2026-01-13T22:22:27.239566962Z   ]
+2026-01-13T22:22:27.239570772Z }
+2026-01-13T22:22:33.241852649Z [Jobs Search] Enterprise search: shops 25, 29, 50, 51
+2026-01-13T22:22:34Z clientIP="73.247.219.3" requestID="381f3276-9868-40d4" responseTimeMS=1608 responseBytes=5110 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:22:34.409336358Z [Jobs Search] Found 100 from job_index, 0 from normalized
+2026-01-13T22:33:21.562490605Z     "pagesQueued": 0,
+2026-01-13T22:33:21.562493726Z     "errors": 0,
+2026-01-13T22:33:21.562496466Z     "skipped": 0
+2026-01-13T22:33:21.562499246Z   },
+2026-01-13T22:33:21.562502106Z   "shops": [
+2026-01-13T22:33:21.562505106Z     {
+2026-01-13T22:33:21.562508166Z       "shopId": 1,
+2026-01-13T22:33:21.562511916Z       "tekmetricShopId": 14956,
+2026-01-13T22:33:21.562514656Z       "synced": 1,
+2026-01-13T22:33:21.562517416Z       "removed": 0,
+2026-01-13T22:33:21.562520196Z       "fromCache": {
+2026-01-13T22:33:21.562522926Z         "vehicles": 1,
+2026-01-13T22:33:21.562526146Z         "customers": 1
+2026-01-13T22:33:21.562528826Z       },
+2026-01-13T22:33:21.562531757Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562534497Z       "terminalSwept": false
+2026-01-13T22:33:21.562537307Z     },
+2026-01-13T22:33:21.562540157Z     {
+2026-01-13T22:33:21.562542917Z       "shopId": 28,
+2026-01-13T22:33:21.562545807Z       "tekmetricShopId": 14956,
+2026-01-13T22:33:21.562548927Z       "synced": 1,
+2026-01-13T22:33:21.562551747Z       "removed": 0,
+2026-01-13T22:33:21.562554657Z       "fromCache": {
+2026-01-13T22:33:21.562557617Z         "vehicles": 1,
+2026-01-13T22:33:21.562560647Z         "customers": 1
+2026-01-13T22:33:21.562563477Z       },
+2026-01-13T22:33:21.562566227Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562569187Z       "terminalSwept": false
+2026-01-13T22:33:21.562571988Z     },
+2026-01-13T22:33:21.562574918Z     {
+2026-01-13T22:33:21.562577588Z       "shopId": 32,
+2026-01-13T22:33:21.562580318Z       "tekmetricShopId": 469,
+2026-01-13T22:33:21.562583048Z       "synced": 0,
+2026-01-13T22:33:21.562585878Z       "removed": 0,
+2026-01-13T22:33:21.562588458Z       "fromCache": {
+2026-01-13T22:33:21.562591218Z         "vehicles": 0,
+2026-01-13T22:33:21.562593988Z         "customers": 0
+2026-01-13T22:33:21.562596728Z       },
+2026-01-13T22:33:21.562603048Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562605939Z       "terminalSwept": false
+2026-01-13T22:33:21.562608639Z     },
+2026-01-13T22:33:21.562611379Z     {
+2026-01-13T22:33:21.562614199Z       "shopId": 36,
+2026-01-13T22:33:21.562617149Z       "tekmetricShopId": 470,
+2026-01-13T22:33:21.562620019Z       "synced": 1,
+2026-01-13T22:33:21.562622839Z       "removed": 0,
+2026-01-13T22:33:21.562625509Z       "fromCache": {
+2026-01-13T22:33:21.562628439Z         "vehicles": 1,
+2026-01-13T22:33:21.562631119Z         "customers": 1
+2026-01-13T22:33:21.562633849Z       },
+2026-01-13T22:33:21.562636629Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562639539Z       "terminalSwept": false
+2026-01-13T22:33:21.562642329Z     },
+2026-01-13T22:33:21.562645089Z     {
+2026-01-13T22:33:21.562647969Z       "shopId": 37,
+2026-01-13T22:33:21.56265078Z       "tekmetricShopId": 471,
+2026-01-13T22:33:21.56265359Z       "synced": 1,
+2026-01-13T22:33:21.56265645Z       "removed": 0,
+2026-01-13T22:33:21.56265923Z       "fromCache": {
+2026-01-13T22:33:21.5626717Z         "vehicles": 2,
+2026-01-13T22:33:21.56267468Z         "customers": 2
+2026-01-13T22:33:21.56267758Z       },
+2026-01-13T22:33:21.5626804Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562683181Z       "terminalSwept": false
+2026-01-13T22:33:21.562685981Z     },
+2026-01-13T22:33:21.562738622Z     {
+2026-01-13T22:33:21.562744822Z       "shopId": 54,
+2026-01-13T22:33:21.562747732Z       "tekmetricShopId": 275,
+2026-01-13T22:33:21.562750542Z       "synced": 0,
+2026-01-13T22:33:21.562753362Z       "removed": 0,
+2026-01-13T22:33:21.562756122Z       "fromCache": {
+2026-01-13T22:33:21.562758872Z         "vehicles": 0,
+2026-01-13T22:33:21.562761763Z         "customers": 0
+2026-01-13T22:33:21.562764372Z       },
+2026-01-13T22:33:21.562767163Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562770143Z       "terminalSwept": false
+2026-01-13T22:33:21.562772843Z     },
+2026-01-13T22:33:21.562775693Z     {
+2026-01-13T22:33:21.562778733Z       "shopId": 57,
+2026-01-13T22:33:21.562781443Z       "tekmetricShopId": 11803,
+2026-01-13T22:33:21.562784263Z       "synced": 0,
+2026-01-13T22:33:21.562787283Z       "removed": 0,
+2026-01-13T22:33:21.562789953Z       "fromCache": {
+2026-01-13T22:33:21.562792843Z         "vehicles": 0,
+2026-01-13T22:33:21.562795523Z         "customers": 0
+2026-01-13T22:33:21.562798333Z       },
+2026-01-13T22:33:21.562801133Z       "pagesQueued": 0,
+2026-01-13T22:33:21.562803953Z       "terminalSwept": false
+2026-01-13T22:33:21.562806824Z     }
+2026-01-13T22:33:21.562809624Z   ]
+2026-01-13T22:33:21.562812484Z }
+2026-01-13T22:34:21.618953121Z [2026-01-13T22:34:21.618Z] Running Tekmetric sync...
+2026-01-13T22:34:23.008656376Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-13T22:32:48.126Z)
+2026-01-13T22:34:23.393873731Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-13T22:32:48.477Z)
+2026-01-13T22:34:23.845321689Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-13T22:32:48.642Z)
+2026-01-13T22:34:24.184156705Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 1 ROs (updated since 2026-01-13T22:32:49.226Z)
+2026-01-13T22:34:24.636197758Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 3 ROs (updated since 2026-01-13T22:32:49.766Z)
+2026-01-13T22:34:26.538724333Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-13T22:32:51.102Z)
+2026-01-13T22:34:26.955643593Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 1 ROs (updated since 2026-01-13T22:32:51.498Z)
+2026-01-13T22:34:27.272974262Z [Cron] Tekmetric incremental sync completed in 5402ms: 5 synced, 0 removed, 6/6 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-13T22:34:27.274493881Z [2026-01-13T22:34:21.618Z] Sync complete: {
+2026-01-13T22:34:27.274507251Z   "ok": true,
+2026-01-13T22:34:27.274512161Z   "duration": "5402ms",
+2026-01-13T22:34:27.274515981Z   "summary": {
+2026-01-13T22:34:27.274519751Z     "totalShops": 7,
+2026-01-13T22:34:27.274523461Z     "totalSynced": 5,
+2026-01-13T22:34:27.274527271Z     "totalRemoved": 0,
+2026-01-13T22:34:27.274531101Z     "fromCache": {
+2026-01-13T22:34:27.274534711Z       "vehicles": 6,
+2026-01-13T22:34:27.274538482Z       "customers": 6
+2026-01-13T22:34:27.274542162Z     },
+2026-01-13T22:34:27.274545852Z     "pagesQueued": 0,
+2026-01-13T22:34:27.274552372Z     "errors": 0,
+2026-01-13T22:34:27.274556262Z     "skipped": 0
+2026-01-13T22:34:27.274560062Z   },
+2026-01-13T22:34:27.274564102Z   "shops": [
+2026-01-13T22:34:27.274568012Z     {
+2026-01-13T22:34:27.274585513Z       "shopId": 1,
+2026-01-13T22:34:27.274588383Z       "tekmetricShopId": 14956,
+2026-01-13T22:34:27.274590583Z       "synced": 0,
+2026-01-13T22:34:27.274592853Z       "removed": 0,
+2026-01-13T22:34:27.274595093Z       "fromCache": {
+2026-01-13T22:34:27.274597233Z         "vehicles": 0,
+2026-01-13T22:34:27.274599453Z         "customers": 0
+2026-01-13T22:34:27.274602513Z       },
+2026-01-13T22:34:27.274605033Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274607313Z       "terminalSwept": false
+2026-01-13T22:34:27.274609393Z     },
+2026-01-13T22:34:27.274611573Z     {
+2026-01-13T22:34:27.274613764Z       "shopId": 28,
+2026-01-13T22:34:27.274615964Z       "tekmetricShopId": 14956,
+2026-01-13T22:34:27.274618113Z       "synced": 0,
+2026-01-13T22:34:27.274620214Z       "removed": 0,
+2026-01-13T22:34:27.274622384Z       "fromCache": {
+2026-01-13T22:34:27.274624524Z         "vehicles": 0,
+2026-01-13T22:34:27.274626604Z         "customers": 0
+2026-01-13T22:34:27.274628644Z       },
+2026-01-13T22:34:27.274630684Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274632884Z       "terminalSwept": false
+2026-01-13T22:34:27.274635034Z     },
+2026-01-13T22:34:27.274637234Z     {
+2026-01-13T22:34:27.274639254Z       "shopId": 32,
+2026-01-13T22:34:27.274641344Z       "tekmetricShopId": 469,
+2026-01-13T22:34:27.274643784Z       "synced": 0,
+2026-01-13T22:34:27.274645974Z       "removed": 0,
+2026-01-13T22:34:27.274648064Z       "fromCache": {
+2026-01-13T22:34:27.274650134Z         "vehicles": 1,
+2026-01-13T22:34:27.274652205Z         "customers": 1
+2026-01-13T22:34:27.274654334Z       },
+2026-01-13T22:34:27.274656414Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274658515Z       "terminalSwept": false
+2026-01-13T22:34:27.274660625Z     },
+2026-01-13T22:34:27.274662765Z     {
+2026-01-13T22:34:27.274664895Z       "shopId": 36,
+2026-01-13T22:34:27.274666935Z       "tekmetricShopId": 470,
+2026-01-13T22:34:27.274669085Z       "synced": 1,
+2026-01-13T22:34:27.274672075Z       "removed": 0,
+2026-01-13T22:34:27.274674415Z       "fromCache": {
+2026-01-13T22:34:27.274676635Z         "vehicles": 1,
+2026-01-13T22:34:27.274678945Z         "customers": 1
+2026-01-13T22:34:27.274681215Z       },
+2026-01-13T22:34:27.274683575Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274686325Z       "terminalSwept": false
+2026-01-13T22:34:27.274721946Z     },
+2026-01-13T22:34:27.274724656Z     {
+2026-01-13T22:34:27.274727016Z       "shopId": 37,
+2026-01-13T22:34:27.274729636Z       "tekmetricShopId": 471,
+2026-01-13T22:34:27.274731927Z       "synced": 3,
+2026-01-13T22:34:27.274734047Z       "removed": 0,
+2026-01-13T22:34:27.274736516Z       "fromCache": {
+2026-01-13T22:34:27.274738677Z         "vehicles": 3,
+2026-01-13T22:34:27.274740757Z         "customers": 3
+2026-01-13T22:34:27.274742947Z       },
+2026-01-13T22:34:27.274745037Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274747167Z       "terminalSwept": false
+2026-01-13T22:34:27.274749307Z     },
+2026-01-13T22:34:27.274751467Z     {
+2026-01-13T22:34:27.274753577Z       "shopId": 54,
+2026-01-13T22:34:27.274755677Z       "tekmetricShopId": 275,
+2026-01-13T22:34:27.274757827Z       "synced": 0,
+2026-01-13T22:34:27.274759937Z       "removed": 0,
+2026-01-13T22:34:27.274761967Z       "fromCache": {
+2026-01-13T22:34:27.274763997Z         "vehicles": 0,
+2026-01-13T22:34:27.274766147Z         "customers": 0
+2026-01-13T22:34:27.274768207Z       },
+2026-01-13T22:34:27.274770237Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274777378Z       "terminalSwept": false
+2026-01-13T22:34:27.274779828Z     },
+2026-01-13T22:34:27.274781988Z     {
+2026-01-13T22:34:27.274784228Z       "shopId": 57,
+2026-01-13T22:34:27.274786358Z       "tekmetricShopId": 11803,
+2026-01-13T22:34:27.274788478Z       "synced": 1,
+2026-01-13T22:34:27.274790548Z       "removed": 0,
+2026-01-13T22:34:27.274792538Z       "fromCache": {
+2026-01-13T22:34:27.274794708Z         "vehicles": 1,
+2026-01-13T22:34:27.274796978Z         "customers": 1
+2026-01-13T22:34:27.274799018Z       },
+2026-01-13T22:34:27.274801078Z       "pagesQueued": 0,
+2026-01-13T22:34:27.274803118Z       "terminalSwept": false
+2026-01-13T22:34:27.274805348Z     }
+2026-01-13T22:34:27.274807738Z   ]
+2026-01-13T22:34:27.274809889Z }
+2026-01-13T22:34:29.000987029Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-01-13T22:34:29.001014049Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-01-13T22:34:29.00101749Z 
+2026-01-13T22:34:29.00102139Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-01-13T22:34:29.00102448Z 
+2026-01-13T22:34:29Z clientIP="54.187.205.235" requestID="81ec7da4-354e-483a" responseTimeMS=8 responseBytes=279 userAgent="Stripe/1.0 (+https://stripe.com/docs/webhooks)"
+2026-01-13T22:34:53Z clientIP="73.247.219.3" requestID="9cce7684-8d87-4c01" responseTimeMS=6 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:53Z clientIP="73.247.219.3" requestID="3707d31e-5952-4d22" responseTimeMS=8 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:53Z clientIP="73.247.219.3" requestID="154f193b-cd76-4ebb" responseTimeMS=13 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:54Z clientIP="73.247.219.3" requestID="977fe245-670b-4170" responseTimeMS=6 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:55Z clientIP="73.247.219.3" requestID="8420fa34-6fe2-4bc0" responseTimeMS=4 responseBytes=439 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:57Z clientIP="73.247.219.3" requestID="819a5db2-04a2-420d" responseTimeMS=6 responseBytes=454 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:57Z clientIP="73.247.219.3" requestID="34f1b7c6-659e-4808" responseTimeMS=7 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:34:58Z clientIP="73.247.219.3" requestID="2cd77cda-8894-486d" responseTimeMS=6 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:02Z clientIP="73.247.219.3" requestID="2cc267cc-4797-4a6e" responseTimeMS=2582 responseBytes=840768 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:02Z clientIP="73.247.219.3" requestID="ec1cbe0f-1715-4ff2" responseTimeMS=5 responseBytes=9176 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:02Z clientIP="73.247.219.3" requestID="64fe10ff-8467-4eb6" responseTimeMS=7 responseBytes=499 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:03Z clientIP="73.247.219.3" requestID="10c5f68a-6ca7-49a5" responseTimeMS=565 responseBytes=356 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:02Z clientIP="73.247.219.3" requestID="29e47319-089d-4b9f" responseTimeMS=5 responseBytes=496 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:02Z clientIP="73.247.219.3" requestID="b2987fa4-32d1-4d3b" responseTimeMS=5 responseBytes=495 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:02Z clientIP="73.247.219.3" requestID="c883c763-4aa0-442e" responseTimeMS=7 responseBytes=22556 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:05Z clientIP="73.247.219.3" requestID="1affeab2-a609-4bbc" responseTimeMS=752 responseBytes=4359 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:05Z clientIP="73.247.219.3" requestID="253ed853-95ad-4d5e" responseTimeMS=439 responseBytes=682 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-13T22:35:00.507571263Z [Protractor] Using basic cache for shop 50 (7471 items) - run sync to refresh
+2026-01-13T22:35:01.211825269Z [Plan Debug] Found Protractor RO: 43965, Customer: Matt Gear, Integration: protractor
+2026-01-13T22:35:01.21186695Z [Plan Debug] Latest RO number: 43965, total ROs: 0, sources checked: Protractor/Tekmetric/AutoFlow
+2026-01-13T22:35:01.582661849Z [Plan Debug] Protractor service history entries: 0
+2026-01-13T22:35:01.584147546Z [Plan Debug] Total shop service history entries (Protractor + Tekmetric): 0
+2026-01-13T22:35:01.646361328Z [DataOne Cache] HIT for squish JTNBE46K73, cached at 2026-01-13T16:12:05.131Z
+2026-01-13T22:35:01.853934556Z [Plan] OEM data source: cache, count: 32
+2026-01-13T22:35:01.853961256Z [Plan Debug] VIN: JTNBE46K673079737
+2026-01-13T22:35:01.853975767Z [Plan Debug] Current Miles: null
+2026-01-13T22:35:01.853980357Z [Plan Debug] OEM Items count: 32
+2026-01-13T22:35:01.853984947Z [Plan Debug] CARFAX Records count: 32
+2026-01-13T22:35:01.853989627Z [Plan Debug] DVI Findings count: 0
+2026-01-13T22:35:01.856505101Z [Plan Debug] Sample OEM items: [
+2026-01-13T22:35:01.856523692Z   'Inspect brake lines and hoses.',
+2026-01-13T22:35:01.856528682Z   'Inspect brake linings/drums and brake pads/discs.',
+2026-01-13T22:35:01.856532472Z   'Measure brake pad thickness and rotor runout.'
+2026-01-13T22:35:01.856536302Z ]
+2026-01-13T22:35:01.856540892Z [Plan Debug] Sample CARFAX records: [
+2026-01-13T22:35:01.856545542Z   'Vehicle serviced; Oil and filter changed; Steering',
+2026-01-13T22:35:01.856550452Z   'Vehicle serviced; Oil and filter changed',
+2026-01-13T22:35:01.856554673Z   'Vehicle serviced; Oil and filter changed'
+2026-01-13T22:35:01.856558882Z ]
+2026-01-13T22:35:01.856572703Z [Plan Debug] Protractor deferred work count: 14
+2026-01-13T22:35:01.856577523Z [Plan Debug] Thresholds: soonMiles=3000, soonDays=90
+2026-01-13T22:35:01.856582363Z [Plan Debug] Buckets: overdue=18, dueSoon=0, upcoming=23 (filtered: overdue=17, dueSoon=0, upcoming=11)
