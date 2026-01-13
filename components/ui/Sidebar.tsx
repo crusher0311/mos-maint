@@ -93,7 +93,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const [switching, setSwitching] = useState(false);
   const [shopSearch, setShopSearch] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
-  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
+  // Auto-booking hidden until feature is ready for production
+  // const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
@@ -117,30 +118,31 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (!enabledFeatures.includes("oil_sticker")) return;
-    
-    const fetchPendingCount = () => {
-      fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
-        .then((res) => {
-          if (!res.ok) {
-            setPendingBookingsCount(0);
-            return null;
-          }
-          return res.json();
-        })
-        .then((data) => {
-          if (data && typeof data.pendingCount === "number") {
-            setPendingBookingsCount(data.pendingCount);
-          }
-        })
-        .catch(() => setPendingBookingsCount(0));
-    };
-
-    fetchPendingCount();
-    const interval = setInterval(fetchPendingCount, 60000);
-    return () => clearInterval(interval);
-  }, [enabledFeatures]);
+  // Auto-booking hidden until feature is ready for production
+  // useEffect(() => {
+  //   if (!enabledFeatures.includes("oil_sticker")) return;
+  //   
+  //   const fetchPendingCount = () => {
+  //     fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
+  //       .then((res) => {
+  //         if (!res.ok) {
+  //           setPendingBookingsCount(0);
+  //           return null;
+  //         }
+  //         return res.json();
+  //       })
+  //       .then((data) => {
+  //         if (data && typeof data.pendingCount === "number") {
+  //           setPendingBookingsCount(data.pendingCount);
+  //         }
+  //       })
+  //       .catch(() => setPendingBookingsCount(0));
+  //   };
+  //
+  //   fetchPendingCount();
+  //   const interval = setInterval(fetchPendingCount, 60000);
+  //   return () => clearInterval(interval);
+  // }, [enabledFeatures]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -226,12 +228,13 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />
     },
-    {
-      name: "Booking Queue",
-      href: "/dashboard/settings/auto-booking/queue",
-      icon: <CalendarCheck className="w-5 h-5" />,
-      featureId: "oil_sticker"
-    },
+    // Auto-booking hidden until feature is ready for production
+    // {
+    //   name: "Booking Queue",
+    //   href: "/dashboard/settings/auto-booking/queue",
+    //   icon: <CalendarCheck className="w-5 h-5" />,
+    //   featureId: "oil_sticker"
+    // },
     {
       name: "Quick Sticker",
       href: "#quick-sticker",
@@ -272,7 +275,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
+        // Auto-booking hidden until feature is ready for production
+        // { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
@@ -543,11 +547,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                 >
                   {item.icon}
                   <span className="flex-1">{item.name}</span>
-                  {item.name === "Booking Queue" && pendingBookingsCount > 0 && (
+                  {/* Auto-booking hidden until feature is ready for production */}
+                  {/* {item.name === "Booking Queue" && pendingBookingsCount > 0 && (
                     <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                       {pendingBookingsCount}
                     </span>
-                  )}
+                  )} */}
                 </Link>
               )}
             </li>
