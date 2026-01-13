@@ -75,50 +75,65 @@ export async function POST(req: NextRequest) {
   const allJobIndexEntries: any[] = [];
 
   // Sync canned jobs / service package templates
-  console.log(`[Protractor Sync] Fetching service packages...`);
+  // Check if we should force refresh canned jobs (expensive operation)
+  const forceRefreshCannedJobs = req.nextUrl.searchParams.get("refreshCannedJobs") === "true";
+  
+  console.log(`[Protractor Sync] Checking canned jobs cache...`);
   try {
-    const cannedJobsResult = await fetchCannedJobs(shopId);
-    console.log(`[Protractor Sync] Canned jobs API result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}`);
+    // First check if we already have enriched data cached
+    const existingCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
+    const hasEnrichedCache = existingCache?.source === "enriched" && existingCache?.items?.length > 0;
     
-    if (cannedJobsResult.ok && cannedJobsResult.cannedJobs?.length) {
-      // Fetch full details for each template (with lines) using rate limiting
-      const templateLimit = pLimit(5); // 5 concurrent requests
-      console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
-      
-      const templatesWithDetails = await Promise.all(
-        cannedJobsResult.cannedJobs.map((template: any) =>
-          templateLimit(async () => {
-            try {
-              const detailResult = await fetchServicePackageTemplateDetail(shopId, template.ID);
-              if (detailResult.ok && detailResult.template) {
-                const linesCount = detailResult.template.ServicePackageLines?.ItemCollection?.length || 0;
-                if (linesCount > 0) {
-                  console.log(`[Protractor Sync] Template ${template.Code}: ${linesCount} lines`);
-                }
-                return detailResult.template;
-              }
-            } catch (err: any) {
-              console.log(`[Protractor Sync] Failed to fetch detail for ${template.Code}: ${err.message}`);
-            }
-            // Fall back to summary if detail fetch fails
-            return template;
-          })
-        )
-      );
-      
-      await upsertCannedJobsCache(shopId, templatesWithDetails);
-      results.cannedJobsSynced = templatesWithDetails.length;
-      
-      const withLines = templatesWithDetails.filter((t: any) => t.ServicePackageLines?.ItemCollection?.length > 0);
-      console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} templates (${withLines.length} with line details)`);
+    if (hasEnrichedCache && !forceRefreshCannedJobs) {
+      // Skip expensive API calls - use existing cache
+      results.cannedJobsSynced = existingCache.items.length;
+      console.log(`[Protractor Sync] Using existing enriched cache with ${existingCache.items.length} canned jobs (add ?refreshCannedJobs=true to force refresh)`);
     } else {
-      // API not available - discover from existing synced data
-      console.log(`[Protractor Sync] API not available, discovering from cached data...`);
-      const discovered = await discoverCannedJobsFromCache(shopId);
-      if (discovered.length > 0) {
-        await mergeCannedJobsToCache(shopId, discovered);
-        results.cannedJobsSynced = discovered.length;
-        console.log(`[Protractor Sync] Discovered ${discovered.length} service packages from cached data`);
+      // No cache or force refresh - do the expensive fetch
+      console.log(`[Protractor Sync] ${forceRefreshCannedJobs ? 'Force refresh requested' : 'No enriched cache'} - fetching service packages...`);
+      const cannedJobsResult = await fetchCannedJobs(shopId);
+      console.log(`[Protractor Sync] Canned jobs API result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}`);
+      
+      if (cannedJobsResult.ok && cannedJobsResult.cannedJobs?.length) {
+        // Fetch full details for each template (with lines) using rate limiting
+        const templateLimit = pLimit(3); // Reduced from 5 to 3 concurrent requests to avoid rate limits
+        console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
+        
+        const templatesWithDetails = await Promise.all(
+          cannedJobsResult.cannedJobs.map((template: any) =>
+            templateLimit(async () => {
+              try {
+                const detailResult = await fetchServicePackageTemplateDetail(shopId, template.ID);
+                if (detailResult.ok && detailResult.template) {
+                  const linesCount = detailResult.template.ServicePackageLines?.ItemCollection?.length || 0;
+                  if (linesCount > 0) {
+                    console.log(`[Protractor Sync] Template ${template.Code}: ${linesCount} lines`);
+                  }
+                  return detailResult.template;
+                }
+              } catch (err: any) {
+                console.log(`[Protractor Sync] Failed to fetch detail for ${template.Code}: ${err.message}`);
+              }
+              // Fall back to summary if detail fetch fails
+              return template;
+            })
+          )
+        );
+        
+        await upsertCannedJobsCache(shopId, templatesWithDetails);
+        results.cannedJobsSynced = templatesWithDetails.length;
+      
+        const withLines = templatesWithDetails.filter((t: any) => t.ServicePackageLines?.ItemCollection?.length > 0);
+        console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} templates (${withLines.length} with line details)`);
+      } else {
+        // API not available - discover from existing synced data
+        console.log(`[Protractor Sync] API not available, discovering from cached data...`);
+        const discovered = await discoverCannedJobsFromCache(shopId);
+        if (discovered.length > 0) {
+          await mergeCannedJobsToCache(shopId, discovered);
+          results.cannedJobsSynced = discovered.length;
+          console.log(`[Protractor Sync] Discovered ${discovered.length} service packages from cached data`);
+        }
       }
     }
   } catch (err: any) {
