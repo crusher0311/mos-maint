@@ -73,8 +73,12 @@ export default function PlanLoading() {
             Building Your Maintenance Plan
           </h2>
           
-          <p className="text-gray-500 mb-4 text-sm">
+          <p className="text-gray-500 mb-2 text-sm">
             We're gathering all the data for your personalized report
+          </p>
+          
+          <p className="text-gray-400 mb-4 text-xs">
+            Initial loads may take up to 30 seconds while we fetch data from multiple sources
           </p>
 
           <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
