@@ -78,7 +78,7 @@ export default function PlanLoading() {
           </p>
           
           <p className="text-orange-400 mb-4 text-xs italic">
-            Initial loads may take up to 30 seconds while we fetch data from multiple sources
+            Initial loads may take up to 30 seconds while we load your smart plan
           </p>
 
           <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
