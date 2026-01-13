@@ -77,7 +77,7 @@ export default function PlanLoading() {
             We're gathering all the data for your personalized report
           </p>
           
-          <p className="text-gray-400 mb-4 text-xs">
+          <p className="text-orange-400 mb-4 text-xs italic">
             Initial loads may take up to 30 seconds while we fetch data from multiple sources
           </p>
 
