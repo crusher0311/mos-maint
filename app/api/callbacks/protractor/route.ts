@@ -24,10 +24,22 @@ async function checkRateLimit(db: Db, connectionId: string): Promise<{ allowed: 
 }
 
 export async function POST(request: NextRequest) {
+  console.log("[Protractor Callback] POST received");
+  console.log("[Protractor Callback] Headers:", Object.fromEntries(request.headers.entries()));
+  
   try {
-    const payload = await request.json();
+    const rawBody = await request.text();
+    console.log("[Protractor Callback] Raw body:", rawBody.slice(0, 1000));
     
-    console.log("[Protractor Callback] Received:", JSON.stringify(payload).slice(0, 500));
+    let payload: any;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (parseErr) {
+      console.log("[Protractor Callback] Body is not JSON, treating as form data");
+      payload = Object.fromEntries(new URLSearchParams(rawBody));
+    }
+    
+    console.log("[Protractor Callback] Parsed payload:", JSON.stringify(payload).slice(0, 500));
 
     const db = await getDb();
 
@@ -180,7 +192,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       status: "ok", 
       endpoint: "Protractor Callback Receiver",
-      usage: "Protractor sends callbacks via GET with query params: connectionId, apiKey, type, id, operation"
+      methods: ["GET", "POST"],
+      usage: "Supports both POST with JSON body and GET with query params"
     });
   }
 
