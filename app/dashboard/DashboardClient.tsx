@@ -638,8 +638,43 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   }, []);
 
-  // Auto-refresh disabled - sync workers keep data up to date
-  // Users can manually refresh with the refresh button if needed
+  // Smart background refresh - updates data without interrupting user actions
+  useEffect(() => {
+    const REFRESH_INTERVAL_MS = 30000; // 30 seconds
+    
+    const backgroundRefresh = async () => {
+      // Skip if any modal is open or user is actively interacting
+      const isUserInteracting = 
+        jobLookupVehicle !== null ||
+        commonFailuresVehicle !== null ||
+        stickerContextMenu !== null ||
+        customStickerModal !== null ||
+        showAddVehicleModal ||
+        printingSticker !== null ||
+        closingVehicle !== null ||
+        document.activeElement?.tagName === 'INPUT';
+      
+      if (isUserInteracting || isRefreshing) {
+        return; // Skip this refresh cycle
+      }
+      
+      // Silently fetch new data
+      const newData = await fetchDashboardData(currentPage, searchQuery, showArchived);
+      if (newData && newData.rows) {
+        // Only update if data actually changed (compare row count or VINs)
+        const currentVins = data.rows.map((r: any) => r.displayVin || r.vin).join(',');
+        const newVins = newData.rows.map((r: any) => r.displayVin || r.vin).join(',');
+        
+        if (currentVins !== newVins || data.rows.length !== newData.rows.length) {
+          setData(newData);
+          setLastUpdated(new Date());
+        }
+      }
+    };
+    
+    const intervalId = setInterval(backgroundRefresh, REFRESH_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [currentPage, searchQuery, showArchived, jobLookupVehicle, commonFailuresVehicle, stickerContextMenu, customStickerModal, showAddVehicleModal, printingSticker, closingVehicle, isRefreshing, data.rows]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
