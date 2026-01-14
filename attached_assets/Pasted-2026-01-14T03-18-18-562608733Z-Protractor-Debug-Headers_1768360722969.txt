@@ -1,0 +1,178 @@
+2026-01-14T03:18:18.562608733Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:18.562615593Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:18.763006951Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:18.763036091Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/21231323-2219-478a-a74f-d3e29eb5eb92
+2026-01-14T03:18:18.763040661Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:18.763045461Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:18.962547162Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:18.962569842Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0b36f19f-f14e-4c19-91c2-7c48c6882630
+2026-01-14T03:18:18.962573912Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:18.962584673Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:21.207455695Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:21.207483326Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6ff524d5-390d-4935-b0c3-49acb1367a6b
+2026-01-14T03:18:21.207486116Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:21.207488996Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:21.407751851Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:21.407780742Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8566f37f-5077-42b0-816f-fe4f8f85edfa
+2026-01-14T03:18:21.407783362Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:21.407786142Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:21.607092058Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:21.607118849Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/38e75274-892d-40e6-a97b-bbbb1ca90563
+2026-01-14T03:18:21.607123499Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:21.607126869Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:21.807760581Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:21.807779362Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/50ad1d8a-c496-4a4a-88a3-79762ca55840
+2026-01-14T03:18:21.807782192Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:21.807785202Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:22.008066077Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:22.008084937Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6d3cf9a6-2ed7-49ab-b36c-bde06c3e762e
+2026-01-14T03:18:22.008087818Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:22.008090898Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:24.452197705Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:24.452222816Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/baa97a0f-aaf9-49cd-a304-048f19971249
+2026-01-14T03:18:24.452227256Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:24.452235536Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:24.652355868Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:24.652376659Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/f9cf1628-93e5-47df-bc5f-40b55eb9e253
+2026-01-14T03:18:24.652381259Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:24.652385919Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:24.852393419Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:24.852418059Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/295688a9-e418-4dd3-82af-d3eda10afc86
+2026-01-14T03:18:24.852421619Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:24.8524263Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:25.052477121Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:25.052504001Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5ee1fdb9-006f-47c9-843d-298072082895
+2026-01-14T03:18:25.052509761Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:25.052514911Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:25.252707845Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:25.252737886Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/18f46bc6-05fa-4507-bb84-95706a7e4c5b
+2026-01-14T03:18:25.252740946Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:25.252745346Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:28.42578148Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:28.425825631Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9b22c177-583c-4c6e-ad5c-fa002e2f03e4
+2026-01-14T03:18:28.425833201Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:28.425839872Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:28.625521795Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:28.625546546Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/f1680a76-a99b-4a32-800d-964678348704
+2026-01-14T03:18:28.625549986Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:28.625553546Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:28.825959174Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:28.825982554Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/35fb0a56-4c1b-4171-92a8-a2470b62f7b9
+2026-01-14T03:18:28.825986794Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:28.825993984Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:29.025312511Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:18:29.025332851Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/4ca5e410-9e3f-4760-9e6c-1b63f658c47d
+2026-01-14T03:18:29.025336021Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:18:29.025339852Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:18:29.214127683Z [2026-01-14T03:18:29.213Z] Running Tekmetric sync...
+2026-01-14T03:18:29Z clientIP="207.216.67.133" requestID="49195f92-cac1-488f" responseTimeMS=35107 responseBytes=315 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+2026-01-14T03:18:30.593908449Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:55.453Z)
+2026-01-14T03:18:30.947776322Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:55.812Z)
+2026-01-14T03:18:31.376292426Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:56.383Z)
+2026-01-14T03:18:31.752239238Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:56.637Z)
+2026-01-14T03:18:32.327107149Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:57.195Z)
+2026-01-14T03:18:33.6768293Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:58.693Z)
+2026-01-14T03:18:34.054821652Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-14T03:16:59.091Z)
+2026-01-14T03:18:34.186038694Z [Cron] Tekmetric incremental sync completed in 4712ms: 0 synced, 0 removed, 0/0 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-14T03:18:34.188168986Z [2026-01-14T03:18:29.213Z] Sync complete: {
+2026-01-14T03:18:34.188190276Z   "ok": true,
+2026-01-14T03:18:34.188195856Z   "duration": "4712ms",
+2026-01-14T03:18:34.188199666Z   "summary": {
+2026-01-14T03:18:34.188203306Z     "totalShops": 7,
+2026-01-14T03:18:34.188206846Z     "totalSynced": 0,
+2026-01-14T03:18:34.188210356Z     "totalRemoved": 0,
+2026-01-14T03:18:34.188214036Z     "fromCache": {
+2026-01-14T03:18:34.188217516Z       "vehicles": 0,
+2026-01-14T03:18:34.188221847Z       "customers": 0
+2026-01-14T03:18:34.188225307Z     },
+2026-01-14T03:18:34.188244987Z     "pagesQueued": 0,
+2026-01-14T03:18:34.188249177Z     "errors": 0,
+2026-01-14T03:18:34.188252757Z     "skipped": 0
+2026-01-14T03:18:34.188256147Z   },
+2026-01-14T03:18:34.188259587Z   "shops": [
+2026-01-14T03:18:34.188262937Z     {
+2026-01-14T03:18:34.188266187Z       "shopId": 1,
+2026-01-14T03:18:34.188270397Z       "tekmetricShopId": 14956,
+2026-01-14T03:18:34.188273948Z       "synced": 0,
+2026-01-14T03:18:34.188277837Z       "removed": 0,
+2026-01-14T03:18:34.188279977Z       "fromCache": {
+2026-01-14T03:18:34.188282058Z         "vehicles": 0,
+2026-01-14T03:18:34.188284218Z         "customers": 0
+2026-01-14T03:18:34.188286318Z       },
+2026-01-14T03:18:34.188288438Z       "pagesQueued": 0,
+2026-01-14T03:18:34.188290568Z       "terminalSwept": false
+2026-01-14T03:18:34.188292658Z     },
+2026-01-14T03:18:34.188294828Z     {
+2026-01-14T03:18:34.188296908Z       "shopId": 28,
+2026-01-14T03:18:34.188298988Z       "tekmetricShopId": 14956,
+2026-01-14T03:18:34.188301188Z       "synced": 0,
+2026-01-14T03:18:34.188303268Z       "removed": 0,
+2026-01-14T03:18:34.188305548Z       "fromCache": {
+2026-01-14T03:18:34.188307648Z         "vehicles": 0,
+2026-01-14T03:18:34.188309718Z         "customers": 0
+2026-01-14T03:18:34.188311868Z       },
+2026-01-14T03:18:34.188313988Z       "pagesQueued": 0,
+2026-01-14T03:18:34.188316118Z       "terminalSwept": false
+2026-01-14T03:18:34.188318278Z     },
+2026-01-14T03:18:34.188320388Z     {
+2026-01-14T03:18:34.188322489Z       "shopId": 32,
+2026-01-14T03:18:34.188324598Z       "tekmetricShopId": 469,
+2026-01-14T03:18:34.188326729Z       "synced": 0,
+2026-01-14T03:18:34.188331949Z       "removed": 0,
+2026-01-14T03:18:34.188334129Z       "fromCache": {
+2026-01-14T03:18:34.188337389Z         "vehicles": 0,
+2026-01-14T03:18:34.188340909Z         "customers": 0
+2026-01-14T03:18:34.188344589Z       },
+2026-01-14T03:18:34.188348239Z       "pagesQueued": 0,
+2026-01-14T03:18:34.188351819Z       "terminalSwept": false
+2026-01-14T03:18:34.188355139Z     },
+2026-01-14T03:18:34.188358369Z     {
+2026-01-14T03:18:34.188361539Z       "shopId": 36,
+2026-01-14T03:18:34.188364989Z       "tekmetricShopId": 470,
+2026-01-14T03:18:34.188368849Z       "synced": 0,
+2026-01-14T03:18:34.188371289Z       "removed": 0,
+2026-01-14T03:18:34.18837337Z       "fromCache": {
+2026-01-14T03:18:34.188375459Z         "vehicles": 0,
+2026-01-14T03:18:34.18837759Z         "customers": 0
+2026-01-14T03:18:34.18837971Z       },
+2026-01-14T03:18:34.188381839Z       "pagesQueued": 0,
+2026-01-14T03:18:34.18838399Z       "terminalSwept": false
+2026-01-14T03:18:34.18838612Z     },
+2026-01-14T03:18:34.18838819Z     {
+2026-01-14T03:18:34.18839027Z       "shopId": 37,
+2026-01-14T03:18:34.18839239Z       "tekmetricShopId": 471,
+2026-01-14T03:18:34.18839453Z       "synced": 0,
+2026-01-14T03:18:34.18839661Z       "removed": 0,
+2026-01-14T03:18:34.1883987Z       "fromCache": {
+2026-01-14T03:18:34.18840079Z         "vehicles": 0,
+2026-01-14T03:18:34.18840294Z         "customers": 0
+2026-01-14T03:18:34.18840504Z       },
+2026-01-14T03:18:34.18840713Z       "pagesQueued": 0,
+2026-01-14T03:18:34.18840921Z       "terminalSwept": false
+2026-01-14T03:18:34.18841132Z     },
+2026-01-14T03:18:34.18841343Z     {
+2026-01-14T03:18:34.1884155Z       "shopId": 54,
+2026-01-14T03:18:34.18841759Z       "tekmetricShopId": 275,
+2026-01-14T03:18:34.18841969Z       "synced": 0,
+2026-01-14T03:18:34.18842175Z       "removed": 0,
+2026-01-14T03:18:34.188429831Z       "fromCache": {
+2026-01-14T03:18:34.188433831Z         "vehicles": 0,
+2026-01-14T03:18:34.188437281Z         "customers": 0
+2026-01-14T03:18:34.188440861Z       },
+2026-01-14T03:18:34.188444161Z       "pagesQueued": 0,
+2026-01-14T03:18:34.188447391Z       "terminalSwept": false
+2026-01-14T03:18:34.188450781Z     },
+2026-01-14T03:18:34.188453931Z     {
+2026-01-14T03:18:34.188457371Z       "shopId": 57,
+2026-01-14T03:18:34.188461061Z       "tekmetricShopId": 11803,
+2026-01-14T03:18:34.188463531Z       "synced": 0,
+2026-01-14T03:18:34.188465611Z       "removed": 0,
+2026-01-14T03:18:34.188467721Z       "fromCache": {
+2026-01-14T03:18:34.188469781Z         "vehicles": 0,
+2026-01-14T03:18:34.188471921Z         "customers": 0
+2026-01-14T03:18:34.188474011Z       },
+2026-01-14T03:18:34.188476141Z       "pagesQueued": 0,
+2026-01-14T03:18:34.188478281Z       "terminalSwept": false
+2026-01-14T03:18:34.188480412Z     }
+2026-01-14T03:18:34.188482521Z   ]
+2026-01-14T03:18:34.188484632Z }
