@@ -280,6 +280,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         const sizeMap: Record<string, { width: string; height: string }> = {
+          '1.5x2.25': { width: '1.5in', height: '2.25in' },
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
           '2x3': { width: '2in', height: '3in' },
@@ -454,6 +455,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         const dataUrl = reader.result as string;
         
         const sizeMap: Record<string, { width: string; height: string }> = {
+          '1.5x2.25': { width: '1.5in', height: '2.25in' },
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
           '2x3': { width: '2in', height: '3in' },

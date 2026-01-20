@@ -56,6 +56,7 @@ interface StickerConfig {
 }
 
 const STICKER_SIZES = [
+  { value: "1.5x2.25", label: "1.5\" x 2.25\" (Zebra)" },
   { value: "2x2", label: "2\" x 2\"" },
   { value: "2x2.5", label: "2\" x 2.5\"" },
   { value: "2x3", label: "2\" x 3\"" },
