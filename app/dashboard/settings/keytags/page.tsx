@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Tag, Loader2, Save, Download, RotateCcw } from "lucide-react";
 
 interface FontStyle {
@@ -81,7 +81,9 @@ export default function KeytagSettingsPage() {
     loadSettings();
   }, []);
 
-  const generatePreview = useCallback(async () => {
+  const previewUrlRef = useRef<string | null>(null);
+
+  const generatePreview = useCallback(async (currentConfig: KeytagConfig) => {
     setPreviewLoading(true);
     try {
       const res = await fetch("/api/keytag/generate", {
@@ -89,16 +91,17 @@ export default function KeytagSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...sampleData,
-          previewConfig: config,
+          previewConfig: currentConfig,
         }),
       });
 
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
+        if (previewUrlRef.current) {
+          URL.revokeObjectURL(previewUrlRef.current);
         }
+        previewUrlRef.current = url;
         setPreviewUrl(url);
       }
     } catch (err) {
@@ -106,12 +109,12 @@ export default function KeytagSettingsPage() {
     } finally {
       setPreviewLoading(false);
     }
-  }, [config]);
+  }, []);
 
   useEffect(() => {
     if (!loading) {
       const debounce = setTimeout(() => {
-        generatePreview();
+        generatePreview(config);
       }, 500);
       return () => clearTimeout(debounce);
     }
@@ -370,14 +373,18 @@ export default function KeytagSettingsPage() {
                 </button>
               </div>
               
-              <div className="bg-gray-100 rounded-lg p-6 flex items-center justify-center min-h-[150px]">
+              <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
                 {previewUrl ? (
-                  <div className="relative">
+                  <div className="relative w-full">
                     <img
                       src={previewUrl}
                       alt="Keytag Preview"
-                      className="rounded shadow-md max-w-full"
-                      style={{ maxHeight: "120px" }}
+                      className="rounded shadow-lg border border-gray-300 w-full"
+                      style={{ 
+                        aspectRatio: "3.5 / 1.125",
+                        objectFit: "contain",
+                        backgroundColor: "#fff"
+                      }}
                     />
                     {previewLoading && (
                       <div className="absolute inset-0 bg-white/50 flex items-center justify-center rounded">
@@ -386,10 +393,14 @@ export default function KeytagSettingsPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center">
+                  <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                   </div>
                 )}
+              </div>
+              
+              <div className="text-center text-xs text-gray-400 mt-2">
+                Actual size: 3½" × 1⅛" (Dymo 30252)
               </div>
 
               <div className="mt-4 text-xs text-gray-500">

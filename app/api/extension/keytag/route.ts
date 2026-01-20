@@ -72,11 +72,11 @@ function generateKeytagHtml(
     ? data.mileage.toLocaleString() 
     : data.mileage;
 
-  const baseFontSize = Math.round(11 * scaleFactor);
+  const baseFontSize = Math.round(10 * scaleFactor);
   const nameFontSize = Math.round(16 * scaleFactor);
-  const vehicleFontSize = Math.round(11 * scaleFactor);
-  const padding = Math.round(16 * scaleFactor);
-  const gap = Math.round(20 * scaleFactor);
+  const vehicleFontSize = Math.round(10 * scaleFactor);
+  const padding = Math.round(12 * scaleFactor);
+  const gap = Math.round(14 * scaleFactor);
 
   return `
     <!DOCTYPE html>
@@ -108,22 +108,22 @@ function generateKeytagHtml(
           padding: ${padding}px;
           display: flex;
           flex-direction: row;
-          align-items: center;
+          align-items: stretch;
         }
         
         .left-section {
           display: flex;
           flex-direction: column;
           justify-content: center;
-          flex: 1;
+          flex: 0.9;
           padding-right: ${gap}px;
+          min-width: 0;
         }
         
         .divider {
-          width: 1px;
-          height: 80%;
+          width: 2px;
           background: ${textColor};
-          opacity: 0.3;
+          flex-shrink: 0;
         }
         
         .right-section {
@@ -131,35 +131,34 @@ function generateKeytagHtml(
           flex-direction: column;
           justify-content: center;
           padding-left: ${gap}px;
-          flex: 1.2;
+          flex: 1.1;
+          min-width: 0;
         }
         
         .customer-name {
           font-size: ${nameFontSize}px;
           font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 1px;
-          padding-bottom: ${Math.round(4 * scaleFactor)}px;
-          border-bottom: 1px solid ${textColor};
-          margin-bottom: ${Math.round(8 * scaleFactor)}px;
+          white-space: nowrap;
+          text-decoration: underline;
+          margin-bottom: ${Math.round(4 * scaleFactor)}px;
         }
         
         .vehicle-info {
           font-size: ${vehicleFontSize}px;
           font-weight: 400;
           text-transform: uppercase;
+          white-space: nowrap;
         }
         
         .info-row {
           font-size: ${baseFontSize}px;
           font-weight: 400;
-          padding-bottom: ${Math.round(3 * scaleFactor)}px;
-          border-bottom: 1px solid ${textColor};
-          margin-bottom: ${Math.round(6 * scaleFactor)}px;
+          white-space: nowrap;
+          margin-bottom: ${Math.round(4 * scaleFactor)}px;
         }
         
         .info-row:last-child {
-          border-bottom: none;
           margin-bottom: 0;
         }
         
