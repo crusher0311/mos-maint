@@ -83,9 +83,20 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
       const valueWeight = el.valueFontWeight || 'normal';
       const valueStyle = el.valueFontStyle || 'normal';
 
+      let valueHtml = escapeHtml(value);
+      if (el.type === 'vin' && el.vinHighlightLast8 && value.length >= 8) {
+        const first = value.slice(0, -8);
+        const last8 = value.slice(-8);
+        const last8Weight = el.vinLast8FontWeight ?? 'bold';
+        const last8Style = el.vinLast8FontStyle ?? 'normal';
+        valueHtml = `<span style="font-weight:${valueWeight};font-style:${valueStyle}">${escapeHtml(first)}</span><span style="font-weight:${last8Weight};font-style:${last8Style}">${escapeHtml(last8)}</span>`;
+      } else {
+        valueHtml = `<span style="font-weight:${valueWeight};font-style:${valueStyle}">${escapeHtml(value)}</span>`;
+      }
+
       const textHtml = el.showLabel
-        ? `<span style="font-weight:${labelWeight};font-style:${labelStyle}">${escapeHtml(el.label)}: </span><span style="font-weight:${valueWeight};font-style:${valueStyle}">${escapeHtml(value)}</span>`
-        : `<span style="font-weight:${el.fontWeight};font-style:${el.fontStyle}">${escapeHtml(value)}</span>`;
+        ? `<span style="font-weight:${labelWeight};font-style:${labelStyle}">${escapeHtml(el.label)}: </span>${valueHtml}`
+        : el.type === 'vin' && el.vinHighlightLast8 ? valueHtml : `<span style="font-weight:${el.fontWeight};font-style:${el.fontStyle}">${escapeHtml(value)}</span>`;
 
       return `
         <div id="${elementId}" class="auto-fit-text" style="

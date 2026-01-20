@@ -16,6 +16,9 @@ export interface DesignerElement {
   labelFontStyle?: 'normal' | 'italic';
   valueFontWeight?: 'normal' | 'bold';
   valueFontStyle?: 'normal' | 'italic';
+  vinHighlightLast8?: boolean;
+  vinLast8FontWeight?: 'normal' | 'bold';
+  vinLast8FontStyle?: 'normal' | 'italic';
 }
 
 export interface DesignerLayout {

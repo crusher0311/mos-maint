@@ -231,6 +231,58 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
         </div>
       )}
 
+      {element.type === 'vin' && (
+        <div className="space-y-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={element.vinHighlightLast8 || false}
+              onChange={(e) => onUpdate({ vinHighlightLast8: e.target.checked })}
+              className="rounded"
+              id="vinHighlight"
+            />
+            <label htmlFor="vinHighlight" className="text-sm text-gray-700 cursor-pointer">
+              Highlight last 8 digits
+            </label>
+          </div>
+          <p className="text-xs text-amber-700">
+            Suppliers often ask for the last 8 characters of the VIN when ordering parts.
+          </p>
+          
+          {element.vinHighlightLast8 && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Last 8 Style</label>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => onUpdate({ 
+                    vinLast8FontWeight: (element.vinLast8FontWeight ?? "bold") === "bold" ? "normal" : "bold" 
+                  })}
+                  className={`flex-1 p-1.5 rounded border text-xs ${
+                    (element.vinLast8FontWeight ?? "bold") === "bold"
+                      ? "bg-amber-100 border-amber-300 text-amber-700"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Bold className="w-3 h-3 mx-auto" />
+                </button>
+                <button
+                  onClick={() => onUpdate({ 
+                    vinLast8FontStyle: (element.vinLast8FontStyle ?? "normal") === "italic" ? "normal" : "italic" 
+                  })}
+                  className={`flex-1 p-1.5 rounded border text-xs ${
+                    (element.vinLast8FontStyle ?? "normal") === "italic"
+                      ? "bg-amber-100 border-amber-300 text-amber-700"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Italic className="w-3 h-3 mx-auto" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="pt-3 border-t">
         <p className="text-xs text-gray-500">
           Preview shows sample data. Actual keytags will display real customer and vehicle information.

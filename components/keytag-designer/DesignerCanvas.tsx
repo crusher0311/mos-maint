@@ -297,7 +297,19 @@ export function DesignerCanvas({
             {element.showLabel ? (
               <>
                 <span style={{ fontWeight: labelWeight, fontStyle: labelStyle }}>{element.label}: </span>
-                <span style={{ fontWeight: valueWeight, fontStyle: valueStyle }}>{value}</span>
+                {element.type === 'vin' && element.vinHighlightLast8 && value.length >= 8 ? (
+                  <>
+                    <span style={{ fontWeight: valueWeight, fontStyle: valueStyle }}>{value.slice(0, -8)}</span>
+                    <span style={{ fontWeight: element.vinLast8FontWeight ?? 'bold', fontStyle: element.vinLast8FontStyle ?? 'normal' }}>{value.slice(-8)}</span>
+                  </>
+                ) : (
+                  <span style={{ fontWeight: valueWeight, fontStyle: valueStyle }}>{value}</span>
+                )}
+              </>
+            ) : element.type === 'vin' && element.vinHighlightLast8 && value.length >= 8 ? (
+              <>
+                <span style={{ fontWeight: element.fontWeight, fontStyle: element.fontStyle }}>{value.slice(0, -8)}</span>
+                <span style={{ fontWeight: element.vinLast8FontWeight ?? 'bold', fontStyle: element.vinLast8FontStyle ?? 'normal' }}>{value.slice(-8)}</span>
               </>
             ) : (
               <span style={{ fontWeight: element.fontWeight, fontStyle: element.fontStyle }}>{value}</span>
