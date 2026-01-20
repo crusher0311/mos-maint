@@ -56,6 +56,7 @@ interface StickerConfig {
 }
 
 const STICKER_SIZES = [
+  { value: "1.5x2.25", label: "1.5\" x 2.25\" (Mono)" },
   { value: "2x2", label: "2\" x 2\"" },
   { value: "2x2.5", label: "2\" x 2.5\"" },
   { value: "2x3", label: "2\" x 3\"" },
@@ -817,8 +818,9 @@ export default function StickerSettingsPage() {
                       alt="Sticker Preview" 
                       className="rounded shadow-md"
                       style={{ 
-                        width: "200px",
-                        height: config.defaultSize === "2x2" ? "200px" : 
+                        width: config.defaultSize === "1.5x2.25" ? "150px" : "200px",
+                        height: config.defaultSize === "1.5x2.25" ? "225px" :
+                                config.defaultSize === "2x2" ? "200px" : 
                                 config.defaultSize === "2x2.5" ? "250px" : 
                                 config.defaultSize === "2x3" ? "300px" : "350px",
                       }}
@@ -833,8 +835,9 @@ export default function StickerSettingsPage() {
                   <div 
                     className="rounded shadow-md bg-white flex items-center justify-center"
                     style={{ 
-                      width: "200px",
-                      height: config.defaultSize === "2x2" ? "200px" : 
+                      width: config.defaultSize === "1.5x2.25" ? "150px" : "200px",
+                      height: config.defaultSize === "1.5x2.25" ? "225px" :
+                              config.defaultSize === "2x2" ? "200px" : 
                               config.defaultSize === "2x2.5" ? "250px" : 
                               config.defaultSize === "2x3" ? "300px" : "350px",
                     }}

@@ -51,7 +51,7 @@ interface StickerConfig {
     serviceLabelColor?: string;
     serviceValueColor?: string;
   };
-  defaultSize?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
+  defaultSize?: "1.5x2.25" | "2x2" | "2x2.5" | "2x3" | "2x3.5";
   appointmentUrl?: string;
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
