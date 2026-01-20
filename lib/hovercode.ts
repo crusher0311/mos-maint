@@ -47,7 +47,7 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
     const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/create/`, {
       method: "POST",
       headers: {
-        Authorization: apiToken,
+        Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -119,7 +119,7 @@ export async function updateHovercodeDestination(
     const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/${hovercodeId}/`, {
       method: "PATCH",
       headers: {
-        Authorization: apiToken,
+        Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
