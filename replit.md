@@ -88,11 +88,23 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Modular Feature Architecture**: Supports à la carte feature toggles.
 *   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration with Plan (maintenance recommendations), Failures (Common Failures Advisor), Lookup (job history search), Canned Jobs, and Sticker (oil change sticker printing), supporting push-to-RO functionality. The Sticker tab allows quick printing with auto-populated mileage from current RO context.
 *   **Keytags Feature**: Prints customer/vehicle info on Dymo 30252 labels (1⅛" x 3½") for key identification while vehicles are in the shop.
-    *   Settings API: `app/api/keytag/settings/route.ts` - GET/POST for shop keytag configuration
-    *   Generation API: `app/api/keytag/generate/route.ts` - Puppeteer-based PNG generation
+    *   **Visual Keytag Designer**: Drag-and-drop layout editor for customizing keytag appearance
+        *   Draggable/resizable text elements for each field (customer name, vehicle, VIN, mileage, RO#)
+        *   Alignment guides that appear when elements align with each other or canvas edges
+        *   Snap-to-grid with configurable grid size (5px, 10px, 20px)
+        *   Undo/redo with keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z)
+        *   Per-element styling: font size (8-36px), bold, italic, text alignment
+        *   Show/hide label prefix option (e.g., "VIN:" vs just the value)
+        *   Color customization for text and background
+        *   Live preview canvas matching Dymo 30252 proportions
+        *   Element bounds validation to prevent overflow
+    *   Data Model: `lib/keytag-designer-types.ts` - DesignerLayout with element positions, sizes, styles
+    *   Components: `components/keytag-designer/` - KeytagDesigner, DesignerCanvas, ElementPanel, ToolbarPanel
+    *   Settings API: `app/api/keytag/settings/route.ts` - GET/POST for shop keytag configuration (supports designerLayout)
+    *   Generation API: `app/api/keytag/generate/route.ts` - Renders elements at custom positions from designer layout
     *   Extension API: `app/api/extension/keytag/route.ts` - Token-authenticated API for Chrome extension
-    *   Settings UI: `app/dashboard/settings/keytags/page.tsx` - Customizable fonts, colors, and live preview
-    *   Display fields: customer name, vehicle info, RO number, mileage
+    *   Settings UI: `app/dashboard/settings/keytags/page.tsx` - Visual designer interface
+    *   Display fields: customer name, vehicle info, VIN, RO number, mileage
     *   Available under Settings > Preferences > Keytags
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations.
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
