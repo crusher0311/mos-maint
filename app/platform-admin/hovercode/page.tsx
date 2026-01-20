@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { QrCode, Save, Loader2, Search, Check, X, RefreshCw } from "lucide-react";
+import { QrCode, Save, Loader2, Search, Check, X, RefreshCw, Trash2 } from "lucide-react";
 
 interface Shop {
   shopId: string | number;
@@ -15,6 +15,7 @@ export default function HovercodePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [savingShopId, setSavingShopId] = useState<string | number | null>(null);
   const [regeneratingShopId, setRegeneratingShopId] = useState<string | number | null>(null);
+  const [clearingShopId, setClearingShopId] = useState<string | number | null>(null);
   const [editingShopId, setEditingShopId] = useState<string | number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -112,6 +113,35 @@ export default function HovercodePage() {
       setMessage({ type: "error", text: "Failed to regenerate QR" });
     } finally {
       setRegeneratingShopId(null);
+    }
+  };
+
+  const clearQR = async (shopId: string | number) => {
+    setClearingShopId(shopId);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/admin/hovercode-qrs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId: String(shopId), action: "clear" }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        setMessage({ type: "success", text: `Cleared QR ID for shop ${shopId}` });
+        setShops((prev) =>
+          prev.map((s) =>
+            s.shopId === shopId ? { ...s, hovercodeQRId: "" } : s
+          )
+        );
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to clear QR" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to clear QR" });
+    } finally {
+      setClearingShopId(null);
     }
   };
 
@@ -253,6 +283,21 @@ export default function HovercodePage() {
                           )}
                           New QR
                         </button>
+                        {shop.hovercodeQRId && (
+                          <button
+                            onClick={() => clearQR(shop.shopId)}
+                            disabled={clearingShopId === shop.shopId}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 disabled:opacity-50"
+                            title="Clear QR ID (for testing)"
+                          >
+                            {clearingShopId === shop.shopId ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                            Clear
+                          </button>
+                        )}
                         <button
                           onClick={() => startEditing(shop)}
                           className="text-sm text-purple-600 hover:text-purple-800 font-medium"

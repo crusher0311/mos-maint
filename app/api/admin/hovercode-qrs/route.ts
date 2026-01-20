@@ -222,7 +222,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { shopId } = body as { shopId: string | number };
+    const { shopId, action } = body as { shopId: string | number; action?: string };
 
     if (!shopId) {
       return NextResponse.json({ error: "shopId required" }, { status: 400 });
@@ -234,6 +234,20 @@ export async function PUT(req: NextRequest) {
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    // Handle clear action
+    if (action === "clear") {
+      await db.collection("shops").updateOne(
+        { shopId: { $in: shopIdVariants } },
+        { $unset: { "stickerConfig.hovercodeQRId": "" } }
+      );
+      console.log(`[HoverCode] Cleared QR ID for shop ${shopId}`);
+      return NextResponse.json({
+        ok: true,
+        shopId: String(shopId),
+        message: "HoverCode QR ID cleared",
+      });
     }
 
     const stickerConfig = shop.stickerConfig || {};
