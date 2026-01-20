@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { QrCode, Save, Loader2, Search, Check, X, RefreshCw, Trash2 } from "lucide-react";
+import { QrCode, Save, Loader2, Search, Check, X } from "lucide-react";
 
 interface Shop {
   shopId: string | number;
   name: string;
-  locationIdentifier?: string | null;
   hovercodeQRId?: string;
 }
 
@@ -15,8 +14,6 @@ export default function HovercodePage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [savingShopId, setSavingShopId] = useState<string | number | null>(null);
-  const [regeneratingShopId, setRegeneratingShopId] = useState<string | number | null>(null);
-  const [clearingShopId, setClearingShopId] = useState<string | number | null>(null);
   const [editingShopId, setEditingShopId] = useState<string | number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -33,7 +30,6 @@ export default function HovercodePage() {
         const shopsWithQR = data.shops.map((shop: any) => ({
           shopId: shop.shopId,
           name: shop.name || `Shop ${shop.shopId}`,
-          locationIdentifier: shop.locationIdentifier || null,
           hovercodeQRId: shop.stickerConfig?.hovercodeQRId || "",
         }));
         setShops(shopsWithQR);
@@ -89,69 +85,10 @@ export default function HovercodePage() {
     }
   };
 
-  const regenerateQR = async (shopId: string | number) => {
-    setRegeneratingShopId(shopId);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/admin/hovercode-qrs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shopId: String(shopId) }),
-      });
-
-      const data = await res.json();
-      if (data.ok) {
-        setMessage({ type: "success", text: `Created new QR (${data.hovercodeId}) for shop ${shopId}` });
-        setShops((prev) =>
-          prev.map((s) =>
-            s.shopId === shopId ? { ...s, hovercodeQRId: data.hovercodeId } : s
-          )
-        );
-      } else {
-        setMessage({ type: "error", text: data.error || "Failed to regenerate QR" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to regenerate QR" });
-    } finally {
-      setRegeneratingShopId(null);
-    }
-  };
-
-  const clearQR = async (shopId: string | number) => {
-    setClearingShopId(shopId);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/admin/hovercode-qrs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shopId: String(shopId), action: "clear" }),
-      });
-
-      const data = await res.json();
-      if (data.ok) {
-        setMessage({ type: "success", text: `Cleared QR ID for shop ${shopId}` });
-        setShops((prev) =>
-          prev.map((s) =>
-            s.shopId === shopId ? { ...s, hovercodeQRId: "" } : s
-          )
-        );
-      } else {
-        setMessage({ type: "error", text: data.error || "Failed to clear QR" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to clear QR" });
-    } finally {
-      setClearingShopId(null);
-    }
-  };
-
   const filteredShops = shops.filter(
     (shop) =>
       String(shop.shopId).includes(searchTerm) ||
       shop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (shop.hovercodeQRId && shop.hovercodeQRId.includes(searchTerm))
   );
 
@@ -228,12 +165,7 @@ export default function HovercodePage() {
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">
                     {shop.shopId}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm text-gray-900 font-medium">{shop.name}</div>
-                    {shop.locationIdentifier && (
-                      <div className="text-xs text-gray-500">{shop.locationIdentifier}</div>
-                    )}
-                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{shop.name}</td>
                   <td className="px-4 py-3">
                     {editingShopId === shop.shopId ? (
                       <input
@@ -277,42 +209,12 @@ export default function HovercodePage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => regenerateQR(shop.shopId)}
-                          disabled={regeneratingShopId === shop.shopId}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100 disabled:opacity-50"
-                          title="Create new QR with logo"
-                        >
-                          {regeneratingShopId === shop.shopId ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-3 h-3" />
-                          )}
-                          New QR
-                        </button>
-                        {shop.hovercodeQRId && (
-                          <button
-                            onClick={() => clearQR(shop.shopId)}
-                            disabled={clearingShopId === shop.shopId}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 disabled:opacity-50"
-                            title="Clear QR ID (for testing)"
-                          >
-                            {clearingShopId === shop.shopId ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3 h-3" />
-                            )}
-                            Clear
-                          </button>
-                        )}
-                        <button
-                          onClick={() => startEditing(shop)}
-                          className="text-sm text-purple-600 hover:text-purple-800 font-medium"
-                        >
-                          {shop.hovercodeQRId ? "Edit" : "Set ID"}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => startEditing(shop)}
+                        className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                      >
+                        {shop.hovercodeQRId ? "Edit" : "Set QR ID"}
+                      </button>
                     )}
                   </td>
                 </tr>

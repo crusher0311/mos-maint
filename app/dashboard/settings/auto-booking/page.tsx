@@ -22,65 +22,22 @@ interface Holiday {
   name: string;
 }
 
-interface HolidayDefinition {
-  id: string;
-  name: string;
-  enabled: boolean;
-}
-
-interface UpcomingHoliday {
-  id: string;
-  name: string;
-  date: string;
-  isObserved: boolean;
-  year: number;
-}
-
-interface HolidayRule {
-  type: "fixed" | "nth_weekday" | "last_weekday" | "day_after" | "day_before";
-  month?: number;
-  day?: number;
-  weekday?: number;
-  n?: number;
-  baseHolidayId?: string;
-  daysAfter?: number;
-  daysBefore?: number;
-}
-
-interface CustomRecurringHoliday {
-  id: string;
-  name: string;
-  rule: HolidayRule;
-}
-
-interface PresetHolidayOption {
-  id: string;
-  name: string;
-  description: string;
-}
-
 interface AutoBookingSettings {
   enabled: boolean;
   leadTimeDays: number;
   blockSaturday: boolean;
   blockSunday: boolean;
   blockHolidays: boolean;
-  enabledHolidays: Record<string, boolean>;
+  useDefaultHolidays: boolean;
   customHolidays: Holiday[];
-  customRecurringHolidays: CustomRecurringHoliday[];
   businessHours: {
     start: string;
     end: string;
   };
-  latestBookingTime: string;
   maxBookingsPerDay: number;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
-  reminderTime: string;
-  reminderDays: number[];
-  skipReminderHolidays: boolean;
-  queueExpiryDays: number;
 }
 
 export default function AutoBookingSettingsPage() {
@@ -89,14 +46,11 @@ export default function AutoBookingSettingsPage() {
   const [available, setAvailable] = useState(false);
   const [unavailableReason, setUnavailableReason] = useState("");
   const [settings, setSettings] = useState<AutoBookingSettings | null>(null);
-  const [holidayDefinitions, setHolidayDefinitions] = useState<HolidayDefinition[]>([]);
-  const [upcomingHolidays, setUpcomingHolidays] = useState<UpcomingHoliday[]>([]);
-  const [presetOptions, setPresetOptions] = useState<PresetHolidayOption[]>([]);
+  const [defaultHolidays, setDefaultHolidays] = useState<Holiday[]>([]);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [newHolidayDate, setNewHolidayDate] = useState("");
   const [newHolidayName, setNewHolidayName] = useState("");
   const [showHolidays, setShowHolidays] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState("");
 
   useEffect(() => {
     fetchSettings();
@@ -110,9 +64,7 @@ export default function AutoBookingSettingsPage() {
       if (data.available) {
         setAvailable(true);
         setSettings(data.settings);
-        setHolidayDefinitions(data.holidayDefinitions || []);
-        setUpcomingHolidays(data.upcomingHolidays || []);
-        setPresetOptions(data.presetHolidayOptions || []);
+        setDefaultHolidays(data.defaultHolidays || []);
       } else {
         setAvailable(false);
         setUnavailableReason(data.reason);
@@ -122,55 +74,6 @@ export default function AutoBookingSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function toggleHoliday(holidayId: string, enabled: boolean) {
-    if (!settings) return;
-    setSettings({
-      ...settings,
-      enabledHolidays: {
-        ...settings.enabledHolidays,
-        [holidayId]: enabled,
-      },
-    });
-  }
-
-  function addRecurringHoliday() {
-    if (!settings || !selectedPreset) return;
-    
-    const preset = presetOptions.find(p => p.id === selectedPreset);
-    if (!preset) return;
-    
-    if (settings.customRecurringHolidays?.some(h => h.id === selectedPreset)) {
-      return;
-    }
-    
-    const presetRules: Record<string, HolidayRule> = {
-      black_friday: { type: "day_after", baseHolidayId: "thanksgiving", daysAfter: 1 },
-      day_after_christmas: { type: "day_after", baseHolidayId: "christmas", daysAfter: 1 },
-      christmas_eve: { type: "day_before", baseHolidayId: "christmas", daysBefore: 1 },
-      new_years_eve: { type: "fixed", month: 12, day: 31 },
-    };
-    
-    const rule = presetRules[selectedPreset];
-    if (!rule) return;
-    
-    setSettings({
-      ...settings,
-      customRecurringHolidays: [
-        ...(settings.customRecurringHolidays || []),
-        { id: selectedPreset, name: preset.name, rule },
-      ],
-    });
-    setSelectedPreset("");
-  }
-
-  function removeRecurringHoliday(id: string) {
-    if (!settings) return;
-    setSettings({
-      ...settings,
-      customRecurringHolidays: (settings.customRecurringHolidays || []).filter(h => h.id !== id),
-    });
   }
 
   async function saveSettings() {
@@ -426,38 +329,21 @@ export default function AutoBookingSettingsPage() {
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                No Later Than (optional)
-              </label>
-              <input
-                type="time"
-                value={settings.latestBookingTime || ""}
-                onChange={(e) => setSettings({ ...settings, latestBookingTime: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Don't schedule appointments after this time (e.g., 10:00 AM). Leave empty for no limit.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Maximum Bookings Per Day
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={settings.maxBookingsPerDay}
-                onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Limits auto-booked appointments per day (doesn't affect manual bookings)
-              </p>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Maximum Bookings Per Day
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={settings.maxBookingsPerDay}
+              onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
+              className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Limits auto-booked appointments per day (doesn't affect manual bookings)
+            </p>
           </div>
         </div>
 
@@ -534,103 +420,25 @@ export default function AutoBookingSettingsPage() {
 
           {showHolidays && (
             <>
-              {settings.blockHolidays && (
+              {settings.blockHolidays && settings.useDefaultHolidays && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">US Federal Holidays</h4>
-                  <p className="text-xs text-gray-500 mb-3">Uncheck holidays your shop stays open for</p>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                    {holidayDefinitions.map((h) => (
-                      <label 
-                        key={h.id} 
-                        className="flex items-center gap-3 cursor-pointer py-1 hover:bg-gray-100 px-2 rounded"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={settings.enabledHolidays[h.id] !== false}
-                          onChange={(e) => toggleHoliday(h.id, e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        />
-                        <span className={`text-sm ${settings.enabledHolidays[h.id] !== false ? "text-gray-900" : "text-gray-400 line-through"}`}>
-                          {h.name}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  
-                  {upcomingHolidays.length > 0 && (
-                    <div className="mt-4">
-                      <h5 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Upcoming Blocked Dates</h5>
-                      <div className="text-sm text-gray-600 space-y-1">
-                        {upcomingHolidays
-                          .filter(h => settings.enabledHolidays[h.id] !== false)
-                          .slice(0, 6)
-                          .map((h, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span>{h.name}</span>
-                              <span className="text-gray-400">{h.date}</span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {settings.blockHolidays && presetOptions.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Recurring Custom Holidays</h4>
-                  <p className="text-xs text-gray-500 mb-3">Add holidays that automatically update each year (like Black Friday)</p>
-                  
-                  <div className="flex gap-2 mb-3">
-                    <select
-                      value={selectedPreset}
-                      onChange={(e) => setSelectedPreset(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select a recurring holiday...</option>
-                      {presetOptions
-                        .filter(p => !settings.customRecurringHolidays?.some(h => h.id === p.id))
-                        .map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} - {p.description}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      onClick={addRecurringHoliday}
-                      disabled={!selectedPreset}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {(settings.customRecurringHolidays?.length || 0) > 0 ? (
-                    <div className="space-y-2">
-                      {settings.customRecurringHolidays.map((h) => (
-                        <div key={h.id} className="flex items-center justify-between p-2 bg-purple-50 rounded-lg">
-                          <div className="text-sm">
-                            <span className="font-medium text-purple-900">{h.name}</span>
-                            <span className="text-purple-500 ml-2 text-xs">(updates yearly)</span>
-                          </div>
-                          <button
-                            onClick={() => removeRecurringHoliday(h.id)}
-                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Default US Holidays</h4>
+                  <div className="bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <div className="grid gap-1 text-sm">
+                      {defaultHolidays.map((h, i) => (
+                        <div key={i} className="flex justify-between text-gray-600">
+                          <span>{h.name}</span>
+                          <span className="text-gray-400">{h.date}</span>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">No recurring custom holidays added</p>
-                  )}
+                  </div>
                 </div>
               )}
 
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">One-Time Blocked Dates</h4>
-                <p className="text-xs text-gray-500 mb-3">Add specific dates when you're closed (doesn't repeat yearly)</p>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Custom Blocked Dates</h4>
+                <p className="text-xs text-gray-500 mb-3">Add shop-specific dates when you're closed</p>
                 
                 <div className="flex gap-2 mb-3">
                   <input
@@ -673,110 +481,11 @@ export default function AutoBookingSettingsPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 italic">No one-time blocked dates</p>
+                  <p className="text-sm text-gray-400 italic">No custom blocked dates</p>
                 )}
               </div>
             </>
           )}
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-          <div className="flex items-center gap-2">
-            <Bell className="w-5 h-5 text-gray-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Email Reminders</h2>
-          </div>
-          <p className="text-sm text-gray-600">
-            Get daily email reminders about pending bookings that need your review.
-          </p>
-
-          <div className="grid sm:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Send Reminder At
-              </label>
-              <input
-                type="time"
-                value={settings.reminderTime || "08:00"}
-                onChange={(e) => setSettings({ ...settings, reminderTime: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Time of day to send reminder emails (in your timezone)
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Queue Expiry (Days)
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={settings.queueExpiryDays || 14}
-                onChange={(e) => setSettings({ ...settings, queueExpiryDays: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Pending bookings expire and disappear after this many days
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Send Reminders On
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { day: 0, label: "Sun" },
-                { day: 1, label: "Mon" },
-                { day: 2, label: "Tue" },
-                { day: 3, label: "Wed" },
-                { day: 4, label: "Thu" },
-                { day: 5, label: "Fri" },
-                { day: 6, label: "Sat" }
-              ].map(({ day, label }) => {
-                const isSelected = (settings.reminderDays || [1, 2, 3, 4, 5]).includes(day);
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => {
-                      const current = settings.reminderDays || [1, 2, 3, 4, 5];
-                      const updated = isSelected
-                        ? current.filter(d => d !== day)
-                        : [...current, day].sort();
-                      setSettings({ ...settings, reminderDays: updated });
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      isSelected
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between py-3 border-t border-gray-100">
-            <div>
-              <h4 className="font-medium text-gray-900">Skip Reminders on Holidays</h4>
-              <p className="text-sm text-gray-500">Don't send reminder emails on blocked holidays</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.skipReminderHolidays ?? true}
-                onChange={(e) => setSettings({ ...settings, skipReminderHolidays: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-4">

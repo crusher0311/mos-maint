@@ -12,8 +12,8 @@ import {
   Settings,
   QrCode,
   Activity,
-  X,
-  Server
+  CreditCard,
+  X
 } from "lucide-react";
 
 interface PlatformAdminSidebarProps {
@@ -56,14 +56,14 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       icon: <DollarSign className="w-5 h-5" />
     },
     {
+      name: "Billing",
+      href: "/platform-admin/billing",
+      icon: <CreditCard className="w-5 h-5" />
+    },
+    {
       name: "API Traffic",
       href: "/platform-admin/api-usage",
       icon: <Activity className="w-5 h-5" />
-    },
-    {
-      name: "Render Logs",
-      href: "/platform-admin/render",
-      icon: <Server className="w-5 h-5" />
     },
     {
       name: "HoverCode QRs",

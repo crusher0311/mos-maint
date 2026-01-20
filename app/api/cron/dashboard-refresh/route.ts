@@ -1,8 +1,4 @@
-// DISABLED: This cron job only logs stats and doesn't perform any essential function.
-// The dashboard fetches fresh data on each request, so no refresh is needed.
-// Kept for reference in case monitoring is needed in the future.
-
-/*
+// app/api/cron/dashboard-refresh/route.ts
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 
@@ -56,15 +52,4 @@ export async function GET(request: Request) {
 // Allow POST as well for manual triggers
 export async function POST(request: Request) {
   return GET(request);
-}
-*/
-
-import { NextResponse } from "next/server";
-
-export async function GET() {
-  return NextResponse.json({ disabled: true, message: "This endpoint is disabled" });
-}
-
-export async function POST() {
-  return NextResponse.json({ disabled: true, message: "This endpoint is disabled" });
 }

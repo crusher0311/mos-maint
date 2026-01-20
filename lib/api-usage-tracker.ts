@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
-export type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode' | 'render';
+export type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode';
 
 interface ApiUsageRecord {
   timestamp: Date;
@@ -73,11 +73,6 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
   },
   hovercode: { 
     name: 'HoverCode',
-    warningThreshold: 0.75,
-    criticalThreshold: 0.85
-  },
-  render: { 
-    name: 'Render',
     warningThreshold: 0.75,
     criticalThreshold: 0.85
   }

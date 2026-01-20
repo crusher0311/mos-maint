@@ -4,12 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { Plus, Loader2, Check, AlertCircle, ChevronDown, ChevronUp, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
 import { AddToROButton } from "./AddToROButton";
 
-type MatchFactor = {
-  label: string;
-  matched: boolean | null;
-  detail?: string;
-};
-
 type HistoricalJob = {
   _id: string;
   job: {
@@ -37,7 +31,6 @@ type HistoricalJob = {
   matchScore?: number;
   matchBand?: "exact" | "likely" | "possible" | "poor";
   matchBandLabel?: string;
-  matchFactors?: MatchFactor[];
 };
 
 type CannedJobOption = {
@@ -376,7 +369,7 @@ export function AddToROWithHistory({
                       <div className="px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <div className="flex items-center gap-2 mb-1">
                               <span
                                 className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${getBandColor(
                                   job.matchBand
@@ -388,26 +381,6 @@ export function AddToROWithHistory({
                                 <span className="text-[10px] text-gray-400">
                                   {job.matchScore}%
                                 </span>
-                              )}
-                              {job.matchFactors && job.matchFactors.length > 0 && (
-                                <div className="flex items-center gap-1 flex-wrap">
-                                  {job.matchFactors.map((factor, idx) => (
-                                    <span
-                                      key={idx}
-                                      className={`text-[9px] px-1 py-0.5 rounded ${
-                                        factor.matched === true
-                                          ? "bg-green-50 text-green-600"
-                                          : factor.matched === false
-                                          ? "bg-red-50 text-red-600"
-                                          : "bg-gray-50 text-gray-500"
-                                      }`}
-                                      title={factor.detail || undefined}
-                                    >
-                                      {factor.matched === true ? "✓" : factor.matched === false ? "✗" : "?"} {factor.label}
-                                      {factor.detail && factor.matched === false && ` (${factor.detail})`}
-                                    </span>
-                                  ))}
-                                </div>
                               )}
                             </div>
                             <p className="text-sm font-medium text-gray-900">

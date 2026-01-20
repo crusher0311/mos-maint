@@ -1,5 +1,4 @@
 import { getDb } from "@/lib/mongo";
-import { getBlockedHolidayDates, type CustomRecurringHoliday } from "./holidays";
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -7,23 +6,24 @@ export interface AutoBookingSettings {
   blockSaturday: boolean;
   blockSunday: boolean;
   blockHolidays: boolean;
-  enabledHolidays: Record<string, boolean>;
+  useDefaultHolidays: boolean;
   customHolidays: Array<{ date: string; name: string }>;
-  customRecurringHolidays: CustomRecurringHoliday[];
   businessHours: {
     start: string;
     end: string;
   };
-  latestBookingTime?: string;
   maxBookingsPerDay: number;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
-  reminderTime?: string;
-  reminderDays?: number[];
-  skipReminderHolidays?: boolean;
-  queueExpiryDays?: number;
 }
+
+const US_HOLIDAYS = new Set([
+  "2025-01-01", "2025-01-20", "2025-02-17", "2025-05-26", "2025-07-04",
+  "2025-09-01", "2025-10-13", "2025-11-11", "2025-11-27", "2025-12-25",
+  "2026-01-01", "2026-01-19", "2026-02-16", "2026-05-25", "2026-07-03",
+  "2026-07-04", "2026-09-07", "2026-10-12", "2026-11-11", "2026-11-26", "2026-12-25",
+]);
 
 export interface BookingSlot {
   date: string;
@@ -58,15 +58,11 @@ function isWeekend(date: Date, settings: AutoBookingSettings): boolean {
 function isHoliday(dateStr: string, settings: AutoBookingSettings): boolean {
   if (!settings.blockHolidays) return false;
   
-  const blockedDates = getBlockedHolidayDates(
-    settings.enabledHolidays,
-    settings.customRecurringHolidays
-  );
-  if (blockedDates.has(dateStr)) {
+  if (settings.useDefaultHolidays && US_HOLIDAYS.has(dateStr)) {
     return true;
   }
   
-  if (settings.customHolidays?.some(h => h.date === dateStr)) {
+  if (settings.customHolidays.some(h => h.date === dateStr)) {
     return true;
   }
   
@@ -74,37 +70,19 @@ function isHoliday(dateStr: string, settings: AutoBookingSettings): boolean {
 }
 
 function getPreferredTime(settings: AutoBookingSettings): string {
-  const [startHour, startMin = 0] = settings.businessHours.start.split(":").map(Number);
+  const [startHour] = settings.businessHours.start.split(":").map(Number);
   const [endHour] = settings.businessHours.end.split(":").map(Number);
-  
-  let preferredTime: string;
   
   switch (settings.preferredTimeSlot) {
     case "morning":
-      preferredTime = settings.businessHours.start;
-      break;
+      return settings.businessHours.start;
     case "afternoon":
       const afternoonHour = Math.max(12, Math.floor((startHour + endHour) / 2));
-      preferredTime = `${afternoonHour.toString().padStart(2, "0")}:00`;
-      break;
+      return `${afternoonHour.toString().padStart(2, "0")}:00`;
     case "any":
     default:
-      preferredTime = settings.businessHours.start;
+      return settings.businessHours.start;
   }
-  
-  if (settings.latestBookingTime) {
-    const [latestHour, latestMin = 0] = settings.latestBookingTime.split(":").map(Number);
-    const [prefHour, prefMin = 0] = preferredTime.split(":").map(Number);
-    
-    const latestMinutes = latestHour * 60 + latestMin;
-    const prefMinutes = prefHour * 60 + prefMin;
-    
-    if (prefMinutes > latestMinutes) {
-      preferredTime = settings.latestBookingTime;
-    }
-  }
-  
-  return preferredTime;
 }
 
 export async function getAutoBookingSettings(shopId: number): Promise<AutoBookingSettings | null> {
@@ -209,11 +187,10 @@ export interface QueuedBooking {
   serviceMileage?: number;
   scheduledDate: string;
   scheduledTime: string;
-  status: "pending" | "confirmed" | "sent" | "failed" | "cancelled" | "expired";
+  status: "pending" | "confirmed" | "sent" | "failed" | "cancelled";
   confirmationMode: "auto" | "review";
   stickerGeneratedAt: Date;
   createdAt: Date;
-  expiresAt?: Date;
   confirmedAt?: Date;
   sentAt?: Date;
   failedAt?: Date;
@@ -225,22 +202,16 @@ export interface QueuedBooking {
 export async function queueBooking(
   shopId: number,
   settings: AutoBookingSettings,
-  booking: Omit<QueuedBooking, "shopId" | "status" | "confirmationMode" | "createdAt" | "expiresAt">
+  booking: Omit<QueuedBooking, "shopId" | "status" | "confirmationMode" | "createdAt">
 ): Promise<{ success: boolean; bookingId?: string; error?: string }> {
   const db = await getDb();
-  
-  const createdAt = new Date();
-  const expiryDays = settings.queueExpiryDays || 14;
-  const expiresAt = new Date(createdAt);
-  expiresAt.setDate(expiresAt.getDate() + expiryDays);
   
   const queuedBooking: QueuedBooking = {
     ...booking,
     shopId,
     status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
     confirmationMode: settings.confirmationMode,
-    createdAt,
-    expiresAt,
+    createdAt: new Date(),
   };
   
   const result = await db.collection("auto_booking_queue").insertOne(queuedBooking);
@@ -253,24 +224,13 @@ export async function queueBooking(
 
 export async function getQueuedBookings(
   shopId: number,
-  status?: string | string[],
-  includeExpired: boolean = false
+  status?: string | string[]
 ): Promise<QueuedBooking[]> {
   const db = await getDb();
   
   const query: any = { shopId };
   if (status) {
     query.status = Array.isArray(status) ? { $in: status } : status;
-  }
-  
-  if (!includeExpired) {
-    query.$or = [
-      { expiresAt: { $exists: false } },
-      { expiresAt: { $gt: new Date() } }
-    ];
-    if (!query.status || (Array.isArray(query.status.$in) && !query.status.$in.includes("expired"))) {
-      query.status = query.status || { $nin: ["expired"] };
-    }
   }
   
   const bookings = await db
@@ -281,26 +241,6 @@ export async function getQueuedBookings(
     .toArray();
   
   return bookings as unknown as QueuedBooking[];
-}
-
-export async function markExpiredBookings(shopId?: number): Promise<number> {
-  const db = await getDb();
-  
-  const query: any = {
-    status: { $in: ["pending", "confirmed"] },
-    expiresAt: { $lt: new Date() }
-  };
-  
-  if (shopId) {
-    query.shopId = shopId;
-  }
-  
-  const result = await db.collection("auto_booking_queue").updateMany(
-    query,
-    { $set: { status: "expired" } }
-  );
-  
-  return result.modifiedCount;
 }
 
 export async function confirmBooking(bookingId: string): Promise<boolean> {

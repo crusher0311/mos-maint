@@ -1,162 +1,142 @@
 #!/usr/bin/env npx tsx
-// Protractor Callback-Driven Sync Worker
-// Processes callbacks frequently, full sync less often
+// Protractor Sync Worker - runs continuously to sync recent work orders
 // Usage: npx tsx scripts/protractor-sync-worker.ts
 
 export {};
 
-const CALLBACK_SYNC_INTERVAL_MS = 5 * 1000; // 5 seconds - process pending callbacks
-const FULL_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes - full reconciliation
+const BASE_SYNC_INTERVAL_MS = 10 * 1000; // 10 seconds
+const MAX_SYNC_INTERVAL_MS = 120 * 1000; // 2 minutes max backoff
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 5000;
 const RATE_LIMIT_BACKOFF_MS = 60000;
 
-function getApiUrl(endpoint: string): string {
+// Determine API URL based on environment
+function getApiUrl(): string {
+  // When running inside combined script or locally, always use localhost
+  // This avoids health check interference on cloud platforms
   const port = process.env.PORT || 5000;
   const useLocalhost = process.env.USE_LOCALHOST_API === 'true' || 
                        (!process.env.PRODUCTION_URL && !process.env.REPLIT_DEV_DOMAIN);
   
   if (useLocalhost || process.env.COMBINED_SCRIPT === 'true') {
-    return `http://localhost:${port}${endpoint}`;
+    return `http://localhost:${port}/api/cron/protractor-sync`;
   }
+  // Production URL for external hosting (when running as separate service)
   if (process.env.PRODUCTION_URL) {
-    return `${process.env.PRODUCTION_URL}${endpoint}`;
+    return `${process.env.PRODUCTION_URL}/api/cron/protractor-sync`;
   }
+  // Replit dev domain
   if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}${endpoint}`;
+    return `https://${process.env.REPLIT_DEV_DOMAIN}/api/cron/protractor-sync`;
   }
-  return `http://localhost:${port}${endpoint}`;
+  return `http://localhost:${port}/api/cron/protractor-sync`;
 }
 
-const CALLBACK_SYNC_URL = getApiUrl('/api/cron/protractor-callback-sync');
-const FULL_SYNC_URL = getApiUrl('/api/cron/protractor-sync');
+const API_URL = getApiUrl();
 
 let isRunning = false;
 let consecutiveFailures = 0;
-let totalCallbackSyncs = 0;
-let totalFullSyncs = 0;
-let successfulCallbackSyncs = 0;
-let successfulFullSyncs = 0;
-let lastFullSyncTime = 0;
+let totalSyncs = 0;
+let successfulSyncs = 0;
+let lastSyncDurationMs = 0;
 
-async function runCallbackSync(): Promise<{ processed: number }> {
-  try {
-    const res = await fetch(CALLBACK_SYNC_URL, {
-      headers: {
-        'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`
-      }
-    });
-    
-    if (res.status === 429) {
-      console.log(`[Callback Sync] Rate limited`);
-      return { processed: 0 };
-    }
-    
-    const text = await res.text();
-    if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
-      return { processed: 0 };
-    }
-    
-    const data = JSON.parse(text);
-    
-    if (res.ok && data.processed > 0) {
-      console.log(`[Callback Sync] Processed ${data.processed} items (${data.successful} successful) in ${data.duration}`);
-      successfulCallbackSyncs++;
-    }
-    
-    totalCallbackSyncs++;
-    return { processed: data.processed || 0 };
-  } catch (err: any) {
-    console.error(`[Callback Sync] Error:`, err.message);
-    return { processed: 0 };
-  }
+function getAdaptiveInterval(): number {
+  if (consecutiveFailures === 0) return BASE_SYNC_INTERVAL_MS;
+  const backoffMultiplier = Math.min(Math.pow(2, consecutiveFailures), 12);
+  return Math.min(BASE_SYNC_INTERVAL_MS * backoffMultiplier, MAX_SYNC_INTERVAL_MS);
 }
 
-async function runFullSync(): Promise<void> {
+async function runSync(): Promise<void> {
+  if (isRunning) {
+    console.log(`[${new Date().toISOString()}] Sync already in progress, skipping...`);
+    return;
+  }
+  
+  isRunning = true;
+  const startTime = Date.now();
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] Running full Protractor sync...`);
+  console.log(`[${timestamp}] Running Protractor sync...`);
+  
+  let lastError: Error | null = null;
+  let success = false;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await fetch(FULL_SYNC_URL, {
+      const res = await fetch(API_URL, {
         headers: {
           'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`
         }
       });
       
       if (res.status === 429) {
-        console.log(`[${timestamp}] Rate limited. Waiting ${RATE_LIMIT_BACKOFF_MS / 1000}s...`);
+        console.log(`[${timestamp}] Rate limited. Waiting ${RATE_LIMIT_BACKOFF_MS / 1000}s before retry...`);
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_BACKOFF_MS));
         continue;
       }
       
       const text = await res.text();
+      
       if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
-        console.log(`[${timestamp}] Server not ready`);
+        console.log(`[${timestamp}] Server not ready (HTML response). Will retry next interval.`);
         break;
       }
       
       const data = JSON.parse(text);
       
       if (res.ok) {
-        console.log(`[${timestamp}] Full sync complete in ${data.duration}:`, 
-          data.shops?.map((s: any) => `shop ${s.shopId}: ${s.synced} synced`).join(', ') || 'no data');
+        console.log(`[${timestamp}] Sync complete:`, JSON.stringify(data, null, 2));
         consecutiveFailures = 0;
-        successfulFullSyncs++;
+        success = true;
+        successfulSyncs++;
       } else {
-        console.error(`[${timestamp}] Full sync failed:`, data.error);
+        console.error(`[${timestamp}] Sync failed:`, data.error);
         consecutiveFailures++;
       }
       break;
       
     } catch (err: any) {
+      lastError = err;
       console.error(`[${timestamp}] Attempt ${attempt}/${MAX_RETRIES} failed:`, err.message);
       
       if (attempt < MAX_RETRIES) {
         const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
+        console.log(`[${timestamp}] Retrying in ${backoff / 1000}s...`);
         await new Promise(resolve => setTimeout(resolve, backoff));
       }
     }
   }
   
-  totalFullSyncs++;
-  lastFullSyncTime = Date.now();
+  totalSyncs++;
+  lastSyncDurationMs = Date.now() - startTime;
+  
+  if (lastError && consecutiveFailures >= MAX_RETRIES) {
+    console.error(`[${timestamp}] All retries exhausted. Consecutive failures: ${consecutiveFailures}`);
+  }
+  
+  if (totalSyncs % 10 === 0) {
+    const successRate = ((successfulSyncs / totalSyncs) * 100).toFixed(1);
+    console.log(`[${timestamp}] Stats: ${successfulSyncs}/${totalSyncs} successful (${successRate}%), last duration: ${lastSyncDurationMs}ms`);
+  }
+  
+  isRunning = false;
 }
 
 async function main(): Promise<void> {
-  console.log('Protractor Callback-Driven Sync Worker started');
-  console.log(`Callback sync interval: ${CALLBACK_SYNC_INTERVAL_MS / 1000} seconds`);
-  console.log(`Full sync interval: ${FULL_SYNC_INTERVAL_MS / 1000 / 60} minutes`);
-  console.log(`Callback sync URL: ${CALLBACK_SYNC_URL}`);
-  console.log(`Full sync URL: ${FULL_SYNC_URL}`);
+  console.log('Protractor Sync Worker started');
+  console.log(`Base sync interval: ${BASE_SYNC_INTERVAL_MS / 1000} seconds`);
+  console.log(`Max retries: ${MAX_RETRIES}`);
+  console.log(`API URL: ${API_URL}`);
   console.log('');
   
-  // Wait for server to start
-  await new Promise(resolve => setTimeout(resolve, 15000));
-  
-  // Run initial full sync
-  await runFullSync();
+  await new Promise(resolve => setTimeout(resolve, 10000));
   
   while (true) {
-    // Check if full sync is due
-    const timeSinceFullSync = Date.now() - lastFullSyncTime;
-    if (timeSinceFullSync >= FULL_SYNC_INTERVAL_MS) {
-      await runFullSync();
+    await runSync();
+    const interval = getAdaptiveInterval();
+    if (interval !== BASE_SYNC_INTERVAL_MS) {
+      console.log(`[${new Date().toISOString()}] Adaptive backoff: waiting ${interval / 1000}s (${consecutiveFailures} consecutive failures)`);
     }
-    
-    // Process pending callbacks
-    if (!isRunning) {
-      isRunning = true;
-      await runCallbackSync();
-      isRunning = false;
-    }
-    
-    // Log stats periodically
-    if ((totalCallbackSyncs + totalFullSyncs) % 50 === 0 && totalCallbackSyncs > 0) {
-      console.log(`[Stats] Callback syncs: ${successfulCallbackSyncs}/${totalCallbackSyncs}, Full syncs: ${successfulFullSyncs}/${totalFullSyncs}`);
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, CALLBACK_SYNC_INTERVAL_MS));
+    await new Promise(resolve => setTimeout(resolve, interval));
   }
 }
 

@@ -5,7 +5,6 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 import { FEATURES } from "@/lib/features";
-import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
@@ -36,25 +35,9 @@ export async function GET() {
     icon: f.icon,
   }));
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ 
-    shopId: { $in: [shopId, String(shopId)] }
-  });
-  
-  const isStandalone = !shop?.protractor?.configured && 
-                       !shop?.tekmetric?.configured && 
-                       !shop?.autoflow?.shopId;
-  
-  const preferences = {
-    allowManualClose: shop?.preferences?.allowManualClose ?? isStandalone,
-    allowManualVehicleEntry: shop?.preferences?.allowManualVehicleEntry ?? isStandalone,
-  };
-
   return NextResponse.json({
     ok: true,
     enabledFeatures,
     enabledFeatureIds,
-    preferences,
-    isStandalone,
   });
 }

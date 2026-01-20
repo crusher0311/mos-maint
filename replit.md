@@ -1,7 +1,7 @@
 # MOS Maintenance MVP
 
 ## Overview
-This Next.js-based automotive maintenance management system provides auto shops with tools for managing vehicle maintenance recommendations and customer data. It offers AI-powered insights, multi-shop user management, and a comprehensive dashboard to enhance efficiency and customer satisfaction through integrations with industry-specific services. The project aims to be a comprehensive, AI-enhanced platform for automotive maintenance management, improving operational efficiency and customer engagement for auto shops.
+This Next.js-based automotive maintenance management system streamlines operations for auto shops by providing tools for managing vehicle maintenance recommendations and customer data. It offers AI-powered insights, multi-shop user management, and a comprehensive dashboard to enhance efficiency and customer satisfaction through integrations with industry-specific services. The project's ambition is to provide a comprehensive, AI-enhanced platform for automotive maintenance management, improving operational efficiency and customer engagement for auto shops.
 
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
@@ -10,37 +10,122 @@ I prefer simple language and clear explanations. I want iterative development, w
 The application uses Next.js 14.2.5 with React 18, Next.js API Routes, MongoDB Atlas, and Tailwind CSS, built with TypeScript/JavaScript.
 
 **UI/UX Decisions:**
-The design features a modern SaaS-style interface with a dark sidebar, light content areas, card-based layouts, and blue as the accent color. Key UI elements include a unified integrations page, a tabbed vehicle detail page, visual data source badges, and a "My Oil Sticker" dashboard for QR code previews, customization, and downloads, alongside a "Quick Sticker" feature for rapid printing.
+The design features a modern SaaS-style interface with a dark sidebar, light content areas, card-based layouts, and blue as the accent color. It includes a unified integrations page, a tabbed vehicle detail page, and visual data source badges for recommendations. The "My Oil Sticker" dashboard UI allows live QR code previews, color customization, and sticker downloads. A "Quick Sticker" feature provides rapid sticker printing with unit selection and service interval presets.
 
 **Technical Implementations:**
-*   **Data Management**: MongoDB Atlas for caching third-party API responses with TTLs and managing normalized data with provenance tracking.
-*   **Integration Mechanisms**: Webhook integration for real-time updates, sync workers for shop management system data (e.g., Protractor, Tekmetric canned jobs), and an `ISMSAdapter` interface for SMS communication.
+*   **Data Caching**: MongoDB Atlas caches third-party API responses with defined TTLs.
+*   **Webhook Integration**: Utilizes webhooks for real-time updates.
+*   **Canned Jobs**: Syncs canned jobs from Protractor and Tekmetric.
+*   **Shop Maintenance Intervals**: Allows shops to define custom schedules.
 *   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based setup.
-*   **Billing & Monitoring**: VIN-based billing, Stripe integration for subscriptions, admin audit logging, unified API usage monitoring with throttling and circuit breakers, and sync worker health monitoring.
-*   **Sticker Generation**: Automatic QR provisioning via HoverCode, sticker image generation using `node-html-to-image`, and configurable sticker schemas with predictive date calculation. A Chrome Extension API fetches sticker configurations.
-*   **Tekmetric Sync**: Automated initial sync, OAuth token management with auto-refresh, and an incremental sync system with per-shop state tracking and concurrent batch processing.
-*   **Core Features**: AI-powered vehicle analysis, customer dashboard, multi-shop management, maintenance planning with intelligent prefetching, component tracking, declined services logging, enterprise features (multi-location analytics, shared jobs), and a platform admin panel.
-*   **Chrome Extension**: MOS Tools Chrome Extension integrates with Tekmetric for maintenance recommendations, common failures advisor, job lookup, canned jobs, and oil change sticker printing.
-*   **Job Management**: AI-scored job lookup with enterprise support and smart job autocomplete with historical data. Multi-location users can set location priority order in Settings > Preferences > Job History, with drag-and-drop reordering. Priority scoring applies 20-15-10-5 points (min +5) and optional "exclude other locations" filtering.
-*   **Common Failures Advisor**: Predicts common repairs based on shop data and AI fallback.
-*   **Auto Booking**: Infrastructure for automated appointment scheduling, including dynamic holiday system, scheduler, queue management, and integration with SMS systems via the `ISMSAdapter`. Features include:
-    - **Daily Email Reminders**: Configurable scheduled reminders sent to shop staff about pending bookings. Shop owners can set reminder time (HH:MM), days of week to send (Mon-Sun), and whether to skip holidays.
-    - **Queue Expiry**: Pending bookings automatically expire after a configurable number of days (1-90), removing stale entries from the review queue.
-    - **Cron Endpoint**: `/api/cron/auto-booking-reminders` for external scheduler integration (requires CRON_SECRET env var).
-    - **Booking Queue UI**: Sidebar link with pending count badge for quick access to bookings awaiting review.
-*   **Manual Vehicle Management**: Standalone shops can manually add vehicles via VIN decode with strict validation (year 1900-current, mileage 0-2M). Admin-controlled `allowManualClose` preference enables close/archive functionality for both manual entries and integration vehicles. Closed VINs are filtered from dashboard.
+*   **VIN-Based Billing**: Tracks "active" vehicles for billing, with trial limits and platform admin controls.
+*   **Stripe Billing Integration**: Manages checkout sessions, webhook processing, and a billing portal, including logging and idempotency.
+*   **Admin Audit Logging**: Comprehensive logging of admin actions (impersonation, unlocks, settings changes) with IP/user-agent tracking.
+*   **Sync Worker Health Monitoring**: Adaptive backoff and health metrics.
+*   **Chrome Extension Version API**: Enforces minimum client-side extension versions.
+*   **E2E Testing with Auth Bypass**: Automated testing infrastructure.
+*   **Distance Unit Preferences**: Shops can choose between miles or kilometers.
+*   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems (e.g., Protractor, Tekmetric).
+*   **Normalized Data Layer**: SMS-agnostic data schema with provenance tracking, 7 normalized collections, bidirectional adapters, dual-write ingestion, content hash-based change detection, and a normalized-only query API with enterprise support and caching. Raw API payloads are preserved.
+*   **My Oil Sticker Integration**:
+    *   **Automatic QR Provisioning**: New shops automatically receive a HoverCode dynamic QR code upon creation via `lib/hovercode.ts`.
+    *   QR Code Generation using HoverCode API for dynamic, tracked QR codes.
+    *   Sticker image generation using `node-html-to-image`.
+    *   API endpoints for dynamic QR redirects, styled QR code generation, sticker PNG generation, and sticker configuration management.
+    *   Configurable sticker schema including logo, phone, taglines, service labels, QR visibility, mileage rounding, predictive date, font styles, colors, default size, appointment URL, unit preference, HoverCode ID, and per-oil-type intervals.
+    *   Predictive date calculation uses CARFAX `milesPerDay` and "shortest interval wins" logic.
+    *   Logo upload flow with presigned URLs and proxy serving.
+    *   Chrome Extension API for fetching sticker config and generating stickers as base64 data URLs for printing.
+    *   Sticker generation tracking for billing with monthly/total counts in platform-admin.
+*   **Tekmetric Sync**:
+    *   Initial sync triggers automatically when shop completes Tekmetric setup.
+    *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
+    *   Shop ID validation on signup prevents invalid configurations.
+    *   Sync via webhooks (real-time) or incremental sync worker (60-second cycles).
+    *   **OAuth Token Management** (`lib/tekmetric-auth.ts`):
+        *   Automatic token refresh using client credentials flow (TEKMETRIC_CLIENT_ID, TEKMETRIC_CLIENT_SECRET).
+        *   Token cached in memory and persisted to MongoDB (`tekmetric_tokens` collection).
+        *   Auto-refresh on 401 errors with single retry.
+        *   Tokens expire after 55 minutes (with 5-minute refresh buffer).
+    *   **Incremental Sync System** (`lib/tekmetric-incremental-sync.ts`):
+        *   Per-shop sync state tracking (lastSyncCursor, overflowQueue, lastClosedSweepAt).
+        *   Uses `updatedDateStart` filter to fetch only recently modified ROs.
+        *   Vehicle/customer caching with 24-hour TTL (`tekmetric_vehicle_cache`, `tekmetric_customer_cache` collections).
+        *   Concurrent batch processing (5 shops per batch) with small stagger delays.
+        *   Overflow page queue (up to 20 pages) for handling large data bursts.
+        *   Terminal status sweep deferred to every 15 minutes when queue is empty.
+        *   Auth failure circuit breaker: auto-pauses shop sync for 1 hour after 3 consecutive 401 errors.
+        *   Targets 50-150 API requests/min (down from 1000-2000 req/min with full sync).
+*   **Unified API Usage Monitoring** (Platform Admin):
+    *   Tracks all external API calls: Tekmetric, CARFAX, DataOne, OpenAI, Protractor, AutoFlow, HoverCode.
+    *   Real-time usage gauges: requests/min, requests/sec, usage %, latency.
+    *   Automatic throttling at 85% capacity, circuit breaker at 95% (Tekmetric/Protractor).
+    *   Dashboard shows top shops by usage, error rates, hourly trends per provider.
+    *   MongoDB collection `api_usage` with 7-day TTL auto-cleanup.
+    *   API endpoint: `/api/platform-admin/api-usage` (all providers) or `?provider=tekmetric` for specific.
+*   **Protractor Rate Limiting**:
+    *   Two-tier throttling: local in-memory (5 req/s) + shared MongoDB (200 req/min).
+    *   Shared limiter queries `api_usage` collection for cross-worker coordination.
+    *   Adaptive delays with exponential backoff when approaching limits.
+    *   Retry logic for 429 (rate limit) and 5xx errors with jitter.
+    *   `sourceWorker` field tracks requests from 'render' vs 'replit' workers.
+    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables Protractor sync on specific deployments.
+    *   `DISABLE_TEKMETRIC_SYNC=true` env var disables Tekmetric sync on specific deployments.
+    *   **v1.8.0 Enhancements**:
+        *   Integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode) displayed on cards.
+        *   Drag-and-drop card reordering with localStorage persistence.
+        *   Enhanced tooltips explaining all metrics: latency, errors, rate limits, usage thresholds.
+        *   24h Usage Trend chart with color-coded bars (purple=OK, red=errors) and legend.
 
-## Planned Features
-*   **Digital Wallet Pass**: Dynamic oil change reminder passes for Apple Wallet and Google Wallet. Replaces traditional windshield stickers with always-available phone reminders. Features include: remote updates when service date/mileage changes, push notifications when service is due, geo-fencing to show on lock screen near the shop, and "Book Now" integration with Auto Booking. Customer adds pass via QR scan or link after service. **Marketing tagline**: "Finally, an oil sticker that never falls off, never fades, never expires — and is smarter than ever."
-*   **Key Tag Printing**: Printable key tags with customer name, vehicle info (Year/Make/Model), VIN, license plate, RO#, color. Data fields already exist in normalized schema (exteriorColor, licensePlate, licensePlateState).
-*   **Customer Concern Tool**: Structured symptom-based intake system for capturing customer-reported vehicle issues. Features system-specific question flows (brakes, cooling, transmission, steering/suspension, A/C, emissions, etc.) that guide advisors through gathering detailed diagnostic information. Includes smart prompts like "Tell me the story about your [issue]" instead of assumptive questions. Captures warning light status, symptom duration, conditions when symptoms occur, and relevant history. Data feeds into vehicle records for technician review and AI-powered diagnostic suggestions.
+**Feature Specifications:**
+*   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
+*   **Customer Dashboard**: Tracks customers and their vehicles.
+*   **Multi-Shop Management**: User authentication with role-based access for multiple shops.
+*   **Maintenance Planning**: Intelligent queue-based prefetching, configurable "Due Soon" thresholds, and display of various recommendation sources.
+*   **Component Tracking & Declined Services**: Advisors track vehicle components and log declined services.
+*   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
+*   **Platform Admin Panel**: Internal MOS staff panel for platform statistics, shop management, user directory, and OpenAI API usage tracking.
+*   **Modular Feature Architecture**: Supports à la carte feature toggles.
+*   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration with Plan (maintenance recommendations), Failures (Common Failures Advisor), Lookup (job history search), Canned Jobs, and Sticker (oil change sticker printing), supporting push-to-RO functionality. The Sticker tab allows quick printing with auto-populated mileage from current RO context.
+*   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations.
+*   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
+*   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach, utilizing pre-computed `shop_repair_patterns` and enterprise aggregation.
+
+## Work In Progress (Paused)
+*   **Auto Booking Feature** (Tasks 1-4 complete, 5-6 pending):
+    *   Settings API: `app/api/settings/auto-booking/route.ts` - Feature-gated for paid plans + Oil Sticker
+    *   Settings UI: `app/dashboard/settings/auto-booking/page.tsx` - Lead time, holidays, business hours, confirmation mode
+    *   Scheduler: `lib/auto-booking/scheduler.ts` - Finds slots respecting preferences
+    *   Queue UI: `app/dashboard/settings/auto-booking/queue/page.tsx` - Review and confirm bookings
+    *   **Next steps**: Integrate with SMS calendar (Tekmetric/Protractor) for real-time availability, connect to sticker generation
+
+## Future Ideas (Saved for Later)
+*   **Districts Layer**: Add organizational groupings between enterprise and shops for large organizations. Would enable district managers, regional filtering in job history/analytics, and district-level repair pattern aggregations. Additive approach recommended (keep current enterprise model, add districts on top).
+
+## Planned Performance Optimizations (Page Load Speed)
+*   **High Priority**:
+    *   Lazy-load heavy components: sticker/QR generation, Uppy file upload, framer-motion animations (load only when needed)
+    *   Add MongoDB compound indexes: `{shopId, status}`, `{shopId, vin}`, `{enterpriseId, createdAt}`
+    *   Server-side data loading: render pages with data pre-loaded to eliminate loading spinners
+*   **Medium Priority**:
+    *   Combine dashboard API calls into batched requests
+    *   Add caching: stale-while-revalidate for vehicle/customer lists, cache feature flags
+    *   Use Next.js Image component for hero images, preload primary fonts
+*   **Observability**: Add Next.js bundle analyzer, track real-user metrics
+
+## Deployment
+To deploy to Render (QA environment):
+```bash
+git push --force
+```
+This pushes the current `qa` branch to trigger a Render deploy.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
 *   **Payments**: Stripe
 *   **VIN Decoding & OEM Schedules**: DataOne API
-*   **Shop Management Systems**: AutoFlow, Protractor, Tekmetric
+*   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API

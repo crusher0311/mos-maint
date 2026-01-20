@@ -3,8 +3,6 @@ import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-a
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
-const TEKMETRIC_TIMEOUT_MS = 30000; // 30 second timeout
-
 async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
   // Acquire distributed rate limit slot (blocks if limit exceeded)
   const rateLimitResult = await acquireDistributedRateLimitSlot('tekmetric');
@@ -16,16 +14,11 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
   const method = options.method || 'GET';
   const startTime = Date.now();
   
-  // Create abort controller for timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TEKMETRIC_TIMEOUT_MS);
-  
   let statusCode = 0;
   try {
     const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
       ...options,
       cache: 'no-store',
-      signal: controller.signal,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -33,7 +26,6 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
       },
     });
 
-    clearTimeout(timeoutId);
     statusCode = response.status;
     const latencyMs = Date.now() - startTime;
     
@@ -54,14 +46,8 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
 
     return response.json();
   } catch (err: any) {
-    clearTimeout(timeoutId);
     const latencyMs = Date.now() - startTime;
     trackApiRequest('tekmetric', endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
-    
-    // Provide clearer error message for timeouts
-    if (err.name === 'AbortError') {
-      throw new Error(`Tekmetric API timeout after ${TEKMETRIC_TIMEOUT_MS/1000}s: ${endpoint}`);
-    }
     throw err;
   }
 }

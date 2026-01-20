@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Plus } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2 } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
-import AddVehicleModal from "@/components/AddVehicleModal";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
 
@@ -110,7 +109,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
-  const [closingVehicle, setClosingVehicle] = useState<string | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -126,26 +124,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
-  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
-  const [shopPreferences, setShopPreferences] = useState<{
-    allowManualClose?: boolean;
-    allowManualVehicleEntry?: boolean;
-  }>({});
-
-  useEffect(() => {
-    async function fetchPreferences() {
-      try {
-        const res = await fetch('/api/shop/features');
-        if (res.ok) {
-          const data = await res.json();
-          setShopPreferences(data.preferences || {});
-        }
-      } catch (e) {
-        console.error('Failed to fetch shop preferences', e);
-      }
-    }
-    fetchPreferences();
-  }, []);
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -280,7 +258,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         const sizeMap: Record<string, { width: string; height: string }> = {
-          '1.5x2.25': { width: '1.5in', height: '2.25in' },
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
           '2x3': { width: '2in', height: '3in' },
@@ -455,7 +432,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         const dataUrl = reader.result as string;
         
         const sizeMap: Record<string, { width: string; height: string }> = {
-          '1.5x2.25': { width: '1.5in', height: '2.25in' },
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
           '2x3': { width: '2in', height: '3in' },
@@ -509,32 +485,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
     } finally {
       setPrintingSticker(null);
-    }
-  };
-
-  const handleCloseVehicle = async (vinOrId: string) => {
-    if (!confirm("Close this vehicle? It will be moved to the archived view.")) {
-      return;
-    }
-    
-    setClosingVehicle(vinOrId);
-    try {
-      const res = await fetch(`/api/vehicles/${encodeURIComponent(vinOrId)}/close`, {
-        method: "POST"
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to close vehicle");
-      }
-      
-      // Refresh dashboard data
-      await refreshData();
-    } catch (error) {
-      console.error("Failed to close vehicle:", error);
-      alert(error instanceof Error ? error.message : "Failed to close vehicle");
-    } finally {
-      setClosingVehicle(null);
     }
   };
 
@@ -640,43 +590,38 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   }, []);
 
-  // Smart background refresh - updates data without interrupting user actions
   useEffect(() => {
-    const REFRESH_INTERVAL_MS = 30000; // 30 seconds
+    const interval = setInterval(() => {
+      loadData(currentPage, searchQuery, showArchived);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [currentPage, searchQuery, showArchived]);
+
+  useEffect(() => {
+    if (!data.user?.shopId) return;
     
-    const backgroundRefresh = async () => {
-      // Skip if any modal is open or user is actively interacting
-      const isUserInteracting = 
-        jobLookupVehicle !== null ||
-        commonFailuresVehicle !== null ||
-        stickerContextMenu !== null ||
-        customStickerModal !== null ||
-        showAddVehicleModal ||
-        printingSticker !== null ||
-        closingVehicle !== null ||
-        document.activeElement?.tagName === 'INPUT';
-      
-      if (isUserInteracting || isRefreshing) {
-        return; // Skip this refresh cycle
-      }
-      
-      // Silently fetch new data
-      const newData = await fetchDashboardData(currentPage, searchQuery, showArchived);
-      if (newData && newData.rows) {
-        // Only update if data actually changed (compare row count or VINs)
-        const currentVins = data.rows.map((r: any) => r.displayVin || r.vin).join(',');
-        const newVins = newData.rows.map((r: any) => r.displayVin || r.vin).join(',');
+    const checkClosedOrders = async () => {
+      try {
+        const response = await fetch('/api/vehicles/check-closed-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopId: data.user.shopId })
+        });
         
-        if (currentVins !== newVins || data.rows.length !== newData.rows.length) {
-          setData(newData);
-          setLastUpdated(new Date());
+        if (response.ok) {
+          const result = await response.json();
+          if (result.closed > 0) {
+            loadData(currentPage, searchQuery, showArchived);
+          }
         }
+      } catch (err) {
+        console.error('Error checking closed orders:', err);
       }
     };
-    
-    const intervalId = setInterval(backgroundRefresh, REFRESH_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, [currentPage, searchQuery, showArchived, jobLookupVehicle, commonFailuresVehicle, stickerContextMenu, customStickerModal, showAddVehicleModal, printingSticker, closingVehicle, isRefreshing, data.rows]);
+
+    const pollInterval = setInterval(checkClosedOrders, 5000);
+    return () => clearInterval(pollInterval);
+  }, [data.user?.shopId, currentPage, searchQuery, showArchived]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -728,14 +673,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <span className="text-xs sm:text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
-            <button
-              onClick={() => setShowAddVehicleModal(true)}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Add Vehicle</span>
-              <span className="sm:hidden">Add</span>
-            </button>
             <button
               onClick={handleToggleArchived}
               className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
@@ -1017,20 +954,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <Printer className="w-4 h-4" />
                             )}
                           </button>
-                          {(r.source === "manual" || shopPreferences.allowManualClose) && (
-                            <button
-                              onClick={() => handleCloseVehicle(vin)}
-                              disabled={closingVehicle === vin}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Close/Archive Vehicle"
-                            >
-                              {closingVehicle === vin ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <X className="w-4 h-4" />
-                              )}
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -1115,7 +1038,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
           <p>Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : "—"}</p>
           <p className="flex items-center gap-1">
-            Use Refresh button for latest data
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+            Auto-refreshes every 30 seconds
           </p>
         </div>
       </div>
@@ -1300,16 +1224,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             </div>
           </div>
         </div>
-      )}
-
-      {showAddVehicleModal && (
-        <AddVehicleModal
-          onClose={() => setShowAddVehicleModal(false)}
-          onSuccess={() => {
-            setShowAddVehicleModal(false);
-            refreshData();
-          }}
-        />
       )}
     </div>
   );

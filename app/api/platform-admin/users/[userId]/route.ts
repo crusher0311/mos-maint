@@ -36,15 +36,49 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     
-    const shopIds = [user.shopId, ...(user.shopIds || [])].filter(Boolean);
-    const uniqueShopIds = [...new Set(shopIds.map(id => String(id)))];
+    const userShopIds = [user.shopId, ...(user.shopIds || [])].filter(Boolean);
+    const uniqueUserShopIds = [...new Set(userShopIds.map(id => String(id)))];
     
-    const shops = await db.collection("shops")
-      .find({ shopId: { $in: uniqueShopIds.map(id => isNaN(Number(id)) ? id : Number(id)) } })
-      .project({ shopId: 1, name: 1 })
-      .toArray();
+    // Fetch all shops and enterprises in parallel
+    const [allShops, enterprises] = await Promise.all([
+      db.collection("shops").find().project({ shopId: 1, name: 1, locationIdentifier: 1, enterpriseId: 1 }).toArray(),
+      db.collection("enterprise_accounts").find().toArray()
+    ]);
     
-    const shopNameMap = new Map(shops.map(s => [String(s.shopId), s.name]));
+    // Build enterprise lookup
+    const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
+    
+    // Find which enterprise the user's primary shop belongs to
+    const primaryShop = allShops.find(s => String(s.shopId) === String(user.shopId));
+    const userEnterpriseId = primaryShop?.enterpriseId?.toString();
+    const userEnterprise = userEnterpriseId ? enterpriseMap.get(userEnterpriseId) : null;
+    
+    // Get enterprise shop IDs
+    const enterpriseShopIds = new Set<string>();
+    if (userEnterprise && userEnterprise.shopIds) {
+      for (const sid of userEnterprise.shopIds) {
+        enterpriseShopIds.add(String(sid));
+      }
+    }
+    
+    // Build shop metadata with enterprise flags
+    const shopMetadata = allShops.map(shop => ({
+      shopId: String(shop.shopId),
+      name: shop.name || `Shop ${shop.shopId}`,
+      locationIdentifier: shop.locationIdentifier || null,
+      isInUserEnterprise: enterpriseShopIds.has(String(shop.shopId)),
+      isUserPrimary: String(shop.shopId) === String(user.shopId),
+      isSelected: uniqueUserShopIds.includes(String(shop.shopId)),
+    }));
+    
+    // Sort: user primary first, then enterprise locations, then others
+    shopMetadata.sort((a, b) => {
+      if (a.isUserPrimary && !b.isUserPrimary) return -1;
+      if (!a.isUserPrimary && b.isUserPrimary) return 1;
+      if (a.isInUserEnterprise && !b.isInUserEnterprise) return -1;
+      if (!a.isInUserEnterprise && b.isInUserEnterprise) return 1;
+      return a.name.localeCompare(b.name);
+    });
     
     return NextResponse.json({
       ok: true,
@@ -54,14 +88,16 @@ export async function GET(
         role: user.role || "user",
         shopId: user.shopId,
         shopIds: user.shopIds || [],
-        shopNames: uniqueShopIds.map(id => ({
-          shopId: id,
-          name: shopNameMap.get(id) || `Shop ${id}`,
-        })),
         isPlatformAdmin: user.isPlatformAdmin || false,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
       },
+      enterprise: userEnterprise ? {
+        _id: userEnterprise._id,
+        name: userEnterprise.name,
+        shopIds: userEnterprise.shopIds?.map((id: any) => String(id)) || [],
+      } : null,
+      shops: shopMetadata,
     });
   } catch (err: any) {
     console.error("Error fetching user:", err);

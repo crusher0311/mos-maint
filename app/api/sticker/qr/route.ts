@@ -10,7 +10,7 @@ import fs from "fs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "appointment.png");
+const DEFAULT_LOGO_PATH = path.join(process.cwd(), "public", "sticker-qr-logo.png");
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 

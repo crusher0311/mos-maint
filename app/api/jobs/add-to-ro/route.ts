@@ -61,13 +61,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Job details are required" }, { status: 400 });
   }
 
-  console.log(`[Jobs Add to RO] Fetching WO ${workOrderGuid} for shop ${shopId}...`);
-  const fetchStart = Date.now();
   const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid);
-  console.log(`[Jobs Add to RO] Fetch took ${Date.now() - fetchStart}ms, ok=${existingWOResult.ok}`);
-  
   if (!existingWOResult.ok || !existingWOResult.workOrder) {
-    console.log(`[Jobs Add to RO] Failed to fetch WO: ${existingWOResult.error}`);
     return NextResponse.json(
       { error: existingWOResult.error || "Work order not found" },
       { status: 404 }
@@ -172,7 +167,6 @@ export async function POST(req: NextRequest) {
 
   console.log(`[Jobs Add to RO] Adding "${job.title}" with ${job.lines.length} lines to WO ${workOrderGuid}...`);
 
-  const updateStart = Date.now();
   const updateResult = await protractorFetch<any>(
     `/WorkOrder/${workOrderGuid}`,
     config,
@@ -181,7 +175,6 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(updatedWorkOrder),
     }
   );
-  console.log(`[Jobs Add to RO] Update took ${Date.now() - updateStart}ms, ok=${updateResult.ok}`);
 
   if (!updateResult.ok) {
     console.log(`[Jobs Add to RO] Failed: ${updateResult.error}`);

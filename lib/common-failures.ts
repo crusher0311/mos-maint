@@ -266,13 +266,10 @@ async function fetchFailuresFromAI(
 Identify the most common failures and repairs for this vehicle around this mileage.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: COMMON_FAILURES_PROMPT },
-        { role: "user", content: userPrompt }
-      ]
-    });
+    const response = await openai.chat([
+      { role: "system", content: COMMON_FAILURES_PROMPT },
+      { role: "user", content: userPrompt }
+    ], "gpt-4o-mini");
     
     const content = response.choices?.[0]?.message?.content || "";
     

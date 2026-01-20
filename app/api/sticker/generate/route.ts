@@ -11,15 +11,6 @@ export const dynamic = "force-dynamic";
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-function getLogoUrl(): string {
-  if (process.env.HOVERCODE_LOGO_URL) {
-    return process.env.HOVERCODE_LOGO_URL;
-  }
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
-  return `${baseUrl}/appointment.png`;
-}
-
 const storage = new Storage({
   credentials: {
     audience: "replit",
@@ -155,12 +146,14 @@ async function createHovercodeQR(
       body: JSON.stringify({
         workspace: HOVERCODE_WORKSPACE_ID,
         qr_data: url,
-        qr_type: "Link",
         dynamic: true,
         display_name: displayName || "Oil Sticker QR",
-        pattern: "Squares",
+        primary_color: color,
         background_color: backgroundColor,
-        logo_url: getLogoUrl(),
+        pattern: "Squares",
+        eye_style: "Rounded",
+        size: size,
+        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,
       }),
     });
@@ -252,7 +245,6 @@ interface StickerRequest {
 }
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "1.5x2.25": { width: 443, height: 665 },
   "2x2": { width: 591, height: 591 },
   "2x2.5": { width: 591, height: 739 },
   "2x3": { width: 591, height: 887 },
@@ -495,41 +487,39 @@ export async function POST(req: NextRequest) {
       const qrColor = config.colors?.primary || "#1976d2";
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
-      // Always use HoverCode QR (has styled icon in center) - QR is typically black/white regardless of sticker colors
-      {
-        if (config.hovercodeQRId) {
-          console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
-          const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
-          if (existingQR.dataUri) {
-            qrDataUrl = existingQR.dataUri;
-          }
+      
+      if (config.hovercodeQRId) {
+        console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
+        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+        if (existingQR.dataUri) {
+          qrDataUrl = existingQR.dataUri;
         }
+      }
+      
+      if (!qrDataUrl) {
+        const newQR = await createHovercodeQR(redirectUrl, {
+          size: 300,
+          color: qrColor,
+          backgroundColor: qrBgColor,
+          displayName: `${shopName} - Oil Sticker`,
+        });
         
-        if (!qrDataUrl) {
-          const newQR = await createHovercodeQR(redirectUrl, {
-            size: 300,
-            color: qrColor,
-            backgroundColor: qrBgColor,
-            displayName: `${shopName} - Oil Sticker`,
-          });
+        if (newQR?.dataUri) {
+          qrDataUrl = newQR.dataUri;
           
-          if (newQR?.dataUri) {
-            qrDataUrl = newQR.dataUri;
-            
-            if (newQR.id && !config.hovercodeQRId) {
-              await db.collection("shops").updateOne(
-                { shopId },
-                { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-              );
-              console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
-            }
+          if (newQR.id && !config.hovercodeQRId) {
+            await db.collection("shops").updateOne(
+              { shopId },
+              { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
+            );
+            console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
           }
         }
-        
-        if (!qrDataUrl) {
-          console.log("[Sticker Generate] HoverCode failed, using fallback QR");
-          qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
-        }
+      }
+      
+      if (!qrDataUrl) {
+        console.log("[Sticker Generate] HoverCode failed, using fallback QR");
+        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
       }
     }
 

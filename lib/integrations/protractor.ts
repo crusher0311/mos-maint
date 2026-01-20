@@ -1984,37 +1984,24 @@ export async function fetchCannedJobsWithCache(
     };
   }
 
-  // Check if we have any cache at all (even basic "api" source)
-  // Only fetch and enrich if completely missing
-  const hasAnyCache = cached?.items?.length > 0;
-  const isCurrentlyEnriching = cached?.source === "enriching";
-  
-  // If we have cache (enriched or api/enriching in progress), use it without triggering new enrichment
-  if (hasAnyCache && (isEnriched || isCurrentlyEnriching || cached?.source === "api")) {
-    if (isEnriched) {
-      console.log(`[Protractor] Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
-    } else if (isCurrentlyEnriching) {
-      console.log(`[Protractor] Enrichment in progress for shop ${shopId}, using current cache (${cached.items.length} items)`);
-    } else {
-      console.log(`[Protractor] Using basic cache for shop ${shopId} (${cached.items.length} items) - run sync to refresh`);
-    }
-    return {
-      ok: true,
-      cannedJobs: normalizeCachedItems(cached.items),
-      source: cached.source || "cache",
-    };
-  }
-  
-  // No cache at all - fetch basic list and start enrichment
-  if (!hasAnyCache) {
-    console.log(`[Protractor] No cache found for shop ${shopId}, fetching basic list...`);
+  // If no enriched cache exists, return basic list immediately and run enrichment in background
+  if (!isEnriched || !hasItems) {
+    console.log(`[Protractor] No enriched cache found for shop ${shopId}, fetching basic list...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
+      // Fall back to whatever cache exists
+      if (cached?.items?.length) {
+        return {
+          ok: true,
+          cannedJobs: normalizeCachedItems(cached.items),
+          source: "cache",
+        };
+      }
       return { ok: false, error: listResult.error };
     }
 
-    // Mark as "enriching" to prevent concurrent enrichment runs
+    // Save basic list immediately so page loads fast
     const now = new Date();
     await db.collection("protractor_canned_jobs").updateOne(
       { shopId },
@@ -2022,7 +2009,7 @@ export async function fetchCannedJobsWithCache(
         $set: {
           items: listResult.cannedJobs,
           fetchedAt: now,
-          source: "enriching",
+          source: "api",
         },
         $setOnInsert: { createdAt: now },
       },
@@ -2046,20 +2033,15 @@ export async function fetchCannedJobsWithCache(
         );
         console.log(`[Protractor] Background enrichment complete: ${enrichedJobs.length} jobs saved`);
       })
-      .catch(async (err) => {
+      .catch((err) => {
         console.error(`[Protractor] Background enrichment failed:`, err);
-        // Reset source to "api" so future loads can retry
-        await db.collection("protractor_canned_jobs").updateOne(
-          { shopId },
-          { $set: { source: "api" } }
-        );
       });
 
     // Return basic list immediately
     return {
       ok: true,
       cannedJobs: normalizeCachedItems(listResult.cannedJobs),
-      source: "api", // Type-safe: enriching is internal state only
+      source: "api",
     };
   }
 

@@ -25,8 +25,7 @@ import {
   LogOut,
   RefreshCw,
   X,
-  Printer,
-  CalendarCheck
+  Printer
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -76,8 +75,7 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   }
   if (pathname?.startsWith("/dashboard/settings/branding") || 
       pathname?.startsWith("/dashboard/settings/stickers") ||
-      pathname?.startsWith("/dashboard/settings/preferences") ||
-      pathname?.startsWith("/dashboard/settings/job-history")) {
+      pathname?.startsWith("/dashboard/settings/preferences")) {
     sections.add("Preferences");
   }
   return sections;
@@ -93,8 +91,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const [switching, setSwitching] = useState(false);
   const [shopSearch, setShopSearch] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
-  // Auto-booking hidden until feature is ready for production
-  // const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
@@ -117,32 +113,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       })
       .catch(() => {});
   }, []);
-
-  // Auto-booking hidden until feature is ready for production
-  // useEffect(() => {
-  //   if (!enabledFeatures.includes("oil_sticker")) return;
-  //   
-  //   const fetchPendingCount = () => {
-  //     fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
-  //       .then((res) => {
-  //         if (!res.ok) {
-  //           setPendingBookingsCount(0);
-  //           return null;
-  //         }
-  //         return res.json();
-  //       })
-  //       .then((data) => {
-  //         if (data && typeof data.pendingCount === "number") {
-  //           setPendingBookingsCount(data.pendingCount);
-  //         }
-  //       })
-  //       .catch(() => setPendingBookingsCount(0));
-  //   };
-  //
-  //   fetchPendingCount();
-  //   const interval = setInterval(fetchPendingCount, 60000);
-  //   return () => clearInterval(interval);
-  // }, [enabledFeatures]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -174,8 +144,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       }
       if ((pathname.startsWith("/dashboard/settings/branding") || 
            pathname.startsWith("/dashboard/settings/stickers") ||
-           pathname.startsWith("/dashboard/settings/preferences") ||
-           pathname.startsWith("/dashboard/settings/job-history")) && !newExpanded.has("Preferences")) {
+           pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
         changed = true;
       }
@@ -228,13 +197,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />
     },
-    // Auto-booking hidden until feature is ready for production
-    // {
-    //   name: "Booking Queue",
-    //   href: "/dashboard/settings/auto-booking/queue",
-    //   icon: <CalendarCheck className="w-5 h-5" />,
-    //   featureId: "oil_sticker"
-    // },
     {
       name: "Quick Sticker",
       href: "#quick-sticker",
@@ -264,19 +226,16 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           href: "/dashboard/settings/preferences",
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
-            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
-            { name: "Job History", href: "/dashboard/settings/job-history" }
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
           ]
         },
-        // Billing page hidden until we have enough data to verify with live users
-        // { name: "Billing", href: "/dashboard/settings/billing" },
+        { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        // Auto-booking hidden until feature is ready for production
-        // { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
+        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
@@ -546,13 +505,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                   }`}
                 >
                   {item.icon}
-                  <span className="flex-1">{item.name}</span>
-                  {/* Auto-booking hidden until feature is ready for production */}
-                  {/* {item.name === "Booking Queue" && pendingBookingsCount > 0 && (
-                    <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                      {pendingBookingsCount}
-                    </span>
-                  )} */}
+                  <span>{item.name}</span>
                 </Link>
               )}
             </li>

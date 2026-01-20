@@ -2,15 +2,6 @@ import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2";
 
-function getLogoUrl(): string {
-  if (process.env.HOVERCODE_LOGO_URL) {
-    return process.env.HOVERCODE_LOGO_URL;
-  }
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
-  return `${baseUrl}/appointment.png`;
-}
-
 interface HovercodeCreateResponse {
   id: string;
   qr_data: string;
@@ -62,12 +53,9 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
       body: JSON.stringify({
         workspace: workspaceId,
         qr_data: destinationUrl,
-        qr_type: "Link",
         display_name: `MOS Sticker - ${options.shopName}`,
-        pattern: "Squares",
-        dynamic: true,
+        primary_color: options.primaryColor || "#1e40af",
         background_color: options.backgroundColor || "#ffffff",
-        logo_url: getLogoUrl(),
         generate_png: true,
       }),
     });

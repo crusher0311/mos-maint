@@ -92,20 +92,20 @@ export default function ApiUsageDashboard() {
   } | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<number | null>(null);
-  const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
-      if (savedOrder) {
-        return JSON.parse(savedOrder);
-      }
-    } catch (e) {
-      console.error("Failed to parse saved card order");
-    }
-    return [];
-  });
+  const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
   const dragOverCard = useRef<string | null>(null);
+
+  useEffect(() => {
+    const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
+    if (savedOrder) {
+      try {
+        setCardOrder(JSON.parse(savedOrder));
+      } catch (e) {
+        console.error("Failed to parse saved card order");
+      }
+    }
+  }, []);
 
   const getOrderedProviders = useCallback(() => {
     if (!data?.providers) return [];

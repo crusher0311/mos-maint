@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Wrench, Clock, CheckCircle, ArrowRight, Calendar, Quote, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Wrench, Clock, CheckCircle, ArrowRight, Calendar, Quote, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 const screenshots = [
@@ -82,17 +82,29 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">Works with the tools you already use</p>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap justify-center items-center gap-4 sm:gap-8 md:gap-12">
-            <div className="flex items-center justify-center text-gray-700">
-              <img src="/logos/protractor-logo.png" alt="Protractor" className="h-8 sm:h-10 object-contain" />
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-blue-600 text-xs sm:text-sm">P</span>
+              </div>
+              <span className="font-semibold text-sm sm:text-base">Protractor</span>
             </div>
-            <div className="flex items-center justify-center text-gray-700">
-              <img src="/logos/tekmetric-logo.png" alt="Tekmetric" className="h-8 sm:h-10 object-contain" />
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-orange-600 text-xs sm:text-sm">T</span>
+              </div>
+              <span className="font-semibold text-sm sm:text-base">Tekmetric</span>
             </div>
-            <div className="flex items-center justify-center text-gray-700">
-              <img src="/logos/carfax-logo.png" alt="CARFAX" className="h-8 sm:h-10 object-contain" />
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-green-600 text-xs sm:text-sm">C</span>
+              </div>
+              <span className="font-semibold text-sm sm:text-base">CARFAX</span>
             </div>
-            <div className="flex items-center justify-center text-gray-700">
-              <img src="/logos/autoflow-logo.png" alt="AutoFlow" className="h-8 sm:h-10 object-contain" />
+            <div className="flex items-center justify-center gap-2 text-gray-700">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-purple-600 text-xs sm:text-sm">A</span>
+              </div>
+              <span className="font-semibold text-sm sm:text-base">AutoFlow</span>
             </div>
           </div>
         </div>
@@ -135,48 +147,6 @@ export default function LandingPage() {
             <p className="text-center text-gray-600 mt-6 text-lg">
               That's not a productivity problem.<br />
               <span className="font-semibold text-gray-900">That's a revenue problem.</span>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Second Pain Point - Repetitive Jobs */}
-      <section className="py-12 sm:py-16 bg-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl sm:rounded-2xl p-5 sm:p-8 md:p-12 border border-amber-100">
-            <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4 mb-5 sm:mb-6">
-              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 bg-amber-100 rounded-lg sm:rounded-xl flex items-center justify-center">
-                <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
-              </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">The Hidden Time Drain</h2>
-                <p className="text-base sm:text-lg text-gray-700 leading-relaxed">
-                  "I can't count how many times I've written <span className="font-semibold text-gray-900">this exact job for this exact same vehicle.</span> Why isn't there an easy button for it?"
-                </p>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg sm:rounded-xl p-4 sm:p-6 border border-amber-200">
-              <p className="text-xs sm:text-sm text-gray-500 mb-3">What if you could reclaim that time?</p>
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">5 min</div>
-                  <div className="text-sm text-gray-500">saved per common job</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">10+ jobs/day</div>
-                  <div className="text-sm text-gray-500">you've done before</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-amber-600">50+ hrs/mo</div>
-                  <div className="text-sm text-gray-500">back in your pocket</div>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-center text-gray-600 mt-6 text-lg">
-              Your shop's history is a goldmine.<br />
-              <span className="font-semibold text-gray-900">MOS turns it into an easy button.</span>
             </p>
           </div>
         </div>

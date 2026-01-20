@@ -10,7 +10,7 @@ import {
   resolveCarfaxConfig, 
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
-import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
+import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
@@ -823,23 +823,10 @@ async function PlanContent({ params }: PageProps) {
   // All available canned jobs for fallback when no mapped jobs exist
   const allCannedJobsList = Object.values(cannedJobsById);
 
-  let vehicle = await db.collection("vehicles").findOne(
+  const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
     { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1 } }
   );
-
-  // Enrich vehicle with DataOne data if year/make/model is missing
-  if (!vehicle?.year || !vehicle?.make || !vehicle?.model) {
-    const enhanced = await getEnhancedVehicleData(vin);
-    if (enhanced.ok && enhanced.vehicle) {
-      vehicle = {
-        ...vehicle,
-        year: vehicle?.year || enhanced.vehicle.year,
-        make: vehicle?.make || enhanced.vehicle.make,
-        model: vehicle?.model || enhanced.vehicle.model,
-      } as typeof vehicle;
-    }
-  }
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
   // This matches the detail page logic exactly
