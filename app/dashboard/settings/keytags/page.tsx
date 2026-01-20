@@ -56,9 +56,10 @@ export default function KeytagSettingsPage() {
 
   const sampleData = {
     customerName: "John Smith",
-    vehicleInfo: "2021 Toyota Camry",
-    roNumber: "12345",
-    mileage: "45,678",
+    vehicleInfo: "2018 Toyota Camry",
+    vin: "4T1BF1FK8JU123456",
+    roNumber: "456789",
+    mileage: "124,382",
   };
 
   useEffect(() => {
@@ -396,6 +397,7 @@ export default function KeytagSettingsPage() {
                 <ul className="space-y-1">
                   <li><span className="text-gray-400">Customer:</span> {sampleData.customerName}</li>
                   <li><span className="text-gray-400">Vehicle:</span> {sampleData.vehicleInfo}</li>
+                  <li><span className="text-gray-400">VIN:</span> {sampleData.vin}</li>
                   <li><span className="text-gray-400">RO#:</span> {sampleData.roNumber}</li>
                   <li><span className="text-gray-400">Mileage:</span> {sampleData.mileage}</li>
                 </ul>
