@@ -488,39 +488,45 @@ export async function POST(req: NextRequest) {
       const qrColor = config.colors?.primary || "#1976d2";
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
+      const isPreview = !!body.previewConfig;
       
-      if (config.hovercodeQRId) {
-        console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
-        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
-        if (existingQR.dataUri) {
-          qrDataUrl = existingQR.dataUri;
-        }
-      }
-      
-      if (!qrDataUrl) {
-        const newQR = await createHovercodeQR(redirectUrl, {
-          size: 300,
-          color: qrColor,
-          backgroundColor: qrBgColor,
-          displayName: `${shopName} - Oil Sticker`,
-        });
-        
-        if (newQR?.dataUri) {
-          qrDataUrl = newQR.dataUri;
-          
-          if (newQR.id && !config.hovercodeQRId) {
-            await db.collection("shops").updateOne(
-              { shopId },
-              { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-            );
-            console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
+      // For preview mode, always use fallback QR so color changes are reflected immediately
+      if (isPreview) {
+        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+      } else {
+        if (config.hovercodeQRId) {
+          console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
+          const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+          if (existingQR.dataUri) {
+            qrDataUrl = existingQR.dataUri;
           }
         }
-      }
-      
-      if (!qrDataUrl) {
-        console.log("[Sticker Generate] HoverCode failed, using fallback QR");
-        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+        
+        if (!qrDataUrl) {
+          const newQR = await createHovercodeQR(redirectUrl, {
+            size: 300,
+            color: qrColor,
+            backgroundColor: qrBgColor,
+            displayName: `${shopName} - Oil Sticker`,
+          });
+          
+          if (newQR?.dataUri) {
+            qrDataUrl = newQR.dataUri;
+            
+            if (newQR.id && !config.hovercodeQRId) {
+              await db.collection("shops").updateOne(
+                { shopId },
+                { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
+              );
+              console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
+            }
+          }
+        }
+        
+        if (!qrDataUrl) {
+          console.log("[Sticker Generate] HoverCode failed, using fallback QR");
+          qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+        }
       }
     }
 
