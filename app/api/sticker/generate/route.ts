@@ -237,7 +237,7 @@ interface StickerRequest {
   currentMileage?: number;
   nextServiceMileage?: number;
   nextServiceDate?: string;
-  size?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
+  size?: "1.5x2.25" | "2x2" | "2x2.5" | "2x3" | "2x3.5";
   includeQR?: boolean;
   previewConfig?: StickerConfig;
   useKilometers?: boolean;
@@ -245,6 +245,7 @@ interface StickerRequest {
 }
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
+  "1.5x2.25": { width: 443, height: 665 },
   "2x2": { width: 591, height: 591 },
   "2x2.5": { width: 591, height: 739 },
   "2x3": { width: 591, height: 887 },
