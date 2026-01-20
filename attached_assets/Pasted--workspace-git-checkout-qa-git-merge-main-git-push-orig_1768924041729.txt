@@ -1,0 +1,40 @@
+~/workspace$ git checkout qa
+git merge main
+git push origin qa
+Updating files: 100% (183/183), done.
+Switched to branch 'qa'
+Your branch and 'origin/qa' have diverged,
+and have 25 and 137 different commits each, respectively.
+  (use "git pull" if you want to integrate the remote branch with yours)
+Auto-merging app/api/callbacks/protractor/route.ts
+CONFLICT (add/add): Merge conflict in app/api/callbacks/protractor/route.ts
+Auto-merging app/api/platform-admin/users/route.ts
+Auto-merging app/api/settings/auto-booking/queue/route.ts
+CONFLICT (add/add): Merge conflict in app/api/settings/auto-booking/queue/route.ts
+Auto-merging app/api/settings/auto-booking/route.ts
+CONFLICT (add/add): Merge conflict in app/api/settings/auto-booking/route.ts
+Auto-merging app/dashboard/settings/auto-booking/page.tsx
+CONFLICT (add/add): Merge conflict in app/dashboard/settings/auto-booking/page.tsx
+Auto-merging app/dashboard/settings/auto-booking/queue/page.tsx
+CONFLICT (add/add): Merge conflict in app/dashboard/settings/auto-booking/queue/page.tsx
+Auto-merging app/platform-admin/users/page.tsx
+CONFLICT (content): Merge conflict in app/platform-admin/users/page.tsx
+Auto-merging components/ui/PlatformAdminSidebar.tsx
+CONFLICT (content): Merge conflict in components/ui/PlatformAdminSidebar.tsx
+Auto-merging components/ui/Sidebar.tsx
+CONFLICT (content): Merge conflict in components/ui/Sidebar.tsx
+Auto-merging lib/api-usage-tracker.ts
+Auto-merging lib/auto-booking/scheduler.ts
+CONFLICT (add/add): Merge conflict in lib/auto-booking/scheduler.ts
+Auto-merging lib/integrations/protractor.ts
+Auto-merging replit.md
+CONFLICT (content): Merge conflict in replit.md
+Automatic merge failed; fix conflicts and then commit the result.
+To https://github.com/crusher0311/mos-maint.git
+ ! [rejected]        qa -> qa (non-fast-forward)
+error: failed to push some refs to 'https://github.com/crusher0311/mos-maint.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. If you want to integrate the remote changes,
+hint: use 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+~/workspace$ 
