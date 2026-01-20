@@ -81,7 +81,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
 
   const elementsHtml = validatedLayout.elements
     .filter((el) => el.visible)
-    .map((el) => {
+    .map((el, index) => {
       const value = dataMap[el.type] || el.label;
       const displayText = el.showLabel ? `${el.label}: ${value}` : value;
       
@@ -90,9 +90,10 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
       const width = el.width * scaleFactor;
       const height = el.height * scaleFactor;
       const fontSize = el.fontSize * scaleFactor;
+      const elementId = `el-${index}`;
 
       return `
-        <div style="
+        <div id="${elementId}" class="auto-fit-text" style="
           position: absolute;
           left: ${left}px;
           top: ${top}px;
@@ -107,9 +108,8 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           justify-content: ${el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'flex-end' : 'flex-start'};
           overflow: hidden;
           white-space: nowrap;
-          text-overflow: ellipsis;
           color: ${validatedLayout.textColor};
-        ">${escapeHtml(displayText)}</div>
+        " data-base-font="${fontSize}"><span class="text-content">${escapeHtml(displayText)}</span></div>
       `;
     })
     .join('');
@@ -145,6 +145,29 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
       <div class="canvas">
         ${elementsHtml}
       </div>
+      <script>
+        function autoFitText() {
+          document.querySelectorAll('.auto-fit-text').forEach(el => {
+            const container = el;
+            const text = el.querySelector('.text-content');
+            if (!text) return;
+            
+            const baseFontSize = parseFloat(el.getAttribute('data-base-font')) || 24;
+            const containerWidth = container.offsetWidth - 4;
+            let fontSize = baseFontSize;
+            
+            text.style.fontSize = fontSize + 'px';
+            
+            while (text.scrollWidth > containerWidth && fontSize > 8) {
+              fontSize -= 1;
+              text.style.fontSize = fontSize + 'px';
+            }
+          });
+        }
+        
+        document.fonts.ready.then(autoFitText);
+        setTimeout(autoFitText, 100);
+      </script>
     </body>
     </html>
   `;
