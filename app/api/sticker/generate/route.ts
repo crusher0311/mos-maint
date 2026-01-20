@@ -11,6 +11,15 @@ export const dynamic = "force-dynamic";
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
+function getLogoUrl(): string {
+  if (process.env.HOVERCODE_LOGO_URL) {
+    return process.env.HOVERCODE_LOGO_URL;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
+  return `${baseUrl}/appointment.png`;
+}
+
 const storage = new Storage({
   credentials: {
     audience: "replit",
@@ -151,7 +160,7 @@ async function createHovercodeQR(
         display_name: displayName || "Oil Sticker QR",
         pattern: "Squares",
         background_color: backgroundColor,
-        logo_url: "https://mos-maintenance-mvp.replit.app/appointment.png",
+        logo_url: getLogoUrl(),
         generate_png: true,
       }),
     });
