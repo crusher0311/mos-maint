@@ -151,6 +151,110 @@ export async function GET(req: NextRequest) {
   }
 }
 
+const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
+
+async function createHovercodeQRWithLogo(
+  url: string,
+  displayName: string
+): Promise<{ id: string; error?: string } | null> {
+  const apiToken = process.env.HOVERCODE_API_TOKEN;
+  const workspaceId = process.env.HOVERCODE_WORKSPACE_ID;
+
+  if (!apiToken || !workspaceId) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace: workspaceId,
+        qr_data: url,
+        dynamic: true,
+        display_name: displayName,
+        primary_color: "#000000",
+        background_color: "#ffffff",
+        pattern: "Squares",
+        eye_style: "Rounded",
+        size: 300,
+        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+        generate_png: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[HoverCode] Create error:", response.status, errorText);
+      return { id: "", error: errorText };
+    }
+
+    const data = await response.json();
+    return { id: data.id };
+  } catch (error) {
+    console.error("[HoverCode] Create failed:", error);
+    return null;
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json({ error: "Forbidden - platform admin access required" }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const { shopId } = body as { shopId: string | number };
+
+    if (!shopId) {
+      return NextResponse.json({ error: "shopId required" }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const shopIdVariants = [shopId, Number(shopId), String(shopId)];
+    const shop = await db.collection("shops").findOne({ shopId: { $in: shopIdVariants } });
+
+    if (!shop) {
+      return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    const redirectUrl = `https://app.myoilsticker.com/sticker/redirect/${shopId}`;
+    const displayName = `${shop.name || `Shop ${shopId}`} - Oil Sticker`;
+
+    const result = await createHovercodeQRWithLogo(redirectUrl, displayName);
+
+    if (!result || !result.id) {
+      return NextResponse.json(
+        { error: result?.error || "Failed to create HoverCode QR" },
+        { status: 500 }
+      );
+    }
+
+    await db.collection("shops").updateOne(
+      { shopId: { $in: shopIdVariants } },
+      { $set: { "stickerConfig.hovercodeQRId": result.id } }
+    );
+
+    return NextResponse.json({
+      ok: true,
+      shopId: String(shopId),
+      hovercodeId: result.id,
+      message: "New QR code created with logo and assigned to shop",
+    });
+  } catch (error) {
+    console.error("Error regenerating QR:", error);
+    return NextResponse.json({ error: "Failed to regenerate QR" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
