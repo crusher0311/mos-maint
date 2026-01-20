@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     while (nextUrl) {
       const response = await fetch(nextUrl, {
         headers: {
-          Authorization: apiToken,
+          Authorization: `Token ${apiToken}`,
         },
       });
 
@@ -168,7 +168,7 @@ async function createHovercodeQRWithLogo(
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
-        Authorization: apiToken,
+        Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

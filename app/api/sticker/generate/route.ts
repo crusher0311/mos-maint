@@ -92,7 +92,7 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<{ dataUri: s
     const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
       method: "GET",
       headers: {
-        "Authorization": HOVERCODE_API_TOKEN,
+        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
       },
     });
 
@@ -140,7 +140,7 @@ async function createHovercodeQR(
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
-        "Authorization": HOVERCODE_API_TOKEN,
+        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

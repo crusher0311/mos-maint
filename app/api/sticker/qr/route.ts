@@ -62,7 +62,7 @@ async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> 
     console.log(`[Sticker QR] Fetching HoverCode QR from: ${url}`);
     
     const response = await fetch(url, {
-      headers: { Authorization: HOVERCODE_API_TOKEN },
+      headers: { Authorization: `Token ${HOVERCODE_API_TOKEN}` },
     });
     
     if (!response.ok) {
