@@ -589,12 +589,12 @@ export default function StickerSettingsPage() {
                   onChange={(e) => {
                     const newSize = e.target.value;
                     if (newSize === "1.5x2.25") {
-                      // Monochrome printer - set all colors to black
-                      setConfig({
-                        ...config,
+                      // Monochrome printer - set all colors to black using functional update
+                      setConfig(prev => ({
+                        ...prev,
                         defaultSize: newSize,
                         colors: {
-                          ...config.colors,
+                          ...prev.colors,
                           primary: "#000000",
                           secondary: "#000000",
                           text: "#000000",
@@ -604,9 +604,9 @@ export default function StickerSettingsPage() {
                           serviceLabelColor: "#000000",
                           serviceValueColor: "#000000",
                         },
-                      });
+                      }));
                     } else {
-                      setConfig({ ...config, defaultSize: newSize });
+                      setConfig(prev => ({ ...prev, defaultSize: newSize }));
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -616,28 +616,7 @@ export default function StickerSettingsPage() {
                   ))}
                 </select>
                 {config.defaultSize === "1.5x2.25" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfig({
-                        ...config,
-                        colors: {
-                          ...config.colors,
-                          primary: "#000000",
-                          secondary: "#000000",
-                          text: "#000000",
-                          phoneColor: "#000000",
-                          taglineColor: "#000000",
-                          taglineLine2Color: "#000000",
-                          serviceLabelColor: "#000000",
-                          serviceValueColor: "#000000",
-                        },
-                      });
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-800 underline mt-1"
-                  >
-                    Reset to monochrome (all black)
-                  </button>
+                  <p className="text-xs text-gray-500 mt-1">Monochrome preset applied</p>
                 )}
               </div>
               <div>
