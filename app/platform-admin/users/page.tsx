@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, Mail, Clock, Key } from "lucide-react";
+import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, Mail, Clock, Key, Plus, Eye, EyeOff } from "lucide-react";
 
 interface User {
   _id: string;
@@ -58,6 +58,14 @@ export default function PlatformUsersPage() {
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
   const [showInvites, setShowInvites] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserShopId, setNewUserShopId] = useState("");
+  const [newUserRole, setNewUserRole] = useState("user");
+  const [newUserIsPlatformAdmin, setNewUserIsPlatformAdmin] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -138,6 +146,47 @@ export default function PlatformUsersPage() {
       }
     } catch (err) {
       console.error("Failed to cancel invite:", err);
+    }
+  }
+
+  async function handleCreateUser() {
+    if (!newUserEmail || !newUserPassword || !newUserShopId) {
+      alert("Email, password, and shop are required");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await fetch("/api/platform-admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: newUserEmail,
+          password: newUserPassword,
+          shopId: newUserShopId,
+          role: newUserRole,
+          isPlatformAdmin: newUserIsPlatformAdmin,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setShowCreateModal(false);
+        setNewUserEmail("");
+        setNewUserPassword("");
+        setNewUserShopId("");
+        setNewUserRole("user");
+        setNewUserIsPlatformAdmin(false);
+        loadUsers();
+        alert("User created successfully!");
+      } else {
+        alert(data.error || "Failed to create user");
+      }
+    } catch (err) {
+      console.error("Failed to create user:", err);
+      alert("Failed to create user");
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -281,12 +330,21 @@ export default function PlatformUsersPage() {
           <h1 className="text-2xl font-bold text-gray-900">All Users</h1>
           <p className="text-gray-600">View and manage all users across all shops</p>
         </div>
-        <button
-          onClick={loadUsers}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Create User
+          </button>
+          <button
+            onClick={loadUsers}
+            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4">
@@ -620,6 +678,134 @@ export default function PlatformUsersPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Create New User</h2>
+                <p className="text-sm text-gray-500">Add a user directly to the system</p>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Shop *
+                </label>
+                <select
+                  value={newUserShopId}
+                  onChange={(e) => setNewUserShopId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Select a shop...</option>
+                  {allShops.map(shop => (
+                    <option key={shop.shopId} value={shop.shopId}>
+                      {shop.name} (ID: {shop.shopId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role
+                </label>
+                <select
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                >
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="user">User</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newUserIsPlatformAdmin}
+                    onChange={(e) => setNewUserIsPlatformAdmin(e.target.checked)}
+                    className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900 flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-purple-600" />
+                      Platform Admin
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Can access the platform admin panel
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                disabled={creating || !newUserEmail || !newUserPassword || !newUserShopId}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create User
+              </button>
+            </div>
           </div>
         </div>
       )}
