@@ -5,6 +5,67 @@ import { getDb } from "@/lib/mongo";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
+
+function getLogoUrl(): string {
+  if (process.env.HOVERCODE_LOGO_URL) {
+    return process.env.HOVERCODE_LOGO_URL;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
+  return `${baseUrl}/appointment.png`;
+}
+
+async function createHovercodeQR(
+  appointmentUrl: string,
+  displayName: string
+): Promise<{ id: string; error?: string } | null> {
+  const apiToken = process.env.HOVERCODE_API_TOKEN;
+  const workspaceId = process.env.HOVERCODE_WORKSPACE_ID;
+
+  if (!apiToken || !workspaceId) {
+    console.log("[Sticker Settings] HoverCode not configured, skipping QR creation");
+    return null;
+  }
+
+  const logoUrl = getLogoUrl();
+  console.log(`[Sticker Settings] Creating HoverCode QR with logo: ${logoUrl}`);
+
+  try {
+    const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace: workspaceId,
+        qr_data: appointmentUrl,
+        qr_type: "Link",
+        dynamic: true,
+        display_name: displayName,
+        pattern: "Squares",
+        background_color: "#ffffff",
+        logo_url: logoUrl,
+        generate_png: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Sticker Settings] HoverCode create error:", response.status, errorText);
+      return { id: "", error: errorText };
+    }
+
+    const data = await response.json();
+    console.log(`[Sticker Settings] Created HoverCode QR: ${data.id}`);
+    return { id: data.id };
+  } catch (error) {
+    console.error("[Sticker Settings] HoverCode create failed:", error);
+    return null;
+  }
+}
+
 interface IntervalConfig {
   mileage: number;
   months: number;
@@ -159,6 +220,29 @@ export async function PUT(req: NextRequest) {
     }
 
     const db = await getDb();
+    
+    // Check if we need to auto-create a HoverCode QR
+    // Conditions: appointmentUrl is being set AND shop doesn't have a hovercodeQRId yet
+    if (body.appointmentUrl && !body.hovercodeQRId) {
+      const shop = await db.collection("shops").findOne(
+        { shopId },
+        { projection: { stickerConfig: 1, name: 1 } }
+      );
+      
+      const existingQRId = shop?.stickerConfig?.hovercodeQRId;
+      
+      if (!existingQRId) {
+        console.log(`[Sticker Settings] Auto-creating HoverCode QR for shop ${shopId}`);
+        const displayName = `${shop?.name || `Shop ${shopId}`} - Oil Sticker`;
+        const qrResult = await createHovercodeQR(body.appointmentUrl, displayName);
+        
+        if (qrResult?.id) {
+          updateFields["stickerConfig.hovercodeQRId"] = qrResult.id;
+          console.log(`[Sticker Settings] Auto-assigned HoverCode QR ${qrResult.id} to shop ${shopId}`);
+        }
+      }
+    }
+    
     const result = await db.collection("shops").updateOne(
       { shopId },
       {
@@ -182,6 +266,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({
       success: true,
       config: updatedShop?.stickerConfig,
+      qrAutoCreated: !!updateFields["stickerConfig.hovercodeQRId"],
     });
   } catch (error) {
     console.error("[Sticker Settings PUT] Error:", error);
