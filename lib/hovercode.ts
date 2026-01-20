@@ -58,7 +58,7 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
         pattern: "Squares",
         dynamic: true,
         background_color: options.backgroundColor || "#ffffff",
-        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+        logo_url: "https://mos-maintenance-mvp.replit.app/appointment.png",
         generate_png: true,
       }),
     });
