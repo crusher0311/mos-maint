@@ -6,6 +6,7 @@ import { QrCode, Save, Loader2, Search, Check, X, RefreshCw, Trash2 } from "luci
 interface Shop {
   shopId: string | number;
   name: string;
+  locationIdentifier?: string | null;
   hovercodeQRId?: string;
 }
 
@@ -32,6 +33,7 @@ export default function HovercodePage() {
         const shopsWithQR = data.shops.map((shop: any) => ({
           shopId: shop.shopId,
           name: shop.name || `Shop ${shop.shopId}`,
+          locationIdentifier: shop.locationIdentifier || null,
           hovercodeQRId: shop.stickerConfig?.hovercodeQRId || "",
         }));
         setShops(shopsWithQR);
@@ -149,6 +151,7 @@ export default function HovercodePage() {
     (shop) =>
       String(shop.shopId).includes(searchTerm) ||
       shop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (shop.hovercodeQRId && shop.hovercodeQRId.includes(searchTerm))
   );
 
@@ -225,7 +228,12 @@ export default function HovercodePage() {
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">
                     {shop.shopId}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{shop.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="text-sm text-gray-900 font-medium">{shop.name}</div>
+                    {shop.locationIdentifier && (
+                      <div className="text-xs text-gray-500">{shop.locationIdentifier}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {editingShopId === shop.shopId ? (
                       <input
