@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
 import nodeHtmlToImage from "node-html-to-image";
+import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ interface KeytagConfig {
     background?: string;
   };
   defaultSize?: "dymo30252";
+  designerLayout?: DesignerLayout;
 }
 
 interface KeytagRequest {
@@ -43,14 +45,6 @@ interface KeytagRequest {
   mileage: string | number;
 }
 
-const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "dymo30252": { width: 1035, height: 333 },
-};
-
-const SIZE_INCHES: Record<string, { width: string; height: string }> = {
-  "dymo30252": { width: "3.45in", height: "1.11in" },
-};
-
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -60,13 +54,95 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-function generateKeytagHtml(
+function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): string {
+  const scaleFactor = DYMO_30252.renderWidth / DYMO_30252.width;
+  
+  const dataMap: Record<string, string> = {
+    customerName: data.customerName?.toUpperCase() || '',
+    vehicleInfo: data.vehicleInfo?.toUpperCase() || '',
+    vin: data.vin || '',
+    roNumber: data.roNumber || '',
+    mileage: typeof data.mileage === 'number' ? data.mileage.toLocaleString() : (data.mileage || ''),
+  };
+
+  const elementsHtml = layout.elements
+    .filter((el) => el.visible)
+    .map((el) => {
+      const value = dataMap[el.type] || el.label;
+      const displayText = el.showLabel ? `${el.label}: ${value}` : value;
+      
+      const left = el.x * scaleFactor;
+      const top = el.y * scaleFactor;
+      const width = el.width * scaleFactor;
+      const height = el.height * scaleFactor;
+      const fontSize = el.fontSize * scaleFactor;
+
+      return `
+        <div style="
+          position: absolute;
+          left: ${left}px;
+          top: ${top}px;
+          width: ${width}px;
+          height: ${height}px;
+          font-size: ${fontSize}px;
+          font-weight: ${el.fontWeight};
+          font-style: ${el.fontStyle};
+          text-align: ${el.textAlign};
+          display: flex;
+          align-items: center;
+          justify-content: ${el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'flex-end' : 'flex-start'};
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          color: ${layout.textColor};
+        ">${escapeHtml(displayText)}</div>
+      `;
+    })
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        html, body {
+          width: ${DYMO_30252.renderWidth}px;
+          height: ${DYMO_30252.renderHeight}px;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          background: ${layout.backgroundColor};
+        }
+        
+        .canvas {
+          position: relative;
+          width: ${DYMO_30252.renderWidth}px;
+          height: ${DYMO_30252.renderHeight}px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="canvas">
+        ${elementsHtml}
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+function generateLegacyHtml(
   config: KeytagConfig,
-  data: KeytagRequest,
-  scaleFactor: number = 1
+  data: KeytagRequest
 ): string {
   const textColor = config.colors?.text || "#000000";
   const backgroundColor = config.colors?.background || "#FFFFFF";
+  const scaleFactor = DYMO_30252.renderWidth / 345;
 
   const mileageFormatted = typeof data.mileage === 'number' 
     ? data.mileage.toLocaleString() 
@@ -91,15 +167,12 @@ function generateKeytagHtml(
           box-sizing: border-box;
         }
         
-        body {
+        html, body {
+          width: ${DYMO_30252.renderWidth}px;
+          height: ${DYMO_30252.renderHeight}px;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
           background: ${backgroundColor};
           color: ${textColor};
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          width: 100vw;
         }
         
         .keytag {
@@ -291,11 +364,12 @@ export async function POST(req: NextRequest) {
       defaultSize: "dymo30252",
     };
 
-    const size = config.defaultSize || "dymo30252";
-    const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["dymo30252"];
-    const scaleFactor = dimensions.width / 345;
-    
-    const html = generateKeytagHtml(config, body, scaleFactor);
+    let html: string;
+    if (config.designerLayout) {
+      html = generateDesignerHtml(config.designerLayout, body);
+    } else {
+      html = generateLegacyHtml(config, body);
+    }
 
     const image = await nodeHtmlToImage({
       html,
@@ -308,16 +382,14 @@ export async function POST(req: NextRequest) {
       },
     }) as string;
 
-    const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["dymo30252"];
-
     return NextResponse.json(
       {
         success: true,
         image: `data:image/png;base64,${image}`,
-        size: size,
+        size: "dymo30252",
         dimensions: {
-          width: sizeInches.width,
-          height: sizeInches.height,
+          width: "3.45in",
+          height: "1.11in",
         },
         roNumber: body.roNumber,
       },
