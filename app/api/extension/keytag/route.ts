@@ -38,6 +38,7 @@ interface KeytagConfig {
 interface KeytagRequest {
   customerName: string;
   vehicleInfo: string;
+  vin?: string;
   roNumber: string;
   mileage: string | number;
 }
@@ -64,16 +65,6 @@ function generateKeytagHtml(
   data: KeytagRequest,
   scaleFactor: number = 1
 ): string {
-  const customerNameStyle = config.fontStyles?.customerName || { bold: true, italic: false, size: 14 };
-  const vehicleInfoStyle = config.fontStyles?.vehicleInfo || { bold: false, italic: false, size: 12 };
-  const roNumberStyle = config.fontStyles?.roNumber || { bold: true, italic: false, size: 12 };
-  const mileageStyle = config.fontStyles?.mileage || { bold: true, italic: false, size: 14 };
-
-  const customerNameSize = Math.round((customerNameStyle.size || 14) * scaleFactor);
-  const vehicleInfoSize = Math.round((vehicleInfoStyle.size || 12) * scaleFactor);
-  const roNumberSize = Math.round((roNumberStyle.size || 12) * scaleFactor);
-  const mileageSize = Math.round((mileageStyle.size || 14) * scaleFactor);
-
   const textColor = config.colors?.text || "#000000";
   const backgroundColor = config.colors?.background || "#FFFFFF";
 
@@ -81,12 +72,18 @@ function generateKeytagHtml(
     ? data.mileage.toLocaleString() 
     : data.mileage;
 
+  const baseFontSize = Math.round(11 * scaleFactor);
+  const nameFontSize = Math.round(16 * scaleFactor);
+  const vehicleFontSize = Math.round(11 * scaleFactor);
+  const padding = Math.round(16 * scaleFactor);
+  const gap = Math.round(20 * scaleFactor);
+
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
         
         * {
           margin: 0;
@@ -108,83 +105,80 @@ function generateKeytagHtml(
         .keytag {
           width: 100%;
           height: 100%;
-          padding: ${Math.round(12 * scaleFactor)}px ${Math.round(16 * scaleFactor)}px;
+          padding: ${padding}px;
           display: flex;
           flex-direction: row;
-          justify-content: space-between;
           align-items: center;
-          gap: ${Math.round(12 * scaleFactor)}px;
         }
         
         .left-section {
           display: flex;
           flex-direction: column;
           justify-content: center;
-          gap: ${Math.round(4 * scaleFactor)}px;
           flex: 1;
+          padding-right: ${gap}px;
+        }
+        
+        .divider {
+          width: 1px;
+          height: 80%;
+          background: ${textColor};
+          opacity: 0.3;
         }
         
         .right-section {
           display: flex;
           flex-direction: column;
           justify-content: center;
-          align-items: flex-end;
-          gap: ${Math.round(4 * scaleFactor)}px;
+          padding-left: ${gap}px;
+          flex: 1.2;
         }
         
         .customer-name {
-          font-size: ${customerNameSize}px;
-          font-weight: ${customerNameStyle.bold ? '700' : '400'};
-          font-style: ${customerNameStyle.italic ? 'italic' : 'normal'};
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 100%;
+          font-size: ${nameFontSize}px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          padding-bottom: ${Math.round(4 * scaleFactor)}px;
+          border-bottom: 1px solid ${textColor};
+          margin-bottom: ${Math.round(8 * scaleFactor)}px;
         }
         
         .vehicle-info {
-          font-size: ${vehicleInfoSize}px;
-          font-weight: ${vehicleInfoStyle.bold ? '700' : '400'};
-          font-style: ${vehicleInfoStyle.italic ? 'italic' : 'normal'};
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 100%;
-          opacity: 0.85;
-        }
-        
-        .ro-number {
-          font-size: ${roNumberSize}px;
-          font-weight: ${roNumberStyle.bold ? '700' : '400'};
-          font-style: ${roNumberStyle.italic ? 'italic' : 'normal'};
-          white-space: nowrap;
-        }
-        
-        .mileage {
-          font-size: ${mileageSize}px;
-          font-weight: ${mileageStyle.bold ? '700' : '400'};
-          font-style: ${mileageStyle.italic ? 'italic' : 'normal'};
-          white-space: nowrap;
-        }
-        
-        .mileage-label {
-          font-size: ${Math.round(10 * scaleFactor)}px;
-          opacity: 0.7;
+          font-size: ${vehicleFontSize}px;
+          font-weight: 400;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+        }
+        
+        .info-row {
+          font-size: ${baseFontSize}px;
+          font-weight: 400;
+          padding-bottom: ${Math.round(3 * scaleFactor)}px;
+          border-bottom: 1px solid ${textColor};
+          margin-bottom: ${Math.round(6 * scaleFactor)}px;
+        }
+        
+        .info-row:last-child {
+          border-bottom: none;
+          margin-bottom: 0;
+        }
+        
+        .info-label {
+          font-weight: 700;
         }
       </style>
     </head>
     <body>
       <div class="keytag">
         <div class="left-section">
-          <div class="customer-name">${escapeHtml(data.customerName)}</div>
-          <div class="vehicle-info">${escapeHtml(data.vehicleInfo)}</div>
+          <div class="customer-name">${escapeHtml(data.customerName.toUpperCase())}</div>
+          <div class="vehicle-info">${escapeHtml(data.vehicleInfo.toUpperCase())}</div>
         </div>
+        <div class="divider"></div>
         <div class="right-section">
-          <div class="ro-number">RO# ${escapeHtml(String(data.roNumber))}</div>
-          <div class="mileage-label">Miles In</div>
-          <div class="mileage">${escapeHtml(mileageFormatted)}</div>
+          ${data.vin ? `<div class="info-row"><span class="info-label">VIN:</span> ${escapeHtml(data.vin)}</div>` : ''}
+          <div class="info-row"><span class="info-label">Mileage:</span> ${escapeHtml(mileageFormatted)}</div>
+          <div class="info-row"><span class="info-label">RO#:</span> ${escapeHtml(String(data.roNumber))}</div>
         </div>
       </div>
     </body>
