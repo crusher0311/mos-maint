@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import puppeteer from "puppeteer";
+import nodeHtmlToImage from "node-html-to-image";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -194,7 +194,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body: KeytagRequest = await req.json();
+    let body: KeytagRequest;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error("Failed to parse request body:", parseError);
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    
+    if (!body || !body.customerName || !body.roNumber) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
     
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
@@ -209,37 +219,19 @@ export async function POST(req: NextRequest) {
     const scaleFactor = dimensions.width / 345;
     const html = generateKeytagHtml(config, body, scaleFactor);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    });
-
-    const page = await browser.newPage();
-    await page.setViewport({
-      width: dimensions.width,
-      height: dimensions.height,
-      deviceScaleFactor: 1,
-    });
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const screenshot = await page.screenshot({
-      type: 'png',
-      omitBackground: false,
-    });
-
-    await browser.close();
+    const image = await nodeHtmlToImage({
+      html,
+      type: "png",
+      transparent: false,
+      puppeteerArgs: {
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+      },
+    }) as Buffer;
 
     const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["dymo30252"];
 
-    return new NextResponse(screenshot, {
+    return new NextResponse(image, {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `inline; filename="keytag-${body.roNumber}.png"`,
