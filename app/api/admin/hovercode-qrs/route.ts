@@ -179,7 +179,7 @@ async function createHovercodeQRWithLogo(
         display_name: displayName,
         pattern: "Squares",
         background_color: "#ffffff",
-        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+        logo_url: "https://mos-maintenance-mvp.replit.app/appointment.png",
         generate_png: true,
       }),
     });
