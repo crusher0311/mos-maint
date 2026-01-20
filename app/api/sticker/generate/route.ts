@@ -490,8 +490,12 @@ export async function POST(req: NextRequest) {
       const shopName = shop.name || `Shop ${shopId}`;
       const isPreview = !!body.previewConfig;
       
-      // Try HoverCode first (styled QR), fall back to basic QR if unavailable
-      {
+      // For preview mode with custom colors, use fallback QR so color changes show immediately
+      // HoverCode QRs are cached with fixed colors, so we can't use them for live preview
+      if (isPreview) {
+        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+      } else {
+        // Production stickers: try HoverCode first (styled QR), fall back to basic QR
         if (config.hovercodeQRId) {
           console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
           const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
