@@ -1006,6 +1006,54 @@ body {
   flex-shrink: 0;
 }
 
+/* ==================== Radio Button Intervals ==================== */
+.interval-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interval-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.interval-radio:hover {
+  border-color: var(--primary);
+  background: var(--gray-50);
+}
+
+.interval-radio:has(input:checked) {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.interval-radio input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.radio-label {
+  font-weight: 500;
+  color: var(--gray-800);
+  flex: 1;
+}
+
+.radio-detail {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
 /* ==================== Responsive ==================== */
 @media (max-width: 320px) {
   .service-item {
