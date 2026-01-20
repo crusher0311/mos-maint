@@ -258,9 +258,11 @@ export function DesignerCanvas({
       {layout.elements.filter((el) => el.visible).map((element) => {
         const isSelected = element.id === selectedId;
         const value = SAMPLE_DATA[element.type] || element.label;
-        const displayText = element.showLabel
-          ? `${element.label}: ${value}`
-          : value;
+        
+        const labelWeight = element.labelFontWeight || element.fontWeight;
+        const labelStyle = element.labelFontStyle || element.fontStyle;
+        const valueWeight = element.valueFontWeight || 'normal';
+        const valueStyle = element.valueFontStyle || 'normal';
 
         return (
           <div
@@ -274,8 +276,6 @@ export function DesignerCanvas({
               width: element.width * 1.5,
               height: element.height * 1.5,
               fontSize: element.fontSize * 1.5,
-              fontWeight: element.fontWeight,
-              fontStyle: element.fontStyle,
               textAlign: element.textAlign,
               color: layout.textColor,
               display: "flex",
@@ -294,7 +294,14 @@ export function DesignerCanvas({
             }}
             onMouseDown={(e) => handleMouseDown(e, element.id, "move")}
           >
-            {displayText}
+            {element.showLabel ? (
+              <>
+                <span style={{ fontWeight: labelWeight, fontStyle: labelStyle }}>{element.label}: </span>
+                <span style={{ fontWeight: valueWeight, fontStyle: valueStyle }}>{value}</span>
+              </>
+            ) : (
+              <span style={{ fontWeight: element.fontWeight, fontStyle: element.fontStyle }}>{value}</span>
+            )}
 
             {isSelected && (
               <>

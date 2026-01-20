@@ -165,6 +165,72 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
         </label>
       </div>
 
+      {element.showLabel && (
+        <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+          <p className="text-xs font-medium text-gray-600 uppercase">Label vs Value Styling</p>
+          
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Label Style (e.g., "VIN:")</label>
+            <div className="flex gap-1">
+              <button
+                onClick={() => onUpdate({ 
+                  labelFontWeight: (element.labelFontWeight || element.fontWeight) === "bold" ? "normal" : "bold" 
+                })}
+                className={`flex-1 p-1.5 rounded border text-xs ${
+                  (element.labelFontWeight || element.fontWeight) === "bold"
+                    ? "bg-blue-100 border-blue-300 text-blue-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Bold className="w-3 h-3 mx-auto" />
+              </button>
+              <button
+                onClick={() => onUpdate({ 
+                  labelFontStyle: (element.labelFontStyle || element.fontStyle) === "italic" ? "normal" : "italic" 
+                })}
+                className={`flex-1 p-1.5 rounded border text-xs ${
+                  (element.labelFontStyle || element.fontStyle) === "italic"
+                    ? "bg-blue-100 border-blue-300 text-blue-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Italic className="w-3 h-3 mx-auto" />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Value Style (e.g., "4T1BF1FK...")</label>
+            <div className="flex gap-1">
+              <button
+                onClick={() => onUpdate({ 
+                  valueFontWeight: (element.valueFontWeight ?? "normal") === "bold" ? "normal" : "bold" 
+                })}
+                className={`flex-1 p-1.5 rounded border text-xs ${
+                  (element.valueFontWeight ?? "normal") === "bold"
+                    ? "bg-blue-100 border-blue-300 text-blue-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Bold className="w-3 h-3 mx-auto" />
+              </button>
+              <button
+                onClick={() => onUpdate({ 
+                  valueFontStyle: (element.valueFontStyle ?? "normal") === "italic" ? "normal" : "italic" 
+                })}
+                className={`flex-1 p-1.5 rounded border text-xs ${
+                  (element.valueFontStyle ?? "normal") === "italic"
+                    ? "bg-blue-100 border-blue-300 text-blue-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Italic className="w-3 h-3 mx-auto" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="pt-3 border-t">
         <p className="text-xs text-gray-500">
           Preview shows sample data. Actual keytags will display real customer and vehicle information.

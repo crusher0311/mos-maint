@@ -92,6 +92,15 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
       const fontSize = el.fontSize * scaleFactor;
       const elementId = `el-${index}`;
 
+      const labelWeight = el.labelFontWeight || el.fontWeight;
+      const labelStyle = el.labelFontStyle || el.fontStyle;
+      const valueWeight = el.valueFontWeight || 'normal';
+      const valueStyle = el.valueFontStyle || 'normal';
+
+      const textHtml = el.showLabel
+        ? `<span style="font-weight:${labelWeight};font-style:${labelStyle}">${escapeHtml(el.label)}: </span><span style="font-weight:${valueWeight};font-style:${valueStyle}">${escapeHtml(value)}</span>`
+        : `<span style="font-weight:${el.fontWeight};font-style:${el.fontStyle}">${escapeHtml(value)}</span>`;
+
       return `
         <div id="${elementId}" class="auto-fit-text" style="
           position: absolute;
@@ -100,8 +109,6 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           width: ${width}px;
           height: ${height}px;
           font-size: ${fontSize}px;
-          font-weight: ${el.fontWeight};
-          font-style: ${el.fontStyle};
           text-align: ${el.textAlign};
           display: flex;
           align-items: center;
@@ -109,7 +116,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           overflow: hidden;
           white-space: nowrap;
           color: ${validatedLayout.textColor};
-        " data-base-font="${fontSize}"><span class="text-content">${escapeHtml(displayText)}</span></div>
+        " data-base-font="${fontSize}"><span class="text-content">${textHtml}</span></div>
       `;
     })
     .join('');
