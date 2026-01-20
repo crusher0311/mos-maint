@@ -74,7 +74,7 @@ const elements = {
   stickerDisabled: document.getElementById('sticker-disabled'),
   stickerMileage: document.getElementById('sticker-mileage'),
   stickerUnit: document.getElementById('sticker-unit'),
-  stickerInterval: document.getElementById('sticker-interval'),
+  stickerIntervalRadios: document.getElementById('sticker-interval-radios'),
   customIntervalFields: document.getElementById('custom-interval-fields'),
   customMonths: document.getElementById('custom-months'),
   customMileage: document.getElementById('custom-mileage'),
@@ -132,11 +132,15 @@ function setupEventListeners() {
     if (e.key === 'Enter') handleJobSearch();
   });
   
-  // Sticker form
-  elements.stickerInterval.addEventListener('change', () => {
-    const isCustom = elements.stickerInterval.value === 'custom';
-    elements.customIntervalFields.classList.toggle('hidden', !isCustom);
-  });
+  // Sticker form - radio buttons
+  if (elements.stickerIntervalRadios) {
+    elements.stickerIntervalRadios.querySelectorAll('input[name="interval"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const isCustom = radio.value === 'custom';
+        elements.customIntervalFields.classList.toggle('hidden', !isCustom);
+      });
+    });
+  }
   
   elements.stickerMileage.addEventListener('input', (e) => {
     e.target.value = formatMileageInput(e.target.value);
@@ -594,6 +598,41 @@ function createServiceItemHTML(item, type) {
 
 // ==================== COMMON FAILURES ====================
 async function loadCommonFailures() {
+  // Check if we have vehicle data - if not, try to load from plan first
+  if (!currentContext || (!currentContext.vehicle && currentContext.roId)) {
+    // We have an RO but no vehicle data yet - fetch from plan API
+    elements.failuresLoading.classList.remove('hidden');
+    elements.failuresEmpty.classList.add('hidden');
+    elements.failuresContent.classList.add('hidden');
+    
+    try {
+      const params = new URLSearchParams({
+        shopId: currentContext.shopId,
+        roId: currentContext.roId,
+        provider: currentContext.provider || 'tekmetric'
+      });
+      if (currentContext.vin) params.set('vin', currentContext.vin);
+      
+      const planResult = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/plan?${params}`
+      });
+      
+      // Extract vehicle data from plan response
+      if (planResult.vehicle && planResult.vehicle.year && planResult.vehicle.make && planResult.vehicle.model) {
+        currentContext.vehicle = {
+          year: planResult.vehicle.year,
+          make: planResult.vehicle.make,
+          model: planResult.vehicle.model,
+          engine: planResult.vehicle.engine || null
+        };
+        currentContext.mileage = planResult.mileage || currentContext.mileage;
+      }
+    } catch (err) {
+      console.log('[MOS] Could not fetch vehicle from plan:', err);
+    }
+  }
+  
   if (!currentContext || !currentContext.vehicle) {
     elements.failuresLoading.classList.add('hidden');
     elements.failuresEmpty.classList.remove('hidden');
@@ -605,11 +644,19 @@ async function loadCommonFailures() {
   const { year, make, model, engine } = currentContext.vehicle;
   const mileage = currentContext.mileage;
   
-  if (!year || !make || !model || !mileage) {
+  if (!year || !make || !model) {
     elements.failuresLoading.classList.add('hidden');
     elements.failuresEmpty.classList.remove('hidden');
     elements.failuresContent.classList.add('hidden');
-    elements.failuresEmpty.querySelector('p').textContent = 'Vehicle year, make, model, and mileage are required.';
+    elements.failuresEmpty.querySelector('p').textContent = 'Vehicle year, make, and model are required.';
+    return;
+  }
+  
+  if (!mileage) {
+    elements.failuresLoading.classList.add('hidden');
+    elements.failuresEmpty.classList.remove('hidden');
+    elements.failuresContent.classList.add('hidden');
+    elements.failuresEmpty.querySelector('p').textContent = 'Vehicle mileage is required for failure predictions.';
     return;
   }
   
@@ -929,7 +976,21 @@ async function loadCannedJobs() {
         endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
       });
       
-      jobs = (result.content || result || []).map(job => ({
+      // Handle different response structures from Tekmetric
+      let rawJobs = [];
+      if (result.error) {
+        throw new Error(result.error);
+      } else if (Array.isArray(result.content)) {
+        rawJobs = result.content;
+      } else if (Array.isArray(result)) {
+        rawJobs = result;
+      } else if (result.content && typeof result.content === 'object') {
+        rawJobs = Object.values(result.content);
+      } else if (result.jobs && Array.isArray(result.jobs)) {
+        rawJobs = result.jobs;
+      }
+      
+      jobs = rawJobs.map(job => ({
         id: job.id,
         name: job.name,
         description: job.description,
@@ -943,7 +1004,18 @@ async function loadCannedJobs() {
         endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
       });
       
-      jobs = result.jobs || [];
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      // Handle different response structures
+      if (Array.isArray(result.jobs)) {
+        jobs = result.jobs;
+      } else if (Array.isArray(result)) {
+        jobs = result;
+      } else {
+        jobs = [];
+      }
     }
     
     renderCannedJobs(jobs);
@@ -1154,7 +1226,8 @@ async function handleStickerPrint() {
   elements.stickerPrintBtn.disabled = true;
   
   try {
-    const intervalType = elements.stickerInterval.value;
+    const selectedRadio = elements.stickerIntervalRadios?.querySelector('input[name="interval"]:checked');
+    const intervalType = selectedRadio?.value || 'synthetic';
     const unit = elements.stickerUnit.value;
     
     const body = {
