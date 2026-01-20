@@ -18,6 +18,7 @@ interface Shop {
   shopId: string;
   name: string;
   location?: string;
+  locationIdentifier?: string;
 }
 
 interface UserModalData {
@@ -582,12 +583,24 @@ export default function PlatformUsersPage() {
                       Primary Location
                     </label>
                     <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center gap-2">
-                        <Building className="w-4 h-4 text-gray-500" />
-                        <span className="font-medium">
-                          {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.name || `Shop ${selectedUser.shopId}`}
-                        </span>
-                      </div>
+                      {(() => {
+                        const shop = allShops.find(s => String(s.shopId) === String(selectedUser.shopId));
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Building className="w-4 h-4 text-gray-500" />
+                            <div>
+                              <span className="font-medium">
+                                {shop?.name || `Shop ${selectedUser.shopId}`}
+                              </span>
+                              {shop?.locationIdentifier && (
+                                <span className="text-sm text-gray-500 ml-2">
+                                  ({shop.locationIdentifier})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -611,8 +624,8 @@ export default function PlatformUsersPage() {
                             />
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-gray-900 text-sm truncate">{shop.name}</div>
-                              {shop.location && (
-                                <div className="text-xs text-gray-500 truncate">{shop.location}</div>
+                              {(shop.locationIdentifier || shop.location) && (
+                                <div className="text-xs text-gray-500 truncate">{shop.locationIdentifier || shop.location}</div>
                               )}
                             </div>
                             <div className="text-xs text-gray-400">ID: {shop.shopId}</div>
@@ -746,7 +759,7 @@ export default function PlatformUsersPage() {
                   <option value="">Select a shop...</option>
                   {allShops.map(shop => (
                     <option key={shop.shopId} value={shop.shopId}>
-                      {shop.name} (ID: {shop.shopId})
+                      {shop.name}{shop.locationIdentifier ? ` - ${shop.locationIdentifier}` : ''} (ID: {shop.shopId})
                     </option>
                   ))}
                 </select>

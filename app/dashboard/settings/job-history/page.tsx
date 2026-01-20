@@ -8,6 +8,7 @@ interface Shop {
   shopId: number;
   name: string;
   location?: string;
+  locationIdentifier?: string;
 }
 
 interface JobHistoryPreferences {
@@ -46,6 +47,7 @@ export default function JobHistoryPreferencesPage() {
           shopId: Number(s.shopId),
           name: s.name,
           location: s.location,
+          locationIdentifier: s.locationIdentifier,
         }));
         setAllShops(shops);
         setHasMultipleShops(shops.length > 1);
@@ -292,8 +294,8 @@ export default function JobHistoryPreferencesPage() {
                       </div>
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">{shop.name}</div>
-                        {shop.location && (
-                          <div className="text-sm text-gray-500">{shop.location}</div>
+                        {(shop.locationIdentifier || shop.location) && (
+                          <div className="text-sm text-gray-500">{shop.locationIdentifier || shop.location}</div>
                         )}
                       </div>
                       <button
@@ -321,8 +323,8 @@ export default function JobHistoryPreferencesPage() {
                       <Building className="w-5 h-5 text-gray-400" />
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">{shop.name}</div>
-                        {shop.location && (
-                          <div className="text-sm text-gray-500">{shop.location}</div>
+                        {(shop.locationIdentifier || shop.location) && (
+                          <div className="text-sm text-gray-500">{shop.locationIdentifier || shop.location}</div>
                         )}
                       </div>
                       <button
