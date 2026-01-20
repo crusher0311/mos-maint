@@ -46,7 +46,6 @@ const KEYTAG_SIZES = [
 ];
 
 export default function KeytagSettingsPage() {
-  const { data: session } = useSession();
   const [config, setConfig] = useState<KeytagConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -181,40 +180,40 @@ export default function KeytagSettingsPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Tag className="w-8 h-8 text-blue-600" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Keytag Settings</h1>
-              <p className="text-sm text-gray-500">Configure your keytag appearance and layout</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleReset}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 flex items-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save Settings
-            </button>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Tag className="w-8 h-8 text-blue-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Keytag Settings</h1>
+            <p className="text-sm text-gray-500">Configure your keytag appearance and layout</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 flex items-center gap-2"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Settings
+          </button>
+        </div>
+      </div>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+          {error}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold mb-4">Size</h2>
@@ -410,7 +409,6 @@ export default function KeytagSettingsPage() {
                 They attach to customer keys while vehicles are in the shop.
               </p>
             </div>
-          </div>
         </div>
       </div>
     </div>

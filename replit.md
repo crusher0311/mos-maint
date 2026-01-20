@@ -87,6 +87,13 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Platform Admin Panel**: Internal MOS staff panel for platform statistics, shop management, user directory, and OpenAI API usage tracking.
 *   **Modular Feature Architecture**: Supports à la carte feature toggles.
 *   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration with Plan (maintenance recommendations), Failures (Common Failures Advisor), Lookup (job history search), Canned Jobs, and Sticker (oil change sticker printing), supporting push-to-RO functionality. The Sticker tab allows quick printing with auto-populated mileage from current RO context.
+*   **Keytags Feature**: Prints customer/vehicle info on Dymo 30252 labels (1⅛" x 3½") for key identification while vehicles are in the shop.
+    *   Settings API: `app/api/keytag/settings/route.ts` - GET/POST for shop keytag configuration
+    *   Generation API: `app/api/keytag/generate/route.ts` - Puppeteer-based PNG generation
+    *   Extension API: `app/api/extension/keytag/route.ts` - Token-authenticated API for Chrome extension
+    *   Settings UI: `app/dashboard/settings/keytags/page.tsx` - Customizable fonts, colors, and live preview
+    *   Display fields: customer name, vehicle info, RO number, mileage
+    *   Available under Settings > Preferences > Keytags
 *   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations.
 *   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
 *   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach, utilizing pre-computed `shop_repair_patterns` and enterprise aggregation.
