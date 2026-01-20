@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { DesignerElement } from "@/lib/keytag-designer-types";
-import { Eye, EyeOff, Bold, Italic, AlignLeft, AlignCenter, AlignRight, Tag } from "lucide-react";
+import { Eye, EyeOff, Bold, Italic, AlignLeft, AlignCenter, AlignRight, Tag, ChevronDown, ChevronRight } from "lucide-react";
 
 interface ElementPanelProps {
   element: DesignerElement;
@@ -10,6 +11,9 @@ interface ElementPanelProps {
 }
 
 export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps) {
+  const [showAdvancedStyles, setShowAdvancedStyles] = useState(false);
+  const [showVinOptions, setShowVinOptions] = useState(false);
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2 pb-3 border-b">
@@ -166,9 +170,17 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
       </div>
 
       {element.showLabel && (
-        <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
-          <p className="text-xs font-medium text-gray-600 uppercase">Label vs Value Styling</p>
+        <div className="border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowAdvancedStyles(!showAdvancedStyles)}
+            className="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-gray-100 text-left"
+          >
+            <span className="text-xs font-medium text-gray-600">Label vs Value Styling</span>
+            {showAdvancedStyles ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          </button>
           
+          {showAdvancedStyles && (
+          <div className="p-3 space-y-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Label Style (e.g., "VIN:")</label>
             <div className="flex gap-1">
@@ -227,57 +239,68 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
                 <Italic className="w-3 h-3 mx-auto" />
               </button>
             </div>
+            </div>
           </div>
+          )}
         </div>
       )}
 
       {element.type === 'vin' && (
-        <div className="space-y-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={element.vinHighlightLast8 || false}
-              onChange={(e) => onUpdate({ vinHighlightLast8: e.target.checked })}
-              className="rounded"
-              id="vinHighlight"
-            />
-            <label htmlFor="vinHighlight" className="text-sm text-gray-700 cursor-pointer">
-              Highlight last 8 digits
-            </label>
-          </div>
-          <p className="text-xs text-amber-700">
-            Suppliers often ask for the last 8 characters of the VIN when ordering parts.
-          </p>
+        <div className="border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowVinOptions(!showVinOptions)}
+            className="w-full flex items-center justify-between p-2 bg-amber-50 hover:bg-amber-100 text-left"
+          >
+            <span className="text-xs font-medium text-amber-700">VIN Options</span>
+            {showVinOptions ? <ChevronDown className="w-4 h-4 text-amber-500" /> : <ChevronRight className="w-4 h-4 text-amber-500" />}
+          </button>
           
-          {element.vinHighlightLast8 && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Last 8 Style</label>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => onUpdate({ 
-                    vinLast8FontWeight: (element.vinLast8FontWeight ?? "bold") === "bold" ? "normal" : "bold" 
-                  })}
-                  className={`flex-1 p-1.5 rounded border text-xs ${
-                    (element.vinLast8FontWeight ?? "bold") === "bold"
-                      ? "bg-amber-100 border-amber-300 text-amber-700"
-                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <Bold className="w-3 h-3 mx-auto" />
-                </button>
-                <button
-                  onClick={() => onUpdate({ 
-                    vinLast8FontStyle: (element.vinLast8FontStyle ?? "normal") === "italic" ? "normal" : "italic" 
-                  })}
-                  className={`flex-1 p-1.5 rounded border text-xs ${
-                    (element.vinLast8FontStyle ?? "normal") === "italic"
-                      ? "bg-amber-100 border-amber-300 text-amber-700"
-                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <Italic className="w-3 h-3 mx-auto" />
-                </button>
-              </div>
+          {showVinOptions && (
+            <div className="p-3 space-y-3 bg-amber-50/50">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={element.vinHighlightLast8 || false}
+                  onChange={(e) => onUpdate({ vinHighlightLast8: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-gray-700">Highlight last 8 digits</span>
+              </label>
+              <p className="text-xs text-amber-600">
+                Suppliers often ask for the last 8 of the VIN when ordering parts.
+              </p>
+              
+              {element.vinHighlightLast8 && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Last 8 Style</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => onUpdate({ 
+                        vinLast8FontWeight: (element.vinLast8FontWeight ?? "bold") === "bold" ? "normal" : "bold" 
+                      })}
+                      className={`flex-1 p-1.5 rounded border text-xs ${
+                        (element.vinLast8FontWeight ?? "bold") === "bold"
+                          ? "bg-amber-100 border-amber-300 text-amber-700"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      <Bold className="w-3 h-3 mx-auto" />
+                    </button>
+                    <button
+                      onClick={() => onUpdate({ 
+                        vinLast8FontStyle: (element.vinLast8FontStyle ?? "normal") === "italic" ? "normal" : "italic" 
+                      })}
+                      className={`flex-1 p-1.5 rounded border text-xs ${
+                        (element.vinLast8FontStyle ?? "normal") === "italic"
+                          ? "bg-amber-100 border-amber-300 text-amber-700"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      <Italic className="w-3 h-3 mx-auto" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
