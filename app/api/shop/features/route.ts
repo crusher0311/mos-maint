@@ -18,7 +18,7 @@ export async function GET() {
   const entitlements = await getFeatureEntitlements(shopId);
   
   const enabledFeatureIds: string[] = [];
-  const featureKeys: FeatureKey[] = ["maintenance", "job_lookup", "oil_sticker", "part_xref", "dvi_tracking"];
+  const featureKeys: FeatureKey[] = ["maintenance", "job_lookup", "oil_sticker", "part_xref", "dvi_tracking", "keytags"];
   
   for (const key of featureKeys) {
     if (entitlements.effectiveFeatures[key]) {
