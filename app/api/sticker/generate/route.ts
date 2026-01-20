@@ -92,7 +92,7 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<{ dataUri: s
     const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
       method: "GET",
       headers: {
-        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
+        "Authorization": HOVERCODE_API_TOKEN,
       },
     });
 
@@ -140,19 +140,17 @@ async function createHovercodeQR(
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
-        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
+        "Authorization": HOVERCODE_API_TOKEN,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         workspace: HOVERCODE_WORKSPACE_ID,
         qr_data: url,
+        qr_type: "Link",
         dynamic: true,
         display_name: displayName || "Oil Sticker QR",
-        primary_color: color,
-        background_color: backgroundColor,
         pattern: "Squares",
-        eye_style: "Rounded",
-        size: size,
+        background_color: backgroundColor,
         logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,
       }),
