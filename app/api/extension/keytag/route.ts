@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import puppeteer from "puppeteer";
+import nodeHtmlToImage from "node-html-to-image";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -298,41 +298,23 @@ export async function POST(req: NextRequest) {
     
     const html = generateKeytagHtml(config, body, scaleFactor);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    });
-
-    const page = await browser.newPage();
-    await page.setViewport({
-      width: dimensions.width,
-      height: dimensions.height,
-      deviceScaleFactor: 1,
-    });
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const screenshot = await page.screenshot({
-      type: 'png',
-      omitBackground: false,
-      encoding: 'base64',
-    });
-
-    await browser.close();
+    const image = await nodeHtmlToImage({
+      html,
+      type: "png",
+      transparent: false,
+      encoding: "base64",
+      puppeteerArgs: {
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+      },
+    }) as string;
 
     const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["dymo30252"];
 
     return NextResponse.json(
       {
         success: true,
-        image: `data:image/png;base64,${screenshot}`,
+        image: `data:image/png;base64,${image}`,
         size: size,
         dimensions: {
           width: sizeInches.width,
