@@ -75,6 +75,7 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   }
   if (pathname?.startsWith("/dashboard/settings/branding") || 
       pathname?.startsWith("/dashboard/settings/stickers") ||
+      pathname?.startsWith("/dashboard/settings/keytags") ||
       pathname?.startsWith("/dashboard/settings/preferences")) {
     sections.add("Preferences");
   }
@@ -144,6 +145,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       }
       if ((pathname.startsWith("/dashboard/settings/branding") || 
            pathname.startsWith("/dashboard/settings/stickers") ||
+           pathname.startsWith("/dashboard/settings/keytags") ||
            pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
         changed = true;
@@ -226,7 +228,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           href: "/dashboard/settings/preferences",
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
-            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" }
+            { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
+            { name: "Keytags", href: "/dashboard/settings/keytags" }
           ]
         },
         { name: "Billing", href: "/dashboard/settings/billing" },
