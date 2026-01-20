@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2 } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
@@ -109,6 +109,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
+  const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -311,6 +312,83 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       alert(error instanceof Error ? error.message : 'Failed to generate sticker.');
     } finally {
       setPrintingSticker(null);
+    }
+  };
+
+  const handlePrintKeytag = async (
+    customerName: string,
+    vehicle: string,
+    vin: string,
+    roNumber: string,
+    mileage: number | null
+  ) => {
+    setPrintingKeytag(vin);
+    try {
+      const res = await fetch('/api/keytag/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: customerName || 'Customer',
+          vehicle: vehicle || 'Vehicle',
+          vin: vin || '',
+          roNumber: roNumber || '',
+          mileage: mileage ?? 0,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate keytag');
+      }
+
+      const blob = await res.blob();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const printFrame = document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.top = '-9999px';
+        printFrame.style.left = '-9999px';
+        document.body.appendChild(printFrame);
+
+        const iframeDoc = printFrame.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Keytag</title>
+              <style>
+                @page { size: 3.5in 1.125in; margin: 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body>
+              <img src="${dataUrl}" />
+            </body>
+            </html>
+          `);
+          iframeDoc.close();
+
+          printFrame.onload = () => {
+            setTimeout(() => {
+              printFrame.contentWindow?.print();
+              setTimeout(() => {
+                document.body.removeChild(printFrame);
+              }, 1000);
+            }, 100);
+          };
+        }
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Failed to print keytag:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
+    } finally {
+      setPrintingKeytag(null);
     }
   };
 
@@ -952,6 +1030,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Printer className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handlePrintKeytag(
+                              r.displayName || '',
+                              r.displayVehicle || '',
+                              vin,
+                              r.displayRo || '',
+                              r.displayMiles
+                            )}
+                            disabled={printingKeytag === vin}
+                            className="p-1.5 rounded transition-colors text-gray-400 hover:text-amber-600 hover:bg-amber-50"
+                            title="Print Keytag"
+                          >
+                            {printingKeytag === vin ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Key className="w-4 h-4" />
                             )}
                           </button>
                         </div>
