@@ -488,14 +488,8 @@ export async function POST(req: NextRequest) {
       const qrColor = config.colors?.primary || "#1976d2";
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
-      const isPreview = !!body.previewConfig;
-      
-      // For preview mode with custom colors, use fallback QR so color changes show immediately
-      // HoverCode QRs are cached with fixed colors, so we can't use them for live preview
-      if (isPreview) {
-        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
-      } else {
-        // Production stickers: try HoverCode first (styled QR), fall back to basic QR
+      // Always use HoverCode QR (has styled icon in center) - QR is typically black/white regardless of sticker colors
+      {
         if (config.hovercodeQRId) {
           console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
           const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
