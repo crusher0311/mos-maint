@@ -153,6 +153,15 @@ export async function GET(req: NextRequest) {
 
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 
+function getLogoUrl(): string {
+  if (process.env.HOVERCODE_LOGO_URL) {
+    return process.env.HOVERCODE_LOGO_URL;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
+  return `${baseUrl}/appointment.png`;
+}
+
 async function createHovercodeQRWithLogo(
   url: string,
   displayName: string
@@ -163,6 +172,9 @@ async function createHovercodeQRWithLogo(
   if (!apiToken || !workspaceId) {
     return null;
   }
+
+  const logoUrl = getLogoUrl();
+  console.log(`[HoverCode] Using logo URL: ${logoUrl}`);
 
   try {
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
@@ -179,7 +191,7 @@ async function createHovercodeQRWithLogo(
         display_name: displayName,
         pattern: "Squares",
         background_color: "#ffffff",
-        logo_url: "https://mos-maintenance-mvp.replit.app/appointment.png",
+        logo_url: logoUrl,
         generate_png: true,
       }),
     });
@@ -224,10 +236,12 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const redirectUrl = `https://app.myoilsticker.com/sticker/redirect/${shopId}`;
+    const stickerConfig = shop.stickerConfig || {};
+    const appointmentUrl = stickerConfig.appointmentUrl || `https://app.myoilsticker.com/sticker/redirect/${shopId}`;
     const displayName = `${shop.name || `Shop ${shopId}`} - Oil Sticker`;
 
-    const result = await createHovercodeQRWithLogo(redirectUrl, displayName);
+    console.log(`[HoverCode] Creating QR for shop ${shopId} with URL: ${appointmentUrl}`);
+    const result = await createHovercodeQRWithLogo(appointmentUrl, displayName);
 
     if (!result || !result.id) {
       return NextResponse.json(
