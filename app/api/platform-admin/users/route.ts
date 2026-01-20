@@ -1,9 +1,61 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import bcrypt from "bcryptjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json({ error: "Forbidden - platform admin access required" }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const { email, password, shopId, role, isPlatformAdmin } = body;
+
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+    }
+
+    if (!shopId) {
+      return NextResponse.json({ error: "Shop ID is required" }, { status: 400 });
+    }
+
+    const db = await getDb();
+
+    const existing = await db.collection("users").findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return NextResponse.json({ error: "User with this email already exists" }, { status: 400 });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await db.collection("users").insertOne({
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      shopId: parseInt(shopId, 10),
+      role: role || "user",
+      isPlatformAdmin: isPlatformAdmin || false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return NextResponse.json({
+      ok: true,
+      userId: result.insertedId,
+      message: "User created successfully",
+    });
+  } catch (err: any) {
+    console.error("Create user error:", err);
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  }
+}
 
 export async function GET() {
   const session = await getSession();
