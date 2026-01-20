@@ -43,6 +43,7 @@ const DEFAULT_INTERVALS = {
 };
 
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
+  "1.5x2.25": { width: 443, height: 665 },
   "2x2": { width: 591, height: 591 },
   "2x2.5": { width: 591, height: 739 },
   "2x3": { width: 591, height: 887 },
@@ -50,6 +51,7 @@ const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
 };
 
 const SIZE_INCHES: Record<string, { width: string; height: string }> = {
+  "1.5x2.25": { width: "1.47in", height: "2.22in" },
   "2x2": { width: "1.97in", height: "1.97in" },
   "2x2.5": { width: "1.97in", height: "2.46in" },
   "2x3": { width: "1.97in", height: "2.96in" },
