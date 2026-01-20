@@ -12,6 +12,10 @@ export interface DesignerElement {
   textAlign: 'left' | 'center' | 'right';
   showLabel: boolean;
   visible: boolean;
+  labelFontWeight?: 'normal' | 'bold';
+  labelFontStyle?: 'normal' | 'italic';
+  valueFontWeight?: 'normal' | 'bold';
+  valueFontStyle?: 'normal' | 'italic';
 }
 
 export interface DesignerLayout {
