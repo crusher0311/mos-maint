@@ -1,0 +1,53 @@
+render@srv-d5hb86i4d50c738vm4o0-55d8bc7657-f6lpp:~/project/src$ ~/workspace$ # 1. Switch to qa branch
+git checkout qa
+
+# 2. Reset qa to the correct commit
+git reset --hard 9289c78
+
+# 3. Force push to update remote
+git push --force origin qa
+Already on 'qa'
+Your branch and 'origin/qa' have diverged,
+and have 27 and 137 different commits each, respectively.
+  (use "git pull" if you want to integrate the remote branch with yours)
+fatal: ambiguous argument '9289c78': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+Enumerating objects: 241, done.
+Counting objects: 100% (241/241), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (181/181), done.
+Writing objects: 100% (202/202), 1.60 MiB | 5.81 MiB/s, done.
+Total 202 (delta 141), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (141/141), completed with 29 local objects.
+To https://github.com/crusher0311/mos-maint.git
+ + 05156e5...d493606 qa -> qa (forced update)
+~/workspace$ 
+bash: /opt/render/workspace$: No such file or directory
+Switched to branch 'qa'
+fatal: ambiguous argument '9289c78': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+bash: Already: command not found
+bash: Your: command not found
+bash: and: command not found
+bash: use: command not found
+bash: fatal:: command not found
+bash: Use: command not found
+bash: git <command> [<revision>...] -- [<file>...]: command not found
+bash: Enumerating: command not found
+bash: syntax error near unexpected token `('
+bash: Delta: command not found
+bash: syntax error near unexpected token `('
+bash: syntax error near unexpected token `('
+bash: syntax error near unexpected token `('
+bash: syntax error near unexpected token `('
+bash: To: command not found
+bash: syntax error near unexpected token `('
+bash: /opt/render/workspace$: No such file or directory
+render@srv-d5hb86i4d50c738vm4o0-55d8bc7657-f6lpp:~/project/src$ 
