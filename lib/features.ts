@@ -8,7 +8,8 @@ export type FeatureId =
   | "maintenance"      // OEM schedules, recommendations, DVI insights
   | "job_lookup"       // Historical job search, parts intelligence (aka History Writer)
   | "oil_sticker"      // Oil change sticker platform
-  | "part_xref";       // Part cross-reference tool
+  | "part_xref"        // Part cross-reference tool
+  | "keytags";         // Key identification tags for vehicles in shop
 
 export type FeatureConfig = {
   id: FeatureId;
@@ -54,6 +55,14 @@ export const FEATURES: FeatureConfig[] = [
     icon: "RefreshCw",
     requiresSMS: true,
     smsProviders: ["protractor", "tekmetric"],
+  },
+  {
+    id: "keytags",
+    name: "Keytags",
+    description: "Print customer and vehicle info on Dymo labels for key identification while vehicles are in the shop",
+    icon: "Tag",
+    requiresSMS: false,
+    smsProviders: [],
   },
 ];
 

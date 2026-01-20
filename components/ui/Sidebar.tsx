@@ -229,7 +229,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
             { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
-            { name: "Keytags", href: "/dashboard/settings/keytags" }
+            { name: "Keytags", href: "/dashboard/settings/keytags", featureId: "keytags" }
           ]
         },
         { name: "Billing", href: "/dashboard/settings/billing" },
