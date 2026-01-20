@@ -16,6 +16,7 @@ interface ShopFeatures {
   job_lookup?: boolean;
   oil_sticker?: boolean;
   part_xref?: boolean;
+  keytags?: boolean;
   dvi_tracking?: boolean;
 }
 
@@ -994,6 +995,7 @@ export default function PlatformShopsPage() {
                     { key: "job_lookup", label: "Job Lookup", desc: "Search historical jobs across shop/enterprise" },
                     { key: "oil_sticker", label: "Oil Sticker", desc: "Generate oil change reminder stickers" },
                     { key: "part_xref", label: "Part Cross-Reference", desc: "Cross-reference parts across manufacturers" },
+                    { key: "keytags", label: "Keytags", desc: "Print customer/vehicle info on Dymo labels for key identification" },
                     { key: "dvi_tracking", label: "DVI Tracking", desc: "Track digital vehicle inspections" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
