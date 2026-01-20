@@ -50,7 +50,25 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
+function validateLayout(layout: DesignerLayout): DesignerLayout {
+  if (!layout.elements || !Array.isArray(layout.elements)) {
+    return { ...layout, elements: [] };
+  }
+  
+  const clampedElements = layout.elements.map((el) => ({
+    ...el,
+    x: Math.max(0, Math.min(el.x || 0, DYMO_30252.width - 30)),
+    y: Math.max(0, Math.min(el.y || 0, DYMO_30252.height - 15)),
+    width: Math.max(30, Math.min(el.width || 100, DYMO_30252.width)),
+    height: Math.max(15, Math.min(el.height || 30, DYMO_30252.height)),
+    fontSize: Math.max(8, Math.min(el.fontSize || 12, 72)),
+  }));
+  
+  return { ...layout, elements: clampedElements };
+}
+
 function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): string {
+  const validatedLayout = validateLayout(layout);
   const scaleFactor = DYMO_30252.renderWidth / DYMO_30252.width;
   
   const dataMap: Record<string, string> = {
@@ -61,7 +79,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
     mileage: typeof data.mileage === 'number' ? data.mileage.toLocaleString() : (data.mileage || ''),
   };
 
-  const elementsHtml = layout.elements
+  const elementsHtml = validatedLayout.elements
     .filter((el) => el.visible)
     .map((el) => {
       const value = dataMap[el.type] || el.label;
@@ -90,7 +108,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           overflow: hidden;
           white-space: nowrap;
           text-overflow: ellipsis;
-          color: ${layout.textColor};
+          color: ${validatedLayout.textColor};
         ">${escapeHtml(displayText)}</div>
       `;
     })
@@ -113,7 +131,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           width: ${DYMO_30252.renderWidth}px;
           height: ${DYMO_30252.renderHeight}px;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-          background: ${layout.backgroundColor};
+          background: ${validatedLayout.backgroundColor};
         }
         
         .canvas {
