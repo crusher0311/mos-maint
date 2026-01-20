@@ -47,15 +47,18 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
     const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/create/`, {
       method: "POST",
       headers: {
-        Authorization: `Token ${apiToken}`,
+        Authorization: apiToken,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         workspace: workspaceId,
         qr_data: destinationUrl,
+        qr_type: "Link",
         display_name: `MOS Sticker - ${options.shopName}`,
-        primary_color: options.primaryColor || "#1e40af",
+        pattern: "Squares",
+        dynamic: true,
         background_color: options.backgroundColor || "#ffffff",
+        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,
       }),
     });
@@ -116,7 +119,7 @@ export async function updateHovercodeDestination(
     const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/${hovercodeId}/`, {
       method: "PATCH",
       headers: {
-        Authorization: `Token ${apiToken}`,
+        Authorization: apiToken,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

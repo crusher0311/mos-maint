@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     while (nextUrl) {
       const response = await fetch(nextUrl, {
         headers: {
-          Authorization: `Token ${apiToken}`,
+          Authorization: apiToken,
         },
       });
 
@@ -168,19 +168,17 @@ async function createHovercodeQRWithLogo(
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
-        Authorization: `Token ${apiToken}`,
+        Authorization: apiToken,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         workspace: workspaceId,
         qr_data: url,
+        qr_type: "Link",
         dynamic: true,
         display_name: displayName,
-        primary_color: "#000000",
-        background_color: "#ffffff",
         pattern: "Squares",
-        eye_style: "Rounded",
-        size: 300,
+        background_color: "#ffffff",
         logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,
       }),

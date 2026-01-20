@@ -115,7 +115,7 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<string | nul
   try {
     const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
       method: "GET",
-      headers: { "Authorization": `Token ${HOVERCODE_API_TOKEN}` },
+      headers: { "Authorization": HOVERCODE_API_TOKEN },
     });
 
     if (!response.ok) return null;
