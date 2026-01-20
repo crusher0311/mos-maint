@@ -880,7 +880,27 @@ export default function StickerSettingsPage() {
                 {STICKER_SIZES.map((size) => (
                   <button
                     key={size.value}
-                    onClick={() => setConfig({ ...config, defaultSize: size.value })}
+                    onClick={() => {
+                      if (size.value === "1.5x2.25") {
+                        setConfig(prev => ({
+                          ...prev,
+                          defaultSize: size.value,
+                          colors: {
+                            ...prev.colors,
+                            primary: "#000000",
+                            secondary: "#000000",
+                            text: "#000000",
+                            phoneColor: "#000000",
+                            taglineColor: "#000000",
+                            taglineLine2Color: "#000000",
+                            serviceLabelColor: "#000000",
+                            serviceValueColor: "#000000",
+                          },
+                        }));
+                      } else {
+                        setConfig(prev => ({ ...prev, defaultSize: size.value }));
+                      }
+                    }}
                     className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
                       config.defaultSize === size.value
                         ? "border-blue-600 bg-blue-50 text-blue-700"
