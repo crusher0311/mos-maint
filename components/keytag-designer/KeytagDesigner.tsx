@@ -196,6 +196,8 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
             <ToolbarPanel
               layout={layout}
               onUpdateLayout={updateLayout}
+              onUpdateElement={updateElement}
+              onSelectElement={setSelectedId}
             />
           )}
         </div>

@@ -1,16 +1,56 @@
 "use client";
 
-import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
-import { Palette, LayoutGrid, Info } from "lucide-react";
+import { DesignerLayout, DesignerElement, DYMO_30252 } from "@/lib/keytag-designer-types";
+import { Palette, LayoutGrid, Info, Layers, Eye, EyeOff } from "lucide-react";
 
 interface ToolbarPanelProps {
   layout: DesignerLayout;
   onUpdateLayout: (updates: Partial<DesignerLayout>) => void;
+  onUpdateElement: (id: string, updates: Partial<DesignerElement>) => void;
+  onSelectElement: (id: string) => void;
 }
 
-export function ToolbarPanel({ layout, onUpdateLayout }: ToolbarPanelProps) {
+export function ToolbarPanel({ layout, onUpdateLayout, onUpdateElement, onSelectElement }: ToolbarPanelProps) {
   return (
     <div className="p-4 space-y-6">
+      <div>
+        <div className="flex items-center gap-2 pb-3 border-b mb-4">
+          <Layers className="w-5 h-5 text-blue-600" />
+          <h3 className="font-semibold text-gray-900">Elements</h3>
+        </div>
+        <div className="space-y-1">
+          {layout.elements.map((el) => (
+            <div
+              key={el.id}
+              className="flex items-center justify-between p-2 rounded hover:bg-gray-50 group"
+            >
+              <button
+                onClick={() => {
+                  if (!el.visible) {
+                    onUpdateElement(el.id, { visible: true });
+                  }
+                  onSelectElement(el.id);
+                }}
+                className="text-sm text-gray-700 hover:text-blue-600 text-left flex-1"
+              >
+                {el.label}
+              </button>
+              <button
+                onClick={() => onUpdateElement(el.id, { visible: !el.visible })}
+                className={`p-1 rounded ${
+                  el.visible 
+                    ? "text-gray-400 hover:text-gray-600 hover:bg-gray-100" 
+                    : "text-red-400 bg-red-50 hover:bg-red-100"
+                }`}
+                title={el.visible ? "Hide element" : "Show element"}
+              >
+                {el.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div>
         <div className="flex items-center gap-2 pb-3 border-b mb-4">
           <Palette className="w-5 h-5 text-blue-600" />
