@@ -616,7 +616,28 @@ export default function StickerSettingsPage() {
                   ))}
                 </select>
                 {config.defaultSize === "1.5x2.25" && (
-                  <p className="text-xs text-gray-500 mt-1">Monochrome - all colors set to black</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfig({
+                        ...config,
+                        colors: {
+                          ...config.colors,
+                          primary: "#000000",
+                          secondary: "#000000",
+                          text: "#000000",
+                          phoneColor: "#000000",
+                          taglineColor: "#000000",
+                          taglineLine2Color: "#000000",
+                          serviceLabelColor: "#000000",
+                          serviceValueColor: "#000000",
+                        },
+                      });
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline mt-1"
+                  >
+                    Reset to monochrome (all black)
+                  </button>
                 )}
               </div>
               <div>
