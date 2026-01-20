@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     const result = await db.collection("users").insertOne({
       email: email.toLowerCase(),
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       shopId: parseInt(shopId, 10),
       role: role || "user",
       isPlatformAdmin: isPlatformAdmin || false,
