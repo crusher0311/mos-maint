@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "oil_sticker" | "part_xref" | "dvi_tracking";
+export type FeatureKey = "maintenance" | "job_lookup" | "oil_sticker" | "part_xref" | "keytags" | "dvi_tracking";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "canceled" | "enterprise" | "demo";
 
@@ -11,6 +11,7 @@ export interface FeatureSettings {
   job_lookup: boolean;
   oil_sticker: boolean;
   part_xref: boolean;
+  keytags: boolean;
   dvi_tracking: boolean;
 }
 
@@ -35,6 +36,7 @@ const DEFAULT_FEATURES: FeatureSettings = {
   job_lookup: false,
   oil_sticker: false,
   part_xref: false,
+  keytags: false,
   dvi_tracking: false,
 };
 
@@ -44,6 +46,7 @@ const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     job_lookup: false,
     oil_sticker: false,
     part_xref: false,
+    keytags: false,
     dvi_tracking: false,
   },
   starter: {
@@ -51,6 +54,7 @@ const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     job_lookup: false,
     oil_sticker: true,
     part_xref: false,
+    keytags: false,
     dvi_tracking: false,
   },
   professional: {
@@ -58,6 +62,7 @@ const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     job_lookup: true,
     oil_sticker: true,
     part_xref: true,
+    keytags: true,
     dvi_tracking: true,
   },
   enterprise: {
@@ -65,6 +70,7 @@ const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     job_lookup: true,
     oil_sticker: true,
     part_xref: true,
+    keytags: true,
     dvi_tracking: true,
   },
   demo: {
@@ -72,6 +78,7 @@ const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     job_lookup: true,
     oil_sticker: true,
     part_xref: true,
+    keytags: true,
     dvi_tracking: true,
   },
 };
@@ -108,6 +115,7 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     job_lookup: shopFeatures.job_lookup ?? enterpriseFeatures.job_lookup ?? planFeatures.job_lookup,
     oil_sticker: shopFeatures.oil_sticker ?? enterpriseFeatures.oil_sticker ?? planFeatures.oil_sticker,
     part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
+    keytags: shopFeatures.keytags ?? enterpriseFeatures.keytags ?? planFeatures.keytags,
     dvi_tracking: shopFeatures.dvi_tracking ?? enterpriseFeatures.dvi_tracking ?? planFeatures.dvi_tracking,
   };
   

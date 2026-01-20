@@ -127,7 +127,7 @@ export async function PATCH(
 
     if (features) {
       const featureUpdate: Partial<FeatureSettings> = {};
-      const validFeatures = ["maintenance", "job_lookup", "oil_sticker", "part_xref", "dvi_tracking"];
+      const validFeatures = ["maintenance", "job_lookup", "oil_sticker", "part_xref", "keytags", "dvi_tracking"];
       
       for (const key of validFeatures) {
         if (features[key] !== undefined) {
