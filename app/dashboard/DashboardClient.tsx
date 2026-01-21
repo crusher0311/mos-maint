@@ -229,79 +229,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   const printStickerWithBrowser = (dataUrl: string, stickerSize: string) => {
-    const sizeMap: Record<string, { width: string; height: string }> = {
-      '2x2': { width: '2in', height: '2in' },
-      '2x2.5': { width: '2in', height: '2.5in' },
-      '2x3': { width: '2in', height: '3in' },
-      '2x3.5': { width: '2in', height: '3.5in' },
-    };
-    const dims = sizeMap[stickerSize] || sizeMap['2x2'];
+    // Download the sticker image so user can open in Windows Photos and print natively
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `oil-sticker-${stickerSize}-${timestamp}.png`;
     
-    // Open a visible popup window so user can interact with print dialog
-    const printWindow = window.open('', '_blank', 'width=520,height=650,menubar=no,toolbar=no,location=no,status=no');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Print Oil Sticker</title>
-          <style>
-            @page { size: ${dims.width} ${dims.height}; margin: 0; }
-            @media print {
-              .print-instructions, .print-button, .close-note { display: none !important; }
-              body { margin: 0; padding: 0; background: white; }
-              .sticker-preview { padding: 0; background: none; box-shadow: none; display: block; border-radius: 0; }
-              .sticker-preview img { width: ${dims.width}; height: ${dims.height}; display: block; }
-            }
-            @media screen {
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 24px; }
-              .print-instructions {
-                background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px;
-                margin-bottom: 20px;
-              }
-              .print-instructions h3 { margin-bottom: 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-              .print-instructions p { font-size: 13px; line-height: 1.6; margin-bottom: 10px; }
-              .print-instructions kbd {
-                background: rgba(255,255,255,0.25); padding: 3px 8px; border-radius: 4px;
-                font-family: monospace; font-weight: bold; font-size: 12px;
-              }
-              .print-instructions .tip { opacity: 0.85; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px; margin-top: 10px; margin-bottom: 0; }
-              .sticker-preview {
-                background: white; padding: 16px; border-radius: 8px; display: inline-block;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.1); margin-bottom: 20px;
-              }
-              .sticker-preview img { display: block; max-width: 280px; height: auto; }
-              .print-button {
-                background: #059669; color: white; border: none; padding: 14px 28px;
-                border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
-                display: inline-flex; align-items: center; gap: 8px;
-              }
-              .print-button:hover { background: #047857; }
-              .close-note { margin-top: 16px; font-size: 12px; color: #666; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="print-instructions">
-            <h3>Print Your Oil Sticker</h3>
-            <p><strong>For DYMO Twin Turbo:</strong> In the print dialog, press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the <strong>Windows System Print Dialog</strong> where you can select Left or Right roll.</p>
-            <p class="tip"><strong>Quick option:</strong> Select your DYMO printer from Chrome's dropdown, set Margins to "None", then click Print.</p>
-          </div>
-          <div class="sticker-preview">
-            <img src="${dataUrl}" alt="Oil Change Sticker" />
-          </div>
-          <br/>
-          <button class="print-button" onclick="window.print()">
-            Open Print Dialog
-          </button>
-          <p class="close-note">Close this window after printing.</p>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-    }
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Show a toast or alert with instructions
+    alert(`Sticker downloaded as "${filename}"\n\nTo print:\n1. Open the downloaded file (double-click)\n2. Right-click > Print, or press Ctrl+P\n3. Select your DYMO printer\n4. Print!`);
   };
 
   const handleQuickPrintStickerWithValues = async (
