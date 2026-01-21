@@ -176,26 +176,45 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   <meta charset="utf-8" />
   <title>Print Sticker</title>
   <style>
-    @page { size: ${dims.width} ${dims.height}; margin: 0; }
+    @page { 
+      size: ${dims.width} ${dims.height}; 
+      margin: 0 !important; 
+      padding: 0 !important;
+    }
+
+    * {
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+    }
 
     html, body {
-      width: ${dims.width};
-      height: ${dims.height};
+      width: ${dims.width} !important;
+      height: ${dims.height} !important;
       margin: 0 !important;
       padding: 0 !important;
       overflow: hidden !important;
-      background: white;
+      background: white !important;
     }
 
-    body { position: relative; }
+    body { 
+      position: relative !important;
+      display: flex !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+    }
 
     img#printImg {
-      position: fixed !important;
-      left: ${xOffset} !important;
-      top: ${yOffset} !important;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
 
-      width: ${dims.width} !important;
-      height: ${dims.height} !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
 
       margin: 0 !important;
       padding: 0 !important;
@@ -203,6 +222,15 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
 
       display: block !important;
       object-fit: fill !important;
+    }
+
+    @media print {
+      html, body {
+        width: ${dims.width} !important;
+        height: ${dims.height} !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
   </style>
 </head>

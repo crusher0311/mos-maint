@@ -559,7 +559,7 @@ function generateStickerHtmlFromLayout(
     
     const isImage = element.type === 'logo' || element.type === 'qrCode';
     
-    // For text elements, use transform scale to fit text within bounds
+    // For text elements, match designer behavior exactly
     const textStyles = !isImage ? `
       font-size: ${element.fontSize}px;
       font-weight: ${element.fontWeight};
@@ -569,8 +569,9 @@ function generateStickerHtmlFromLayout(
       display: flex;
       align-items: center;
       justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
-      overflow: visible;
+      overflow: hidden;
       white-space: nowrap;
+      text-overflow: ellipsis;
       line-height: 1.2;
     ` : '';
     
