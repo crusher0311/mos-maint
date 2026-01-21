@@ -484,6 +484,12 @@ export default function StickerSettingsPage() {
             initialSize={currentSize}
             logoUrl={config.logo || undefined}
             qrUrl={config.showQRCode ? qrUrl || undefined : undefined}
+            contentData={{
+              phone: config.phone || undefined,
+              tagline: config.tagline || undefined,
+              taglineLine2: config.taglineLine2 || undefined,
+              serviceLabel: config.serviceLabel || undefined,
+            }}
             onChange={handleDesignerChange}
           />
         </div>

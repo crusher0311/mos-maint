@@ -4,6 +4,15 @@ import { useRef, useState, useCallback } from "react";
 import { StickerElement, StickerLayout, STICKER_SAMPLE_DATA } from "@/lib/sticker-designer-types";
 import { QrCode, Image as ImageIcon } from "lucide-react";
 
+interface StickerContentData {
+  phone?: string;
+  tagline?: string;
+  taglineLine2?: string;
+  serviceLabel?: string;
+  serviceDate?: string;
+  serviceMileage?: string;
+}
+
 interface StickerDesignerCanvasProps {
   layout: StickerLayout;
   selectedId: string | null;
@@ -11,6 +20,7 @@ interface StickerDesignerCanvasProps {
   onUpdateElement: (id: string, updates: Partial<StickerElement>) => void;
   logoUrl?: string;
   qrUrl?: string;
+  contentData?: StickerContentData;
 }
 
 interface DragState {
@@ -37,6 +47,7 @@ export function StickerDesignerCanvas({
   onUpdateElement,
   logoUrl,
   qrUrl,
+  contentData,
 }: StickerDesignerCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -253,10 +264,25 @@ export function StickerDesignerCanvas({
         );
 
       case "serviceLabel":
-        return <span style={style}>{element.content || STICKER_SAMPLE_DATA.serviceLabel}</span>;
+        return <span style={style}>{element.content || contentData?.serviceLabel || STICKER_SAMPLE_DATA.serviceLabel}</span>;
+
+      case "phone":
+        return <span style={style}>{contentData?.phone || STICKER_SAMPLE_DATA.phone}</span>;
+
+      case "tagline":
+        return <span style={style}>{contentData?.tagline || STICKER_SAMPLE_DATA.tagline}</span>;
+
+      case "taglineLine2":
+        return <span style={style}>{contentData?.taglineLine2 || STICKER_SAMPLE_DATA.taglineLine2}</span>;
+
+      case "serviceDate":
+        return <span style={style}>{contentData?.serviceDate || STICKER_SAMPLE_DATA.serviceDate}</span>;
+
+      case "serviceMileage":
+        return <span style={style}>{contentData?.serviceMileage || STICKER_SAMPLE_DATA.serviceMileage}</span>;
 
       default:
-        return <span style={style}>{STICKER_SAMPLE_DATA[element.type] || element.label}</span>;
+        return <span style={style}>{element.label}</span>;
     }
   };
 
