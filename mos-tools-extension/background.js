@@ -224,6 +224,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // Async response
   }
+
+  // -------------------- DYMO Direct Printing --------------------
+  if (message.action === "DYMO_PRINT") {
+    handleDymoPrint(message)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true; // Async response
+  }
+
+  if (message.action === "DYMO_GET_PRINTERS") {
+    getDymoPrinters()
+      .then(printers => sendResponse({ success: true, printers }))
+      .catch(err => sendResponse({ success: false, error: err.message, printers: [] }));
+    return true; // Async response
+  }
+
+  if (message.action === "DYMO_CHECK_STATUS") {
+    isDymoConnectRunning()
+      .then(running => sendResponse({ success: true, running }))
+      .catch(err => sendResponse({ success: false, running: false, error: err.message }));
+    return true; // Async response
+  }
 });
 
 // ==================== MOS API FUNCTIONS ====================
@@ -517,6 +539,151 @@ async function handleImmediateStickerPrint(context, tabId) {
     sticker: data.sticker,
     oilType: intervalType
   };
+}
+
+// ==================== DYMO DIRECT PRINTING ====================
+const DYMO_API_BASE = 'http://127.0.0.1:41951/DYMO/DLS/Printing';
+
+async function isDymoConnectRunning() {
+  try {
+    const response = await fetch(`${DYMO_API_BASE}/StatusConnected`, {
+      method: 'GET',
+    });
+    const text = await response.text();
+    return text.toLowerCase() === 'true';
+  } catch (e) {
+    console.log('[DYMO] DYMO Connect not running:', e.message);
+    return false;
+  }
+}
+
+async function getDymoPrinters() {
+  try {
+    const response = await fetch(`${DYMO_API_BASE}/GetPrinters`, {
+      method: 'GET',
+    });
+    const xml = await response.text();
+    return parsePrintersXml(xml);
+  } catch (e) {
+    console.error('[DYMO] Failed to get printers:', e);
+    return [];
+  }
+}
+
+function parsePrintersXml(xml) {
+  const printers = [];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const printerNodes = doc.querySelectorAll('LabelWriterPrinter');
+  
+  printerNodes.forEach((node) => {
+    const name = node.querySelector('Name')?.textContent || '';
+    const modelName = node.querySelector('ModelName')?.textContent || '';
+    const isConnected = node.querySelector('IsConnected')?.textContent?.toLowerCase() === 'true';
+    const isLocal = node.querySelector('IsLocal')?.textContent?.toLowerCase() === 'true';
+    const isTwinTurbo = modelName.toLowerCase().includes('twin turbo');
+    
+    if (name && isConnected) {
+      printers.push({ name, modelName, isConnected, isLocal, isTwinTurbo });
+    }
+  });
+  
+  return printers;
+}
+
+function createLabelXml(imageBase64, widthInches, heightInches) {
+  const widthTwips = Math.round(widthInches * 1440);
+  const heightTwips = Math.round(heightInches * 1440);
+  
+  const imageData = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  
+  return `<?xml version="1.0" encoding="utf-8"?>
+<DieCutLabel Version="8.0" Units="twips">
+  <PaperOrientation>Portrait</PaperOrientation>
+  <Id>Custom</Id>
+  <PaperName>Custom ${widthInches}x${heightInches}</PaperName>
+  <DrawCommands>
+    <RoundRectangle X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}" Rx="0" Ry="0"/>
+  </DrawCommands>
+  <ObjectInfo>
+    <ImageObject>
+      <Name>StickerImage</Name>
+      <ForeColor Alpha="255" Red="0" Green="0" Blue="0"/>
+      <BackColor Alpha="0" Red="255" Green="255" Blue="255"/>
+      <LinkedObjectName></LinkedObjectName>
+      <Rotation>Rotation0</Rotation>
+      <IsMirrored>False</IsMirrored>
+      <IsVariable>False</IsVariable>
+      <Image>${imageData}</Image>
+      <ScaleMode>Uniform</ScaleMode>
+      <BorderWidth>0</BorderWidth>
+      <BorderColor Alpha="255" Red="0" Green="0" Blue="0"/>
+      <HorizontalAlignment>Center</HorizontalAlignment>
+      <VerticalAlignment>Center</VerticalAlignment>
+    </ImageObject>
+    <Bounds X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}"/>
+  </ObjectInfo>
+</DieCutLabel>`;
+}
+
+function createPrintParamsXml(twinTurboRoll) {
+  if (!twinTurboRoll || twinTurboRoll === 'Auto') {
+    return '';
+  }
+  
+  return `<?xml version="1.0" encoding="utf-8"?>
+<LabelWriterPrintParams>
+  <Copies>1</Copies>
+  <PrintQuality>BarcodeAndGraphics</PrintQuality>
+  <TwinTurboRoll>${twinTurboRoll}</TwinTurboRoll>
+</LabelWriterPrintParams>`;
+}
+
+async function handleDymoPrint(message) {
+  const { imageBase64, widthInches, heightInches, printerName, twinTurboRoll } = message;
+  
+  try {
+    const isConnected = await isDymoConnectRunning();
+    if (!isConnected) {
+      return { success: false, error: 'DYMO Connect is not running' };
+    }
+
+    const printers = await getDymoPrinters();
+    if (printers.length === 0) {
+      return { success: false, error: 'No DYMO printers found' };
+    }
+
+    const selectedPrinter = printers.find(p => p.name === printerName) || printers[0];
+    const labelXml = createLabelXml(imageBase64, widthInches, heightInches);
+    const printParamsXml = createPrintParamsXml(twinTurboRoll);
+
+    const formData = new URLSearchParams();
+    formData.append('printerName', selectedPrinter.name);
+    formData.append('labelXml', labelXml);
+    formData.append('labelSetXml', '');
+    if (printParamsXml) {
+      formData.append('printParamsXml', printParamsXml);
+    }
+
+    const response = await fetch(`${DYMO_API_BASE}/PrintLabel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Print failed: ${errorText}` };
+    }
+
+    console.log('[DYMO] Print successful to:', selectedPrinter.name);
+    return { success: true, printerName: selectedPrinter.name };
+  } catch (e) {
+    console.error('[DYMO] Print error:', e);
+    return { success: false, error: e.message || 'Unknown error' };
+  }
 }
 
 console.log("[MOS Tools] Background service worker loaded");
