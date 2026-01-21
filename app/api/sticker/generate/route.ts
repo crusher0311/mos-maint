@@ -694,6 +694,10 @@ export async function POST(req: NextRequest) {
     console.log("[Sticker Generate] Using designer layout:", !!(designerLayout && designerLayout.elements));
     
     if (designerLayout && designerLayout.elements) {
+      console.log("[Sticker Generate] Layout canvas:", designerLayout.canvasWidth, "x", designerLayout.canvasHeight);
+      console.log("[Sticker Generate] Output dimensions:", dimensions.width, "x", dimensions.height);
+      console.log("[Sticker Generate] Scale factors:", dimensions.width / designerLayout.canvasWidth, "x", dimensions.height / designerLayout.canvasHeight);
+      console.log("[Sticker Generate] Elements count:", designerLayout.elements.length);
       const dataConfig = body.dataConfig || {
         logo: config.logo,
         phone: config.phone,
