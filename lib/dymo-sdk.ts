@@ -157,7 +157,7 @@ export function createLabelXml(
         <Color A="0" R="0" G="0" B="0"></Color>
       </SolidColorBrush>
     </BorderColor>
-    <BorderWidth>0</BorderWidth>
+    <BorderThickness>0</BorderThickness>
     <PrintDensity>Normal</PrintDensity>
     <ClearObjects>False</ClearObjects>
     <ObjectInfo>
