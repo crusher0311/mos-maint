@@ -159,52 +159,76 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         };
         const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
         
-        // Use popup window for better print control with label printers
-        const printWindow = window.open("", "_blank", "width=400,height=600");
-        if (printWindow) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Print Sticker</title>
-              <style>
-                @page {
-                  size: ${dims.width} ${dims.height};
-                  margin: 0;
-                }
-                * {
-                  margin: 0;
-                  padding: 0;
-                  box-sizing: border-box;
-                }
-                html, body {
-                  width: ${dims.width};
-                  height: ${dims.height};
-                  margin: 0;
-                  padding: 0;
-                  overflow: hidden;
-                  background: white;
-                }
-                #printImg {
-                  position: fixed;
-                  left: 0;
-                  top: 0;
-                  width: ${dims.width};
-                  height: ${dims.height};
-                  display: block;
-                  margin: 0;
-                  padding: 0;
-                  object-fit: fill;
-                }
-              </style>
-            </head>
-            <body>
-              <img id="printImg" src="${dataUrl}" onload="setTimeout(function() { window.print(); }, 200);" />
-            </body>
-            </html>
-          `);
-          printWindow.document.close();
+        // Print from NEW WINDOW with !important everywhere to prevent overrides
+        const xOffset = "0in";
+        const yOffset = "0in"; // Start at 0, adjust if needed
+        
+        const printWindow = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
+        if (!printWindow) {
+          alert("Please allow popups to print stickers");
+          return;
         }
+        
+        printWindow.document.open();
+        printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Print Sticker</title>
+  <style>
+    @page { size: ${dims.width} ${dims.height}; margin: 0; }
+
+    html, body {
+      width: ${dims.width};
+      height: ${dims.height};
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: white;
+    }
+
+    body { position: relative; }
+
+    img#printImg {
+      position: fixed !important;
+      left: ${xOffset} !important;
+      top: ${yOffset} !important;
+
+      width: ${dims.width} !important;
+      height: ${dims.height} !important;
+
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+
+      display: block !important;
+      object-fit: fill !important;
+    }
+  </style>
+</head>
+<body>
+  <img id="printImg" src="${dataUrl}" />
+  <script>
+    const img = document.getElementById('printImg');
+    img.onload = () => {
+      setTimeout(() => {
+        window.focus();
+        window.print();
+      }, 100);
+    };
+    img.onerror = () => {
+      document.body.innerHTML = '<p>Failed to load image for printing.</p>';
+    };
+    if (img.complete) {
+      setTimeout(() => {
+        window.focus();
+        window.print();
+      }, 100);
+    }
+  </script>
+</body>
+</html>`);
+        printWindow.document.close();
       };
       reader.readAsDataURL(blob);
 
