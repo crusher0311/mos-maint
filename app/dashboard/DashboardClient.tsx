@@ -237,8 +237,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     };
     const dims = sizeMap[stickerSize] || sizeMap['2x2'];
     
-    // Create an in-memory HTML page with the sticker - no file saved to disk
-    const html = `<!DOCTYPE html>
+    // Open popup window - supports Chrome print preview
+    const printWindow = window.open('', '_blank', 'width=520,height=600');
+    if (printWindow) {
+      printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <title>Print Oil Sticker</title>
@@ -246,16 +248,16 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     @page { size: ${dims.width} ${dims.height}; margin: 0; }
     @media print {
       .no-print { display: none !important; }
-      body { margin: 0; padding: 0; }
-      img { width: ${dims.width}; height: ${dims.height}; display: block; }
+      body { margin: 0; padding: 0; background: white; }
+      .sticker-img { width: ${dims.width}; height: ${dims.height}; display: block; }
     }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; margin: 0; }
-    .info { background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px; max-width: 400px; }
+    .info { background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px; }
     .info h3 { margin: 0 0 10px 0; font-size: 15px; }
     .info p { margin: 0 0 8px 0; font-size: 13px; line-height: 1.5; }
     .info kbd { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
     .preview { background: white; padding: 16px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
-    .preview img { max-width: 280px; height: auto; display: block; }
+    .sticker-img { max-width: 280px; height: auto; display: block; }
     .hint { margin-top: 16px; font-size: 12px; color: #666; }
   </style>
 </head>
@@ -266,16 +268,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     <p>For Twin Turbo roll selection: Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> for Windows System Print Dialog.</p>
   </div>
   <div class="preview">
-    <img src="${dataUrl}" alt="Oil Sticker" />
+    <img class="sticker-img" src="${dataUrl}" alt="Oil Sticker" />
   </div>
-  <p class="hint no-print">Close this tab after printing. No files saved to your computer.</p>
+  <p class="hint no-print">Close this window after printing.</p>
 </body>
-</html>`;
-    
-    // Create blob URL and open in new tab
-    const blob = new Blob([html], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    window.open(blobUrl, '_blank');
+</html>`);
+      printWindow.document.close();
+      printWindow.focus();
+    }
   };
 
   const handleQuickPrintStickerWithValues = async (
