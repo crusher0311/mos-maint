@@ -143,25 +143,25 @@ export function createLabelXml(
   <Id>OilSticker</Id>
   <PaperName>30270 Continuous Clear</PaperName>
   <DrawCommands>
-    <RoundRectangle X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}" Rx="0" Ry="0"/>
+    <RoundRectangle X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}" Rx="0" Ry="0"></RoundRectangle>
   </DrawCommands>
   <ObjectInfo>
     <ImageObject>
       <Name>STICKER_IMAGE</Name>
-      <ForeColor Alpha="255" Red="0" Green="0" Blue="0"/>
-      <BackColor Alpha="0" Red="255" Green="255" Blue="255"/>
-      <LinkedObjectName/>
+      <ForeColor Alpha="255" Red="0" Green="0" Blue="0"> </ForeColor>
+      <BackColor Alpha="0" Red="255" Green="255" Blue="255"> </BackColor>
+      <LinkedObjectName></LinkedObjectName>
       <Rotation>Rotation0</Rotation>
       <IsMirrored>False</IsMirrored>
       <IsVariable>False</IsVariable>
       <Image>${imageBase64}</Image>
       <ScaleMode>Uniform</ScaleMode>
       <BorderWidth>0</BorderWidth>
-      <BorderColor Alpha="255" Red="0" Green="0" Blue="0"/>
+      <BorderColor Alpha="255" Red="0" Green="0" Blue="0"> </BorderColor>
       <HorizontalAlignment>Center</HorizontalAlignment>
       <VerticalAlignment>Center</VerticalAlignment>
     </ImageObject>
-    <Bounds X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}"/>
+    <Bounds X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}"></Bounds>
   </ObjectInfo>
 </DieCutLabel>`;
 }
