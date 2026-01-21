@@ -158,6 +158,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           position: relative;
           width: ${DYMO_30252.renderWidth}px;
           height: ${DYMO_30252.renderHeight}px;
+          overflow: visible;
         }
       </style>
     </head>
@@ -359,6 +360,7 @@ export async function POST(req: NextRequest) {
       html,
       type: "png",
       transparent: false,
+      selector: ".canvas",
       puppeteerArgs: {
         executablePath: process.env.CHROMIUM_PATH || undefined,
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
