@@ -496,9 +496,10 @@ function generateStickerHtmlFromLayout(
   dimensions: { width: number; height: number },
   logoDataUrl: string | null,
   qrDataUrl: string | null
-): string {
-  const scaleX = dimensions.width / layout.canvasWidth;
-  const scaleY = dimensions.height / layout.canvasHeight;
+): { html: string; renderWidth: number; renderHeight: number; outputWidth: number; outputHeight: number } {
+  // Render at canvas size for pixel-perfect matching, then scale up the image
+  const renderWidth = layout.canvasWidth;
+  const renderHeight = layout.canvasHeight;
   
   const useKilometers = dataConfig?.useKilometers ?? false;
   const roundMileage = dataConfig?.roundMileage ?? true;
@@ -549,13 +550,8 @@ function generateStickerHtmlFromLayout(
   
   const visibleElements = layout.elements.filter(el => el.visible);
   
+  // Render at 1:1 scale with canvas coordinates - no scaling needed
   const elementsHtml = visibleElements.map(element => {
-    const x = Math.round(element.x * scaleX);
-    const y = Math.round(element.y * scaleY);
-    const width = Math.round(element.width * scaleX);
-    const height = Math.round(element.height * scaleY);
-    const fontSize = Math.round(element.fontSize * Math.min(scaleX, scaleY));
-    
     const content = getElementContent(element);
     if (!content) return '';
     
@@ -564,12 +560,12 @@ function generateStickerHtmlFromLayout(
     return `
       <div style="
         position: absolute;
-        left: ${x}px;
-        top: ${y}px;
-        width: ${width}px;
-        height: ${height}px;
+        left: ${element.x}px;
+        top: ${element.y}px;
+        width: ${element.width}px;
+        height: ${element.height}px;
         ${!isImage ? `
-          font-size: ${fontSize}px;
+          font-size: ${element.fontSize}px;
           font-weight: ${element.fontWeight};
           font-style: ${element.fontStyle};
           text-align: ${element.textAlign};
@@ -588,15 +584,15 @@ function generateStickerHtmlFromLayout(
     `;
   }).join('');
   
-  return `
+  const html = `
 <!DOCTYPE html>
 <html>
 <head>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: ${dimensions.width}px;
-      height: ${dimensions.height}px;
+      width: ${renderWidth}px;
+      height: ${renderHeight}px;
       font-family: Arial, Helvetica, sans-serif;
       background: ${layout.backgroundColor};
       position: relative;
@@ -608,6 +604,8 @@ function generateStickerHtmlFromLayout(
 </body>
 </html>
   `;
+  
+  return { html, renderWidth, renderHeight, outputWidth: dimensions.width, outputHeight: dimensions.height };
 }
 
 export async function POST(req: NextRequest) {
@@ -686,6 +684,10 @@ export async function POST(req: NextRequest) {
     }
 
     let html: string;
+    let renderWidth = dimensions.width;
+    let renderHeight = dimensions.height;
+    let outputWidth = dimensions.width;
+    let outputHeight = dimensions.height;
     
     const designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
     
@@ -699,7 +701,7 @@ export async function POST(req: NextRequest) {
         useKilometers: config.useKilometers,
         roundMileage: config.roundMileage,
       };
-      html = generateStickerHtmlFromLayout(
+      const result = generateStickerHtmlFromLayout(
         designerLayout,
         dataConfig,
         body,
@@ -707,19 +709,31 @@ export async function POST(req: NextRequest) {
         logoDataUrl,
         qrDataUrl
       );
+      html = result.html;
+      renderWidth = result.renderWidth;
+      renderHeight = result.renderHeight;
+      outputWidth = result.outputWidth;
+      outputHeight = result.outputHeight;
     } else {
       html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
     }
 
-    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH || "/nix/store/$(ls /nix/store | grep -m1 chromium)/bin/chromium";
+    // Render at canvas size, then scale up the image for pixel-perfect matching
+    const scaleUp = outputWidth / renderWidth;
     
     const image = await nodeHtmlToImage({
       html,
       type: "png",
       transparent: false,
+      selector: "body",
       puppeteerArgs: {
         executablePath: process.env.CHROMIUM_PATH || undefined,
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+        defaultViewport: {
+          width: renderWidth,
+          height: renderHeight,
+          deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
+        },
       },
     });
 
