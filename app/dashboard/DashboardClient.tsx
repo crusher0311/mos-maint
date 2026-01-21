@@ -229,19 +229,53 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   const printStickerWithBrowser = (dataUrl: string, stickerSize: string) => {
-    // Download the sticker image so user can open in Windows Photos and print natively
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const filename = `oil-sticker-${stickerSize}-${timestamp}.png`;
+    const sizeMap: Record<string, { width: string; height: string }> = {
+      '2x2': { width: '2in', height: '2in' },
+      '2x2.5': { width: '2in', height: '2.5in' },
+      '2x3': { width: '2in', height: '3in' },
+      '2x3.5': { width: '2in', height: '3.5in' },
+    };
+    const dims = sizeMap[stickerSize] || sizeMap['2x2'];
     
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Create an in-memory HTML page with the sticker - no file saved to disk
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Print Oil Sticker</title>
+  <style>
+    @page { size: ${dims.width} ${dims.height}; margin: 0; }
+    @media print {
+      .no-print { display: none !important; }
+      body { margin: 0; padding: 0; }
+      img { width: ${dims.width}; height: ${dims.height}; display: block; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; margin: 0; }
+    .info { background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px; max-width: 400px; }
+    .info h3 { margin: 0 0 10px 0; font-size: 15px; }
+    .info p { margin: 0 0 8px 0; font-size: 13px; line-height: 1.5; }
+    .info kbd { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    .preview { background: white; padding: 16px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+    .preview img { max-width: 280px; height: auto; display: block; }
+    .hint { margin-top: 16px; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="info no-print">
+    <h3>Print Your Oil Sticker</h3>
+    <p>Press <kbd>Ctrl</kbd>+<kbd>P</kbd> to print, then select your DYMO printer.</p>
+    <p>For Twin Turbo roll selection: Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> for Windows System Print Dialog.</p>
+  </div>
+  <div class="preview">
+    <img src="${dataUrl}" alt="Oil Sticker" />
+  </div>
+  <p class="hint no-print">Close this tab after printing. No files saved to your computer.</p>
+</body>
+</html>`;
     
-    // Show a toast or alert with instructions
-    alert(`Sticker downloaded as "${filename}"\n\nTo print:\n1. Open the downloaded file (double-click)\n2. Right-click > Print, or press Ctrl+P\n3. Select your DYMO printer\n4. Print!`);
+    // Create blob URL and open in new tab
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
   };
 
   const handleQuickPrintStickerWithValues = async (
