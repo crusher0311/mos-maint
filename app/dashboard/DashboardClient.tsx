@@ -229,9 +229,16 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   const printStickerWithBrowser = (dataUrl: string, stickerSize: string) => {
+    console.log("[Print Debug] Browser print fallback triggered, size:", stickerSize);
     // Open the image directly in a new tab - Chrome can preview this for printing
     // User presses Ctrl+P to print, or Ctrl+Shift+P for Windows System Print Dialog
-    window.open(dataUrl, '_blank');
+    const printWindow = window.open(dataUrl, '_blank');
+    if (!printWindow) {
+      console.error("[Print Debug] Popup was blocked!");
+      alert("Please allow popups to print the sticker, or change your printer settings to 'Browser' in Settings > Sticker Designer.");
+    } else {
+      console.log("[Print Debug] Print window opened successfully");
+    }
   };
 
   const handleQuickPrintStickerWithValues = async (
