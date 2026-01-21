@@ -185,6 +185,12 @@ export async function PUT(req: NextRequest) {
         updateFields[`stickerConfig.${field}`] = body[field as keyof StickerConfig];
       }
     }
+    
+    // Debug: log QR code position being saved
+    if (body.designerLayout?.elements) {
+      const qrElement = body.designerLayout.elements.find((e: { type: string }) => e.type === 'qrCode');
+      console.log('[Settings SAVE] QR Code position:', qrElement ? { x: qrElement.x, y: qrElement.y } : 'not found');
+    }
 
     if (Object.keys(updateFields).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
