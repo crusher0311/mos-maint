@@ -112,6 +112,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
   const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
   const [keytagPrinterType, setKeytagPrinterType] = useState<"browser" | "dymo">("browser");
+  const [dymoPrinterKeytag, setDymoPrinterKeytag] = useState<string>("");
   const [dymoAvailable, setDymoAvailable] = useState<boolean | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
@@ -354,7 +355,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           const result = await printWithDymo(
             dataUrl,
             dimensions.widthInches,
-            dimensions.heightInches
+            dimensions.heightInches,
+            dymoPrinterKeytag || undefined
           );
           
           if (!result.success) {
@@ -684,6 +686,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           const data = await res.json();
           const printerType = data.config?.printerType ?? "browser";
           setKeytagPrinterType(printerType);
+          setDymoPrinterKeytag(data.config?.dymoPrinterKeytag ?? "");
           
           if (printerType === "dymo") {
             const env = await checkDymoEnvironment();

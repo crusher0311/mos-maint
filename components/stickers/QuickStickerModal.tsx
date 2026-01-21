@@ -56,6 +56,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   const [roundMileage, setRoundMileage] = useState(true);
   const [intervals, setIntervals] = useState<IntervalsConfig>(DEFAULT_INTERVALS);
   const [printerType, setPrinterType] = useState<"browser" | "dymo">("browser");
+  const [dymoPrinterSticker, setDymoPrinterSticker] = useState<string>("");
   const [dymoStatus, setDymoStatus] = useState<"checking" | "available" | "unavailable" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +78,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           setStickerSize(data.config.defaultSize ?? "2x2.5");
           const configuredPrinterType = data.config.printerType ?? "browser";
           setPrinterType(configuredPrinterType);
+          setDymoPrinterSticker(data.config.dymoPrinterSticker ?? "");
           
           if (configuredPrinterType === "dymo") {
             setDymoStatus("checking");
@@ -166,7 +168,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           const result = await printWithDymo(
             dataUrl,
             dimensions.widthInches,
-            dimensions.heightInches
+            dimensions.heightInches,
+            dymoPrinterSticker || undefined
           );
           
           if (!result.success) {
