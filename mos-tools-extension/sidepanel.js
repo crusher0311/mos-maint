@@ -1212,7 +1212,30 @@ async function handleStickerPrint() {
 }
 
 function printStickerImage(sticker) {
-  console.log('[MOS] Sending sticker to content script for printing');
+  console.log('[MOS] Attempting DYMO direct print first');
+  
+  // Try DYMO direct printing first (extension has localhost permission)
+  chrome.runtime.sendMessage({
+    action: 'DYMO_PRINT',
+    imageBase64: sticker.dataUrl,
+    widthInches: parseFloat(sticker.widthInches) || 2,
+    heightInches: parseFloat(sticker.heightInches) || 2,
+    printerName: sticker.printerName || '',
+    twinTurboRoll: sticker.twinTurboRoll || 'Auto'
+  }, (response) => {
+    if (response?.success) {
+      console.log('[MOS] DYMO print successful:', response.printerName);
+      showNotification('Printed to DYMO!', 'success');
+    } else {
+      console.log('[MOS] DYMO print failed, falling back to browser print:', response?.error);
+      // Fall back to browser printing
+      printStickerViaBrowser(sticker);
+    }
+  });
+}
+
+function printStickerViaBrowser(sticker) {
+  console.log('[MOS] Using browser print fallback');
   
   // Send to content script via background - content script can print from the actual page
   chrome.runtime.sendMessage({
