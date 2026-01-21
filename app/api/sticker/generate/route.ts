@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
 import nodeHtmlToImage from "node-html-to-image";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
@@ -693,13 +694,17 @@ export async function POST(req: NextRequest) {
     let outputWidth = dimensions.width;
     let outputHeight = dimensions.height;
     
-    const designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
+    let designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
     
-    // Debug: log QR code position received
-    if (designerLayout?.elements) {
-      const qrElement = designerLayout.elements.find((e: { type: string }) => e.type === 'qrCode');
-      console.log('[Generate API] QR Code position:', qrElement ? { x: qrElement.x, y: qrElement.y } : 'not found');
-      console.log('[Generate API] Using layout from:', body.designerLayout ? 'request body' : 'shop config');
+    // Scale the layout to match the requested sticker size
+    // This ensures the designer preview matches the printed output exactly
+    if (designerLayout && designerLayout.elements) {
+      const targetSize = getStickerSize(size);
+      if (designerLayout.canvasWidth !== targetSize.canvasWidth || 
+          designerLayout.canvasHeight !== targetSize.canvasHeight) {
+        console.log(`[Generate API] Scaling layout from ${designerLayout.canvasWidth}x${designerLayout.canvasHeight} to ${targetSize.canvasWidth}x${targetSize.canvasHeight}`);
+        designerLayout = scaleLayoutToSize(designerLayout, size);
+      }
     }
     
     if (designerLayout && designerLayout.elements) {
