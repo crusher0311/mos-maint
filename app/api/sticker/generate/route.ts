@@ -697,7 +697,15 @@ export async function POST(req: NextRequest) {
       console.log("[Sticker Generate] Layout canvas:", designerLayout.canvasWidth, "x", designerLayout.canvasHeight);
       console.log("[Sticker Generate] Output dimensions:", dimensions.width, "x", dimensions.height);
       console.log("[Sticker Generate] Scale factors:", dimensions.width / designerLayout.canvasWidth, "x", dimensions.height / designerLayout.canvasHeight);
-      console.log("[Sticker Generate] Elements count:", designerLayout.elements.length);
+      console.log("[Sticker Generate] Elements:", designerLayout.elements.map((e: DesignerElement) => ({
+        type: e.type,
+        x: e.x,
+        y: e.y,
+        width: e.width,
+        height: e.height,
+        fontSize: e.fontSize,
+        visible: e.visible
+      })));
       const dataConfig = body.dataConfig || {
         logo: config.logo,
         phone: config.phone,
