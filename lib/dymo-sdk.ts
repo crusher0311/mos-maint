@@ -139,11 +139,12 @@ export function createLabelXml(
   <DYMOLabel Version="3">
     <Description>Oil Sticker</Description>
     <Orientation>Portrait</Orientation>
-    <LabelName>30270 Continuous Clear</LabelName>
+    <LabelName>Address</LabelName>
     <InitialLength>${heightInches}</InitialLength>
     <BorderStyle>SolidLine</BorderStyle>
     <BorderWidth>0</BorderWidth>
     <PrintDensity>Normal</PrintDensity>
+    <ClearObjects>False</ClearObjects>
     <ObjectInfo>
       <IImageObject>
         <Name>STICKER_IMAGE</Name>
@@ -157,6 +158,7 @@ export function createLabelXml(
       </IImageObject>
       <Bounds X="0" Y="0" Width="${widthInches}" Height="${heightInches}"></Bounds>
     </ObjectInfo>
+    <Blank></Blank>
   </DYMOLabel>
 </DesktopLabel>`;
 }
