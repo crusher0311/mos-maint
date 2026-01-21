@@ -159,28 +159,15 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         };
         const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
         
-        const iframe = document.createElement("iframe");
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "none";
-        document.body.appendChild(iframe);
-        
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (iframeDoc) {
-          iframeDoc.open();
-          iframeDoc.write(`
+        // Use popup window for better print control with label printers
+        const printWindow = window.open("", "_blank", "width=400,height=600");
+        if (printWindow) {
+          printWindow.document.write(`
             <!DOCTYPE html>
             <html>
             <head>
               <title>Print Sticker</title>
               <style>
-                :root {
-                  --x-offset: 0in;
-                  --y-offset: 0.04in; /* slight offset for DYMO feed */
-                }
                 @page {
                   size: ${dims.width} ${dims.height};
                   margin: 0;
@@ -198,13 +185,12 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   overflow: hidden;
                   background: white;
                 }
-                /* Pin the image to exact label size - no browser layout variability */
                 #printImg {
                   position: fixed;
-                  left: var(--x-offset);
-                  top: var(--y-offset);
-                  width: calc(${dims.width} - 0.08in); /* safe margin on sides */
-                  height: calc(${dims.height} - 0.08in); /* safe margin top/bottom */
+                  left: 0;
+                  top: 0;
+                  width: ${dims.width};
+                  height: ${dims.height};
                   display: block;
                   margin: 0;
                   padding: 0;
@@ -213,31 +199,11 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
               </style>
             </head>
             <body>
-              <img id="printImg" src="${dataUrl}" />
+              <img id="printImg" src="${dataUrl}" onload="setTimeout(function() { window.print(); }, 200);" />
             </body>
             </html>
           `);
-          iframeDoc.close();
-          
-          const img = iframeDoc.getElementById("sticker") as HTMLImageElement;
-          if (img) {
-            img.onload = () => {
-              setTimeout(() => {
-                iframe.contentWindow?.print();
-                setTimeout(() => {
-                  document.body.removeChild(iframe);
-                }, 1000);
-              }, 100);
-            };
-            if (img.complete) {
-              setTimeout(() => {
-                iframe.contentWindow?.print();
-                setTimeout(() => {
-                  document.body.removeChild(iframe);
-                }, 1000);
-              }, 100);
-            }
-          }
+          printWindow.document.close();
         }
       };
       reader.readAsDataURL(blob);
