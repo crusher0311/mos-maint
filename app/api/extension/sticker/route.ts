@@ -185,6 +185,37 @@ interface StickerConfig {
     euro?: { mileage: number; months: number };
     diesel?: { mileage: number; months: number };
   };
+  designerLayout?: DesignerLayout;
+}
+
+interface DesignerElement {
+  id: string;
+  type: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  backgroundColor?: string;
+  visible: boolean;
+  showLabel?: boolean;
+  imageFit?: 'contain' | 'cover';
+  content?: string;
+}
+
+interface DesignerLayout {
+  elements: DesignerElement[];
+  canvasWidth: number;
+  canvasHeight: number;
+  gridSize: number;
+  showGrid: boolean;
+  backgroundColor: string;
+  version?: number;
 }
 
 function generateStickerHtml(
@@ -330,6 +361,128 @@ function generateStickerHtml(
   </div>
 </body>
 </html>`;
+}
+
+function generateStickerHtmlFromLayout(
+  layout: DesignerLayout,
+  config: StickerConfig,
+  nextServiceMileage: number,
+  nextServiceDate: string,
+  useKilometers: boolean,
+  logoDataUrl: string | null,
+  qrDataUrl: string | null,
+  dimensions: { width: number; height: number }
+): string {
+  const scaleX = dimensions.width / layout.canvasWidth;
+  const scaleY = dimensions.height / layout.canvasHeight;
+  
+  const distanceUnit = useKilometers ? "km" : "mi";
+  const roundMileage = config.roundMileage !== false;
+  
+  const formattedDate = nextServiceDate
+    ? new Date(nextServiceDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "";
+  
+  let mileageValue = nextServiceMileage;
+  if (mileageValue && roundMileage) {
+    mileageValue = Math.round(mileageValue / 100) * 100;
+  }
+  const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
+  
+  const getElementContent = (element: DesignerElement): string => {
+    switch (element.type) {
+      case 'logo':
+        if (logoDataUrl) {
+          return `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:${element.imageFit || 'contain'};" />`;
+        }
+        return '';
+      case 'qrCode':
+        if (qrDataUrl) {
+          return `<img src="${qrDataUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
+        }
+        return '';
+      case 'phone':
+        return config.phone || '';
+      case 'tagline':
+        return config.tagline || '';
+      case 'taglineLine2':
+        return config.taglineLine2 || '';
+      case 'serviceLabel':
+        return element.content || config.serviceLabel || 'Next Oil Service';
+      case 'serviceDate':
+        return formattedDate;
+      case 'serviceMileage':
+        return formattedMileage ? `${formattedMileage} ${distanceUnit}` : '';
+      default:
+        return element.content || '';
+    }
+  };
+  
+  const visibleElements = layout.elements.filter(el => el.visible);
+  
+  const elementsHtml = visibleElements.map(element => {
+    const x = Math.round(element.x * scaleX);
+    const y = Math.round(element.y * scaleY);
+    const width = Math.round(element.width * scaleX);
+    const height = Math.round(element.height * scaleY);
+    const fontSize = Math.round(element.fontSize * Math.min(scaleX, scaleY));
+    
+    const content = getElementContent(element);
+    if (!content) return '';
+    
+    const isImage = element.type === 'logo' || element.type === 'qrCode';
+    
+    return `
+      <div style="
+        position: absolute;
+        left: ${x}px;
+        top: ${y}px;
+        width: ${width}px;
+        height: ${height}px;
+        ${!isImage ? `
+          font-size: ${fontSize}px;
+          font-weight: ${element.fontWeight};
+          font-style: ${element.fontStyle};
+          text-align: ${element.textAlign};
+          color: ${element.color};
+          display: flex;
+          align-items: center;
+          justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
+          overflow: hidden;
+          white-space: nowrap;
+          line-height: 1.2;
+        ` : ''}
+        ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
+      ">
+        ${content}
+      </div>
+    `;
+  }).join('');
+  
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: ${dimensions.width}px;
+      height: ${dimensions.height}px;
+      font-family: Arial, Helvetica, sans-serif;
+      background: ${layout.backgroundColor};
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  ${elementsHtml}
+</body>
+</html>
+  `;
 }
 
 export async function OPTIONS() {
@@ -531,15 +684,30 @@ export async function POST(request: NextRequest) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
     }
 
-    const html = generateStickerHtml(
-      configWithLogo,
-      nextServiceMileage,
-      nextServiceDate,
-      useHours,
-      useKilometers,
-      qrDataUrl,
-      dimensions
-    );
+    let html: string;
+    
+    if (stickerConfig.designerLayout && stickerConfig.designerLayout.elements) {
+      html = generateStickerHtmlFromLayout(
+        stickerConfig.designerLayout,
+        configWithLogo,
+        nextServiceMileage,
+        nextServiceDate,
+        useKilometers,
+        logoDataUrl,
+        qrDataUrl,
+        dimensions
+      );
+    } else {
+      html = generateStickerHtml(
+        configWithLogo,
+        nextServiceMileage,
+        nextServiceDate,
+        useHours,
+        useKilometers,
+        qrDataUrl,
+        dimensions
+      );
+    }
 
     const image = await nodeHtmlToImage({
       html,
