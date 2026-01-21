@@ -51,7 +51,8 @@ export interface DymoEnvironment {
   errorDetails?: string;
 }
 
-const DYMO_SDK_URL = "https://labelwriter.com/software/dls/sdk/js/dymo.connect.framework.js";
+// Use jsDelivr CDN to serve the official DYMO Connect Framework from GitHub
+const DYMO_SDK_URL = "https://cdn.jsdelivr.net/gh/dymosoftware/dymo-connect-framework@master/dymo.connect.framework.min.js";
 
 let sdkLoaded = false;
 let sdkLoadPromise: Promise<boolean> | null = null;
@@ -79,8 +80,9 @@ export async function loadDymoSdk(): Promise<boolean> {
       sdkLoaded = true;
       resolve(true);
     };
-    script.onerror = () => {
-      console.error("Failed to load DYMO SDK");
+    script.onerror = (error) => {
+      console.error("Failed to load DYMO SDK from:", DYMO_SDK_URL, error);
+      sdkLoadPromise = null; // Reset so we can try again
       resolve(false);
     };
     document.head.appendChild(script);
