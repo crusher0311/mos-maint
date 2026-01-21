@@ -23,6 +23,36 @@ interface FontStyle {
   size?: number;
 }
 
+interface DesignerElement {
+  id: string;
+  type: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  backgroundColor?: string;
+  visible: boolean;
+  showLabel?: boolean;
+  imageFit?: 'contain' | 'cover';
+  content?: string;
+}
+
+interface DesignerLayout {
+  elements: DesignerElement[];
+  canvasWidth: number;
+  canvasHeight: number;
+  gridSize: number;
+  showGrid: boolean;
+  backgroundColor: string;
+  version?: number;
+}
+
 interface StickerConfig {
   enabled?: boolean;
   logo?: string;
@@ -56,6 +86,7 @@ interface StickerConfig {
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
   hovercodeQRId?: string;
+  designerLayout?: DesignerLayout;
 }
 
 export async function GET(req: NextRequest) {
