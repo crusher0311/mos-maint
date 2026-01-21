@@ -64,6 +64,8 @@ interface StickerConfig {
   roundMileage?: boolean;
   usePredictiveDate?: boolean;
   printerType?: "browser" | "dymo";
+  dymoPrinterSticker?: string;
+  dymoPrinterKeytag?: string;
   fontStyles?: {
     phone?: FontStyle;
     tagline?: FontStyle;
@@ -171,6 +173,8 @@ export async function PUT(req: NextRequest) {
       "roundMileage",
       "usePredictiveDate",
       "printerType",
+      "dymoPrinterSticker",
+      "dymoPrinterKeytag",
       "fontStyles",
       "colors",
       "defaultSize",

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
 import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
+import { getDymoPrinters, DymoPrinter } from "@/lib/dymo-sdk";
 
 interface IntervalConfig {
   mileage: number;
@@ -28,6 +29,8 @@ interface StickerDataConfig {
   roundMileage: boolean;
   usePredictiveDate: boolean;
   printerType: "browser" | "dymo";
+  dymoPrinterSticker: string;
+  dymoPrinterKeytag: string;
   defaultSize: string;
   appointmentUrl: string;
   useKilometers: boolean;
@@ -73,6 +76,8 @@ const DEFAULT_CONFIG: StickerDataConfig = {
   roundMileage: true,
   usePredictiveDate: false,
   printerType: "browser",
+  dymoPrinterSticker: "",
+  dymoPrinterKeytag: "",
   defaultSize: DEFAULT_STICKER_SIZE,
   appointmentUrl: "",
   useKilometers: false,
@@ -97,14 +102,35 @@ export default function StickerSettingsPage() {
     intervals: true,
     options: false,
   });
+  
+  const [dymoPrinters, setDymoPrinters] = useState<DymoPrinter[]>([]);
+  const [loadingPrinters, setLoadingPrinters] = useState(false);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
+  
+  const refreshDymoPrinters = useCallback(async () => {
+    setLoadingPrinters(true);
+    try {
+      const printers = await getDymoPrinters();
+      setDymoPrinters(printers);
+    } catch (error) {
+      console.error("Failed to get DYMO printers:", error);
+    } finally {
+      setLoadingPrinters(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchSettings();
   }, []);
+  
+  useEffect(() => {
+    if (config.printerType === "dymo") {
+      refreshDymoPrinters();
+    }
+  }, [config.printerType, refreshDymoPrinters]);
 
   useEffect(() => {
     if (!loading) {
@@ -129,6 +155,8 @@ export default function StickerSettingsPage() {
             roundMileage: data.config.roundMileage ?? DEFAULT_CONFIG.roundMileage,
             usePredictiveDate: data.config.usePredictiveDate ?? DEFAULT_CONFIG.usePredictiveDate,
             printerType: data.config.printerType ?? DEFAULT_CONFIG.printerType,
+            dymoPrinterSticker: data.config.dymoPrinterSticker ?? DEFAULT_CONFIG.dymoPrinterSticker,
+            dymoPrinterKeytag: data.config.dymoPrinterKeytag ?? DEFAULT_CONFIG.dymoPrinterKeytag,
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
@@ -196,6 +224,8 @@ export default function StickerSettingsPage() {
           roundMileage: config.roundMileage,
           usePredictiveDate: config.usePredictiveDate,
           printerType: config.printerType,
+          dymoPrinterSticker: config.dymoPrinterSticker,
+          dymoPrinterKeytag: config.dymoPrinterKeytag,
           defaultSize: currentSize,
           appointmentUrl: config.appointmentUrl,
           useKilometers: config.useKilometers,
@@ -576,9 +606,66 @@ export default function StickerSettingsPage() {
                   {PRINTER_TYPES.find(t => t.value === config.printerType)?.description}
                 </p>
                 {config.printerType === "dymo" && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    DYMO Connect software must be installed on the printing computer.
-                  </p>
+                  <>
+                    <p className="text-xs text-amber-600 mt-1">
+                      DYMO Connect software must be installed on the printing computer.
+                    </p>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Sticker Printer</label>
+                        <div className="flex gap-2">
+                          <select
+                            value={config.dymoPrinterSticker}
+                            onChange={(e) => setConfig({ ...config, dymoPrinterSticker: e.target.value })}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          >
+                            <option value="">Auto (first available)</option>
+                            {dymoPrinters.map((printer) => (
+                              <option key={printer.name} value={printer.name}>
+                                {printer.name} {printer.isTwinTurbo ? "(Twin Turbo)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={refreshDymoPrinters}
+                            disabled={loadingPrinters}
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            {loadingPrinters ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh"}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Printer used for oil change stickers
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Keytag Printer</label>
+                        <div className="flex gap-2">
+                          <select
+                            value={config.dymoPrinterKeytag}
+                            onChange={(e) => setConfig({ ...config, dymoPrinterKeytag: e.target.value })}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          >
+                            <option value="">Auto (first available)</option>
+                            {dymoPrinters.map((printer) => (
+                              <option key={printer.name} value={printer.name}>
+                                {printer.name} {printer.isTwinTurbo ? "(Twin Turbo)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Printer used for keytags
+                        </p>
+                      </div>
+                    </div>
+                    {dymoPrinters.length === 0 && !loadingPrinters && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        No DYMO printers detected. Make sure DYMO Connect is running.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
