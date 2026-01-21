@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { X, Loader2, Printer, AlertCircle } from "lucide-react";
-import { printWithDymo, checkDymoEnvironment, STICKER_SIZE_DIMENSIONS } from "@/lib/dymo-sdk";
+import { printWithDymo, checkDymoEnvironment, STICKER_SIZE_DIMENSIONS, TwinTurboRollSelection } from "@/lib/dymo-sdk";
 
 interface IntervalConfig {
   mileage: number;
@@ -57,6 +57,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   const [intervals, setIntervals] = useState<IntervalsConfig>(DEFAULT_INTERVALS);
   const [printerType, setPrinterType] = useState<"browser" | "dymo">("browser");
   const [dymoPrinterSticker, setDymoPrinterSticker] = useState<string>("");
+  const [dymoRollSticker, setDymoRollSticker] = useState<TwinTurboRollSelection>("auto");
   const [dymoStatus, setDymoStatus] = useState<"checking" | "available" | "unavailable" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +80,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           const configuredPrinterType = data.config.printerType ?? "browser";
           setPrinterType(configuredPrinterType);
           setDymoPrinterSticker(data.config.dymoPrinterSticker ?? "");
+          setDymoRollSticker(data.config.dymoRollSticker ?? "auto");
           
           if (configuredPrinterType === "dymo") {
             setDymoStatus("checking");
@@ -169,7 +171,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             dataUrl,
             dimensions.widthInches,
             dimensions.heightInches,
-            dymoPrinterSticker || undefined
+            dymoPrinterSticker || undefined,
+            dymoRollSticker
           );
           
           if (!result.success) {

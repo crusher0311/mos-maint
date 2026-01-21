@@ -18,6 +18,8 @@ interface IntervalsConfig {
   conventional: IntervalConfig;
 }
 
+type TwinTurboRoll = "auto" | "left" | "right";
+
 interface StickerDataConfig {
   enabled: boolean;
   logo: string;
@@ -31,6 +33,8 @@ interface StickerDataConfig {
   printerType: "browser" | "dymo";
   dymoPrinterSticker: string;
   dymoPrinterKeytag: string;
+  dymoRollSticker: TwinTurboRoll;
+  dymoRollKeytag: TwinTurboRoll;
   defaultSize: string;
   appointmentUrl: string;
   useKilometers: boolean;
@@ -65,6 +69,12 @@ const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: strin
   { key: "diesel", label: "Diesel", description: "Diesel engines" },
 ];
 
+const ROLL_OPTIONS: { value: TwinTurboRoll; label: string }[] = [
+  { value: "auto", label: "Auto (Switch when empty)" },
+  { value: "left", label: "Left Roll" },
+  { value: "right", label: "Right Roll" },
+];
+
 const DEFAULT_CONFIG: StickerDataConfig = {
   enabled: true,
   logo: "",
@@ -78,6 +88,8 @@ const DEFAULT_CONFIG: StickerDataConfig = {
   printerType: "browser",
   dymoPrinterSticker: "",
   dymoPrinterKeytag: "",
+  dymoRollSticker: "auto",
+  dymoRollKeytag: "auto",
   defaultSize: DEFAULT_STICKER_SIZE,
   appointmentUrl: "",
   useKilometers: false,
@@ -157,6 +169,8 @@ export default function StickerSettingsPage() {
             printerType: data.config.printerType ?? DEFAULT_CONFIG.printerType,
             dymoPrinterSticker: data.config.dymoPrinterSticker ?? DEFAULT_CONFIG.dymoPrinterSticker,
             dymoPrinterKeytag: data.config.dymoPrinterKeytag ?? DEFAULT_CONFIG.dymoPrinterKeytag,
+            dymoRollSticker: data.config.dymoRollSticker ?? DEFAULT_CONFIG.dymoRollSticker,
+            dymoRollKeytag: data.config.dymoRollKeytag ?? DEFAULT_CONFIG.dymoRollKeytag,
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
@@ -226,6 +240,8 @@ export default function StickerSettingsPage() {
           printerType: config.printerType,
           dymoPrinterSticker: config.dymoPrinterSticker,
           dymoPrinterKeytag: config.dymoPrinterKeytag,
+          dymoRollSticker: config.dymoRollSticker,
+          dymoRollKeytag: config.dymoRollKeytag,
           defaultSize: currentSize,
           appointmentUrl: config.appointmentUrl,
           useKilometers: config.useKilometers,
@@ -640,6 +656,23 @@ export default function StickerSettingsPage() {
                         </p>
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Sticker Roll (Twin Turbo)</label>
+                        <select
+                          value={config.dymoRollSticker}
+                          onChange={(e) => setConfig({ ...config, dymoRollSticker: e.target.value as TwinTurboRoll })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          {ROLL_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Which roll to use for stickers on Twin Turbo printers
+                        </p>
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Keytag Printer</label>
                         <div className="flex gap-2">
                           <select
@@ -657,6 +690,23 @@ export default function StickerSettingsPage() {
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
                           Printer used for keytags
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Keytag Roll (Twin Turbo)</label>
+                        <select
+                          value={config.dymoRollKeytag}
+                          onChange={(e) => setConfig({ ...config, dymoRollKeytag: e.target.value as TwinTurboRoll })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          {ROLL_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Which roll to use for keytags on Twin Turbo printers
                         </p>
                       </div>
                     </div>

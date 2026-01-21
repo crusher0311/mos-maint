@@ -6,7 +6,7 @@ import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, C
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
-import { printWithDymo, checkDymoEnvironment, KEYTAG_SIZE_DIMENSIONS } from "@/lib/dymo-sdk";
+import { printWithDymo, checkDymoEnvironment, KEYTAG_SIZE_DIMENSIONS, TwinTurboRollSelection } from "@/lib/dymo-sdk";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -113,6 +113,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
   const [keytagPrinterType, setKeytagPrinterType] = useState<"browser" | "dymo">("browser");
   const [dymoPrinterKeytag, setDymoPrinterKeytag] = useState<string>("");
+  const [dymoRollKeytag, setDymoRollKeytag] = useState<TwinTurboRollSelection>("auto");
   const [dymoAvailable, setDymoAvailable] = useState<boolean | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
@@ -356,7 +357,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             dataUrl,
             dimensions.widthInches,
             dimensions.heightInches,
-            dymoPrinterKeytag || undefined
+            dymoPrinterKeytag || undefined,
+            dymoRollKeytag
           );
           
           if (!result.success) {
@@ -687,6 +689,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           const printerType = data.config?.printerType ?? "browser";
           setKeytagPrinterType(printerType);
           setDymoPrinterKeytag(data.config?.dymoPrinterKeytag ?? "");
+          setDymoRollKeytag(data.config?.dymoRollKeytag ?? "auto");
           
           if (printerType === "dymo") {
             const env = await checkDymoEnvironment();
