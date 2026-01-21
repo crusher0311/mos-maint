@@ -145,6 +145,7 @@ export async function PUT(req: NextRequest) {
       "useKilometers",
       "intervals",
       "hovercodeQRId",
+      "designerLayout",
     ];
 
     const updateFields: Record<string, unknown> = {};
