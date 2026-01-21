@@ -182,15 +182,6 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   size: ${dims.width} ${dims.height};
                   margin: 0;
                 }
-                @media print {
-                  html, body {
-                    width: ${dims.width};
-                    height: ${dims.height};
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: hidden;
-                  }
-                }
                 * {
                   margin: 0;
                   padding: 0;
@@ -201,11 +192,37 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   height: ${dims.height};
                   margin: 0;
                   padding: 0;
+                  overflow: hidden;
+                }
+                @media print {
+                  html, body {
+                    width: ${dims.width};
+                    height: ${dims.height};
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden;
+                  }
+                  #label {
+                    width: ${dims.width};
+                    height: ${dims.height};
+                    padding: 0.04in; /* ~1.2mm safe area for DYMO */
+                    box-sizing: border-box;
+                    overflow: hidden;
+                  }
+                  #label img {
+                    max-width: 100%;
+                    max-height: 100%;
+                    width: 100%;
+                    height: 100%;
+                    object-fit: contain;
+                  }
                 }
                 #label {
                   width: ${dims.width};
                   height: ${dims.height};
                   display: block;
+                  padding: 0.04in;
+                  box-sizing: border-box;
                 }
                 img {
                   width: 100%;
