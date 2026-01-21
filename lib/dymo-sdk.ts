@@ -159,8 +159,10 @@ export function createLabelXml(
     </BorderColor>
     <BorderThickness>0</BorderThickness>
     <Show_Border>False</Show_Border>
-    <ClearObjects>False</ClearObjects>
-    <ObjectInfo>
+    <DynamicLayoutManager>
+      <RotationBehavior>ClearObjects</RotationBehavior>
+      <LabelObjects>
+        <ObjectInfo>
       <IImageObject>
         <Name>STICKER_IMAGE</Name>
         <Rotation>Rotation0</Rotation>
@@ -172,7 +174,9 @@ export function createLabelXml(
         <Image>${imageBase64}</Image>
       </IImageObject>
       <Bounds X="0" Y="0" Width="${widthInches}" Height="${heightInches}"></Bounds>
-    </ObjectInfo>
+        </ObjectInfo>
+      </LabelObjects>
+    </DynamicLayoutManager>
     <Blank></Blank>
   </DYMOLabel>
 </DesktopLabel>`;
