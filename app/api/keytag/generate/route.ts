@@ -126,7 +126,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
           display: flex;
           align-items: center;
           justify-content: ${el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'flex-end' : 'flex-start'};
-          overflow: hidden;
+          overflow: visible;
           white-space: nowrap;
           color: ${validatedLayout.textColor};
         " data-base-font="${fontSize}"><span class="text-content">${textHtml}</span></div>
