@@ -6,7 +6,15 @@ import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, C
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
-import { printWithDymo, checkDymoEnvironment, KEYTAG_SIZE_DIMENSIONS, TwinTurboRollSelection } from "@/lib/dymo-sdk";
+import { 
+  isDymoConnectRunning, 
+  getDymoPrinters, 
+  printWithDymoConnect, 
+  KEYTAG_SIZE_DIMENSIONS,
+  STICKER_SIZE_DIMENSIONS,
+  TwinTurboRoll,
+  DymoPrinter
+} from "@/lib/dymo-connect";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -113,10 +121,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
   const [keytagPrinterType, setKeytagPrinterType] = useState<"browser" | "dymo">("browser");
   const [dymoPrinterKeytag, setDymoPrinterKeytag] = useState<string>("");
-  const [dymoRollKeytag, setDymoRollKeytag] = useState<TwinTurboRollSelection>("auto");
+  const [dymoRollKeytag, setDymoRollKeytag] = useState<TwinTurboRoll>("Auto");
   const [stickerPrinterType, setStickerPrinterType] = useState<"browser" | "dymo">("browser");
   const [dymoPrinterSticker, setDymoPrinterSticker] = useState<string>("");
-  const [dymoRollSticker, setDymoRollSticker] = useState<TwinTurboRollSelection>("auto");
+  const [dymoRollSticker, setDymoRollSticker] = useState<TwinTurboRoll>("Auto");
   const [dymoAvailable, setDymoAvailable] = useState<boolean | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
@@ -220,14 +228,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     setCustomStickerModal(null);
   };
 
-  // Sticker size dimensions in inches for DYMO printing
-  const STICKER_SIZE_DIMENSIONS: Record<string, { widthInches: number; heightInches: number }> = {
-    '2x2': { widthInches: 2, heightInches: 2 },
-    '2x2.5': { widthInches: 2, heightInches: 2.5 },
-    '2x3': { widthInches: 2, heightInches: 3 },
-    '2x3.5': { widthInches: 2, heightInches: 3.5 },
-  };
-
   const printStickerWithBrowser = (dataUrl: string, stickerSize: string) => {
     // Open the image directly in a new tab - Chrome can preview this for printing
     // User presses Ctrl+P to print, or Ctrl+Shift+P for Windows System Print Dialog
@@ -287,13 +287,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         console.log("[DYMO Debug] At print time - dymoRollSticker:", dymoRollSticker);
         
         // Check if DYMO is enabled and available
-        if (stickerPrinterType === "dymo" && dymoAvailable) {
+        if (stickerPrinterType === "dymo" && dymoAvailable && dymoPrinterSticker) {
           const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS['2x2'];
-          const result = await printWithDymo(
+          const result = await printWithDymoConnect(
             dataUrl,
             dimensions.widthInches,
             dimensions.heightInches,
-            dymoPrinterSticker || undefined,
+            dymoPrinterSticker,
             dymoRollSticker
           );
           
@@ -349,13 +349,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = async () => {
         const dataUrl = reader.result as string;
         
-        if (keytagPrinterType === "dymo" && dymoAvailable) {
+        if (keytagPrinterType === "dymo" && dymoAvailable && dymoPrinterKeytag) {
           const dimensions = KEYTAG_SIZE_DIMENSIONS["dymo30252"];
-          const result = await printWithDymo(
+          const result = await printWithDymoConnect(
             dataUrl,
             dimensions.widthInches,
             dimensions.heightInches,
-            dymoPrinterKeytag || undefined,
+            dymoPrinterKeytag,
             dymoRollKeytag
           );
           
@@ -539,14 +539,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         console.log("[DYMO Debug] handleQuickPrintSticker - dymoAvailable:", dymoAvailable);
         
         // Check if DYMO is enabled and available
-        if (stickerPrinterType === "dymo" && dymoAvailable) {
+        if (stickerPrinterType === "dymo" && dymoAvailable && dymoPrinterSticker) {
           const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS['2x2'];
           console.log("[DYMO Debug] Attempting DYMO print with dimensions:", dimensions);
-          const result = await printWithDymo(
+          const result = await printWithDymoConnect(
             dataUrl,
             dimensions.widthInches,
             dimensions.heightInches,
-            dymoPrinterSticker || undefined,
+            dymoPrinterSticker,
             dymoRollSticker
           );
           
@@ -680,15 +680,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           // Keytag DYMO settings (uses same printerType but separate printer/roll)
           setKeytagPrinterType(printerType);
           setDymoPrinterKeytag(data.config?.dymoPrinterKeytag ?? "");
-          setDymoRollKeytag(data.config?.dymoRollKeytag ?? "auto");
+          setDymoRollKeytag(data.config?.dymoRollKeytag ?? "Auto");
           
           if (printerType === "dymo") {
-            console.log("[DYMO Debug] Checking DYMO environment...");
-            const env = await checkDymoEnvironment();
-            console.log("[DYMO Debug] DYMO environment result:", env);
-            const isAvailable = env?.isWebServicePresent ?? false;
-            console.log("[DYMO Debug] Setting dymoAvailable to:", isAvailable);
-            setDymoAvailable(isAvailable);
+            console.log("[DYMO Debug] Checking DYMO Connect...");
+            const isConnected = await isDymoConnectRunning();
+            console.log("[DYMO Debug] DYMO Connect running:", isConnected);
+            setDymoAvailable(isConnected);
           } else {
             console.log("[DYMO Debug] Printer type is not 'dymo', skipping DYMO check");
           }
