@@ -237,73 +237,70 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     };
     const dims = sizeMap[stickerSize] || sizeMap['2x2'];
     
-    const existingFrame = document.getElementById('sticker-print-frame');
-    if (existingFrame) existingFrame.remove();
-    
-    const iframe = document.createElement('iframe');
-    iframe.id = 'sticker-print-frame';
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (iframeDoc) {
-      iframeDoc.open();
-      iframeDoc.write(`
+    // Open a visible popup window so user can interact with print dialog
+    const printWindow = window.open('', '_blank', 'width=520,height=650,menubar=no,toolbar=no,location=no,status=no');
+    if (printWindow) {
+      printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Print Sticker</title>
+          <title>Print Oil Sticker</title>
           <style>
             @page { size: ${dims.width} ${dims.height}; margin: 0; }
             @media print {
-              .print-instructions { display: none !important; }
-              html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; margin: 0; padding: 0; }
-              img { display: block; width: 100%; height: 100%; }
+              .print-instructions, .print-button, .close-note { display: none !important; }
+              body { margin: 0; padding: 0; background: white; }
+              .sticker-preview { padding: 0; background: none; box-shadow: none; display: block; border-radius: 0; }
+              .sticker-preview img { width: ${dims.width}; height: ${dims.height}; display: block; }
             }
             @media screen {
               * { margin: 0; padding: 0; box-sizing: border-box; }
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f0f0; padding: 20px; }
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 24px; }
               .print-instructions {
                 background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px;
-                margin-bottom: 20px; max-width: 400px;
+                margin-bottom: 20px;
               }
-              .print-instructions h3 { margin-bottom: 8px; font-size: 14px; }
-              .print-instructions p { font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
+              .print-instructions h3 { margin-bottom: 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+              .print-instructions p { font-size: 13px; line-height: 1.6; margin-bottom: 10px; }
               .print-instructions kbd {
-                background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;
-                font-family: monospace; font-weight: bold;
+                background: rgba(255,255,255,0.25); padding: 3px 8px; border-radius: 4px;
+                font-family: monospace; font-weight: bold; font-size: 12px;
               }
+              .print-instructions .tip { opacity: 0.85; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px; margin-top: 10px; margin-bottom: 0; }
               .sticker-preview {
-                background: white; padding: 10px; border-radius: 8px; display: inline-block;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                background: white; padding: 16px; border-radius: 8px; display: inline-block;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.1); margin-bottom: 20px;
               }
-              .sticker-preview img { display: block; max-width: 300px; height: auto; }
+              .sticker-preview img { display: block; max-width: 280px; height: auto; }
+              .print-button {
+                background: #059669; color: white; border: none; padding: 14px 28px;
+                border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+                display: inline-flex; align-items: center; gap: 8px;
+              }
+              .print-button:hover { background: #047857; }
+              .close-note { margin-top: 16px; font-size: 12px; color: #666; }
             }
           </style>
         </head>
         <body>
           <div class="print-instructions">
-            <h3>🖨️ DYMO Printing Tip</h3>
-            <p>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the <strong>Windows System Print Dialog</strong> for full DYMO printer options including Twin Turbo roll selection.</p>
-            <p style="opacity: 0.8; font-size: 11px;">Or select your DYMO printer from Chrome's dropdown and set Margins to "None".</p>
+            <h3>Print Your Oil Sticker</h3>
+            <p><strong>For DYMO Twin Turbo:</strong> In the print dialog, press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the <strong>Windows System Print Dialog</strong> where you can select Left or Right roll.</p>
+            <p class="tip"><strong>Quick option:</strong> Select your DYMO printer from Chrome's dropdown, set Margins to "None", then click Print.</p>
           </div>
           <div class="sticker-preview">
-            <img src="${dataUrl}" />
+            <img src="${dataUrl}" alt="Oil Change Sticker" />
           </div>
+          <br/>
+          <button class="print-button" onclick="window.print()">
+            Open Print Dialog
+          </button>
+          <p class="close-note">Close this window after printing.</p>
         </body>
         </html>
       `);
-      iframeDoc.close();
-      
-      setTimeout(() => {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      }, 250);
+      printWindow.document.close();
+      printWindow.focus();
     }
   };
 
