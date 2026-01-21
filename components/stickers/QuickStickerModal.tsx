@@ -179,7 +179,6 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     @page { 
       size: ${dims.width} ${dims.height}; 
       margin: 0 !important; 
-      padding: 0 !important;
     }
 
     * {
@@ -188,48 +187,43 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       box-sizing: border-box !important;
     }
 
-    html, body {
-      width: ${dims.width} !important;
-      height: ${dims.height} !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      background: white !important;
+    html {
+      width: 100vw !important;
+      height: 100vh !important;
     }
 
-    body { 
+    body {
+      width: 100vw !important;
+      height: 100vh !important;
+      overflow: hidden !important;
+      background: white !important;
       position: relative !important;
-      display: flex !important;
-      align-items: stretch !important;
-      justify-content: stretch !important;
     }
 
     img#printImg {
       position: absolute !important;
       left: 0 !important;
       top: 0 !important;
-      right: 0 !important;
-      bottom: 0 !important;
-
-      width: 100% !important;
-      height: 100% !important;
-      max-width: 100% !important;
-      max-height: 100% !important;
-
-      margin: 0 !important;
-      padding: 0 !important;
-      border: 0 !important;
-
+      width: 100vw !important;
+      height: 100vh !important;
       display: block !important;
       object-fit: fill !important;
     }
 
     @media print {
+      @page { 
+        size: ${dims.width} ${dims.height}; 
+        margin: 0 !important; 
+      }
       html, body {
-        width: ${dims.width} !important;
-        height: ${dims.height} !important;
+        width: 100% !important;
+        height: 100% !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+      }
+      img#printImg {
+        width: 100% !important;
+        height: 100% !important;
       }
     }
   </style>
