@@ -134,14 +134,17 @@ export function createLabelXml(
   widthInches: number,
   heightInches: number
 ): string {
+  const widthTwips = Math.round(widthInches * 1440);
+  const heightTwips = Math.round(heightInches * 1440);
+
   return `<?xml version="1.0" encoding="utf-8"?>
 <DesktopLabel Version="1">
   <DYMOLabel Version="3">
     <Description>Oil Sticker</Description>
     <Orientation>Portrait</Orientation>
-    <LabelName>Custom</LabelName>
+    <LabelName>30270 Continuous</LabelName>
     <InitialLength>${heightInches}</InitialLength>
-    <BorderStyle>SolidLine</BorderStyle>
+    <BorderStyle>None</BorderStyle>
     <BorderWidth>0</BorderWidth>
     <PrintDensity>Normal</PrintDensity>
     <ObjectInfo>
@@ -155,7 +158,7 @@ export function createLabelXml(
           </BackgroundBrush>
           <BorderBrush>
             <SolidColorBrush>
-              <Color A="1" R="0" G="0" B="0"></Color>
+              <Color A="0" R="0" G="0" B="0"></Color>
             </SolidColorBrush>
           </BorderBrush>
         </Brushes>
@@ -179,11 +182,7 @@ export function createLabelXml(
         </Size>
       </Bounds>
     </ObjectInfo>
-    <PaperInfo>
-      <Name>Custom ${widthInches}x${heightInches}</Name>
-      <Width>${widthInches}</Width>
-      <Height>${heightInches}</Height>
-    </PaperInfo>
+    <LabelLength>${heightInches}</LabelLength>
   </DYMOLabel>
 </DesktopLabel>`;
 }
