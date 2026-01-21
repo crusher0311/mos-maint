@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Loader2, Check, Download, QrCode, Palette, Type, Phone, Link2, Calendar, Gauge, ImageIcon, Upload } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight } from "lucide-react";
+import { StickerDesigner } from "@/components/sticker-designer";
+import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
 
 interface IntervalConfig {
   mileage: number;
@@ -15,13 +17,7 @@ interface IntervalsConfig {
   conventional: IntervalConfig;
 }
 
-interface FontStyle {
-  bold: boolean;
-  italic: boolean;
-  size: number;
-}
-
-interface StickerConfig {
+interface StickerDataConfig {
   enabled: boolean;
   logo: string;
   phone: string;
@@ -31,28 +27,11 @@ interface StickerConfig {
   showQRCode: boolean;
   roundMileage: boolean;
   usePredictiveDate: boolean;
-  fontStyles: {
-    phone: FontStyle;
-    tagline: FontStyle;
-    taglineLine2: FontStyle;
-    serviceLabel: FontStyle;
-    serviceValue: FontStyle;
-  };
-  colors: {
-    primary: string;
-    secondary: string;
-    text: string;
-    background: string;
-    phoneColor: string;
-    taglineColor: string;
-    taglineLine2Color: string;
-    serviceLabelColor: string;
-    serviceValueColor: string;
-  };
   defaultSize: string;
   appointmentUrl: string;
   useKilometers: boolean;
   intervals: IntervalsConfig;
+  designerLayout?: StickerLayout;
 }
 
 const STICKER_SIZES = [
@@ -77,15 +56,7 @@ const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: strin
   { key: "diesel", label: "Diesel", description: "Diesel engines" },
 ];
 
-const DEFAULT_FONT_STYLES = {
-  phone: { bold: true, italic: false, size: 14 },
-  tagline: { bold: false, italic: true, size: 11 },
-  taglineLine2: { bold: false, italic: true, size: 11 },
-  serviceLabel: { bold: false, italic: false, size: 12 },
-  serviceValue: { bold: true, italic: true, size: 14 },
-};
-
-const DEFAULT_CONFIG: StickerConfig = {
+const DEFAULT_CONFIG: StickerDataConfig = {
   enabled: true,
   logo: "",
   phone: "",
@@ -95,19 +66,7 @@ const DEFAULT_CONFIG: StickerConfig = {
   showQRCode: true,
   roundMileage: true,
   usePredictiveDate: false,
-  fontStyles: DEFAULT_FONT_STYLES,
-  colors: {
-    primary: "#cc0000",
-    secondary: "#1976d2",
-    text: "#ffffff",
-    background: "#ffffff",
-    phoneColor: "#000000",
-    taglineColor: "#333333",
-    taglineLine2Color: "#333333",
-    serviceLabelColor: "#666666",
-    serviceValueColor: "#cc0000",
-  },
-  defaultSize: "2x2.5",
+  defaultSize: DEFAULT_STICKER_SIZE,
   appointmentUrl: "",
   useKilometers: false,
   intervals: DEFAULT_INTERVALS,
@@ -120,12 +79,21 @@ export default function StickerSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  const [config, setConfig] = useState<StickerConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<StickerDataConfig>(DEFAULT_CONFIG);
+  const [designerLayout, setDesignerLayout] = useState<StickerLayout>(() => createDefaultLayout(DEFAULT_STICKER_SIZE));
+  const [currentSize, setCurrentSize] = useState(DEFAULT_STICKER_SIZE);
+  
+  const [expandedSections, setExpandedSections] = useState({
+    content: true,
+    intervals: true,
+    options: false,
+  });
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   useEffect(() => {
     fetchSettings();
@@ -134,60 +102,8 @@ export default function StickerSettingsPage() {
   useEffect(() => {
     if (!loading) {
       refreshQrPreview();
-      debouncedRefreshPreview();
     }
-  }, [config, loading]);
-  
-  function debouncedRefreshPreview() {
-    if (previewTimeoutRef.current) {
-      clearTimeout(previewTimeoutRef.current);
-    }
-    previewTimeoutRef.current = setTimeout(() => {
-      refreshStickerPreview();
-    }, 500);
-  }
-  
-  async function refreshStickerPreview() {
-    setPreviewLoading(true);
-    try {
-      const sampleMileage = config.roundMileage ? 165000 : 165123;
-      const sampleDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      
-      const res = await fetch("/api/sticker/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nextServiceMileage: sampleMileage,
-          nextServiceDate: sampleDate,
-          size: config.defaultSize,
-          includeQR: config.showQRCode,
-          previewConfig: {
-            logo: config.logo,
-            phone: config.phone,
-            tagline: config.tagline,
-            taglineLine2: config.taglineLine2,
-            serviceLabel: config.serviceLabel,
-            fontStyles: config.fontStyles,
-            colors: config.colors,
-            useKilometers: config.useKilometers,
-            roundMileage: config.roundMileage,
-          },
-        }),
-      });
-      
-      if (res.ok) {
-        const blob = await res.blob();
-        if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
-        }
-        setPreviewUrl(URL.createObjectURL(blob));
-      }
-    } catch (err) {
-      console.error("Failed to refresh sticker preview:", err);
-    } finally {
-      setPreviewLoading(false);
-    }
-  }
+  }, [config.showQRCode, loading]);
 
   async function fetchSettings() {
     try {
@@ -195,7 +111,7 @@ export default function StickerSettingsPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.config) {
-          setConfig({
+          const fetchedConfig = {
             enabled: data.config.enabled ?? DEFAULT_CONFIG.enabled,
             logo: data.config.logo ?? DEFAULT_CONFIG.logo,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
@@ -205,24 +121,6 @@ export default function StickerSettingsPage() {
             showQRCode: data.config.showQRCode ?? DEFAULT_CONFIG.showQRCode,
             roundMileage: data.config.roundMileage ?? DEFAULT_CONFIG.roundMileage,
             usePredictiveDate: data.config.usePredictiveDate ?? DEFAULT_CONFIG.usePredictiveDate,
-            fontStyles: {
-              phone: data.config.fontStyles?.phone ?? DEFAULT_FONT_STYLES.phone,
-              tagline: data.config.fontStyles?.tagline ?? DEFAULT_FONT_STYLES.tagline,
-              taglineLine2: data.config.fontStyles?.taglineLine2 ?? DEFAULT_FONT_STYLES.taglineLine2,
-              serviceLabel: data.config.fontStyles?.serviceLabel ?? DEFAULT_FONT_STYLES.serviceLabel,
-              serviceValue: data.config.fontStyles?.serviceValue ?? DEFAULT_FONT_STYLES.serviceValue,
-            },
-            colors: {
-              primary: data.config.colors?.primary ?? DEFAULT_CONFIG.colors.primary,
-              secondary: data.config.colors?.secondary ?? DEFAULT_CONFIG.colors.secondary,
-              text: data.config.colors?.text ?? DEFAULT_CONFIG.colors.text,
-              background: data.config.colors?.background ?? DEFAULT_CONFIG.colors.background,
-              phoneColor: data.config.colors?.phoneColor ?? DEFAULT_CONFIG.colors.phoneColor,
-              taglineColor: data.config.colors?.taglineColor ?? DEFAULT_CONFIG.colors.taglineColor,
-              taglineLine2Color: data.config.colors?.taglineLine2Color ?? DEFAULT_CONFIG.colors.taglineLine2Color,
-              serviceLabelColor: data.config.colors?.serviceLabelColor ?? DEFAULT_CONFIG.colors.serviceLabelColor,
-              serviceValueColor: data.config.colors?.serviceValueColor ?? DEFAULT_CONFIG.colors.serviceValueColor,
-            },
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
@@ -232,7 +130,15 @@ export default function StickerSettingsPage() {
               synthetic: data.config.intervals?.synthetic ?? DEFAULT_INTERVALS.synthetic,
               conventional: data.config.intervals?.conventional ?? DEFAULT_INTERVALS.conventional,
             },
-          });
+          };
+          setConfig(fetchedConfig);
+          setCurrentSize(fetchedConfig.defaultSize);
+          
+          if (data.config.designerLayout) {
+            setDesignerLayout(data.config.designerLayout);
+          } else {
+            setDesignerLayout(createDefaultLayout(fetchedConfig.defaultSize));
+          }
         }
       }
     } catch (err) {
@@ -243,10 +149,12 @@ export default function StickerSettingsPage() {
   }
 
   async function refreshQrPreview() {
+    if (!config.showQRCode) {
+      setQrUrl(null);
+      return;
+    }
     try {
-      const color = encodeURIComponent(config.colors.primary);
-      const backgroundColor = encodeURIComponent("#ffffff");
-      const res = await fetch(`/api/sticker/qr?size=200&color=${color}&backgroundColor=${backgroundColor}`);
+      const res = await fetch(`/api/sticker/qr?size=200`);
       if (res.ok) {
         const blob = await res.blob();
         setQrUrl(URL.createObjectURL(blob));
@@ -255,6 +163,12 @@ export default function StickerSettingsPage() {
       console.error("Failed to load QR preview:", err);
     }
   }
+
+  const handleDesignerChange = useCallback((layout: StickerLayout, size: string) => {
+    setDesignerLayout(layout);
+    setCurrentSize(size);
+    setConfig(prev => ({ ...prev, defaultSize: size }));
+  }, []);
 
   async function saveSettings() {
     setSaving(true);
@@ -273,12 +187,11 @@ export default function StickerSettingsPage() {
           showQRCode: config.showQRCode,
           roundMileage: config.roundMileage,
           usePredictiveDate: config.usePredictiveDate,
-          fontStyles: config.fontStyles,
-          colors: config.colors,
-          defaultSize: config.defaultSize,
+          defaultSize: currentSize,
           appointmentUrl: config.appointmentUrl,
           useKilometers: config.useKilometers,
           intervals: config.intervals,
+          designerLayout: designerLayout,
         }),
       });
       
@@ -302,13 +215,20 @@ export default function StickerSettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          size: config.defaultSize,
-          primaryColor: config.colors.primary,
-          backgroundColor: "#ffffff",
-          tagline: config.tagline,
-          phone: config.phone,
-          useKilometers: config.useKilometers,
+          size: currentSize,
           includeQR: config.showQRCode,
+          designerLayout: designerLayout,
+          dataConfig: {
+            logo: config.logo,
+            phone: config.phone,
+            tagline: config.tagline,
+            taglineLine2: config.taglineLine2,
+            serviceLabel: config.serviceLabel,
+            useKilometers: config.useKilometers,
+            roundMileage: config.roundMileage,
+          },
+          nextServiceMileage: config.roundMileage ? 165000 : 165123,
+          nextServiceDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         }),
       });
       
@@ -317,7 +237,7 @@ export default function StickerSettingsPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `oil-sticker-${config.defaultSize}.png`;
+        a.download = `oil-sticker-${currentSize}.png`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -330,13 +250,6 @@ export default function StickerSettingsPage() {
     } finally {
       setDownloading(false);
     }
-  }
-
-  function updateColor(colorKey: keyof typeof config.colors, value: string) {
-    setConfig({
-      ...config,
-      colors: { ...config.colors, [colorKey]: value },
-    });
   }
 
   function updateInterval(
@@ -436,11 +349,11 @@ export default function StickerSettingsPage() {
   }
 
   return (
-    <main className="p-6 max-w-6xl">
+    <main className="p-6 max-w-7xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Oil Change Stickers</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Oil Change Sticker Designer</h1>
         <p className="text-gray-600 mt-1">
-          Generate custom oil change stickers with QR codes that link to your appointment page.
+          Design your custom oil change stickers with drag-and-drop positioning.
         </p>
       </div>
 
@@ -453,22 +366,20 @@ export default function StickerSettingsPage() {
         </div>
       )}
 
-      <div className="flex gap-6">
-        <div className="flex-1 space-y-6 min-w-0">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Type className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">Sticker Content</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => toggleSection("content")}
+          >
+            <h2 className="font-semibold text-gray-900">Sticker Content</h2>
+            {expandedSections.content ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+          </div>
+          
+          {expandedSections.content && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4" />
-                    Shop Logo
-                  </div>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Shop Logo</label>
                 <div className="flex gap-2">
                   <input
                     type="url"
@@ -506,12 +417,7 @@ export default function StickerSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    Shop Phone
-                  </div>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Shop Phone</label>
                 <input
                   type="tel"
                   value={config.phone}
@@ -527,19 +433,19 @@ export default function StickerSettingsPage() {
                   type="text"
                   value={config.tagline}
                   onChange={(e) => setConfig({ ...config, tagline: e.target.value })}
-                  placeholder="Schedule Service"
+                  placeholder="Your Trusted Auto Care"
                   maxLength={30}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Line 2 (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tagline Line 2</label>
                 <input
                   type="text"
                   value={config.taglineLine2}
                   onChange={(e) => setConfig({ ...config, taglineLine2: e.target.value })}
-                  placeholder="Address or extra info"
+                  placeholder="Since 1985"
                   maxLength={35}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -558,79 +464,44 @@ export default function StickerSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <div className="flex items-center gap-2">
-                    <Link2 className="w-4 h-4" />
-                    Appointment URL
-                  </div>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Appointment URL</label>
                 <input
                   type="url"
                   value={config.appointmentUrl}
                   onChange={(e) => setConfig({ ...config, appointmentUrl: e.target.value })}
-                  placeholder="https://booking-page.com"
+                  placeholder="https://booking.yourshop.com"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Gauge className="w-5 h-5 text-blue-600" />
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-semibold text-gray-900 mb-4">Sticker Designer</h2>
+          <StickerDesigner
+            initialLayout={designerLayout}
+            initialSize={currentSize}
+            logoUrl={config.logo || undefined}
+            qrUrl={config.showQRCode ? qrUrl || undefined : undefined}
+            onChange={handleDesignerChange}
+          />
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => toggleSection("options")}
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-5 h-5 text-blue-600" />
               <h2 className="font-semibold text-gray-900">Sticker Options</h2>
             </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-                <select
-                  value={config.defaultSize}
-                  onChange={(e) => setConfig({ ...config, defaultSize: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {STICKER_SIZES.map((size) => (
-                    <option key={size.value} value={size.value}>{size.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">QR Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.primary}
-                    onChange={(e) => updateColor("primary", e.target.value)}
-                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.primary}
-                    onChange={(e) => updateColor("primary", e.target.value)}
-                    className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Background</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={config.colors.background}
-                    onChange={(e) => updateColor("background", e.target.value)}
-                    className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={config.colors.background}
-                    onChange={(e) => updateColor("background", e.target.value)}
-                    className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg">
+            {expandedSections.options ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+          </div>
+          
+          {expandedSections.options && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -668,99 +539,23 @@ export default function StickerSettingsPage() {
                 <span className="text-sm text-gray-700">Predictive date</span>
               </label>
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Palette className="w-5 h-5 text-blue-600" />
-              <h2 className="font-semibold text-gray-900">Text Styling</h2>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                { key: "phone", label: "Phone", colorKey: "phoneColor" as const },
-                { key: "tagline", label: "Tagline", colorKey: "taglineColor" as const },
-                { key: "taglineLine2", label: "Line 2", colorKey: "taglineLine2Color" as const },
-                { key: "serviceLabel", label: "Label", colorKey: "serviceLabelColor" as const },
-                { key: "serviceValue", label: "Date/Mileage", colorKey: "serviceValueColor" as const },
-              ].map((item) => {
-                const style = config.fontStyles[item.key as keyof typeof config.fontStyles];
-                const colorValue = config.colors[item.colorKey];
-                return (
-                  <div key={item.key} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                    <span className="w-20 font-medium text-gray-700 text-sm">{item.label}</span>
-                    <input
-                      type="color"
-                      value={colorValue}
-                      onChange={(e) => updateColor(item.colorKey, e.target.value)}
-                      className="w-8 h-8 rounded border border-gray-300 cursor-pointer flex-shrink-0"
-                    />
-                    <input
-                      type="text"
-                      value={colorValue}
-                      onChange={(e) => updateColor(item.colorKey, e.target.value)}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                    />
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        value={style.size}
-                        onChange={(e) => setConfig({
-                          ...config,
-                          fontStyles: {
-                            ...config.fontStyles,
-                            [item.key]: { ...style, size: Number(e.target.value) || 12 }
-                          }
-                        })}
-                        className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                        min={8}
-                        max={24}
-                      />
-                      <span className="text-xs text-gray-500">px</span>
-                    </div>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={style.bold}
-                        onChange={(e) => setConfig({
-                          ...config,
-                          fontStyles: {
-                            ...config.fontStyles,
-                            [item.key]: { ...style, bold: e.target.checked }
-                          }
-                        })}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-xs font-bold text-gray-700">B</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={style.italic}
-                        onChange={(e) => setConfig({
-                          ...config,
-                          fontStyles: {
-                            ...config.fontStyles,
-                            [item.key]: { ...style, italic: e.target.checked }
-                          }
-                        })}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-xs italic text-gray-700">I</span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-3">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => toggleSection("intervals")}
+          >
+            <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-600" />
               <h2 className="font-semibold text-gray-900">Service Intervals</h2>
             </div>
+            {expandedSections.intervals ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+          </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {expandedSections.intervals && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
               {OIL_TYPES.map((oilType) => {
                 const interval = config.intervals?.[oilType.key] ?? DEFAULT_INTERVALS[oilType.key];
                 return (
@@ -794,90 +589,27 @@ export default function StickerSettingsPage() {
                 );
               })}
             </div>
-          </div>
+          )}
+        </div>
 
+        <div className="flex gap-4">
           <button
             onClick={saveSettings}
             disabled={saving}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+            className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Save Settings
           </button>
-        </div>
-
-        <div className="w-80 flex-shrink-0">
-          <div className="sticky top-6 space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="font-semibold text-gray-900 mb-4">Preview</h2>
-              <div className="flex justify-center p-4 bg-gray-100 rounded-lg relative">
-                {previewUrl ? (
-                  <div className="relative">
-                    <img 
-                      src={previewUrl} 
-                      alt="Sticker Preview" 
-                      className="rounded shadow-md"
-                      style={{ 
-                        width: config.defaultSize === "1.5x2.25" ? "150px" : "200px",
-                        height: config.defaultSize === "1.5x2.25" ? "225px" :
-                                config.defaultSize === "2x2" ? "200px" : 
-                                config.defaultSize === "2x2.5" ? "250px" : 
-                                config.defaultSize === "2x3" ? "300px" : "350px",
-                      }}
-                    />
-                    {previewLoading && (
-                      <div className="absolute inset-0 bg-white/50 flex items-center justify-center rounded">
-                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div 
-                    className="rounded shadow-md bg-white flex items-center justify-center"
-                    style={{ 
-                      width: config.defaultSize === "1.5x2.25" ? "150px" : "200px",
-                      height: config.defaultSize === "1.5x2.25" ? "225px" :
-                              config.defaultSize === "2x2" ? "200px" : 
-                              config.defaultSize === "2x2.5" ? "250px" : 
-                              config.defaultSize === "2x3" ? "300px" : "350px",
-                    }}
-                  >
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 text-center mt-3">
-                Sample preview with {config.roundMileage ? "rounded" : "exact"} mileage
-              </p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="font-semibold text-gray-900 mb-3">Download</h2>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {STICKER_SIZES.map((size) => (
-                  <button
-                    key={size.value}
-                    onClick={() => setConfig({ ...config, defaultSize: size.value })}
-                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-                      config.defaultSize === size.value
-                        ? "border-blue-600 bg-blue-50 text-blue-700"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    {size.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={downloadSticker}
-                disabled={downloading}
-                className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                Download {STICKER_SIZES.find(s => s.value === config.defaultSize)?.label}
-              </button>
-            </div>
-          </div>
+          
+          <button
+            onClick={downloadSticker}
+            disabled={downloading}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            Download Sample
+          </button>
         </div>
       </div>
     </main>
