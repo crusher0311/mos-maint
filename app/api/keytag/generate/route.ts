@@ -41,8 +41,10 @@ interface KeytagRequest {
   designerLayout?: DesignerLayout;
 }
 
-function escapeHtml(text: string): string {
-  return text
+function escapeHtml(text: string | number | undefined | null): string {
+  if (text === undefined || text === null) return '';
+  const str = String(text);
+  return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

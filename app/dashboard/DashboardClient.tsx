@@ -329,7 +329,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: customerName || 'Customer',
-          vehicle: vehicle || 'Vehicle',
+          vehicleInfo: vehicle || 'Vehicle',
           vin: vin || '',
           roNumber: roNumber || '',
           mileage: mileage ?? 0,
