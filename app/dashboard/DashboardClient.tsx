@@ -229,53 +229,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   const printStickerWithBrowser = (dataUrl: string, stickerSize: string) => {
-    const sizeMap: Record<string, { width: string; height: string }> = {
-      '2x2': { width: '2in', height: '2in' },
-      '2x2.5': { width: '2in', height: '2.5in' },
-      '2x3': { width: '2in', height: '3in' },
-      '2x3.5': { width: '2in', height: '3.5in' },
-    };
-    const dims = sizeMap[stickerSize] || sizeMap['2x2'];
-    
-    // Open popup window - supports Chrome print preview
-    const printWindow = window.open('', '_blank', 'width=520,height=600');
-    if (printWindow) {
-      printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Print Oil Sticker</title>
-  <style>
-    @page { size: ${dims.width} ${dims.height}; margin: 0; }
-    @media print {
-      .no-print { display: none !important; }
-      body { margin: 0; padding: 0; background: white; }
-      .sticker-img { width: ${dims.width}; height: ${dims.height}; display: block; }
-    }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; margin: 0; }
-    .info { background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px; }
-    .info h3 { margin: 0 0 10px 0; font-size: 15px; }
-    .info p { margin: 0 0 8px 0; font-size: 13px; line-height: 1.5; }
-    .info kbd { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
-    .preview { background: white; padding: 16px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
-    .sticker-img { max-width: 280px; height: auto; display: block; }
-    .hint { margin-top: 16px; font-size: 12px; color: #666; }
-  </style>
-</head>
-<body>
-  <div class="info no-print">
-    <h3>Print Your Oil Sticker</h3>
-    <p>Press <kbd>Ctrl</kbd>+<kbd>P</kbd> to print, then select your DYMO printer.</p>
-    <p>For Twin Turbo roll selection: Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> for Windows System Print Dialog.</p>
-  </div>
-  <div class="preview">
-    <img class="sticker-img" src="${dataUrl}" alt="Oil Sticker" />
-  </div>
-  <p class="hint no-print">Close this window after printing.</p>
-</body>
-</html>`);
-      printWindow.document.close();
-      printWindow.focus();
-    }
+    // Open the image directly in a new tab - Chrome can preview this for printing
+    // User presses Ctrl+P to print, or Ctrl+Shift+P for Windows System Print Dialog
+    window.open(dataUrl, '_blank');
   };
 
   const handleQuickPrintStickerWithValues = async (
