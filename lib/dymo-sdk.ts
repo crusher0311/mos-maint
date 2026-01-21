@@ -163,17 +163,26 @@ export function createLabelXml(
       <RotationBehavior>ClearObjects</RotationBehavior>
       <LabelObjects>
         <ObjectInfo>
-      <IImageObject>
-        <Name>STICKER_IMAGE</Name>
-        <Rotation>Rotation0</Rotation>
-        <IsMirrored>False</IsMirrored>
-        <IsVariable>False</IsVariable>
-        <HorizontalAlignment>Center</HorizontalAlignment>
-        <VerticalAlignment>Center</VerticalAlignment>
-        <ScaleMode>Uniform</ScaleMode>
-        <Image>${imageBase64}</Image>
-      </IImageObject>
-      <Bounds X="0" Y="0" Width="${widthInches}" Height="${heightInches}"></Bounds>
+          <IImageObject>
+            <Name>STICKER_IMAGE</Name>
+            <Rotation>Rotation0</Rotation>
+            <IsMirrored>False</IsMirrored>
+            <IsVariable>False</IsVariable>
+            <HorizontalAlignment>Center</HorizontalAlignment>
+            <VerticalAlignment>Center</VerticalAlignment>
+            <ScaleMode>Uniform</ScaleMode>
+            <Image>${imageBase64}</Image>
+          </IImageObject>
+          <Bounds>
+            <DYMOPoint>
+              <X>0.05</X>
+              <Y>0.05</Y>
+            </DYMOPoint>
+            <Size>
+              <Width>${widthInches - 0.1}</Width>
+              <Height>${heightInches - 0.1}</Height>
+            </Size>
+          </Bounds>
         </ObjectInfo>
       </LabelObjects>
     </DynamicLayoutManager>
