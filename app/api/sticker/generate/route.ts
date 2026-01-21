@@ -695,6 +695,13 @@ export async function POST(req: NextRequest) {
     
     const designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
     
+    // Debug: log QR code position received
+    if (designerLayout?.elements) {
+      const qrElement = designerLayout.elements.find((e: { type: string }) => e.type === 'qrCode');
+      console.log('[Generate API] QR Code position:', qrElement ? { x: qrElement.x, y: qrElement.y } : 'not found');
+      console.log('[Generate API] Using layout from:', body.designerLayout ? 'request body' : 'shop config');
+    }
+    
     if (designerLayout && designerLayout.elements) {
       const dataConfig = body.dataConfig || {
         logo: config.logo,

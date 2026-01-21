@@ -210,6 +210,12 @@ export default function StickerSettingsPage() {
 
   async function downloadSticker() {
     setDownloading(true);
+    
+    // Debug: log QR code position from current layout
+    const qrElement = designerLayout.elements.find(e => e.type === 'qrCode');
+    console.log('[Download] QR Code position:', qrElement ? { x: qrElement.x, y: qrElement.y } : 'not found');
+    console.log('[Download] Canvas height:', designerLayout.canvasHeight);
+    
     try {
       const res = await fetch("/api/sticker/generate", {
         method: "POST",
