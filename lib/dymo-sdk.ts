@@ -12,11 +12,23 @@ declare global {
           getPrinters: () => Promise<DymoPrinter[]>;
           openLabelXml: (xml: string) => DymoLabel;
           renderLabel: (labelXml: string, renderParams: string, printerName: string) => Promise<string>;
+          createLabelWriterPrintParamsXml: (params: {
+            copies?: number;
+            jobTitle?: string;
+            twinTurboRoll?: string;
+          }) => string;
+          TwinTurboRoll: {
+            Left: string;
+            Right: string;
+            Auto: string;
+          };
         };
       };
     };
   }
 }
+
+export type TwinTurboRollSelection = "auto" | "left" | "right";
 
 export interface DymoPrinter {
   name: string;
@@ -151,7 +163,8 @@ export async function printWithDymo(
   imageBase64: string,
   widthInches: number,
   heightInches: number,
-  printerName?: string
+  printerName?: string,
+  twinTurboRoll?: TwinTurboRollSelection
 ): Promise<{ success: boolean; error?: string }> {
   const loaded = await loadDymoSdk();
   if (!loaded || !window.dymo) {
@@ -181,7 +194,20 @@ export async function printWithDymo(
       return { success: false, error: "Invalid label format" };
     }
 
-    label.print(selectedPrinter.name);
+    let printParamsXml = "";
+    if (twinTurboRoll && selectedPrinter.isTwinTurbo && window.dymo.label.framework.createLabelWriterPrintParamsXml) {
+      const rollMapping: Record<TwinTurboRollSelection, string> = {
+        auto: window.dymo.label.framework.TwinTurboRoll?.Auto || "Auto",
+        left: window.dymo.label.framework.TwinTurboRoll?.Left || "Left",
+        right: window.dymo.label.framework.TwinTurboRoll?.Right || "Right",
+      };
+      printParamsXml = window.dymo.label.framework.createLabelWriterPrintParamsXml({
+        copies: 1,
+        twinTurboRoll: rollMapping[twinTurboRoll],
+      });
+    }
+
+    label.print(selectedPrinter.name, printParamsXml);
 
     return { success: true };
   } catch (error) {

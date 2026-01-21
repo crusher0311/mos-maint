@@ -95,6 +95,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
     *   DYMO SDK utility: `lib/dymo-sdk.ts` - Loads external SDK, detects printers, generates label XML
     *   Applies to both oil change stickers and keytags
     *   **Printer Selection**: Shops with multiple DYMO printers (e.g., Twin Turbo with two rolls) can select which printer to use for stickers vs keytags separately
+    *   **Roll Selection**: Twin Turbo printers can select which roll (Left, Right, or Auto) to use for stickers vs keytags - uses DYMO SDK's `createLabelWriterPrintParamsXml` with `twinTurboRoll` parameter
 *   **Keytags Feature**: Prints customer/vehicle info on Dymo 30252 labels (1⅛" x 3½") for key identification while vehicles are in the shop.
     *   **Visual Keytag Designer**: Drag-and-drop layout editor for customizing keytag appearance
         *   Draggable/resizable text elements for each field (customer name, vehicle, VIN, mileage, RO#)
