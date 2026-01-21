@@ -260,12 +260,42 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           <title>Print Sticker</title>
           <style>
             @page { size: ${dims.width} ${dims.height}; margin: 0; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
-            img { display: block; width: 100%; height: 100%; }
+            @media print {
+              .print-instructions { display: none !important; }
+              html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; margin: 0; padding: 0; }
+              img { display: block; width: 100%; height: 100%; }
+            }
+            @media screen {
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f0f0; padding: 20px; }
+              .print-instructions {
+                background: #1a56db; color: white; padding: 16px 20px; border-radius: 8px;
+                margin-bottom: 20px; max-width: 400px;
+              }
+              .print-instructions h3 { margin-bottom: 8px; font-size: 14px; }
+              .print-instructions p { font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
+              .print-instructions kbd {
+                background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;
+                font-family: monospace; font-weight: bold;
+              }
+              .sticker-preview {
+                background: white; padding: 10px; border-radius: 8px; display: inline-block;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              }
+              .sticker-preview img { display: block; max-width: 300px; height: auto; }
+            }
           </style>
         </head>
-        <body><img src="${dataUrl}" /></body>
+        <body>
+          <div class="print-instructions">
+            <h3>🖨️ DYMO Printing Tip</h3>
+            <p>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the <strong>Windows System Print Dialog</strong> for full DYMO printer options including Twin Turbo roll selection.</p>
+            <p style="opacity: 0.8; font-size: 11px;">Or select your DYMO printer from Chrome's dropdown and set Margins to "None".</p>
+          </div>
+          <div class="sticker-preview">
+            <img src="${dataUrl}" />
+          </div>
+        </body>
         </html>
       `);
       iframeDoc.close();
