@@ -13,11 +13,21 @@ import { StickerDesignerCanvas } from "./StickerDesignerCanvas";
 import { StickerElementPanel } from "./StickerElementPanel";
 import { StickerToolbarPanel } from "./StickerToolbarPanel";
 
+interface StickerContentData {
+  phone?: string;
+  tagline?: string;
+  taglineLine2?: string;
+  serviceLabel?: string;
+  serviceDate?: string;
+  serviceMileage?: string;
+}
+
 interface StickerDesignerProps {
   initialLayout?: StickerLayout;
   initialSize?: string;
   logoUrl?: string;
   qrUrl?: string;
+  contentData?: StickerContentData;
   onChange?: (layout: StickerLayout, size: string) => void;
 }
 
@@ -31,6 +41,7 @@ export function StickerDesigner({
   initialSize = DEFAULT_STICKER_SIZE,
   logoUrl,
   qrUrl,
+  contentData,
   onChange,
 }: StickerDesignerProps) {
   const [currentSize, setCurrentSize] = useState(initialSize);
@@ -178,6 +189,7 @@ export function StickerDesigner({
             onUpdateElement={handleUpdateElement}
             logoUrl={logoUrl}
             qrUrl={qrUrl}
+            contentData={contentData}
           />
         </div>
         
