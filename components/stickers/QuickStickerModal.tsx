@@ -149,20 +149,15 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        const sizeWidthInches: Record<string, string> = {
-          "2x2": "1.97in",
-          "2x2.5": "1.97in",
-          "2x3": "1.97in",
-          "2x3.5": "1.97in",
+        // Define exact physical dimensions for each sticker size
+        const sizeDimensions: Record<string, { width: string; height: string }> = {
+          "1.5x2.25": { width: "1.5in", height: "2.25in" },
+          "2x2": { width: "2in", height: "2in" },
+          "2x2.5": { width: "2in", height: "2.5in" },
+          "2x3": { width: "2in", height: "3in" },
+          "2x3.5": { width: "2in", height: "3.5in" },
         };
-        const sizeHeightInches: Record<string, string> = {
-          "2x2": "1.97in",
-          "2x2.5": "2.46in",
-          "2x3": "2.96in",
-          "2x3.5": "3.45in",
-        };
-        const imgWidth = sizeWidthInches[stickerSize] || "1.97in";
-        const imgHeight = sizeHeightInches[stickerSize] || "2.46in";
+        const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
         
         const iframe = document.createElement("iframe");
         iframe.style.position = "fixed";
@@ -182,21 +177,48 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             <head>
               <title>Print Sticker</title>
               <style>
-                @page { margin: 0; size: auto; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { 
+                /* Force exact label size with no margins */
+                @page {
+                  size: ${dims.width} ${dims.height};
+                  margin: 0;
+                }
+                @media print {
+                  html, body {
+                    width: ${dims.width};
+                    height: ${dims.height};
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden;
+                  }
+                }
+                * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+                }
+                html, body {
+                  width: ${dims.width};
+                  height: ${dims.height};
+                  margin: 0;
+                  padding: 0;
+                }
+                #label {
+                  width: ${dims.width};
+                  height: ${dims.height};
+                  display: block;
+                }
+                img {
                   width: 100%;
                   height: 100%;
-                }
-                img { 
-                  width: ${imgWidth};
-                  height: ${imgHeight};
                   display: block;
+                  object-fit: contain;
                 }
               </style>
             </head>
             <body>
-              <img id="sticker" src="${dataUrl}" />
+              <div id="label">
+                <img id="sticker" src="${dataUrl}" />
+              </div>
             </body>
             </html>
           `);
