@@ -134,56 +134,38 @@ export function createLabelXml(
   widthInches: number,
   heightInches: number
 ): string {
+  // Convert inches to twips (1 inch = 1440 twips)
+  const widthTwips = Math.round(widthInches * 1440);
+  const heightTwips = Math.round(heightInches * 1440);
+  const marginTwips = Math.round(0.05 * 1440); // 0.05 inch margin
+  
   return `<?xml version="1.0" encoding="utf-8"?>
-<DesktopLabel Version="1">
-  <DYMOLabel Version="3">
-    <Description>Oil Sticker</Description>
-    <Orientation>Portrait</Orientation>
-    <LabelName>Address</LabelName>
-    <InitialLength>${heightInches}</InitialLength>
-    <BorderStyle>SolidLine</BorderStyle>
-    <DYMORect>
-      <DYMOPoint>
-        <X>0.1</X>
-        <Y>0.1</Y>
-      </DYMOPoint>
-      <Size>
-        <Width>${widthInches - 0.2}</Width>
-        <Height>${heightInches - 0.2}</Height>
-      </Size>
-    </DYMORect>
-    <BorderColor>
-      <SolidColorBrush>
-        <Color A="0" R="0" G="0" B="0"> </Color>
-      </SolidColorBrush>
-    </BorderColor>
-    <BorderThickness>0</BorderThickness>
-    <Show_Border>False</Show_Border>
-    <DynamicLayoutManager>
-      <RotationBehavior>ClearObjects</RotationBehavior>
-      <LabelObjects>
-        <ObjectInfo>
-          <ImageObject>
-            <Name>STICKER_IMAGE</Name>
-            <Rotation>Rotation0</Rotation>
-            <IsMirrored>False</IsMirrored>
-            <IsVariable>False</IsVariable>
-            <HorizontalAlignment>Center</HorizontalAlignment>
-            <VerticalAlignment>Center</VerticalAlignment>
-            <ScaleMode>Uniform</ScaleMode>
-            <Image>${imageBase64}</Image>
-          </ImageObject>
-          <Bounds>
-            <X>0.05</X>
-            <Y>0.05</Y>
-            <Width>${widthInches - 0.1}</Width>
-            <Height>${heightInches - 0.1}</Height>
-          </Bounds>
-        </ObjectInfo>
-      </LabelObjects>
-    </DynamicLayoutManager>
-  </DYMOLabel>
-</DesktopLabel>`;
+<DieCutLabel Version="8.0" Units="twips">
+  <PaperOrientation>Portrait</PaperOrientation>
+  <Id>Custom</Id>
+  <PaperName>Custom ${widthInches}x${heightInches}</PaperName>
+  <DrawCommands>
+    <RoundRectangle X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}" Rx="0" Ry="0"/>
+  </DrawCommands>
+  <ObjectInfo>
+    <ImageObject>
+      <Name>StickerImage</Name>
+      <ForeColor Alpha="255" Red="0" Green="0" Blue="0"/>
+      <BackColor Alpha="0" Red="255" Green="255" Blue="255"/>
+      <LinkedObjectName> </LinkedObjectName>
+      <Rotation>Rotation0</Rotation>
+      <IsMirrored>False</IsMirrored>
+      <IsVariable>False</IsVariable>
+      <Image>${imageBase64}</Image>
+      <ScaleMode>Uniform</ScaleMode>
+      <BorderWidth>0</BorderWidth>
+      <BorderColor Alpha="255" Red="0" Green="0" Blue="0"/>
+      <HorizontalAlignment>Center</HorizontalAlignment>
+      <VerticalAlignment>Center</VerticalAlignment>
+    </ImageObject>
+    <Bounds X="${marginTwips}" Y="${marginTwips}" Width="${widthTwips - marginTwips * 2}" Height="${heightTwips - marginTwips * 2}"/>
+  </ObjectInfo>
+</DieCutLabel>`;
 }
 
 export async function printWithDymo(
