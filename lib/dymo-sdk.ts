@@ -154,7 +154,7 @@ export function createLabelXml(
     </DYMORect>
     <BorderColor>
       <SolidColorBrush>
-        <Color A="0" R="0" G="0" B="0"></Color>
+        <Color A="0" R="0" G="0" B="0"> </Color>
       </SolidColorBrush>
     </BorderColor>
     <BorderThickness>0</BorderThickness>
@@ -162,16 +162,24 @@ export function createLabelXml(
     <DynamicLayoutManager>
       <RotationBehavior>ClearObjects</RotationBehavior>
       <LabelObjects>
-        <ImageObject>
-          <Name>STICKER_IMAGE</Name>
+        <ObjectInfo>
+          <ImageObject>
+            <Name>STICKER_IMAGE</Name>
+            <Rotation>Rotation0</Rotation>
+            <IsMirrored>False</IsMirrored>
+            <IsVariable>False</IsVariable>
+            <HorizontalAlignment>Center</HorizontalAlignment>
+            <VerticalAlignment>Center</VerticalAlignment>
+            <ScaleMode>Uniform</ScaleMode>
+            <Image>${imageBase64}</Image>
+          </ImageObject>
           <Bounds>
             <X>0.05</X>
             <Y>0.05</Y>
             <Width>${widthInches - 0.1}</Width>
             <Height>${heightInches - 0.1}</Height>
           </Bounds>
-          <Data>${imageBase64}</Data>
-        </ImageObject>
+        </ObjectInfo>
       </LabelObjects>
     </DynamicLayoutManager>
   </DYMOLabel>
