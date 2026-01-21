@@ -177,6 +177,10 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             <head>
               <title>Print Sticker</title>
               <style>
+                :root {
+                  --x-offset: 0in;
+                  --y-offset: 0.04in; /* slight offset for DYMO feed */
+                }
                 @page {
                   size: ${dims.width} ${dims.height};
                   margin: 0;
@@ -187,35 +191,29 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   box-sizing: border-box;
                 }
                 html, body {
-                  width: 100%;
-                  height: 100%;
-                  margin: 0 !important;
-                  padding: 0 !important;
+                  width: ${dims.width};
+                  height: ${dims.height};
+                  margin: 0;
+                  padding: 0;
                   overflow: hidden;
                   background: white;
                 }
-                #label {
-                  width: 100vw;
-                  height: 100vh;
-                  padding: 0.04in;
-                  box-sizing: border-box;
-                  overflow: hidden;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                }
-                img {
-                  width: 100%;
-                  height: 100%;
+                /* Pin the image to exact label size - no browser layout variability */
+                #printImg {
+                  position: fixed;
+                  left: var(--x-offset);
+                  top: var(--y-offset);
+                  width: calc(${dims.width} - 0.08in); /* safe margin on sides */
+                  height: calc(${dims.height} - 0.08in); /* safe margin top/bottom */
                   display: block;
+                  margin: 0;
+                  padding: 0;
                   object-fit: fill;
                 }
               </style>
             </head>
             <body>
-              <div id="label">
-                <img id="sticker" src="${dataUrl}" />
-              </div>
+              <img id="printImg" src="${dataUrl}" />
             </body>
             </html>
           `);
