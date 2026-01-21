@@ -144,7 +144,7 @@ export function createLabelXml(
     <Orientation>Portrait</Orientation>
     <LabelName>30270 Continuous</LabelName>
     <InitialLength>${heightInches}</InitialLength>
-    <BorderStyle>None</BorderStyle>
+    <BorderStyle>SolidLine</BorderStyle>
     <BorderWidth>0</BorderWidth>
     <PrintDensity>Normal</PrintDensity>
     <ObjectInfo>
