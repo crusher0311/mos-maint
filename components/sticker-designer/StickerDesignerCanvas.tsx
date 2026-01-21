@@ -287,26 +287,38 @@ export function StickerDesignerCanvas({
   };
 
   const visibleElements = layout.elements.filter((el) => el.visible);
+  
+  // Scale factor for displaying the canvas larger while keeping internal coordinates
+  const displayScale = 2;
 
   return (
     <div className="flex flex-col items-center">
-      <div
-        ref={canvasRef}
-        className="relative border-2 border-gray-300 rounded-lg shadow-lg cursor-crosshair select-none"
-        style={{
-          width: layout.canvasWidth,
-          height: layout.canvasHeight,
-          backgroundColor: layout.backgroundColor,
-          backgroundImage: layout.showGrid
-            ? `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`
-            : "none",
-          backgroundSize: layout.showGrid ? `${layout.gridSize}px ${layout.gridSize}px` : "auto",
+      <div 
+        style={{ 
+          width: layout.canvasWidth * displayScale, 
+          height: layout.canvasHeight * displayScale,
+          position: 'relative',
         }}
-        onClick={handleCanvasClick}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
       >
+        <div
+          ref={canvasRef}
+          className="relative border-2 border-gray-300 rounded-lg shadow-lg cursor-crosshair select-none"
+          style={{
+            width: layout.canvasWidth,
+            height: layout.canvasHeight,
+            backgroundColor: layout.backgroundColor,
+            backgroundImage: layout.showGrid
+              ? `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`
+              : "none",
+            backgroundSize: layout.showGrid ? `${layout.gridSize}px ${layout.gridSize}px` : "auto",
+            transform: `scale(${displayScale})`,
+            transformOrigin: 'top left',
+          }}
+          onClick={handleCanvasClick}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
         {alignmentGuides.map((guide, idx) => (
           <div
             key={idx}
@@ -363,10 +375,11 @@ export function StickerDesignerCanvas({
             </div>
           );
         })}
+        </div>
       </div>
       
       <p className="text-xs text-gray-500 mt-2">
-        {layout.canvasWidth} x {layout.canvasHeight} px (preview scale)
+        {layout.canvasWidth} x {layout.canvasHeight} px (displayed at {displayScale}x)
       </p>
     </div>
   );
