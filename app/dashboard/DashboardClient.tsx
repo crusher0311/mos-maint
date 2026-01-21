@@ -324,6 +324,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = async () => {
         const dataUrl = reader.result as string;
         
+        console.log("[DYMO Debug] At print time - stickerPrinterType:", stickerPrinterType);
+        console.log("[DYMO Debug] At print time - dymoAvailable:", dymoAvailable);
+        console.log("[DYMO Debug] At print time - dymoPrinterSticker:", dymoPrinterSticker);
+        console.log("[DYMO Debug] At print time - dymoRollSticker:", dymoRollSticker);
+        
         // Check if DYMO is enabled and available
         if (stickerPrinterType === "dymo" && dymoAvailable) {
           const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS['2x2'];
@@ -724,6 +729,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           const data = await res.json();
           const printerType = data.config?.printerType ?? "browser";
           
+          console.log("[DYMO Debug] Printer type from settings:", printerType);
+          console.log("[DYMO Debug] Sticker printer:", data.config?.dymoPrinterSticker);
+          console.log("[DYMO Debug] Sticker roll:", data.config?.dymoRollSticker);
+          
           // Sticker DYMO settings
           setStickerPrinterType(printerType);
           setDymoPrinterSticker(data.config?.dymoPrinterSticker ?? "");
@@ -735,8 +744,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           setDymoRollKeytag(data.config?.dymoRollKeytag ?? "auto");
           
           if (printerType === "dymo") {
+            console.log("[DYMO Debug] Checking DYMO environment...");
             const env = await checkDymoEnvironment();
-            setDymoAvailable(env?.isWebServicePresent ?? false);
+            console.log("[DYMO Debug] DYMO environment result:", env);
+            const isAvailable = env?.isWebServicePresent ?? false;
+            console.log("[DYMO Debug] Setting dymoAvailable to:", isAvailable);
+            setDymoAvailable(isAvailable);
+          } else {
+            console.log("[DYMO Debug] Printer type is not 'dymo', skipping DYMO check");
           }
         }
       } catch (err) {
