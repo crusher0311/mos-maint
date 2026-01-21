@@ -689,6 +689,10 @@ export async function POST(req: NextRequest) {
     
     const designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
     
+    console.log("[Sticker Generate] designerLayout from body:", !!body.designerLayout);
+    console.log("[Sticker Generate] designerLayout from shop:", !!shop.stickerConfig?.designerLayout);
+    console.log("[Sticker Generate] Using designer layout:", !!(designerLayout && designerLayout.elements));
+    
     if (designerLayout && designerLayout.elements) {
       const dataConfig = body.dataConfig || {
         logo: config.logo,
