@@ -1,0 +1,126 @@
+Chrome is still laying out your print content in “normal flow” (or it’s still applying some wrapper centering), because if the image were truly position: fixed; top: …; left: …; width/height: 1.5in/2.25in, you would always see it snap to the very top-left of the preview and only move when you change the offset. You’re not seeing that, so one of these is true:
+
+The “fixed pinning” CSS is not actually being applied in the print document (wrong selector / wrong element / CSS not in the printed frame), or
+
+You are printing an iframe, but Chrome is printing the parent page, not the iframe document you styled, or
+
+The image isn’t the thing being positioned (a wrapper is), and the wrapper still has display:flex; justify-content:center / margins, or
+
+top: 0.04in is being ignored because something else overrides it (inline style, other CSS, or the element isn’t #printImg).
+
+Let’s force a “can’t be ignored” implementation that eliminates all 4.
+
+Do this: print from a NEW WINDOW (not an iframe) + wait for image load
+
+This is the most reliable path in Chrome + DYMO.
+
+Drop-in function
+export function printPngUrl(pngUrl) {
+  const w = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
+  if (!w) return;
+
+  // tweak these if you need nudging
+  const xOffset = "0in";
+  const yOffset = "0.04in"; // try 0.00in, 0.04in, 0.08in
+
+  w.document.open();
+  w.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Print</title>
+  <style>
+    @page { size: 1.5in 2.25in; margin: 0; }
+
+    html, body {
+      width: 1.5in;
+      height: 2.25in;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: white;
+    }
+
+    /* IMPORTANT: remove any layout influence */
+    body { position: relative; }
+
+    img#printImg {
+      position: fixed !important;
+      left: ${xOffset} !important;
+      top: ${yOffset} !important;
+
+      width: 1.5in !important;
+      height: 2.25in !important;
+
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+
+      display: block !important;
+      object-fit: fill !important;
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <img id="printImg" src="${pngUrl}" />
+  <script>
+    const img = document.getElementById('printImg');
+    img.onload = () => {
+      // Wait a beat so Chrome applies @page before printing
+      setTimeout(() => {
+        window.focus();
+        window.print();
+        window.close();
+      }, 100);
+    };
+    img.onerror = () => {
+      document.body.innerHTML = '<p>Failed to load image for printing.</p>';
+    };
+  </script>
+</body>
+</html>`);
+  w.document.close();
+}
+
+Why this works when iframe approaches “don’t change anything”
+
+A new window avoids Chrome’s iframe-print quirks (super common: iframe has correct CSS but Chrome prints parent context).
+
+!important everywhere prevents accidental overrides.
+
+img.onload guarantees you print after the image exists and layout is settled (printing before load often causes “mystery offsets / centering”).
+
+Quick sanity test (takes 10 seconds)
+
+Set yOffset = "0in" and print preview.
+
+If the image still isn’t pinned hard to the top-left, then you’re not printing this document (wrong window/print call), or the CSS isn’t actually in the printed doc.
+
+If it does pin, then you can tune yOffset and you’re done.
+
+Also: make sure you aren’t fighting your own “safe margin”
+
+You mentioned “image is pinned to label size minus 0.08in safe margin”.
+
+If you did something like:
+
+setting the image width/height to calc(1.5in - 0.08in) and centering it,
+
+or adding padding to body,
+
+that will reintroduce vertical drift and “moves up”.
+
+For now: print full-bleed at 1.5in × 2.25in, and if you need a safe margin, bake it into the PNG itself (preferred for DYMO), not via CSS layout.
+
+If you paste 15 lines, I can pinpoint the exact cause
+
+Paste only the part where you call print, e.g. the code that does one of these:
+
+iframe.contentWindow.print()
+
+window.print()
+
+document.write(...) for the print iframe/window
+
+Because right now your screenshots strongly suggest the CSS/element you think you’re printing is not the thing Chrome is actually printing. Once I see that print call + the HTML you inject, I can tell you precisely what’s being ignored and why.
