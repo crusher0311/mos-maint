@@ -134,39 +134,58 @@ export function createLabelXml(
   widthInches: number,
   heightInches: number
 ): string {
-  const widthTwips = Math.round(widthInches * 1440);
-  const heightTwips = Math.round(heightInches * 1440);
-
   return `<?xml version="1.0" encoding="utf-8"?>
-<DieCutLabel Version="8.0" Units="twips" MediaType="Default">
-  <PaperOrientation>Portrait</PaperOrientation>
-  <Id>CustomLabel</Id>
-  <IsOutlined>false</IsOutlined>
-  <CustomPaper>
-    <Size Width="${widthTwips}" Height="${heightTwips}"/>
-  </CustomPaper>
-  <DrawCommands>
-    <RoundRectangle X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}" Rx="0" Ry="0"/>
-  </DrawCommands>
-  <ObjectInfo>
-    <ImageObject>
-      <Name>STICKER_IMAGE</Name>
-      <ForeColor Alpha="255" Red="0" Green="0" Blue="0"/>
-      <BackColor Alpha="0" Red="255" Green="255" Blue="255"/>
-      <LinkedObjectName></LinkedObjectName>
-      <Rotation>Rotation0</Rotation>
-      <IsMirrored>False</IsMirrored>
-      <IsVariable>False</IsVariable>
-      <Image>${imageBase64}</Image>
-      <ScaleMode>Uniform</ScaleMode>
-      <BorderWidth>0</BorderWidth>
-      <BorderColor Alpha="255" Red="0" Green="0" Blue="0"/>
-      <HorizontalAlignment>Center</HorizontalAlignment>
-      <VerticalAlignment>Center</VerticalAlignment>
-    </ImageObject>
-    <Bounds X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}"/>
-  </ObjectInfo>
-</DieCutLabel>`;
+<DesktopLabel Version="1">
+  <DYMOLabel Version="3">
+    <Description>Oil Sticker</Description>
+    <Orientation>Portrait</Orientation>
+    <LabelName>Custom</LabelName>
+    <InitialLength>${heightInches}</InitialLength>
+    <BorderStyle>SolidLine</BorderStyle>
+    <BorderWidth>0</BorderWidth>
+    <PrintDensity>Normal</PrintDensity>
+    <ObjectInfo>
+      <ImageObject>
+        <Name>STICKER_IMAGE</Name>
+        <Brushes>
+          <BackgroundBrush>
+            <SolidColorBrush>
+              <Color A="0" R="255" G="255" B="255"></Color>
+            </SolidColorBrush>
+          </BackgroundBrush>
+          <BorderBrush>
+            <SolidColorBrush>
+              <Color A="1" R="0" G="0" B="0"></Color>
+            </SolidColorBrush>
+          </BorderBrush>
+        </Brushes>
+        <Rotation>Rotation0</Rotation>
+        <IsMirrored>False</IsMirrored>
+        <IsVariable>False</IsVariable>
+        <HorizontalAlignment>Center</HorizontalAlignment>
+        <VerticalAlignment>Center</VerticalAlignment>
+        <ScaleMode>Uniform</ScaleMode>
+        <BorderWidth>0</BorderWidth>
+        <Image>${imageBase64}</Image>
+      </ImageObject>
+      <Bounds>
+        <DYMOPoint>
+          <X>0</X>
+          <Y>0</Y>
+        </DYMOPoint>
+        <Size>
+          <Width>${widthInches}</Width>
+          <Height>${heightInches}</Height>
+        </Size>
+      </Bounds>
+    </ObjectInfo>
+    <PaperInfo>
+      <Name>Custom ${widthInches}x${heightInches}</Name>
+      <Width>${widthInches}</Width>
+      <Height>${heightInches}</Height>
+    </PaperInfo>
+  </DYMOLabel>
+</DesktopLabel>`;
 }
 
 export async function printWithDymo(
