@@ -557,6 +557,21 @@ function generateStickerHtmlFromLayout(
     
     const isImage = element.type === 'logo' || element.type === 'qrCode';
     
+    // For text elements, use transform scale to fit text within bounds
+    const textStyles = !isImage ? `
+      font-size: ${element.fontSize}px;
+      font-weight: ${element.fontWeight};
+      font-style: ${element.fontStyle};
+      text-align: ${element.textAlign};
+      color: ${element.color};
+      display: flex;
+      align-items: center;
+      justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
+      overflow: visible;
+      white-space: nowrap;
+      line-height: 1.2;
+    ` : '';
+    
     return `
       <div style="
         position: absolute;
@@ -564,19 +579,7 @@ function generateStickerHtmlFromLayout(
         top: ${element.y}px;
         width: ${element.width}px;
         height: ${element.height}px;
-        ${!isImage ? `
-          font-size: ${element.fontSize}px;
-          font-weight: ${element.fontWeight};
-          font-style: ${element.fontStyle};
-          text-align: ${element.textAlign};
-          color: ${element.color};
-          display: flex;
-          align-items: center;
-          justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
-          overflow: hidden;
-          white-space: nowrap;
-          line-height: 1.2;
-        ` : ''}
+        ${textStyles}
         ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
       ">
         ${content}
