@@ -134,36 +134,31 @@ export function createLabelXml(
   widthInches: number,
   heightInches: number
 ): string {
-  const widthTwips = Math.round(widthInches * 1440);
-  const heightTwips = Math.round(heightInches * 1440);
-
   return `<?xml version="1.0" encoding="utf-8"?>
-<DieCutLabel Version="8.0" Units="twips">
-  <PaperOrientation>Portrait</PaperOrientation>
-  <Id>OilSticker</Id>
-  <PaperName>30270 Continuous Clear</PaperName>
-  <DrawCommands>
-    <RoundRectangle X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}" Rx="0" Ry="0"></RoundRectangle>
-  </DrawCommands>
-  <ObjectInfo>
-    <ImageObject>
-      <Name>STICKER_IMAGE</Name>
-      <ForeColor Alpha="255" Red="0" Green="0" Blue="0"> </ForeColor>
-      <BackColor Alpha="0" Red="255" Green="255" Blue="255"> </BackColor>
-      <LinkedObjectName></LinkedObjectName>
-      <Rotation>Rotation0</Rotation>
-      <IsMirrored>False</IsMirrored>
-      <IsVariable>False</IsVariable>
-      <Image>${imageBase64}</Image>
-      <ScaleMode>Uniform</ScaleMode>
-      <BorderWidth>0</BorderWidth>
-      <BorderColor Alpha="255" Red="0" Green="0" Blue="0"> </BorderColor>
-      <HorizontalAlignment>Center</HorizontalAlignment>
-      <VerticalAlignment>Center</VerticalAlignment>
-    </ImageObject>
-    <Bounds X="0" Y="0" Width="${widthTwips}" Height="${heightTwips}"></Bounds>
-  </ObjectInfo>
-</DieCutLabel>`;
+<DesktopLabel Version="1">
+  <DYMOLabel Version="3">
+    <Description>Oil Sticker</Description>
+    <Orientation>Portrait</Orientation>
+    <LabelName>30270 Continuous Clear</LabelName>
+    <InitialLength>${heightInches}</InitialLength>
+    <BorderStyle>SolidLine</BorderStyle>
+    <BorderWidth>0</BorderWidth>
+    <PrintDensity>Normal</PrintDensity>
+    <ObjectInfo>
+      <IImageObject>
+        <Name>STICKER_IMAGE</Name>
+        <Rotation>Rotation0</Rotation>
+        <IsMirrored>False</IsMirrored>
+        <IsVariable>False</IsVariable>
+        <HorizontalAlignment>Center</HorizontalAlignment>
+        <VerticalAlignment>Center</VerticalAlignment>
+        <ScaleMode>Uniform</ScaleMode>
+        <Image>${imageBase64}</Image>
+      </IImageObject>
+      <Bounds X="0" Y="0" Width="${widthInches}" Height="${heightInches}"></Bounds>
+    </ObjectInfo>
+  </DYMOLabel>
+</DesktopLabel>`;
 }
 
 export async function printWithDymo(
