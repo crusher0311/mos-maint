@@ -142,6 +142,21 @@ export function createLabelXml(
     <LabelName>Address</LabelName>
     <InitialLength>${heightInches}</InitialLength>
     <BorderStyle>SolidLine</BorderStyle>
+    <DYMORect>
+      <DYMOPoint>
+        <X>0.1</X>
+        <Y>0.1</Y>
+      </DYMOPoint>
+      <Size>
+        <Width>${widthInches - 0.2}</Width>
+        <Height>${heightInches - 0.2}</Height>
+      </Size>
+    </DYMORect>
+    <BorderColor>
+      <SolidColorBrush>
+        <Color A="0" R="0" G="0" B="0"></Color>
+      </SolidColorBrush>
+    </BorderColor>
     <BorderWidth>0</BorderWidth>
     <PrintDensity>Normal</PrintDensity>
     <ClearObjects>False</ClearObjects>
