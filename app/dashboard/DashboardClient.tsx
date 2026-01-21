@@ -575,55 +575,37 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       const blob = await response.blob();
       const reader = new FileReader();
       
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const dataUrl = reader.result as string;
         
-        const sizeMap: Record<string, { width: string; height: string }> = {
-          '2x2': { width: '2in', height: '2in' },
-          '2x2.5': { width: '2in', height: '2.5in' },
-          '2x3': { width: '2in', height: '3in' },
-          '2x3.5': { width: '2in', height: '3.5in' },
-        };
-        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
+        console.log("[DYMO Debug] handleQuickPrintSticker - stickerPrinterType:", stickerPrinterType);
+        console.log("[DYMO Debug] handleQuickPrintSticker - dymoAvailable:", dymoAvailable);
         
-        const existingFrame = document.getElementById('sticker-print-frame');
-        if (existingFrame) existingFrame.remove();
-        
-        const iframe = document.createElement('iframe');
-        iframe.id = 'sticker-print-frame';
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = 'none';
-        document.body.appendChild(iframe);
-        
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (iframeDoc) {
-          iframeDoc.open();
-          iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Print Sticker</title>
-              <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
-                img { display: block; width: 100%; height: 100%; }
-              </style>
-            </head>
-            <body><img src="${dataUrl}" /></body>
-            </html>
-          `);
-          iframeDoc.close();
+        // Check if DYMO is enabled and available
+        if (stickerPrinterType === "dymo" && dymoAvailable) {
+          const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS['2x2'];
+          console.log("[DYMO Debug] Attempting DYMO print with dimensions:", dimensions);
+          const result = await printWithDymo(
+            dataUrl,
+            dimensions.widthInches,
+            dimensions.heightInches,
+            dymoPrinterSticker || undefined,
+            dymoRollSticker
+          );
           
-          setTimeout(() => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-          }, 250);
+          if (!result.success) {
+            console.error("DYMO print failed, falling back to browser:", result.error);
+            printStickerWithBrowser(dataUrl, stickerSize);
+          } else {
+            console.log("[DYMO Debug] DYMO print succeeded");
+          }
+          setPrintingSticker(null);
+          return;
         }
+        
+        // Browser printing fallback
+        printStickerWithBrowser(dataUrl, stickerSize);
+        setPrintingSticker(null);
       };
       
       reader.readAsDataURL(blob);
