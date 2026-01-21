@@ -1,11 +1,40 @@
 /**
- * DYMO Connect REST API client
+ * DYMO Connect SDK client
  * 
- * Communicates with DYMO Connect's local web service at http://127.0.0.1:41951
+ * Uses DYMO's official JavaScript framework which handles CORS internally.
  * Requires DYMO Connect software installed on the user's machine.
  */
 
-const DYMO_API_BASE = 'http://127.0.0.1:41951/DYMO/DLS/Printing';
+declare global {
+  interface Window {
+    dymo?: {
+      label: {
+        framework: {
+          init: (callback?: () => void) => void;
+          checkEnvironment: () => {
+            isFrameworkInstalled: boolean;
+            isBrowserSupported: boolean;
+            isWebServicePresent: boolean;
+            errorDetails?: string;
+          };
+          getPrinters: () => DymoPrinter[];
+          openLabelXml: (xml: string) => DymoLabel;
+          renderLabel: (labelXml: string, renderParams: string, printerName: string) => string;
+          createLabelWriterPrintParamsXml: (params: {
+            copies?: number;
+            jobTitle?: string;
+            twinTurboRoll?: string;
+          }) => string;
+          TwinTurboRoll: {
+            Left: string;
+            Right: string;
+            Auto: string;
+          };
+        };
+      };
+    };
+  }
+}
 
 export type TwinTurboRoll = 'Auto' | 'Left' | 'Right';
 
@@ -17,52 +46,95 @@ export interface DymoPrinter {
   isTwinTurbo: boolean;
 }
 
+export interface DymoLabel {
+  print: (printerName: string, printParams?: string, labelSetXml?: string) => void;
+  setObjectText: (objectName: string, text: string) => void;
+  isValidLabel: () => boolean;
+}
+
+export interface DymoEnvironment {
+  isFrameworkInstalled: boolean;
+  isBrowserSupported: boolean;
+  isWebServicePresent: boolean;
+  errorDetails?: string;
+}
+
+const DYMO_SDK_URL = 'https://labelwriter.com/software/dls/sdk/js/DYMO.Label.Framework.3.0.js';
+
+let sdkLoaded = false;
+let sdkLoadPromise: Promise<boolean> | null = null;
+
+export async function loadDymoSdk(): Promise<boolean> {
+  if (sdkLoaded && window.dymo) {
+    return true;
+  }
+
+  if (sdkLoadPromise) {
+    return sdkLoadPromise;
+  }
+
+  sdkLoadPromise = new Promise((resolve) => {
+    if (window.dymo) {
+      sdkLoaded = true;
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = DYMO_SDK_URL;
+    script.async = true;
+    script.onload = () => {
+      sdkLoaded = true;
+      if (window.dymo?.label?.framework?.init) {
+        window.dymo.label.framework.init(() => {
+          resolve(true);
+        });
+      } else {
+        resolve(true);
+      }
+    };
+    script.onerror = (error) => {
+      console.error('Failed to load DYMO SDK:', error);
+      sdkLoadPromise = null;
+      resolve(false);
+    };
+    document.head.appendChild(script);
+  });
+
+  return sdkLoadPromise;
+}
+
 export async function isDymoConnectRunning(): Promise<boolean> {
+  const loaded = await loadDymoSdk();
+  if (!loaded || !window.dymo) {
+    return false;
+  }
+
   try {
-    const response = await fetch(`${DYMO_API_BASE}/StatusConnected`, {
-      method: 'GET',
-      mode: 'cors',
-    });
-    const text = await response.text();
-    return text.toLowerCase() === 'true';
+    const env = window.dymo.label.framework.checkEnvironment();
+    return env.isWebServicePresent;
   } catch (e) {
+    console.error('Error checking DYMO environment:', e);
     return false;
   }
 }
 
 export async function getDymoPrinters(): Promise<DymoPrinter[]> {
-  try {
-    const response = await fetch(`${DYMO_API_BASE}/GetPrinters`, {
-      method: 'GET',
-      mode: 'cors',
-    });
-    const xml = await response.text();
-    return parsePrintersXml(xml);
-  } catch (e) {
-    console.error('Failed to get DYMO printers:', e);
+  const loaded = await loadDymoSdk();
+  if (!loaded || !window.dymo) {
     return [];
   }
-}
 
-function parsePrintersXml(xml: string): DymoPrinter[] {
-  const printers: DymoPrinter[] = [];
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, 'text/xml');
-  const printerNodes = doc.querySelectorAll('LabelWriterPrinter');
-  
-  printerNodes.forEach((node) => {
-    const name = node.querySelector('Name')?.textContent || '';
-    const modelName = node.querySelector('ModelName')?.textContent || '';
-    const isConnected = node.querySelector('IsConnected')?.textContent?.toLowerCase() === 'true';
-    const isLocal = node.querySelector('IsLocal')?.textContent?.toLowerCase() === 'true';
-    const isTwinTurbo = modelName.toLowerCase().includes('twin turbo');
-    
-    if (name) {
-      printers.push({ name, modelName, isConnected, isLocal, isTwinTurbo });
-    }
-  });
-  
-  return printers;
+  try {
+    const printers = window.dymo.label.framework.getPrinters();
+    return printers.filter((p) => p.isConnected).map((p) => ({
+      ...p,
+      isTwinTurbo: p.modelName?.toLowerCase().includes('twin turbo') || p.name?.toLowerCase().includes('twin turbo'),
+    }));
+  } catch (e) {
+    console.error('Error getting DYMO printers:', e);
+    return [];
+  }
 }
 
 function createLabelXml(
@@ -104,19 +176,6 @@ function createLabelXml(
 </DieCutLabel>`;
 }
 
-function createPrintParamsXml(twinTurboRoll?: TwinTurboRoll): string {
-  if (!twinTurboRoll || twinTurboRoll === 'Auto') {
-    return '';
-  }
-  
-  return `<?xml version="1.0" encoding="utf-8"?>
-<LabelWriterPrintParams>
-  <Copies>1</Copies>
-  <PrintQuality>BarcodeAndGraphics</PrintQuality>
-  <TwinTurboRoll>${twinTurboRoll}</TwinTurboRoll>
-</LabelWriterPrintParams>`;
-}
-
 export async function printWithDymoConnect(
   imageBase64: string,
   widthInches: number,
@@ -124,73 +183,46 @@ export async function printWithDymoConnect(
   printerName: string,
   twinTurboRoll?: TwinTurboRoll
 ): Promise<{ success: boolean; error?: string }> {
+  const loaded = await loadDymoSdk();
+  if (!loaded || !window.dymo) {
+    return { success: false, error: 'DYMO SDK not loaded' };
+  }
+
   try {
-    const isConnected = await isDymoConnectRunning();
-    if (!isConnected) {
-      return { success: false, error: 'DYMO Connect is not running' };
+    const printers = await getDymoPrinters();
+    if (printers.length === 0) {
+      return { success: false, error: 'No DYMO printers connected' };
     }
+
+    const selectedPrinter = printers.find((p) => p.name === printerName) || printers[0];
 
     const labelXml = createLabelXml(imageBase64, widthInches, heightInches);
-    const printParamsXml = createPrintParamsXml(twinTurboRoll);
+    const label = window.dymo.label.framework.openLabelXml(labelXml);
 
-    const formData = new FormData();
-    formData.append('printerName', printerName);
-    formData.append('labelXml', labelXml);
-    formData.append('labelSetXml', '');
-    if (printParamsXml) {
-      formData.append('printParamsXml', printParamsXml);
+    if (!label.isValidLabel()) {
+      return { success: false, error: 'Invalid label format' };
     }
 
-    const response = await fetch(`${DYMO_API_BASE}/PrintLabel`, {
-      method: 'POST',
-      body: formData,
-      mode: 'cors',
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `Print failed: ${errorText}` };
+    let printParamsXml = '';
+    if (twinTurboRoll && twinTurboRoll !== 'Auto' && selectedPrinter.isTwinTurbo) {
+      const rollValue = twinTurboRoll === 'Left' 
+        ? window.dymo.label.framework.TwinTurboRoll.Left 
+        : window.dymo.label.framework.TwinTurboRoll.Right;
+      
+      printParamsXml = window.dymo.label.framework.createLabelWriterPrintParamsXml({
+        copies: 1,
+        twinTurboRoll: rollValue,
+      });
     }
 
+    label.print(selectedPrinter.name, printParamsXml);
     return { success: true };
   } catch (e) {
-    console.error('DYMO Connect print error:', e);
+    console.error('DYMO print error:', e);
     return { 
       success: false, 
       error: e instanceof Error ? e.message : 'Unknown error' 
     };
-  }
-}
-
-export async function renderLabelPreview(
-  imageBase64: string,
-  widthInches: number,
-  heightInches: number,
-  printerName: string
-): Promise<string | null> {
-  try {
-    const labelXml = createLabelXml(imageBase64, widthInches, heightInches);
-
-    const formData = new FormData();
-    formData.append('printerName', printerName);
-    formData.append('labelXml', labelXml);
-    formData.append('renderParamsXml', '');
-
-    const response = await fetch(`${DYMO_API_BASE}/RenderLabel`, {
-      method: 'POST',
-      body: formData,
-      mode: 'cors',
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const previewBase64 = await response.text();
-    return `data:image/png;base64,${previewBase64}`;
-  } catch (e) {
-    console.error('DYMO Connect render error:', e);
-    return null;
   }
 }
 
