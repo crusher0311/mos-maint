@@ -63,6 +63,7 @@ interface StickerConfig {
   showQRCode?: boolean;
   roundMileage?: boolean;
   usePredictiveDate?: boolean;
+  printerType?: "browser" | "dymo";
   fontStyles?: {
     phone?: FontStyle;
     tagline?: FontStyle;
@@ -169,6 +170,7 @@ export async function PUT(req: NextRequest) {
       "showQRCode",
       "roundMileage",
       "usePredictiveDate",
+      "printerType",
       "fontStyles",
       "colors",
       "defaultSize",

@@ -6,6 +6,7 @@ import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, C
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
+import { printWithDymo, checkDymoEnvironment, KEYTAG_SIZE_DIMENSIONS } from "@/lib/dymo-sdk";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -110,6 +111,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
   const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
+  const [keytagPrinterType, setKeytagPrinterType] = useState<"browser" | "dymo">("browser");
+  const [dymoAvailable, setDymoAvailable] = useState<boolean | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -343,52 +346,73 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
       const blob = await res.blob();
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const dataUrl = reader.result as string;
-        const printFrame = document.createElement('iframe');
-        printFrame.style.position = 'fixed';
-        printFrame.style.top = '-9999px';
-        printFrame.style.left = '-9999px';
-        document.body.appendChild(printFrame);
-
-        const iframeDoc = printFrame.contentWindow?.document;
-        if (iframeDoc) {
-          iframeDoc.open();
-          iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Print Keytag</title>
-              <style>
-                @page { size: 3.5in 1.125in; margin: 0; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
-                img { display: block; width: 100%; height: 100%; }
-              </style>
-            </head>
-            <body>
-              <img src="${dataUrl}" />
-            </body>
-            </html>
-          `);
-          iframeDoc.close();
-
-          printFrame.onload = () => {
-            setTimeout(() => {
-              printFrame.contentWindow?.print();
-              setTimeout(() => {
-                document.body.removeChild(printFrame);
-              }, 1000);
-            }, 100);
-          };
+        
+        if (keytagPrinterType === "dymo" && dymoAvailable) {
+          const dimensions = KEYTAG_SIZE_DIMENSIONS["dymo30252"];
+          const result = await printWithDymo(
+            dataUrl,
+            dimensions.widthInches,
+            dimensions.heightInches
+          );
+          
+          if (!result.success) {
+            console.error("DYMO print failed, falling back to browser:", result.error);
+            printKeytagWithBrowser(dataUrl);
+          }
+          setPrintingKeytag(null);
+          return;
         }
+        
+        printKeytagWithBrowser(dataUrl);
+        setPrintingKeytag(null);
       };
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print keytag:', error);
       alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
-    } finally {
       setPrintingKeytag(null);
+    }
+  };
+  
+  const printKeytagWithBrowser = (dataUrl: string) => {
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.top = '-9999px';
+    printFrame.style.left = '-9999px';
+    document.body.appendChild(printFrame);
+
+    const iframeDoc = printFrame.contentWindow?.document;
+    if (iframeDoc) {
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Print Keytag</title>
+          <style>
+            @page { size: 3.5in 1.125in; margin: 0; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
+            img { display: block; width: 100%; height: 100%; }
+          </style>
+        </head>
+        <body>
+          <img src="${dataUrl}" />
+        </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      printFrame.onload = () => {
+        setTimeout(() => {
+          printFrame.contentWindow?.print();
+          setTimeout(() => {
+            document.body.removeChild(printFrame);
+          }, 1000);
+        }, 100);
+      };
     }
   };
 
@@ -651,6 +675,26 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // Always fetch fresh data on mount to ensure SSR and client are in sync
     // This prevents stale data from showing after browser refresh
     loadData(1, "", false);
+    
+    // Fetch printer settings for keytags
+    async function fetchPrinterSettings() {
+      try {
+        const res = await fetch("/api/sticker/settings");
+        if (res.ok) {
+          const data = await res.json();
+          const printerType = data.config?.printerType ?? "browser";
+          setKeytagPrinterType(printerType);
+          
+          if (printerType === "dymo") {
+            const env = await checkDymoEnvironment();
+            setDymoAvailable(env?.isWebServicePresent ?? false);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch printer settings:", err);
+      }
+    }
+    fetchPrinterSettings();
     
     if (data.rows?.length > 0) {
       const vinsToPrefeetch = data.rows

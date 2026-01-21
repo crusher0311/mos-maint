@@ -27,12 +27,18 @@ interface StickerDataConfig {
   showQRCode: boolean;
   roundMileage: boolean;
   usePredictiveDate: boolean;
+  printerType: "browser" | "dymo";
   defaultSize: string;
   appointmentUrl: string;
   useKilometers: boolean;
   intervals: IntervalsConfig;
   designerLayout?: StickerLayout;
 }
+
+const PRINTER_TYPES = [
+  { value: "browser", label: "Browser Print", description: "Uses Chrome/browser print dialog" },
+  { value: "dymo", label: "DYMO Direct", description: "Prints directly to DYMO printer (requires DYMO Connect)" },
+];
 
 const STICKER_SIZES = [
   { value: "1.5x2.25", label: "1.5\" x 2.25\" (Mono)" },
@@ -66,6 +72,7 @@ const DEFAULT_CONFIG: StickerDataConfig = {
   showQRCode: true,
   roundMileage: true,
   usePredictiveDate: false,
+  printerType: "browser",
   defaultSize: DEFAULT_STICKER_SIZE,
   appointmentUrl: "",
   useKilometers: false,
@@ -121,6 +128,7 @@ export default function StickerSettingsPage() {
             showQRCode: data.config.showQRCode ?? DEFAULT_CONFIG.showQRCode,
             roundMileage: data.config.roundMileage ?? DEFAULT_CONFIG.roundMileage,
             usePredictiveDate: data.config.usePredictiveDate ?? DEFAULT_CONFIG.usePredictiveDate,
+            printerType: data.config.printerType ?? DEFAULT_CONFIG.printerType,
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
@@ -187,6 +195,7 @@ export default function StickerSettingsPage() {
           showQRCode: config.showQRCode,
           roundMileage: config.roundMileage,
           usePredictiveDate: config.usePredictiveDate,
+          printerType: config.printerType,
           defaultSize: currentSize,
           appointmentUrl: config.appointmentUrl,
           useKilometers: config.useKilometers,
@@ -550,6 +559,28 @@ export default function StickerSettingsPage() {
                 />
                 <span className="text-sm text-gray-700">Predictive date</span>
               </label>
+              <div className="col-span-2 md:col-span-4 mt-2 pt-3 border-t border-gray-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Printer Type</label>
+                <select
+                  value={config.printerType}
+                  onChange={(e) => setConfig({ ...config, printerType: e.target.value as "browser" | "dymo" })}
+                  className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  {PRINTER_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {PRINTER_TYPES.find(t => t.value === config.printerType)?.description}
+                </p>
+                {config.printerType === "dymo" && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    DYMO Connect software must be installed on the printing computer.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
