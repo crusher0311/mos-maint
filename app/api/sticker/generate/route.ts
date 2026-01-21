@@ -284,12 +284,13 @@ interface DesignerLayout {
   version?: number;
 }
 
+// 300 DPI output dimensions for crisp label printing
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "1.5x2.25": { width: 443, height: 665 },
-  "2x2": { width: 591, height: 591 },
-  "2x2.5": { width: 591, height: 739 },
-  "2x3": { width: 591, height: 887 },
-  "2x3.5": { width: 591, height: 1035 },
+  "1.5x2.25": { width: 450, height: 675 },  // 1.5" x 2.25" at 300 DPI
+  "2x2": { width: 600, height: 600 },        // 2" x 2" at 300 DPI
+  "2x2.5": { width: 600, height: 750 },      // 2" x 2.5" at 300 DPI
+  "2x3": { width: 600, height: 900 },        // 2" x 3" at 300 DPI
+  "2x3.5": { width: 600, height: 1050 },     // 2" x 3.5" at 300 DPI
 };
 
 function generateStickerHtml(
