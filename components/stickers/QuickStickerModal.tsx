@@ -177,7 +177,6 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             <head>
               <title>Print Sticker</title>
               <style>
-                /* Force exact label size with no margins */
                 @page {
                   size: ${dims.width} ${dims.height};
                   margin: 0;
@@ -188,47 +187,28 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   box-sizing: border-box;
                 }
                 html, body {
-                  width: ${dims.width};
-                  height: ${dims.height};
-                  margin: 0;
-                  padding: 0;
+                  width: 100%;
+                  height: 100%;
+                  margin: 0 !important;
+                  padding: 0 !important;
                   overflow: hidden;
-                }
-                @media print {
-                  html, body {
-                    width: ${dims.width};
-                    height: ${dims.height};
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: hidden;
-                  }
-                  #label {
-                    width: ${dims.width};
-                    height: ${dims.height};
-                    padding: 0.04in; /* ~1.2mm safe area for DYMO */
-                    box-sizing: border-box;
-                    overflow: hidden;
-                  }
-                  #label img {
-                    max-width: 100%;
-                    max-height: 100%;
-                    width: 100%;
-                    height: 100%;
-                    object-fit: contain;
-                  }
+                  background: white;
                 }
                 #label {
-                  width: ${dims.width};
-                  height: ${dims.height};
-                  display: block;
+                  width: 100vw;
+                  height: 100vh;
                   padding: 0.04in;
                   box-sizing: border-box;
+                  overflow: hidden;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
                 }
                 img {
                   width: 100%;
                   height: 100%;
                   display: block;
-                  object-fit: contain;
+                  object-fit: fill;
                 }
               </style>
             </head>
