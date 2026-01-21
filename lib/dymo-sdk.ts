@@ -3,6 +3,7 @@ declare global {
     dymo?: {
       label: {
         framework: {
+          init: (callback?: () => void) => void;
           checkEnvironment: () => Promise<{
             isFrameworkInstalled: boolean;
             isBrowserSupported: boolean;
@@ -98,6 +99,13 @@ export async function checkDymoEnvironment(): Promise<DymoEnvironment | null> {
   }
 
   try {
+    // Initialize the framework first if init function exists
+    if (typeof window.dymo.label.framework.init === 'function') {
+      await new Promise<void>((resolve) => {
+        window.dymo!.label.framework.init(resolve);
+      });
+    }
+    
     const env = await window.dymo.label.framework.checkEnvironment();
     return env;
   } catch (error) {
