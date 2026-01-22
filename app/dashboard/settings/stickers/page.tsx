@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
 import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
 
@@ -77,6 +77,7 @@ export default function StickerSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [regeneratingQr, setRegeneratingQr] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -161,6 +162,28 @@ export default function StickerSettingsPage() {
       }
     } catch (err) {
       console.error("Failed to load QR preview:", err);
+    }
+  }
+
+  async function regenerateQrCode() {
+    setRegeneratingQr(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/sticker/regenerate-qr", {
+        method: "POST",
+      });
+      if (res.ok) {
+        setMessage({ type: "success", text: "QR code regenerated and cached" });
+        refreshQrPreview();
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to regenerate QR code" });
+      }
+    } catch (err) {
+      console.error("Failed to regenerate QR code:", err);
+      setMessage({ type: "error", text: "Failed to regenerate QR code" });
+    } finally {
+      setRegeneratingQr(false);
     }
   }
 
@@ -523,6 +546,18 @@ export default function StickerSettingsPage() {
                 />
                 <span className="text-sm text-gray-700">Show QR code</span>
               </label>
+              {config.showQRCode && (
+                <button
+                  type="button"
+                  onClick={regenerateQrCode}
+                  disabled={regeneratingQr}
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                  title="Refresh the cached QR code image"
+                >
+                  <RefreshCw size={14} className={regeneratingQr ? "animate-spin" : ""} />
+                  {regeneratingQr ? "Regenerating..." : "Refresh QR"}
+                </button>
+              )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"

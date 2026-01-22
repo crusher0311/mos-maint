@@ -227,6 +227,7 @@ interface StickerConfig {
   appointmentUrl?: string;
   useKilometers?: boolean;
   hovercodeQRId?: string;
+  cachedQrCodeDataUri?: string;
   roundMileage?: boolean;
 }
 
