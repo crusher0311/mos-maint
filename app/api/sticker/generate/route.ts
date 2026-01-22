@@ -654,14 +654,28 @@ export async function POST(req: NextRequest) {
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
-      if (config.hovercodeQRId) {
-        console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
+      // First, try to use cached QR code (fastest, most reliable)
+      if (config.cachedQrCodeDataUri) {
+        console.log("[Sticker Generate] Using cached QR code from config");
+        qrDataUrl = config.cachedQrCodeDataUri;
+      }
+      
+      // If no cached QR, try existing HoverCode
+      if (!qrDataUrl && config.hovercodeQRId) {
+        console.log(`[Sticker Generate] Fetching HoverCode QR: ${config.hovercodeQRId}`);
         const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
         if (existingQR.dataUri) {
           qrDataUrl = existingQR.dataUri;
+          // Cache it for next time
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
+          );
+          console.log("[Sticker Generate] Cached HoverCode QR for future use");
         }
       }
       
+      // If still no QR, create a new HoverCode
       if (!qrDataUrl) {
         const newQR = await createHovercodeQR(redirectUrl, {
           size: 300,
@@ -673,19 +687,31 @@ export async function POST(req: NextRequest) {
         if (newQR?.dataUri) {
           qrDataUrl = newQR.dataUri;
           
+          // Save both the HoverCode ID and cache the QR image
+          const updateFields: Record<string, string> = {
+            "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
+          };
           if (newQR.id && !config.hovercodeQRId) {
-            await db.collection("shops").updateOne(
-              { shopId },
-              { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-            );
-            console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
+            updateFields["stickerConfig.hovercodeQRId"] = newQR.id;
           }
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: updateFields }
+          );
+          console.log(`[Sticker Generate] Created and cached new HoverCode QR: ${newQR.id}`);
         }
       }
       
+      // Final fallback: generate locally
       if (!qrDataUrl) {
         console.log("[Sticker Generate] HoverCode failed, using fallback QR");
         qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+        // Cache the fallback QR too
+        await db.collection("shops").updateOne(
+          { shopId },
+          { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
+        );
+        console.log("[Sticker Generate] Cached fallback QR for future use");
       }
     }
 

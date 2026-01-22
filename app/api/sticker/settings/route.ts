@@ -86,6 +86,7 @@ interface StickerConfig {
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
   hovercodeQRId?: string;
+  cachedQrCodeDataUri?: string;
   designerLayout?: DesignerLayout;
 }
 
@@ -176,6 +177,7 @@ export async function PUT(req: NextRequest) {
       "useKilometers",
       "intervals",
       "hovercodeQRId",
+      "cachedQrCodeDataUri",
       "designerLayout",
     ];
 
