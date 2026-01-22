@@ -14,8 +14,10 @@ import {
   CalendarCheck,
   CalendarX,
   Users,
-  Bell
+  Bell,
+  ListChecks
 } from "lucide-react";
+import Link from "next/link";
 
 interface Holiday {
   date: string;
@@ -183,6 +185,14 @@ export default function AutoBookingSettingsPage() {
               <p className="text-gray-500">Automatically schedule appointments from sticker predictions</p>
             </div>
           </div>
+          
+          <Link
+            href="/dashboard/settings/auto-booking/queue"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <ListChecks className="w-4 h-4" />
+            View Queue
+          </Link>
         </div>
 
         {message && (
