@@ -5,6 +5,7 @@ import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
 import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
+import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -244,6 +245,13 @@ interface StickerRequest {
     useKilometers?: boolean;
     roundMileage?: boolean;
   };
+  // Customer data for auto booking
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  vehicleId?: string;
+  roNumber?: string;
 }
 
 interface DesignerElement {
@@ -775,6 +783,29 @@ export async function POST(req: NextRequest) {
       vehicleModel: body.vehicleModel || null,
       size,
     });
+
+    // Trigger auto booking if customer data is provided and we have a service date
+    if (body.nextServiceDate && (body.customerName || body.customerId)) {
+      const bookingData: StickerBookingData = {
+        customerId: body.customerId,
+        customerName: body.customerName,
+        customerPhone: body.customerPhone,
+        customerEmail: body.customerEmail,
+        vehicleId: body.vehicleId,
+        vin: body.vin,
+        vehicleYear: body.vehicleYear,
+        vehicleMake: body.vehicleMake,
+        vehicleModel: body.vehicleModel,
+        roNumber: body.roNumber,
+      };
+      const bookingResult = await triggerAutoBookingFromSticker(
+        shopId,
+        body.nextServiceDate,
+        body.nextServiceMileage || 0,
+        bookingData
+      );
+      console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
+    }
 
     const imageBuffer = image as Buffer;
     return new NextResponse(new Uint8Array(imageBuffer), {
