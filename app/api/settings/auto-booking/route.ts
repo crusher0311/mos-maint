@@ -166,12 +166,12 @@ export async function POST(req: NextRequest) {
       settings.timezone = body.timezone;
     }
 
+    settings.updatedAt = new Date();
     await db.collection("shops").updateOne(
       { shopId },
       {
         $set: {
           autoBooking: settings,
-          "autoBooking.updatedAt": new Date(),
         },
       }
     );
