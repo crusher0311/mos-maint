@@ -14,10 +14,11 @@ interface ShopBilling {
 interface ShopFeatures {
   maintenance?: boolean;
   job_lookup?: boolean;
+  common_failures?: boolean;
   oil_sticker?: boolean;
-  part_xref?: boolean;
   keytags?: boolean;
-  dvi_tracking?: boolean;
+  auto_booking?: boolean;
+  part_xref?: boolean;
 }
 
 interface IntegrationDetails {
@@ -944,9 +945,11 @@ export default function PlatformShopsPage() {
                           setFeatureEdits({
                             maintenance: true,
                             job_lookup: true,
+                            common_failures: true,
                             oil_sticker: true,
+                            keytags: true,
+                            auto_booking: true,
                             part_xref: true,
-                            dvi_tracking: true,
                           });
                         }
                       }}
@@ -991,12 +994,13 @@ export default function PlatformShopsPage() {
                 <p className="text-xs text-gray-500 mb-3">Override plan defaults. Leave unchecked to use plan defaults.</p>
                 <div className="space-y-2">
                   {[
-                    { key: "maintenance", label: "Maintenance Tracking", desc: "Track vehicle maintenance schedules" },
-                    { key: "job_lookup", label: "Job Lookup", desc: "Search historical jobs across shop/enterprise" },
+                    { key: "maintenance", label: "Maintenance Tracking", desc: "Track vehicle maintenance schedules and DVI insights" },
+                    { key: "job_lookup", label: "Job Lookup", desc: "Search historical jobs with smart autocomplete" },
+                    { key: "common_failures", label: "Common Failures Advisor", desc: "Predict common repairs by vehicle/mileage" },
                     { key: "oil_sticker", label: "Oil Sticker", desc: "Generate oil change reminder stickers" },
+                    { key: "keytags", label: "Keytags", desc: "Print customer/vehicle info on Dymo labels" },
+                    { key: "auto_booking", label: "Auto Booking", desc: "Automated appointment booking for oil changes" },
                     { key: "part_xref", label: "Part Cross-Reference", desc: "Cross-reference parts across manufacturers" },
-                    { key: "keytags", label: "Keytags", desc: "Print customer/vehicle info on Dymo labels for key identification" },
-                    { key: "dvi_tracking", label: "DVI Tracking", desc: "Track digital vehicle inspections" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input
