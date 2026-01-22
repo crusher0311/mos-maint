@@ -310,3 +310,77 @@ export async function markBookingFailed(
   
   return result.modifiedCount > 0;
 }
+
+export interface StickerBookingData {
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  vehicleId?: string;
+  vin?: string;
+  vehicleYear?: number;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  roNumber?: string;
+}
+
+export async function triggerAutoBookingFromSticker(
+  shopId: number,
+  nextServiceDate: string,
+  nextServiceMileage: number,
+  data: StickerBookingData
+): Promise<{ queued: boolean; bookingId?: string; status?: string; error?: string }> {
+  try {
+    const settings = await getAutoBookingSettings(shopId);
+    
+    if (!settings || !settings.enabled) {
+      return { queued: false, error: "Auto booking not enabled" };
+    }
+    
+    if (!data.customerName && !data.customerId) {
+      return { queued: false, error: "Customer info required for booking" };
+    }
+    
+    const targetDate = new Date(nextServiceDate);
+    const slotResult = await findAvailableSlot(shopId, targetDate, settings);
+    
+    if (!slotResult.success || !slotResult.slot) {
+      return { queued: false, error: slotResult.error || "No available slot" };
+    }
+    
+    const vehicleDesc = [data.vehicleYear, data.vehicleMake, data.vehicleModel]
+      .filter(Boolean)
+      .join(" ");
+    
+    const result = await queueBooking(shopId, settings, {
+      customerId: data.customerId,
+      customerName: data.customerName || "Unknown Customer",
+      customerPhone: data.customerPhone,
+      customerEmail: data.customerEmail,
+      vehicleId: data.vehicleId,
+      vin: data.vin,
+      vehicleYear: data.vehicleYear,
+      vehicleMake: data.vehicleMake,
+      vehicleModel: data.vehicleModel,
+      serviceType: "Oil Change",
+      serviceMileage: nextServiceMileage,
+      scheduledDate: slotResult.slot.date,
+      scheduledTime: slotResult.slot.time,
+      stickerGeneratedAt: new Date(),
+    });
+    
+    if (result.success) {
+      console.log(`[Auto Booking] Queued booking for shop ${shopId}: ${result.bookingId}, status=${settings.confirmationMode === "auto" ? "confirmed" : "pending"}`);
+      return { 
+        queued: true, 
+        bookingId: result.bookingId,
+        status: settings.confirmationMode === "auto" ? "confirmed" : "pending"
+      };
+    }
+    
+    return { queued: false, error: result.error };
+  } catch (err: any) {
+    console.error("[Auto Booking] Trigger error:", err);
+    return { queued: false, error: err.message };
+  }
+}
