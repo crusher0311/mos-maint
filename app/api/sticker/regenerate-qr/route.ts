@@ -156,16 +156,17 @@ export async function POST(req: NextRequest) {
         displayName: `${shopName} - Oil Sticker`,
       });
 
+      // Save HoverCode ID even if we don't get dataUri
+      if (newQR?.id) {
+        await db.collection("shops").updateOne(
+          { shopId },
+          { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
+        );
+        console.log(`[Regenerate QR] Saved HoverCode ID: ${newQR.id}`);
+      }
+
       if (newQR?.dataUri) {
         qrDataUrl = newQR.dataUri;
-
-        // Update HoverCode ID if new
-        if (newQR.id) {
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-          );
-        }
       }
     }
 
