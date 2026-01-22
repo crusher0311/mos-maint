@@ -41,7 +41,7 @@ export async function GET() {
       });
     }
     
-    const pendingCount = await db.collection("booking_queue").countDocuments({
+    const pendingCount = await db.collection("auto_booking_queue").countDocuments({
       shopId,
       status: "pending"
     });

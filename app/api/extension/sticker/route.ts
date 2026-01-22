@@ -5,6 +5,7 @@ import nodeHtmlToImage from "node-html-to-image";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -614,6 +615,17 @@ export async function POST(request: NextRequest) {
       smsShopId,
       provider = "tekmetric",
       tagline,
+      // Customer/vehicle data for auto booking
+      customerId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      vehicleId,
+      vin,
+      vehicleYear,
+      vehicleMake,
+      vehicleModel,
+      roNumber,
     } = body;
 
     if (!currentMileage || currentMileage <= 0) {
@@ -728,6 +740,30 @@ export async function POST(request: NextRequest) {
       unit,
     });
 
+    // Trigger auto booking if customer/vehicle data provided
+    let bookingResult: { queued: boolean; bookingId?: string; status?: string; error?: string } | null = null;
+    if (mosShopId && (customerName || customerId)) {
+      const bookingData: StickerBookingData = {
+        customerId,
+        customerName,
+        customerPhone,
+        customerEmail,
+        vehicleId,
+        vin,
+        vehicleYear,
+        vehicleMake,
+        vehicleModel,
+        roNumber,
+      };
+      bookingResult = await triggerAutoBookingFromSticker(
+        mosShopId,
+        nextServiceDate,
+        nextServiceMileage,
+        bookingData
+      );
+      console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
+    }
+
     const imageBuffer = image as Buffer;
     const base64Image = imageBuffer.toString("base64");
     const dataUrl = `data:image/png;base64,${base64Image}`;
@@ -745,6 +781,7 @@ export async function POST(request: NextRequest) {
         nextServiceDate,
         unit,
       },
+      booking: bookingResult,
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Sticker] Generate error:", error);
