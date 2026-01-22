@@ -98,9 +98,10 @@ export async function getAutoBookingSettings(shopId: number): Promise<AutoBookin
   const hasAutoBooking = Array.isArray(rawFeatures) 
     ? rawFeatures.includes("auto_booking")
     : (rawFeatures && typeof rawFeatures === "object" && (rawFeatures as any).auto_booking === true);
-  const isPaid = shop.billingStatus === "active" || shop.plan === "professional" || shop.plan === "enterprise";
+  const isAllowed = shop.billingStatus === "active" || shop.billingStatus === "trial" || shop.billingStatus === "demo" || 
+    shop.plan === "professional" || shop.plan === "enterprise" || shop.plan === "trial" || shop.plan === "demo";
   
-  if (!isPaid || !hasAutoBooking) return null;
+  if (!isAllowed || !hasAutoBooking) return null;
   if (!shop.autoBooking?.enabled) return null;
   
   return shop.autoBooking as AutoBookingSettings;
