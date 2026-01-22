@@ -113,9 +113,11 @@ export async function POST(req: NextRequest) {
           // Auto-enable all features for paid shops
           updateData["enabledFeatures.maintenance"] = true;
           updateData["enabledFeatures.job_lookup"] = true;
+          updateData["enabledFeatures.common_failures"] = true;
           updateData["enabledFeatures.oil_sticker"] = true;
+          updateData["enabledFeatures.keytags"] = true;
+          updateData["enabledFeatures.auto_booking"] = true;
           updateData["enabledFeatures.part_xref"] = true;
-          updateData["enabledFeatures.dvi_tracking"] = true;
           console.log(`[Stripe] Shop ${shopId} - enabling all features for paid plan`);
           
           await db.collection("shops").updateOne(

@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "oil_sticker" | "part_xref" | "keytags" | "dvi_tracking";
+export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "canceled" | "enterprise" | "demo";
 
@@ -9,10 +9,11 @@ export type BillingPlan = "trial" | "starter" | "professional" | "enterprise" | 
 export interface FeatureSettings {
   maintenance: boolean;
   job_lookup: boolean;
+  common_failures: boolean;
   oil_sticker: boolean;
-  part_xref: boolean;
   keytags: boolean;
-  dvi_tracking: boolean;
+  auto_booking: boolean;
+  part_xref: boolean;
 }
 
 export interface ShopBilling {
@@ -34,52 +35,58 @@ export interface FeatureEntitlements {
 const DEFAULT_FEATURES: FeatureSettings = {
   maintenance: true,
   job_lookup: false,
+  common_failures: false,
   oil_sticker: false,
-  part_xref: false,
   keytags: false,
-  dvi_tracking: false,
+  auto_booking: false,
+  part_xref: false,
 };
 
 const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
   trial: {
     maintenance: true,
     job_lookup: false,
+    common_failures: false,
     oil_sticker: false,
-    part_xref: false,
     keytags: false,
-    dvi_tracking: false,
+    auto_booking: false,
+    part_xref: false,
   },
   starter: {
     maintenance: true,
     job_lookup: false,
+    common_failures: false,
     oil_sticker: true,
-    part_xref: false,
     keytags: false,
-    dvi_tracking: false,
+    auto_booking: false,
+    part_xref: false,
   },
   professional: {
     maintenance: true,
     job_lookup: true,
+    common_failures: true,
     oil_sticker: true,
-    part_xref: true,
     keytags: true,
-    dvi_tracking: true,
+    auto_booking: true,
+    part_xref: true,
   },
   enterprise: {
     maintenance: true,
     job_lookup: true,
+    common_failures: true,
     oil_sticker: true,
-    part_xref: true,
     keytags: true,
-    dvi_tracking: true,
+    auto_booking: true,
+    part_xref: true,
   },
   demo: {
     maintenance: true,
     job_lookup: true,
+    common_failures: true,
     oil_sticker: true,
-    part_xref: true,
     keytags: true,
-    dvi_tracking: true,
+    auto_booking: true,
+    part_xref: true,
   },
 };
 
@@ -113,10 +120,11 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   const effectiveFeatures: FeatureSettings = {
     maintenance: shopFeatures.maintenance ?? enterpriseFeatures.maintenance ?? planFeatures.maintenance,
     job_lookup: shopFeatures.job_lookup ?? enterpriseFeatures.job_lookup ?? planFeatures.job_lookup,
+    common_failures: shopFeatures.common_failures ?? enterpriseFeatures.common_failures ?? planFeatures.common_failures,
     oil_sticker: shopFeatures.oil_sticker ?? enterpriseFeatures.oil_sticker ?? planFeatures.oil_sticker,
-    part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
     keytags: shopFeatures.keytags ?? enterpriseFeatures.keytags ?? planFeatures.keytags,
-    dvi_tracking: shopFeatures.dvi_tracking ?? enterpriseFeatures.dvi_tracking ?? planFeatures.dvi_tracking,
+    auto_booking: shopFeatures.auto_booking ?? enterpriseFeatures.auto_booking ?? planFeatures.auto_booking,
+    part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
   };
   
   const billing: ShopBilling = {
@@ -230,10 +238,12 @@ export function getAvailablePlans(): { id: BillingPlan; name: string; features: 
 
 export function getFeatureList(): { key: FeatureKey; name: string; description: string }[] {
   return [
-    { key: "maintenance", name: "Maintenance Tracking", description: "Track vehicle maintenance schedules and recommendations" },
-    { key: "job_lookup", name: "Job Lookup", description: "Search historical jobs across your shop and enterprise" },
+    { key: "maintenance", name: "Maintenance Tracking", description: "Track vehicle maintenance schedules, DVI insights, and recommendations" },
+    { key: "job_lookup", name: "Job Lookup", description: "Search historical jobs with smart autocomplete across your shop and enterprise" },
+    { key: "common_failures", name: "Common Failures Advisor", description: "Predict common repairs by vehicle, powertrain, and mileage" },
     { key: "oil_sticker", name: "Oil Sticker", description: "Generate oil change reminder stickers" },
+    { key: "keytags", name: "Keytags", description: "Print customer/vehicle info on Dymo labels for key identification" },
+    { key: "auto_booking", name: "Auto Booking", description: "Automated appointment booking for oil change reminders" },
     { key: "part_xref", name: "Part Cross-Reference", description: "Cross-reference parts across manufacturers" },
-    { key: "dvi_tracking", name: "DVI Tracking", description: "Track digital vehicle inspections" },
   ];
 }
