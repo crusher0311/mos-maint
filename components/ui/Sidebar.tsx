@@ -25,7 +25,8 @@ import {
   LogOut,
   RefreshCw,
   X,
-  Printer
+  Printer,
+  CalendarCheck
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -92,6 +93,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const [switching, setSwitching] = useState(false);
   const [shopSearch, setShopSearch] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
+  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
+  const [showBookingBadge, setShowBookingBadge] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +117,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (enabledFeatures.includes("auto_booking")) {
+      fetch("/api/settings/auto-booking/pending-count")
+        .then((res) => res.json())
+        .then((data) => {
+          setPendingBookingsCount(data.count || 0);
+          setShowBookingBadge(data.showBadge || false);
+        })
+        .catch(() => {});
+    }
+  }, [enabledFeatures]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -200,6 +215,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       icon: <LayoutDashboard className="w-5 h-5" />
     },
     {
+      name: "Booking Review",
+      href: "/dashboard/settings/auto-booking/queue",
+      icon: <CalendarCheck className="w-5 h-5" />,
+      featureId: "auto_booking"
+    },
+    {
       name: "Quick Sticker",
       href: "#quick-sticker",
       icon: <Printer className="w-5 h-5" />,
@@ -238,7 +259,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
+        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     }
@@ -501,14 +522,21 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
               ) : (
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
                       ? "bg-white/20 text-white"
                       : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
                 >
-                  {item.icon}
-                  <span>{item.name}</span>
+                  <div className="flex items-center gap-3">
+                    {item.icon}
+                    <span>{item.name}</span>
+                  </div>
+                  {item.name === "Booking Review" && showBookingBadge && pendingBookingsCount > 0 && (
+                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-red-500 text-white rounded-full">
+                      {pendingBookingsCount > 99 ? "99+" : pendingBookingsCount}
+                    </span>
+                  )}
                 </Link>
               )}
             </li>
