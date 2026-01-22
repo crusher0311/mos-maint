@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,24 +81,20 @@ export async function GET(req: NextRequest) {
     const shopId = Number(session.shopId);
     const db = await getDb();
     
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { autoBooking: 1, enabledFeatures: 1, plan: 1, billingStatus: 1 } }
-    );
-
-    const rawFeatures = shop?.enabledFeatures;
-    const hasOilSticker = Array.isArray(rawFeatures) 
-      ? rawFeatures.includes("oil_sticker")
-      : (rawFeatures && typeof rawFeatures === "object" && rawFeatures.oil_sticker === true);
-    const isPaid = shop?.billingStatus === "active" || shop?.plan === "professional" || shop?.plan === "enterprise";
-    
-    if (!isPaid || !hasOilSticker) {
+    // Check feature entitlements
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!entitlements.canUseFeature("auto_booking")) {
       return NextResponse.json({
         available: false,
-        reason: !isPaid ? "Requires a paid plan" : "Requires Oil Sticker feature",
+        reason: "Auto Booking feature is not enabled for this shop",
         settings: null,
       });
     }
+    
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { autoBooking: 1 } }
+    );
 
     const settings = shop?.autoBooking || DEFAULT_SETTINGS;
 
@@ -125,20 +122,11 @@ export async function POST(req: NextRequest) {
     const shopId = Number(session.shopId);
     const db = await getDb();
     
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { enabledFeatures: 1, plan: 1, billingStatus: 1 } }
-    );
-
-    const rawFeatures = shop?.enabledFeatures;
-    const hasOilSticker = Array.isArray(rawFeatures) 
-      ? rawFeatures.includes("oil_sticker")
-      : (rawFeatures && typeof rawFeatures === "object" && rawFeatures.oil_sticker === true);
-    const isPaid = shop?.billingStatus === "active" || shop?.plan === "professional" || shop?.plan === "enterprise";
-    
-    if (!isPaid || !hasOilSticker) {
+    // Check feature entitlements
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!entitlements.canUseFeature("auto_booking")) {
       return NextResponse.json(
-        { error: "Auto Booking requires a paid plan with Oil Sticker enabled" },
+        { error: "Auto Booking feature is not enabled for this shop" },
         { status: 403 }
       );
     }
