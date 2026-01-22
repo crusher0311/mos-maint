@@ -92,7 +92,10 @@ export async function getAutoBookingSettings(shopId: number): Promise<AutoBookin
     { projection: { autoBooking: 1, enabledFeatures: 1, billingStatus: 1, plan: 1 } }
   );
   
-  if (!shop) return null;
+  if (!shop) {
+    console.log(`[Auto Booking] Shop ${shopId} not found`);
+    return null;
+  }
   
   const rawFeatures = shop.enabledFeatures;
   const hasAutoBooking = Array.isArray(rawFeatures) 
@@ -100,6 +103,8 @@ export async function getAutoBookingSettings(shopId: number): Promise<AutoBookin
     : (rawFeatures && typeof rawFeatures === "object" && (rawFeatures as any).auto_booking === true);
   const isAllowed = shop.billingStatus === "active" || shop.billingStatus === "trial" || shop.billingStatus === "demo" || 
     shop.plan === "professional" || shop.plan === "enterprise" || shop.plan === "trial" || shop.plan === "demo";
+  
+  console.log(`[Auto Booking] Shop ${shopId}: hasAutoBooking=${hasAutoBooking}, isAllowed=${isAllowed}, billingStatus=${shop.billingStatus}, plan=${shop.plan}, enabledFeatures=${JSON.stringify(rawFeatures)}, autoBooking.enabled=${shop.autoBooking?.enabled}`);
   
   if (!isAllowed || !hasAutoBooking) return null;
   if (!shop.autoBooking?.enabled) return null;
