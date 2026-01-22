@@ -4,7 +4,6 @@ import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
 import nodeHtmlToImage from "node-html-to-image";
-import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 
 export const runtime = "nodejs";
@@ -183,15 +182,6 @@ async function createHovercodeQR(
   }
 }
 
-async function fallbackQRGeneration(url: string, color: string = "#1976d2"): Promise<string> {
-  const qrDataUrl = await QRCode.toDataURL(url, {
-    width: 300,
-    margin: 2,
-    color: { dark: color, light: "#ffffff" },
-    errorCorrectionLevel: "H",
-  });
-  return qrDataUrl;
-}
 
 interface FontStyle {
   bold?: boolean;
@@ -703,16 +693,10 @@ export async function POST(req: NextRequest) {
         }
       }
       
-      // Final fallback: generate locally
+      // Require a valid QR code - no fallback
       if (!qrDataUrl) {
-        console.log("[Sticker Generate] HoverCode failed, using fallback QR");
-        qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
-        // Cache the fallback QR too
-        await db.collection("shops").updateOne(
-          { shopId },
-          { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
-        );
-        console.log("[Sticker Generate] Cached fallback QR for future use");
+        console.error("[Sticker Generate] Failed to get QR code from HoverCode");
+        return NextResponse.json({ error: "Failed to generate QR code. Please try refreshing the QR code in settings." }, { status: 500 });
       }
     }
 
