@@ -118,7 +118,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const refreshPendingCount = () => {
     if (enabledFeatures.includes("auto_booking")) {
       fetch("/api/settings/auto-booking/pending-count")
         .then((res) => res.json())
@@ -128,6 +128,16 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         })
         .catch(() => {});
     }
+  };
+
+  useEffect(() => {
+    refreshPendingCount();
+  }, [enabledFeatures]);
+
+  useEffect(() => {
+    const handleRefresh = () => refreshPendingCount();
+    window.addEventListener("refreshBookingCount", handleRefresh);
+    return () => window.removeEventListener("refreshBookingCount", handleRefresh);
   }, [enabledFeatures]);
 
   useEffect(() => {

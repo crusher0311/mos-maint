@@ -50,6 +50,7 @@ function getDayOfWeek(date: Date): number {
 
 function isWeekend(date: Date, settings: AutoBookingSettings): boolean {
   const day = getDayOfWeek(date);
+  console.log(`[Auto Booking] isWeekend check: date=${date.toISOString()}, day=${day}, blockSaturday=${settings.blockSaturday}, blockSunday=${settings.blockSunday}`);
   if (settings.blockSaturday && day === 6) return true;
   if (settings.blockSunday && day === 0) return true;
   return false;

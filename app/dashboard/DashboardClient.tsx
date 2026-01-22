@@ -343,6 +343,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           setTimeout(() => {
             iframe.contentWindow?.focus();
             iframe.contentWindow?.print();
+            window.dispatchEvent(new CustomEvent("refreshBookingCount"));
           }, 250);
         }
       };
@@ -605,6 +606,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           setTimeout(() => {
             iframe.contentWindow?.focus();
             iframe.contentWindow?.print();
+            window.dispatchEvent(new CustomEvent("refreshBookingCount"));
           }, 250);
         }
       };
