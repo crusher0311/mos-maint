@@ -31,6 +31,16 @@ export async function GET() {
     const confirmationMode = shop?.autoBooking?.confirmationMode || "review";
     const isReviewMode = confirmationMode === "review";
     
+    // Only query pending count when in review mode to avoid unnecessary DB work
+    if (!isReviewMode) {
+      return NextResponse.json({
+        count: 0,
+        showBadge: false,
+        confirmationMode,
+        available: true
+      });
+    }
+    
     const pendingCount = await db.collection("booking_queue").countDocuments({
       shopId,
       status: "pending"
@@ -38,7 +48,7 @@ export async function GET() {
     
     return NextResponse.json({
       count: pendingCount,
-      showBadge: isReviewMode && pendingCount > 0,
+      showBadge: pendingCount > 0,
       confirmationMode,
       available: true
     });
