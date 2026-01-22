@@ -433,7 +433,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   };
 
-  const handleQuickPrintSticker = async (vin: string, currentMileage: number | null) => {
+  const handleQuickPrintSticker = async (
+    vin: string, 
+    currentMileage: number | null,
+    customerName?: string,
+    vehicleYear?: number,
+    vehicleMake?: string,
+    vehicleModel?: string
+  ) => {
     if (!currentMileage) {
       alert("Mileage is required to print a sticker");
       return;
@@ -535,6 +542,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           nextServiceDate,
           size: stickerSize,
           includeQR,
+          customerName,
+          vehicleYear,
+          vehicleMake,
+          vehicleModel,
         }),
       });
       
@@ -1057,7 +1068,21 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                             <AlertTriangle className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleQuickPrintSticker(vin, r.displayMiles)}
+                            onClick={() => {
+                              let year = r.vehicle?.year;
+                              let make = r.vehicle?.make;
+                              let model = r.vehicle?.model;
+                              if (!year && !make && !model && r.displayVehicle) {
+                                const vehicleStr = r.displayVehicle || "";
+                                const yearMatch = vehicleStr.match(/^(\d{4})/);
+                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                                const parts = afterYear.split(" ").filter(Boolean);
+                                make = parts[0] || undefined;
+                                model = parts.slice(1).join(" ") || undefined;
+                              }
+                              handleQuickPrintSticker(vin, r.displayMiles, r.displayName, year, make, model);
+                            }}
                             onContextMenu={(e) => {
                               let year = r.vehicle?.year;
                               let make = r.vehicle?.make;
