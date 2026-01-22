@@ -80,6 +80,7 @@ export default function BookingQueuePage() {
           text: action === "confirm" ? "Booking confirmed" : "Booking cancelled" 
         });
         fetchBookings();
+        window.dispatchEvent(new CustomEvent("refreshBookingCount"));
       } else {
         const data = await res.json();
         setMessage({ type: "error", text: data.error || "Action failed" });
