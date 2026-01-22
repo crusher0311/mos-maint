@@ -117,10 +117,18 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     y: number;
     intervals: Record<string, { mileage: number; months: number }>;
     useKilometers: boolean;
+    customerName?: string;
+    vehicleYear?: number;
+    vehicleMake?: string;
+    vehicleModel?: string;
   } | null>(null);
   const [customStickerModal, setCustomStickerModal] = useState<{
     vin: string;
     mileage: number;
+    customerName?: string;
+    vehicleYear?: number;
+    vehicleMake?: string;
+    vehicleModel?: string;
   } | null>(null);
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
@@ -136,7 +144,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     return () => document.removeEventListener("mousedown", handleClickOutsideContext);
   }, []);
 
-  const handleStickerRightClick = async (e: React.MouseEvent, vin: string, currentMileage: number | null) => {
+  const handleStickerRightClick = async (
+    e: React.MouseEvent, 
+    vin: string, 
+    currentMileage: number | null,
+    customerName?: string,
+    vehicleYear?: number,
+    vehicleMake?: string,
+    vehicleModel?: string
+  ) => {
     e.preventDefault();
     if (!currentMileage) {
       alert("Mileage is required to print a sticker");
@@ -162,6 +178,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           y: e.clientY,
           intervals: config.intervals || defaultIntervals,
           useKilometers: config.useKilometers || false,
+          customerName,
+          vehicleYear,
+          vehicleMake,
+          vehicleModel,
         });
       }
     } catch (err) {
@@ -179,12 +199,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     const nextServiceDate = nextDate.toISOString().split('T')[0];
     const nextServiceMileage = stickerContextMenu.mileage + interval.mileage;
     
+    const { customerName, vehicleYear, vehicleMake, vehicleModel } = stickerContextMenu;
     setStickerContextMenu(null);
     handleQuickPrintStickerWithValues(
       stickerContextMenu.vin,
       stickerContextMenu.mileage,
       nextServiceMileage,
-      nextServiceDate
+      nextServiceDate,
+      customerName,
+      vehicleYear,
+      vehicleMake,
+      vehicleModel
     );
   };
 
@@ -197,6 +222,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     setCustomStickerModal({
       vin: stickerContextMenu.vin,
       mileage: stickerContextMenu.mileage,
+      customerName: stickerContextMenu.customerName,
+      vehicleYear: stickerContextMenu.vehicleYear,
+      vehicleMake: stickerContextMenu.vehicleMake,
+      vehicleModel: stickerContextMenu.vehicleModel,
     });
     setStickerContextMenu(null);
   };
@@ -207,7 +236,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       customStickerModal.vin,
       customStickerModal.mileage,
       parseInt(customMileage) || customStickerModal.mileage + 5000,
-      customDate
+      customDate,
+      customStickerModal.customerName,
+      customStickerModal.vehicleYear,
+      customStickerModal.vehicleMake,
+      customStickerModal.vehicleModel
     );
     setCustomStickerModal(null);
   };
@@ -216,7 +249,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     vin: string,
     currentMileage: number,
     nextServiceMileage: number,
-    nextServiceDate: string
+    nextServiceDate: string,
+    customerName?: string,
+    vehicleYear?: number,
+    vehicleMake?: string,
+    vehicleModel?: string
   ) => {
     setPrintingSticker(vin);
     try {
@@ -245,6 +282,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           nextServiceDate,
           size: stickerSize,
           includeQR,
+          customerName,
+          vehicleYear,
+          vehicleMake,
+          vehicleModel,
         }),
       });
       
@@ -1017,7 +1058,21 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           </button>
                           <button
                             onClick={() => handleQuickPrintSticker(vin, r.displayMiles)}
-                            onContextMenu={(e) => handleStickerRightClick(e, vin, r.displayMiles)}
+                            onContextMenu={(e) => {
+                              let year = r.vehicle?.year;
+                              let make = r.vehicle?.make;
+                              let model = r.vehicle?.model;
+                              if (!year && !make && !model && r.displayVehicle) {
+                                const vehicleStr = r.displayVehicle || "";
+                                const yearMatch = vehicleStr.match(/^(\d{4})/);
+                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                                const parts = afterYear.split(" ").filter(Boolean);
+                                make = parts[0] || undefined;
+                                model = parts.slice(1).join(" ") || undefined;
+                              }
+                              handleStickerRightClick(e, vin, r.displayMiles, r.displayName, year, make, model);
+                            }}
                             disabled={printingSticker === vin || !r.displayMiles}
                             className={`p-1.5 rounded transition-colors ${
                               !r.displayMiles 
