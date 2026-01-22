@@ -95,12 +95,12 @@ export async function getAutoBookingSettings(shopId: number): Promise<AutoBookin
   if (!shop) return null;
   
   const rawFeatures = shop.enabledFeatures;
-  const hasOilSticker = Array.isArray(rawFeatures) 
-    ? rawFeatures.includes("oil_sticker")
-    : (rawFeatures && typeof rawFeatures === "object" && (rawFeatures as any).oil_sticker === true);
+  const hasAutoBooking = Array.isArray(rawFeatures) 
+    ? rawFeatures.includes("auto_booking")
+    : (rawFeatures && typeof rawFeatures === "object" && (rawFeatures as any).auto_booking === true);
   const isPaid = shop.billingStatus === "active" || shop.plan === "professional" || shop.plan === "enterprise";
   
-  if (!isPaid || !hasOilSticker) return null;
+  if (!isPaid || !hasAutoBooking) return null;
   if (!shop.autoBooking?.enabled) return null;
   
   return shop.autoBooking as AutoBookingSettings;
