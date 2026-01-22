@@ -63,11 +63,6 @@ interface StickerConfig {
   showQRCode?: boolean;
   roundMileage?: boolean;
   usePredictiveDate?: boolean;
-  printerType?: "browser" | "dymo";
-  dymoPrinterSticker?: string;
-  dymoPrinterKeytag?: string;
-  dymoRollSticker?: "auto" | "left" | "right";
-  dymoRollKeytag?: "auto" | "left" | "right";
   fontStyles?: {
     phone?: FontStyle;
     tagline?: FontStyle;
@@ -174,11 +169,6 @@ export async function PUT(req: NextRequest) {
       "showQRCode",
       "roundMileage",
       "usePredictiveDate",
-      "printerType",
-      "dymoPrinterSticker",
-      "dymoPrinterKeytag",
-      "dymoRollSticker",
-      "dymoRollKeytag",
       "fontStyles",
       "colors",
       "defaultSize",

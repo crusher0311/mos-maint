@@ -87,15 +87,6 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Platform Admin Panel**: Internal MOS staff panel for platform statistics, shop management, user directory, and OpenAI API usage tracking.
 *   **Modular Feature Architecture**: Supports à la carte feature toggles.
 *   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration with Plan (maintenance recommendations), Failures (Common Failures Advisor), Lookup (job history search), Canned Jobs, and Sticker (oil change sticker printing), supporting push-to-RO functionality. The Sticker tab allows quick printing with auto-populated mileage from current RO context.
-*   **DYMO Direct Printing**:
-    *   Shops can choose between "Browser Print" (Chrome print dialog) or "DYMO Direct" printing in Settings > Sticker Designer
-    *   DYMO printing bypasses the Chrome print dialog for faster label printing workflow
-    *   Requires DYMO Connect software installed on the user's computer
-    *   Automatically falls back to browser printing if DYMO is unavailable
-    *   DYMO SDK utility: `lib/dymo-sdk.ts` - Loads external SDK, detects printers, generates label XML
-    *   Applies to both oil change stickers and keytags
-    *   **Printer Selection**: Shops with multiple DYMO printers (e.g., Twin Turbo with two rolls) can select which printer to use for stickers vs keytags separately
-    *   **Roll Selection**: Twin Turbo printers can select which roll (Left, Right, or Auto) to use for stickers vs keytags - uses DYMO SDK's `createLabelWriterPrintParamsXml` with `twinTurboRoll` parameter
 *   **Keytags Feature**: Prints customer/vehicle info on Dymo 30252 labels (1⅛" x 3½") for key identification while vehicles are in the shop.
     *   **Visual Keytag Designer**: Drag-and-drop layout editor for customizing keytag appearance
         *   Draggable/resizable text elements for each field (customer name, vehicle, VIN, mileage, RO#)

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, Printer, AlertCircle } from "lucide-react";
-import { printWithDymo, checkDymoEnvironment, STICKER_SIZE_DIMENSIONS, TwinTurboRollSelection } from "@/lib/dymo-sdk";
+import { X, Loader2, Printer } from "lucide-react";
 
 interface IntervalConfig {
   mileage: number;
@@ -55,10 +54,6 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   const [unit, setUnit] = useState<UnitType>("mi");
   const [roundMileage, setRoundMileage] = useState(true);
   const [intervals, setIntervals] = useState<IntervalsConfig>(DEFAULT_INTERVALS);
-  const [printerType, setPrinterType] = useState<"browser" | "dymo">("browser");
-  const [dymoPrinterSticker, setDymoPrinterSticker] = useState<string>("");
-  const [dymoRollSticker, setDymoRollSticker] = useState<TwinTurboRollSelection>("auto");
-  const [dymoStatus, setDymoStatus] = useState<"checking" | "available" | "unavailable" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,17 +72,6 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           setUnit(data.config.useKilometers ? "km" : "mi");
           setRoundMileage(data.config.roundMileage ?? true);
           setStickerSize(data.config.defaultSize ?? "2x2.5");
-          const configuredPrinterType = data.config.printerType ?? "browser";
-          setPrinterType(configuredPrinterType);
-          setDymoPrinterSticker(data.config.dymoPrinterSticker ?? "");
-          setDymoRollSticker(data.config.dymoRollSticker ?? "auto");
-          
-          if (configuredPrinterType === "dymo") {
-            setDymoStatus("checking");
-            const env = await checkDymoEnvironment();
-            setDymoStatus(env?.isWebServicePresent ? "available" : "unavailable");
-          }
-          
           if (data.config.intervals) {
             setIntervals({
               diesel: data.config.intervals.diesel ?? DEFAULT_INTERVALS.diesel,
@@ -162,55 +146,28 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       const blob = await res.blob();
       
       const reader = new FileReader();
-      reader.onloadend = async () => {
+      reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        if (printerType === "dymo" && dymoStatus === "available") {
-          const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS["2x2.5"];
-          const result = await printWithDymo(
-            dataUrl,
-            dimensions.widthInches,
-            dimensions.heightInches,
-            dymoPrinterSticker || undefined,
-            dymoRollSticker
-          );
-          
-          if (!result.success) {
-            setError(`DYMO print failed: ${result.error}. Falling back to browser print.`);
-            printWithBrowser(dataUrl);
-          } else {
-            onClose();
-          }
-          setGenerating(false);
+        // Define exact physical dimensions for each sticker size
+        const sizeDimensions: Record<string, { width: string; height: string }> = {
+          "1.5x2.25": { width: "1.5in", height: "2.25in" },
+          "2x2": { width: "2in", height: "2in" },
+          "2x2.5": { width: "2in", height: "2.5in" },
+          "2x3": { width: "2in", height: "3in" },
+          "2x3.5": { width: "2in", height: "3.5in" },
+        };
+        const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
+        
+        // Print from NEW WINDOW with !important everywhere to prevent overrides
+        const xOffset = "0in";
+        const yOffset = "0in"; // Start at 0, adjust if needed
+        
+        const printWindow = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
+        if (!printWindow) {
+          alert("Please allow popups to print stickers");
           return;
         }
-        
-        printWithBrowser(dataUrl);
-      };
-      reader.readAsDataURL(blob);
-    } catch (err) {
-      console.error("Failed to generate sticker:", err);
-      setError("Failed to generate sticker. Please try again.");
-    } finally {
-      setGenerating(false);
-    }
-  }
-  
-  function printWithBrowser(dataUrl: string) {
-    const sizeDimensions: Record<string, { width: string; height: string }> = {
-      "1.5x2.25": { width: "1.5in", height: "2.25in" },
-      "2x2": { width: "2in", height: "2in" },
-      "2x2.5": { width: "2in", height: "2.5in" },
-      "2x3": { width: "2in", height: "3in" },
-      "2x3.5": { width: "2in", height: "3.5in" },
-    };
-    const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
-    
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
-    if (!printWindow) {
-      alert("Please allow popups to print stickers");
-      return;
-    }
         
         printWindow.document.open();
         printWindow.document.write(`<!doctype html>
@@ -293,8 +250,17 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   </script>
 </body>
 </html>`);
-    printWindow.document.close();
-    onClose();
+        printWindow.document.close();
+      };
+      reader.readAsDataURL(blob);
+
+      onClose();
+    } catch (err) {
+      console.error("Failed to generate sticker:", err);
+      setError("Failed to generate sticker. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function formatMileageInput(value: string): string {
