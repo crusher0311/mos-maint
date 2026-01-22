@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
-import QRCode from "qrcode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,16 +99,6 @@ async function createHovercodeQR(
   }
 }
 
-async function fallbackQRGeneration(url: string, color: string = "#1976d2"): Promise<string> {
-  const qrDataUrl = await QRCode.toDataURL(url, {
-    width: 300,
-    margin: 2,
-    color: { dark: color, light: "#ffffff" },
-    errorCorrectionLevel: "H",
-  });
-  return qrDataUrl;
-}
-
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -170,10 +159,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallback to local generation
+    // Require a valid QR code - no fallback
     if (!qrDataUrl) {
-      console.log("[Regenerate QR] Using fallback local QR generation");
-      qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+      console.error("[Regenerate QR] Failed to get QR code from HoverCode");
+      return NextResponse.json({ error: "Failed to generate QR code from HoverCode" }, { status: 500 });
     }
 
     // Cache the QR code
