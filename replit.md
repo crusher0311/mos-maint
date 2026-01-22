@@ -85,7 +85,15 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Component Tracking & Declined Services**: Advisors track vehicle components and log declined services.
 *   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
 *   **Platform Admin Panel**: Internal MOS staff panel for platform statistics, shop management, user directory, and OpenAI API usage tracking.
-*   **Modular Feature Architecture**: Supports à la carte feature toggles.
+*   **Modular Feature Architecture**: 7 à la carte feature flags managed via platform admin:
+    1. **maintenance** - Maintenance Tracking (includes DVI insights, OEM schedules, recommendations)
+    2. **job_lookup** - Job Lookup (includes Smart Autocomplete, historical job search)
+    3. **common_failures** - Common Failures Advisor (predictive repairs by vehicle/mileage)
+    4. **oil_sticker** - Oil Sticker (visual designer, QR codes, printing)
+    5. **keytags** - Keytags (Dymo label printing for key identification)
+    6. **auto_booking** - Auto Booking (automated oil change appointment scheduling)
+    7. **part_xref** - Part Cross-Reference (cross-manufacturer part lookup)
+    Feature resolution: shop overrides > enterprise defaults > plan defaults. Files: `lib/features.ts`, `lib/featureResolver.ts`.
 *   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration with Plan (maintenance recommendations), Failures (Common Failures Advisor), Lookup (job history search), Canned Jobs, and Sticker (oil change sticker printing), supporting push-to-RO functionality. The Sticker tab allows quick printing with auto-populated mileage from current RO context.
 *   **Keytags Feature**: Prints customer/vehicle info on Dymo 30252 labels (1⅛" x 3½") for key identification while vehicles are in the shop.
     *   **Visual Keytag Designer**: Drag-and-drop layout editor for customizing keytag appearance
