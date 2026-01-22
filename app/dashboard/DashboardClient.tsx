@@ -6,15 +6,6 @@ import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, C
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
-import { 
-  isDymoConnectRunning, 
-  getDymoPrinters, 
-  printWithDymoConnect, 
-  KEYTAG_SIZE_DIMENSIONS,
-  STICKER_SIZE_DIMENSIONS,
-  TwinTurboRoll,
-  DymoPrinter
-} from "@/lib/dymo-connect";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -119,13 +110,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
   const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
-  const [keytagPrinterType, setKeytagPrinterType] = useState<"browser" | "dymo">("browser");
-  const [dymoPrinterKeytag, setDymoPrinterKeytag] = useState<string>("");
-  const [dymoRollKeytag, setDymoRollKeytag] = useState<TwinTurboRoll>("Auto");
-  const [stickerPrinterType, setStickerPrinterType] = useState<"browser" | "dymo">("browser");
-  const [dymoPrinterSticker, setDymoPrinterSticker] = useState<string>("");
-  const [dymoRollSticker, setDymoRollSticker] = useState<TwinTurboRoll>("Auto");
-  const [dymoAvailable, setDymoAvailable] = useState<boolean | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -228,19 +212,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     setCustomStickerModal(null);
   };
 
-  const printStickerWithBrowser = (dataUrl: string, stickerSize: string) => {
-    console.log("[Print Debug] Browser print fallback triggered, size:", stickerSize);
-    // Open the image directly in a new tab - Chrome can preview this for printing
-    // User presses Ctrl+P to print, or Ctrl+Shift+P for Windows System Print Dialog
-    const printWindow = window.open(dataUrl, '_blank');
-    if (!printWindow) {
-      console.error("[Print Debug] Popup was blocked!");
-      alert("Please allow popups to print the sticker, or change your printer settings to 'Browser' in Settings > Sticker Designer.");
-    } else {
-      console.log("[Print Debug] Print window opened successfully");
-    }
-  };
-
   const handleQuickPrintStickerWithValues = async (
     vin: string,
     currentMileage: number,
@@ -285,42 +256,61 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       const blob = await response.blob();
       const reader = new FileReader();
       
-      reader.onloadend = async () => {
+      reader.onloadend = () => {
         const dataUrl = reader.result as string;
+        const sizeMap: Record<string, { width: string; height: string }> = {
+          '2x2': { width: '2in', height: '2in' },
+          '2x2.5': { width: '2in', height: '2.5in' },
+          '2x3': { width: '2in', height: '3in' },
+          '2x3.5': { width: '2in', height: '3.5in' },
+        };
+        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
         
-        console.log("[DYMO Debug] At print time - stickerPrinterType:", stickerPrinterType);
-        console.log("[DYMO Debug] At print time - dymoAvailable:", dymoAvailable);
-        console.log("[DYMO Debug] At print time - dymoPrinterSticker:", dymoPrinterSticker);
-        console.log("[DYMO Debug] At print time - dymoRollSticker:", dymoRollSticker);
+        const existingFrame = document.getElementById('sticker-print-frame');
+        if (existingFrame) existingFrame.remove();
         
-        // Check if DYMO is enabled and available
-        if (stickerPrinterType === "dymo" && dymoAvailable && dymoPrinterSticker) {
-          const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS['2x2'];
-          const result = await printWithDymoConnect(
-            dataUrl,
-            dimensions.widthInches,
-            dimensions.heightInches,
-            dymoPrinterSticker,
-            dymoRollSticker
-          );
+        const iframe = document.createElement('iframe');
+        iframe.id = 'sticker-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body><img src="${dataUrl}" /></body>
+            </html>
+          `);
+          iframeDoc.close();
           
-          if (!result.success) {
-            console.error("DYMO print failed, falling back to browser:", result.error);
-            printStickerWithBrowser(dataUrl, stickerSize);
-          }
-          setPrintingSticker(null);
-          return;
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }, 250);
         }
-        
-        // Browser printing fallback
-        printStickerWithBrowser(dataUrl, stickerSize);
-        setPrintingSticker(null);
       };
       
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print sticker:', error);
       alert(error instanceof Error ? error.message : 'Failed to generate sticker.');
+    } finally {
       setPrintingSticker(null);
     }
   };
@@ -353,75 +343,52 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
       const blob = await res.blob();
       const reader = new FileReader();
-      reader.onloadend = async () => {
+      reader.onloadend = () => {
         const dataUrl = reader.result as string;
-        
-        if (keytagPrinterType === "dymo" && dymoAvailable && dymoPrinterKeytag) {
-          const dimensions = KEYTAG_SIZE_DIMENSIONS["dymo30252"];
-          const result = await printWithDymoConnect(
-            dataUrl,
-            dimensions.widthInches,
-            dimensions.heightInches,
-            dymoPrinterKeytag,
-            dymoRollKeytag
-          );
-          
-          if (!result.success) {
-            console.error("DYMO print failed, falling back to browser:", result.error);
-            printKeytagWithBrowser(dataUrl);
-          }
-          setPrintingKeytag(null);
-          return;
+        const printFrame = document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.top = '-9999px';
+        printFrame.style.left = '-9999px';
+        document.body.appendChild(printFrame);
+
+        const iframeDoc = printFrame.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Keytag</title>
+              <style>
+                @page { size: 3.5in 1.125in; margin: 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body>
+              <img src="${dataUrl}" />
+            </body>
+            </html>
+          `);
+          iframeDoc.close();
+
+          printFrame.onload = () => {
+            setTimeout(() => {
+              printFrame.contentWindow?.print();
+              setTimeout(() => {
+                document.body.removeChild(printFrame);
+              }, 1000);
+            }, 100);
+          };
         }
-        
-        printKeytagWithBrowser(dataUrl);
-        setPrintingKeytag(null);
       };
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print keytag:', error);
       alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
+    } finally {
       setPrintingKeytag(null);
-    }
-  };
-  
-  const printKeytagWithBrowser = (dataUrl: string) => {
-    const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'fixed';
-    printFrame.style.top = '-9999px';
-    printFrame.style.left = '-9999px';
-    document.body.appendChild(printFrame);
-
-    const iframeDoc = printFrame.contentWindow?.document;
-    if (iframeDoc) {
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Print Keytag</title>
-          <style>
-            @page { size: 3.5in 1.125in; margin: 0; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
-            img { display: block; width: 100%; height: 100%; }
-          </style>
-        </head>
-        <body>
-          <img src="${dataUrl}" />
-        </body>
-        </html>
-      `);
-      iframeDoc.close();
-
-      printFrame.onload = () => {
-        setTimeout(() => {
-          printFrame.contentWindow?.print();
-          setTimeout(() => {
-            document.body.removeChild(printFrame);
-          }, 1000);
-        }, 100);
-      };
     }
   };
 
@@ -539,37 +506,55 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       const blob = await response.blob();
       const reader = new FileReader();
       
-      reader.onloadend = async () => {
+      reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        console.log("[DYMO Debug] handleQuickPrintSticker - stickerPrinterType:", stickerPrinterType);
-        console.log("[DYMO Debug] handleQuickPrintSticker - dymoAvailable:", dymoAvailable);
+        const sizeMap: Record<string, { width: string; height: string }> = {
+          '2x2': { width: '2in', height: '2in' },
+          '2x2.5': { width: '2in', height: '2.5in' },
+          '2x3': { width: '2in', height: '3in' },
+          '2x3.5': { width: '2in', height: '3.5in' },
+        };
+        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
         
-        // Check if DYMO is enabled and available
-        if (stickerPrinterType === "dymo" && dymoAvailable && dymoPrinterSticker) {
-          const dimensions = STICKER_SIZE_DIMENSIONS[stickerSize] || STICKER_SIZE_DIMENSIONS['2x2'];
-          console.log("[DYMO Debug] Attempting DYMO print with dimensions:", dimensions);
-          const result = await printWithDymoConnect(
-            dataUrl,
-            dimensions.widthInches,
-            dimensions.heightInches,
-            dymoPrinterSticker,
-            dymoRollSticker
-          );
+        const existingFrame = document.getElementById('sticker-print-frame');
+        if (existingFrame) existingFrame.remove();
+        
+        const iframe = document.createElement('iframe');
+        iframe.id = 'sticker-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
+              </style>
+            </head>
+            <body><img src="${dataUrl}" /></body>
+            </html>
+          `);
+          iframeDoc.close();
           
-          if (!result.success) {
-            console.error("DYMO print failed, falling back to browser:", result.error);
-            printStickerWithBrowser(dataUrl, stickerSize);
-          } else {
-            console.log("[DYMO Debug] DYMO print succeeded");
-          }
-          setPrintingSticker(null);
-          return;
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          }, 250);
         }
-        
-        // Browser printing fallback
-        printStickerWithBrowser(dataUrl, stickerSize);
-        setPrintingSticker(null);
       };
       
       reader.readAsDataURL(blob);
@@ -666,43 +651,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // Always fetch fresh data on mount to ensure SSR and client are in sync
     // This prevents stale data from showing after browser refresh
     loadData(1, "", false);
-    
-    // Fetch printer settings for stickers and keytags
-    async function fetchPrinterSettings() {
-      try {
-        const res = await fetch("/api/sticker/settings");
-        if (res.ok) {
-          const data = await res.json();
-          const printerType = data.config?.printerType ?? "browser";
-          
-          console.log("[DYMO Debug] Printer type from settings:", printerType);
-          console.log("[DYMO Debug] Sticker printer:", data.config?.dymoPrinterSticker);
-          console.log("[DYMO Debug] Sticker roll:", data.config?.dymoRollSticker);
-          
-          // Sticker DYMO settings
-          setStickerPrinterType(printerType);
-          setDymoPrinterSticker(data.config?.dymoPrinterSticker ?? "");
-          setDymoRollSticker(data.config?.dymoRollSticker ?? "auto");
-          
-          // Keytag DYMO settings (uses same printerType but separate printer/roll)
-          setKeytagPrinterType(printerType);
-          setDymoPrinterKeytag(data.config?.dymoPrinterKeytag ?? "");
-          setDymoRollKeytag(data.config?.dymoRollKeytag ?? "Auto");
-          
-          if (printerType === "dymo") {
-            console.log("[DYMO Debug] Checking DYMO Connect...");
-            const isConnected = await isDymoConnectRunning();
-            console.log("[DYMO Debug] DYMO Connect running:", isConnected);
-            setDymoAvailable(isConnected);
-          } else {
-            console.log("[DYMO Debug] Printer type is not 'dymo', skipping DYMO check");
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch printer settings:", err);
-      }
-    }
-    fetchPrinterSettings();
     
     if (data.rows?.length > 0) {
       const vinsToPrefeetch = data.rows
