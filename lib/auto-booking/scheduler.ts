@@ -324,12 +324,67 @@ export interface StickerBookingData {
   roNumber?: string;
 }
 
+export async function findAvailableSlotFromDate(
+  shopId: number,
+  startDate: Date,
+  settings: AutoBookingSettings,
+  maxAttempts: number = 14
+): Promise<ScheduleResult> {
+  const attempts: BookingSlot[] = [];
+  let currentDate = new Date(startDate);
+  
+  for (let i = 0; i < maxAttempts; i++) {
+    const dateStr = formatDate(currentDate);
+    const time = getPreferredTime(settings);
+    const datetime = new Date(`${dateStr}T${time}:00`);
+    
+    const slot: BookingSlot = {
+      date: dateStr,
+      time,
+      datetime,
+      available: true,
+    };
+    
+    if (isWeekend(currentDate, settings)) {
+      slot.available = false;
+      slot.reason = getDayOfWeek(currentDate) === 6 ? "Saturday blocked" : "Sunday blocked";
+    } else if (isHoliday(dateStr, settings)) {
+      slot.available = false;
+      slot.reason = "Holiday blocked";
+    } else {
+      const existingCount = await getExistingBookingsCount(shopId, dateStr);
+      if (existingCount >= settings.maxBookingsPerDay) {
+        slot.available = false;
+        slot.reason = `Max bookings reached (${existingCount}/${settings.maxBookingsPerDay})`;
+      }
+    }
+    
+    attempts.push(slot);
+    
+    if (slot.available) {
+      return {
+        success: true,
+        slot,
+        attempts,
+      };
+    }
+    
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
+  return {
+    success: false,
+    error: `No available slot found within ${maxAttempts} days`,
+    attempts,
+  };
+}
+
 export async function triggerAutoBookingFromSticker(
   shopId: number,
   nextServiceDate: string,
   nextServiceMileage: number,
   data: StickerBookingData
-): Promise<{ queued: boolean; bookingId?: string; status?: string; error?: string }> {
+): Promise<{ queued: boolean; bookingId?: string; status?: string; error?: string; scheduledDate?: string }> {
   try {
     const settings = await getAutoBookingSettings(shopId);
     
@@ -341,16 +396,15 @@ export async function triggerAutoBookingFromSticker(
       return { queued: false, error: "Customer info required for booking" };
     }
     
-    const targetDate = new Date(nextServiceDate);
-    const slotResult = await findAvailableSlot(shopId, targetDate, settings);
+    // Use the sticker's nextServiceDate directly as the target booking date
+    const stickerDate = new Date(nextServiceDate);
+    
+    // Find available slot starting from the sticker date (no leadTimeDays shift)
+    const slotResult = await findAvailableSlotFromDate(shopId, stickerDate, settings);
     
     if (!slotResult.success || !slotResult.slot) {
-      return { queued: false, error: slotResult.error || "No available slot" };
+      return { queued: false, error: slotResult.error || "No available slot near service date" };
     }
-    
-    const vehicleDesc = [data.vehicleYear, data.vehicleMake, data.vehicleModel]
-      .filter(Boolean)
-      .join(" ");
     
     const result = await queueBooking(shopId, settings, {
       customerId: data.customerId,
@@ -370,11 +424,12 @@ export async function triggerAutoBookingFromSticker(
     });
     
     if (result.success) {
-      console.log(`[Auto Booking] Queued booking for shop ${shopId}: ${result.bookingId}, status=${settings.confirmationMode === "auto" ? "confirmed" : "pending"}`);
+      console.log(`[Auto Booking] Queued booking for shop ${shopId}: ${result.bookingId}, date=${slotResult.slot.date}, status=${settings.confirmationMode === "auto" ? "confirmed" : "pending"}`);
       return { 
         queued: true, 
         bookingId: result.bookingId,
-        status: settings.confirmationMode === "auto" ? "confirmed" : "pending"
+        status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
+        scheduledDate: slotResult.slot.date,
       };
     }
     
