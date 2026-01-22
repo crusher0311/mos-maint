@@ -10,142 +10,26 @@ I prefer simple language and clear explanations. I want iterative development, w
 The application uses Next.js 14.2.5 with React 18, Next.js API Routes, MongoDB Atlas, and Tailwind CSS, built with TypeScript/JavaScript.
 
 **UI/UX Decisions:**
-The design features a modern SaaS-style interface with a dark sidebar, light content areas, card-based layouts, and blue as the accent color. It includes a unified integrations page, a tabbed vehicle detail page, and visual data source badges for recommendations. The "My Oil Sticker" dashboard UI allows live QR code previews, color customization, and sticker downloads. A "Quick Sticker" feature provides rapid sticker printing with unit selection and service interval presets.
+The design features a modern SaaS-style interface with a dark sidebar, light content areas, card-based layouts, and blue as the accent color. It includes a unified integrations page, a tabbed vehicle detail page, and visual data source badges for recommendations. The "My Oil Sticker" dashboard UI allows live QR code previews, color customization, and sticker downloads. A "Quick Sticker" feature provides rapid sticker printing with unit selection and service interval presets. Keytag printing features a visual designer with drag-and-drop layout editing, element styling, and live preview.
 
 **Technical Implementations:**
-*   **Data Caching**: MongoDB Atlas caches third-party API responses with defined TTLs.
-*   **Webhook Integration**: Utilizes webhooks for real-time updates.
-*   **Canned Jobs**: Syncs canned jobs from Protractor and Tekmetric.
-*   **Shop Maintenance Intervals**: Allows shops to define custom schedules.
+*   **Data Management**: MongoDB Atlas for caching third-party API responses, state tracking, and normalized data storage.
+*   **Integration Mechanisms**: Webhooks for real-time updates and an incremental sync system for shop management systems (e.g., Tekmetric, Protractor) with robust error handling, OAuth token management, and rate limiting.
 *   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based setup.
-*   **VIN-Based Billing**: Tracks "active" vehicles for billing, with trial limits and platform admin controls.
-*   **Stripe Billing Integration**: Manages checkout sessions, webhook processing, and a billing portal, including logging and idempotency.
-*   **Admin Audit Logging**: Comprehensive logging of admin actions (impersonation, unlocks, settings changes) with IP/user-agent tracking.
-*   **Sync Worker Health Monitoring**: Adaptive backoff and health metrics.
-*   **Chrome Extension Version API**: Enforces minimum client-side extension versions.
-*   **E2E Testing with Auth Bypass**: Automated testing infrastructure.
-*   **Distance Unit Preferences**: Shops can choose between miles or kilometers.
-*   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems (e.g., Protractor, Tekmetric).
-*   **Normalized Data Layer**: SMS-agnostic data schema with provenance tracking, 7 normalized collections, bidirectional adapters, dual-write ingestion, content hash-based change detection, and a normalized-only query API with enterprise support and caching. Raw API payloads are preserved.
-*   **My Oil Sticker Integration**:
-    *   **Automatic QR Provisioning**: New shops automatically receive a HoverCode dynamic QR code upon creation via `lib/hovercode.ts`.
-    *   QR Code Generation using HoverCode API for dynamic, tracked QR codes.
-    *   Sticker image generation using `node-html-to-image`.
-    *   API endpoints for dynamic QR redirects, styled QR code generation, sticker PNG generation, and sticker configuration management.
-    *   Configurable sticker schema including logo, phone, taglines, service labels, QR visibility, mileage rounding, predictive date, font styles, colors, default size, appointment URL, unit preference, HoverCode ID, and per-oil-type intervals.
-    *   Predictive date calculation uses CARFAX `milesPerDay` and "shortest interval wins" logic.
-    *   Logo upload flow with presigned URLs and proxy serving.
-    *   Chrome Extension API for fetching sticker config and generating stickers as base64 data URLs for printing.
-    *   Sticker generation tracking for billing with monthly/total counts in platform-admin.
-*   **Tekmetric Sync**:
-    *   Initial sync triggers automatically when shop completes Tekmetric setup.
-    *   Supports both `tekmetric.shopId` and legacy `tekmetricShopId` configurations.
-    *   Shop ID validation on signup prevents invalid configurations.
-    *   Sync via webhooks (real-time) or incremental sync worker (60-second cycles).
-    *   **OAuth Token Management** (`lib/tekmetric-auth.ts`):
-        *   Automatic token refresh using client credentials flow (TEKMETRIC_CLIENT_ID, TEKMETRIC_CLIENT_SECRET).
-        *   Token cached in memory and persisted to MongoDB (`tekmetric_tokens` collection).
-        *   Auto-refresh on 401 errors with single retry.
-        *   Tokens expire after 55 minutes (with 5-minute refresh buffer).
-    *   **Incremental Sync System** (`lib/tekmetric-incremental-sync.ts`):
-        *   Per-shop sync state tracking (lastSyncCursor, overflowQueue, lastClosedSweepAt).
-        *   Uses `updatedDateStart` filter to fetch only recently modified ROs.
-        *   Vehicle/customer caching with 24-hour TTL (`tekmetric_vehicle_cache`, `tekmetric_customer_cache` collections).
-        *   Concurrent batch processing (5 shops per batch) with small stagger delays.
-        *   Overflow page queue (up to 20 pages) for handling large data bursts.
-        *   Terminal status sweep deferred to every 15 minutes when queue is empty.
-        *   Auth failure circuit breaker: auto-pauses shop sync for 1 hour after 3 consecutive 401 errors.
-        *   Targets 50-150 API requests/min (down from 1000-2000 req/min with full sync).
-*   **Unified API Usage Monitoring** (Platform Admin):
-    *   Tracks all external API calls: Tekmetric, CARFAX, DataOne, OpenAI, Protractor, AutoFlow, HoverCode.
-    *   Real-time usage gauges: requests/min, requests/sec, usage %, latency.
-    *   Automatic throttling at 85% capacity, circuit breaker at 95% (Tekmetric/Protractor).
-    *   Dashboard shows top shops by usage, error rates, hourly trends per provider.
-    *   MongoDB collection `api_usage` with 7-day TTL auto-cleanup.
-    *   API endpoint: `/api/platform-admin/api-usage` (all providers) or `?provider=tekmetric` for specific.
-*   **Protractor Rate Limiting**:
-    *   Two-tier throttling: local in-memory (5 req/s) + shared MongoDB (200 req/min).
-    *   Shared limiter queries `api_usage` collection for cross-worker coordination.
-    *   Adaptive delays with exponential backoff when approaching limits.
-    *   Retry logic for 429 (rate limit) and 5xx errors with jitter.
-    *   `sourceWorker` field tracks requests from 'render' vs 'replit' workers.
-    *   `DISABLE_PROTRACTOR_SYNC=true` env var disables Protractor sync on specific deployments.
-    *   `DISABLE_TEKMETRIC_SYNC=true` env var disables Tekmetric sync on specific deployments.
-    *   **v1.8.0 Enhancements**:
-        *   Integration logos (OpenAI, Tekmetric, Protractor, CARFAX, DataOne, AutoFlow, HoverCode) displayed on cards.
-        *   Drag-and-drop card reordering with localStorage persistence.
-        *   Enhanced tooltips explaining all metrics: latency, errors, rate limits, usage thresholds.
-        *   24h Usage Trend chart with color-coded bars (purple=OK, red=errors) and legend.
+*   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration for checkout and billing portal, and feature flags for modular functionality.
+*   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring across all external services, and a Chrome Extension Version API.
+*   **Sticker & Keytag Generation**: QR code generation using HoverCode API, sticker image generation via `node-html-to-image`, and Dymo label printing for keytags with a visual designer.
+*   **AI & Recommendations**: AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor leveraging shop data and AI.
+*   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems, enabling a normalized, SMS-agnostic data layer with provenance tracking and dual-write ingestion.
+*   **Auto Booking**: A feature-gated system for automated oil change appointment scheduling, including lead time configuration, holiday/business hour management, and a review queue, with a trigger from sticker printing.
+*   **Chrome Extension**: A side panel extension integrating with Tekmetric for maintenance recommendations, common failures, job history search, canned jobs, and oil change sticker printing.
 
 **Feature Specifications:**
-*   **Vehicle Analysis**: AI-powered maintenance recommendations based on vehicle history.
-*   **Customer Dashboard**: Tracks customers and their vehicles.
-*   **Multi-Shop Management**: User authentication with role-based access for multiple shops.
-*   **Maintenance Planning**: Intelligent queue-based prefetching, configurable "Due Soon" thresholds, and display of various recommendation sources.
-*   **Component Tracking & Declined Services**: Advisors track vehicle components and log declined services.
-*   **Enterprise Features**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
-*   **Platform Admin Panel**: Internal MOS staff panel for platform statistics, shop management, user directory, and OpenAI API usage tracking.
-*   **Modular Feature Architecture**: 7 à la carte feature flags managed via platform admin:
-    1. **maintenance** - Maintenance Tracking (includes DVI insights, OEM schedules, recommendations)
-    2. **job_lookup** - Job Lookup (includes Smart Autocomplete, historical job search)
-    3. **common_failures** - Common Failures Advisor (predictive repairs by vehicle/mileage)
-    4. **oil_sticker** - Oil Sticker (visual designer, QR codes, printing)
-    5. **keytags** - Keytags (Dymo label printing for key identification)
-    6. **auto_booking** - Auto Booking (automated oil change appointment scheduling)
-    7. **part_xref** - Part Cross-Reference (cross-manufacturer part lookup)
-    Feature resolution: shop overrides > enterprise defaults > plan defaults. Files: `lib/features.ts`, `lib/featureResolver.ts`.
-*   **MOS Tools Chrome Extension**: A side panel extension for Tekmetric integration with Plan (maintenance recommendations), Failures (Common Failures Advisor), Lookup (job history search), Canned Jobs, and Sticker (oil change sticker printing), supporting push-to-RO functionality. The Sticker tab allows quick printing with auto-populated mileage from current RO context.
-*   **Keytags Feature**: Prints customer/vehicle info on Dymo 30252 labels (1⅛" x 3½") for key identification while vehicles are in the shop.
-    *   **Visual Keytag Designer**: Drag-and-drop layout editor for customizing keytag appearance
-        *   Draggable/resizable text elements for each field (customer name, vehicle, VIN, mileage, RO#)
-        *   Alignment guides that appear when elements align with each other or canvas edges
-        *   Snap-to-grid with configurable grid size (5px, 10px, 20px)
-        *   Undo/redo with keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z)
-        *   Per-element styling: font size (8-36px), bold, italic, text alignment
-        *   Show/hide label prefix option (e.g., "VIN:" vs just the value)
-        *   Color customization for text and background
-        *   Live preview canvas matching Dymo 30252 proportions
-        *   Element bounds validation to prevent overflow
-    *   Data Model: `lib/keytag-designer-types.ts` - DesignerLayout with element positions, sizes, styles
-    *   Components: `components/keytag-designer/` - KeytagDesigner, DesignerCanvas, ElementPanel, ToolbarPanel
-    *   Settings API: `app/api/keytag/settings/route.ts` - GET/POST for shop keytag configuration (supports designerLayout)
-    *   Generation API: `app/api/keytag/generate/route.ts` - Renders elements at custom positions from designer layout
-    *   Extension API: `app/api/extension/keytag/route.ts` - Token-authenticated API for Chrome extension
-    *   Settings UI: `app/dashboard/settings/keytags/page.tsx` - Visual designer interface
-    *   Display fields: customer name, vehicle info, VIN, RO number, mileage
-    *   Available under Settings > Preferences > Keytags
-*   **Job Lookup with Enterprise Support**: AI-scored job search across enterprise locations.
-*   **Smart Job Autocomplete**: As-you-type suggestions with historical labor hours and pricing.
-*   **Common Failures Advisor**: Predicts common repairs by vehicle/powertrain/mileage using a "shop data first, AI fallback" approach, utilizing pre-computed `shop_repair_patterns` and enterprise aggregation.
-
-## Work In Progress (Paused)
-*   **Auto Booking Feature** (Tasks 1-4 complete, 5-6 pending):
-    *   Settings API: `app/api/settings/auto-booking/route.ts` - Feature-gated for paid plans + Oil Sticker
-    *   Settings UI: `app/dashboard/settings/auto-booking/page.tsx` - Lead time, holidays, business hours, confirmation mode
-    *   Scheduler: `lib/auto-booking/scheduler.ts` - Finds slots respecting preferences
-    *   Queue UI: `app/dashboard/settings/auto-booking/queue/page.tsx` - Review and confirm bookings
-    *   **Next steps**: Integrate with SMS calendar (Tekmetric/Protractor) for real-time availability, connect to sticker generation
-
-## Future Ideas (Saved for Later)
-*   **Districts Layer**: Add organizational groupings between enterprise and shops for large organizations. Would enable district managers, regional filtering in job history/analytics, and district-level repair pattern aggregations. Additive approach recommended (keep current enterprise model, add districts on top).
-
-## Planned Performance Optimizations (Page Load Speed)
-*   **High Priority**:
-    *   Lazy-load heavy components: sticker/QR generation, Uppy file upload, framer-motion animations (load only when needed)
-    *   Add MongoDB compound indexes: `{shopId, status}`, `{shopId, vin}`, `{enterpriseId, createdAt}`
-    *   Server-side data loading: render pages with data pre-loaded to eliminate loading spinners
-*   **Medium Priority**:
-    *   Combine dashboard API calls into batched requests
-    *   Add caching: stale-while-revalidate for vehicle/customer lists, cache feature flags
-    *   Use Next.js Image component for hero images, preload primary fonts
-*   **Observability**: Add Next.js bundle analyzer, track real-user metrics
-
-## Deployment
-To deploy to Render (QA environment):
-```bash
-git push --force
-```
-This pushes the current `qa` branch to trigger a Render deploy.
+*   **Core Management**: Vehicle analysis, customer dashboard, multi-shop management.
+*   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services.
+*   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
+*   **Modular Features**: A la carte feature flags (maintenance, job lookup, common failures, oil sticker, keytags, auto booking, part cross-reference) managed via platform admin.
+*   **User Preferences**: Shops can choose distance units (miles/kilometers).
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
