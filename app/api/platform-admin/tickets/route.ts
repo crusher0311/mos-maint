@@ -19,6 +19,27 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb();
 
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const autoCloseResult = await db.collection("support_tickets").updateMany(
+      {
+        status: "resolved",
+        resolvedAt: { $lt: twentyFourHoursAgo },
+        updatedAt: { $lt: twentyFourHoursAgo }
+      },
+      {
+        $set: {
+          status: "closed",
+          closedAt: new Date(),
+          autoClosedAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    if (autoCloseResult.modifiedCount > 0) {
+      console.log(`Auto-closed ${autoCloseResult.modifiedCount} resolved tickets after 24h inactivity`);
+    }
+
     const query: Record<string, any> = {};
 
     if (status && status !== "all") {
