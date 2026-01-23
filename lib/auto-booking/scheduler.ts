@@ -348,8 +348,11 @@ async function pushAppointmentToSMS(
   });
   
   // Combine date and time to create appointment datetime
-  const appointmentDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
-  const endDateTime = new Date(appointmentDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+  // Format as local time string (no timezone) - Tekmetric expects local shop time
+  const startTimeStr = `${booking.scheduledDate}T${booking.scheduledTime}:00`;
+  const [hours, minutes] = booking.scheduledTime.split(':').map(Number);
+  const endHours = hours + 1; // 1 hour duration
+  const endTimeStr = `${booking.scheduledDate}T${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
   
   // Try Tekmetric first if available
   if (hasTekmetric) {
@@ -378,8 +381,8 @@ async function pushAppointmentToSMS(
           shopId: Number(shop.tekmetric.shopId),
           customerId: tekmetricCustomerId,
           vehicleId: tekmetricVehicleId,
-          startTime: appointmentDateTime.toISOString(),
-          endTime: endDateTime.toISOString(),
+          startTime: startTimeStr,
+          endTime: endTimeStr,
           title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           note: `Auto-booked via MOS Oil Sticker. Service: ${booking.serviceType}`,
         });
@@ -416,7 +419,7 @@ async function pushAppointmentToSMS(
         shopId: booking.shopId,
         contactId: protractorContactId,
         vehicleId: protractorVehicleId,
-        scheduledTime: appointmentDateTime.toISOString(),
+        scheduledTime: startTimeStr,
         duration: 60,
         notes: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}. Auto-booked via MOS.`,
       });
