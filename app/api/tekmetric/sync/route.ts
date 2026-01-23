@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     const shopId = shop.tekmetric.shopId;
+    console.log(`[Tekmetric Sync] Starting sync for shop ${userShopId}, Tekmetric shopId: ${shopId}`);
+    
     const stats = {
       repairOrdersFound: 0,
       vehiclesImported: 0,
@@ -183,6 +185,11 @@ export async function POST(request: NextRequest) {
       { shopId: { $in: [userShopId, Number(userShopId)] } },
       { $set: { "tekmetric.lastSync": new Date() } }
     );
+
+    console.log(`[Tekmetric Sync] Complete - ROs: ${stats.repairOrdersFound}, Imported: ${stats.vehiclesImported}, Updated: ${stats.vehiclesUpdated}, Errors: ${stats.errors.length}`);
+    if (stats.errors.length > 0) {
+      console.log(`[Tekmetric Sync] Errors:`, stats.errors.slice(0, 5));
+    }
 
     return NextResponse.json({
       success: true,
