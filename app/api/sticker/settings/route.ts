@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
         serviceLabelColor: "#666666",
         serviceValueColor: "#cc0000",
       },
-      defaultSize: "2x2.5",
+      defaultSize: "2x2",
       useKilometers: false,
     };
 

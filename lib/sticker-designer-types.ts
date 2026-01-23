@@ -103,7 +103,7 @@ export const STICKER_SIZES: StickerSizeConfig[] = [
   },
 ];
 
-export const DEFAULT_STICKER_SIZE = '2x2.5';
+export const DEFAULT_STICKER_SIZE = '2x2';
 
 export function getStickerSize(sizeValue: string): StickerSizeConfig {
   return STICKER_SIZES.find(s => s.value === sizeValue) || STICKER_SIZES[2];
@@ -111,6 +111,13 @@ export function getStickerSize(sizeValue: string): StickerSizeConfig {
 
 export function createDefaultElements(size: StickerSizeConfig): StickerElement[] {
   const { canvasWidth, canvasHeight } = size;
+  
+  // For 2x2 size, use the optimized layout with QR on left
+  if (size.value === '2x2') {
+    return create2x2DefaultElements();
+  }
+  
+  // For other sizes, use centered layout
   const centerX = canvasWidth / 2;
   
   return [
@@ -157,7 +164,7 @@ export function createDefaultElements(size: StickerSizeConfig): StickerElement[]
       fontWeight: 'normal',
       fontStyle: 'italic',
       textAlign: 'center',
-      color: '#333333',
+      color: '#000000',
       visible: true,
     },
     {
@@ -172,7 +179,7 @@ export function createDefaultElements(size: StickerSizeConfig): StickerElement[]
       fontWeight: 'normal',
       fontStyle: 'italic',
       textAlign: 'center',
-      color: '#333333',
+      color: '#000000',
       visible: false,
     },
     {
@@ -187,9 +194,9 @@ export function createDefaultElements(size: StickerSizeConfig): StickerElement[]
       fontWeight: 'normal',
       fontStyle: 'normal',
       textAlign: 'center',
-      color: '#666666',
+      color: '#000000',
       visible: true,
-      content: 'Next Oil Service',
+      content: 'Next Service Due',
     },
     {
       id: 'serviceDate',
@@ -225,15 +232,143 @@ export function createDefaultElements(size: StickerSizeConfig): StickerElement[]
       id: 'qrCode',
       type: 'qrCode',
       label: 'QR Code',
-      x: centerX - 35,
-      y: canvasHeight - 80,
-      width: 70,
-      height: 70,
+      x: centerX - 40,
+      y: canvasHeight - 90,
+      width: 80,
+      height: 80,
       fontSize: 12,
       fontWeight: 'normal',
       fontStyle: 'normal',
       textAlign: 'center',
       color: '#000000',
+      visible: true,
+    },
+  ];
+}
+
+// 2x2 default template: Logo/Phone/Tagline top, QR left, Service info right
+function create2x2DefaultElements(): StickerElement[] {
+  return [
+    {
+      id: 'logo',
+      type: 'logo',
+      label: 'Logo',
+      x: 5,
+      y: 5,
+      width: 55,
+      height: 55,
+      fontSize: 12,
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      textAlign: 'center',
+      color: '#000000',
+      visible: true,
+      imageFit: 'contain',
+    },
+    {
+      id: 'phone',
+      type: 'phone',
+      label: 'Phone',
+      x: 65,
+      y: 35,
+      width: 130,
+      height: 18,
+      fontSize: 14,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      textAlign: 'left',
+      color: '#000000',
+      visible: true,
+    },
+    {
+      id: 'tagline',
+      type: 'tagline',
+      label: 'Tagline',
+      x: 65,
+      y: 53,
+      width: 130,
+      height: 16,
+      fontSize: 11,
+      fontWeight: 'normal',
+      fontStyle: 'italic',
+      textAlign: 'left',
+      color: '#000000',
+      visible: true,
+    },
+    {
+      id: 'taglineLine2',
+      type: 'taglineLine2',
+      label: 'Tagline Line 2',
+      x: 65,
+      y: 68,
+      width: 130,
+      height: 16,
+      fontSize: 11,
+      fontWeight: 'normal',
+      fontStyle: 'italic',
+      textAlign: 'left',
+      color: '#000000',
+      visible: false,
+    },
+    {
+      id: 'qrCode',
+      type: 'qrCode',
+      label: 'QR Code',
+      x: 5,
+      y: 115,
+      width: 80,
+      height: 80,
+      fontSize: 12,
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      textAlign: 'center',
+      color: '#000000',
+      visible: true,
+    },
+    {
+      id: 'serviceLabel',
+      type: 'serviceLabel',
+      label: 'Service Label',
+      x: 90,
+      y: 115,
+      width: 105,
+      height: 18,
+      fontSize: 12,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      textAlign: 'left',
+      color: '#000000',
+      visible: true,
+      content: 'Next Service Due',
+    },
+    {
+      id: 'serviceDate',
+      type: 'serviceDate',
+      label: 'Service Date',
+      x: 90,
+      y: 138,
+      width: 105,
+      height: 24,
+      fontSize: 16,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      textAlign: 'left',
+      color: '#cc0000',
+      visible: true,
+    },
+    {
+      id: 'serviceMileage',
+      type: 'serviceMileage',
+      label: 'Service Mileage',
+      x: 90,
+      y: 165,
+      width: 105,
+      height: 24,
+      fontSize: 16,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      textAlign: 'left',
+      color: '#cc0000',
       visible: true,
     },
   ];
