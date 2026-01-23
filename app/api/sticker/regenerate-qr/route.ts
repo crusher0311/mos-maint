@@ -137,8 +137,10 @@ export async function POST(req: NextRequest) {
 
     let qrDataUrl: string | null = null;
 
-    // Use the appointment logo from public folder
-    const logoUrl = "https://mos-maintenance-mvp.replit.app/appointment-logo.png";
+    // Use the appointment logo via API route (publicly accessible)
+    // Use the dev domain which serves the current development code
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
+    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
     console.log("[Regenerate QR] Using logo URL:", logoUrl);
 
     // Always create a new HoverCode QR with proper styling (dynamic + Squares pattern)
