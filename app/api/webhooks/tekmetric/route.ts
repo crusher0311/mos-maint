@@ -120,19 +120,20 @@ export async function POST(req: NextRequest) {
         
         if (existingWO) {
           // Update existing work order
-          await db.collection("tekmetric_work_orders").updateOne(
+          const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
+          const result = await db.collection("tekmetric_work_orders").updateOne(
             { workOrderId: String(roId) },
             { 
               $set: { 
                 status: statusName,
                 statusCode: statusCode,
-                label: repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null,
+                label: newLabel,
                 labelColor: repairOrder.color || null,
                 updatedAt: new Date()
               }
             }
           );
-          console.log(`[Tekmetric Webhook] Updated RO #${roNumber} status to ${statusName}`);
+          console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
         } else {
           // New work order - fetch vehicle and customer details, then create
           const shop = await db.collection("shops").findOne({
