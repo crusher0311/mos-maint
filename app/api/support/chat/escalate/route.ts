@@ -35,10 +35,18 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}`;
 
+  let shopName = null;
+  if (session.shopId) {
+    const shop = await db.collection("shops").findOne({ id: session.shopId });
+    shopName = shop?.name || null;
+  }
+
   const result = await db.collection("support_tickets").insertOne({
     ticketNumber,
     userEmail: session.email,
+    userName: session.email.split("@")[0],
     shopId: session.shopId,
+    shopName,
     subject: ticketSubject,
     description: ticketDescription,
     status: "open",

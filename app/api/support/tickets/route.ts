@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
-import { createNotification, createNotificationsForUsers } from "@/lib/notifications";
-import { SUPER_ADMINS } from "@/lib/super-admins";
+import { createNotificationsForUsers } from "@/lib/notifications";
+import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const db = await getDb();
 
     const tickets = await db.collection("support_tickets")
-      .find({ userEmail: user.email })
+      .find({ userEmail: session.email })
       .sort({ createdAt: -1 })
       .toArray();
 
@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -46,7 +46,11 @@ export async function POST(request: NextRequest) {
 
     const db = await getDb();
 
-    const shopInfo = await db.collection("shop_users").findOne({ email: user.email });
+    let shopName = null;
+    if (session.shopId) {
+      const shop = await db.collection("shops").findOne({ id: session.shopId });
+      shopName = shop?.name || null;
+    }
 
     const ticketCount = await db.collection("support_tickets").countDocuments();
     const ticketNumber = `TKT-${String(ticketCount + 1).padStart(5, "0")}`;
@@ -58,16 +62,16 @@ export async function POST(request: NextRequest) {
       category: category || "general",
       priority: priority || "medium",
       status: "open",
-      userEmail: user.email,
-      userName: user.name || user.email.split("@")[0],
-      shopId: shopInfo?.shopId || null,
-      shopName: shopInfo?.shopName || null,
+      userEmail: session.email,
+      userName: session.email.split("@")[0],
+      shopId: session.shopId || null,
+      shopName,
       assignedTo: null,
       messages: [{
         id: new ObjectId().toString(),
         from: "user",
-        fromEmail: user.email,
-        fromName: user.name || user.email.split("@")[0],
+        fromEmail: session.email,
+        fromName: session.email.split("@")[0],
         message: description,
         createdAt: new Date()
       }],
@@ -98,35 +102,35 @@ export async function POST(request: NextRequest) {
     const priorityLabel = priorityLabels[ticket.priority] || ticket.priority;
 
     try {
-      const userEmail = makeTicketCreatedEmail(ticketNumber, subject, categoryLabel);
+      const userEmailContent = makeTicketCreatedEmail(ticketNumber, subject, categoryLabel);
       await sendEmail({
-        to: user.email,
-        subject: userEmail.subject,
-        html: userEmail.html,
-        text: userEmail.text
+        to: session.email,
+        subject: userEmailContent.subject,
+        html: userEmailContent.html,
+        text: userEmailContent.text
       });
     } catch (emailErr) {
       console.error("Failed to send ticket confirmation email:", emailErr);
     }
 
     try {
-      const adminUserIds = SUPER_ADMINS.map(email => `admin:${email}`);
+      const adminUserIds = SUPER_ADMIN_EMAILS.map(email => `admin:${email}`);
       await createNotificationsForUsers(adminUserIds, {
         type: "ticket_created",
         title: `New Ticket: ${ticketNumber}`,
-        message: `${shopInfo?.shopName || user.email} submitted: ${subject}`,
+        message: `${shopName || session.email} submitted: ${subject}`,
         link: `/platform-admin/tickets?id=${result.insertedId}`,
         metadata: { ticketId: result.insertedId.toString(), ticketNumber }
       });
       
-      for (const adminEmail of SUPER_ADMINS) {
+      for (const adminEmail of SUPER_ADMIN_EMAILS) {
         try {
           const adminEmailContent = makeNewTicketAdminEmail(
             ticketNumber,
             subject,
             categoryLabel,
             priorityLabel,
-            shopInfo?.shopName || user.email
+            shopName || session.email
           );
           await sendEmail({
             to: adminEmail,
