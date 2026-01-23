@@ -67,6 +67,7 @@ async function createHovercodeQR(
       primary_color: "#111111",
       background_color: options.backgroundColor || "#ffffff",
       pattern: "Squares",
+      eye_style: "Rounded",
       generate_png: true,
     };
     

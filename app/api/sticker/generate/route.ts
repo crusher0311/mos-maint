@@ -154,6 +154,7 @@ async function createHovercodeQR(
         primary_color: color,
         background_color: backgroundColor,
         pattern: "Squares",
+        eye_style: "Rounded",
         size: size,
         logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,
