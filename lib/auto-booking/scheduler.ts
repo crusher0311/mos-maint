@@ -262,12 +262,275 @@ export async function confirmBooking(bookingId: string): Promise<boolean> {
   const db = await getDb();
   const { ObjectId } = await import("mongodb");
   
+  // First, get the booking and update status to confirmed
+  const booking = await db.collection("auto_booking_queue").findOne({
+    _id: new ObjectId(bookingId),
+    status: "pending"
+  });
+  
+  if (!booking) {
+    console.log(`[Auto Booking] Booking ${bookingId} not found or not pending`);
+    return false;
+  }
+  
+  // Update status to confirmed
   const result = await db.collection("auto_booking_queue").updateOne(
     { _id: new ObjectId(bookingId), status: "pending" },
     { $set: { status: "confirmed", confirmedAt: new Date() } }
   );
   
-  return result.modifiedCount > 0;
+  if (result.modifiedCount === 0) {
+    return false;
+  }
+  
+  // Now try to push the appointment to the SMS
+  const pushResult = await pushAppointmentToSMS(booking as unknown as QueuedBooking & { _id: any });
+  
+  if (pushResult.success) {
+    // Mark as sent
+    await db.collection("auto_booking_queue").updateOne(
+      { _id: new ObjectId(bookingId) },
+      {
+        $set: {
+          status: "sent",
+          sentAt: new Date(),
+          externalAppointmentId: pushResult.externalId,
+          provider: pushResult.provider,
+        }
+      }
+    );
+    console.log(`[Auto Booking] Booking ${bookingId} sent to ${pushResult.provider}, external ID: ${pushResult.externalId}`);
+    return true;
+  } else {
+    // Mark as failed but keep confirmed status so user can retry
+    await db.collection("auto_booking_queue").updateOne(
+      { _id: new ObjectId(bookingId) },
+      {
+        $set: {
+          failedAt: new Date(),
+          failedReason: pushResult.error,
+        }
+      }
+    );
+    console.error(`[Auto Booking] Failed to push booking ${bookingId} to SMS: ${pushResult.error}`);
+    // Return false to indicate the push failed (booking is confirmed but not synced)
+    return false;
+  }
+}
+
+async function pushAppointmentToSMS(
+  booking: QueuedBooking & { _id: any }
+): Promise<{ success: boolean; externalId?: string; provider?: string; error?: string }> {
+  const db = await getDb();
+  
+  // Get shop details to determine which SMS to use
+  const shop = await db.collection("shops").findOne(
+    { shopId: booking.shopId },
+    { projection: { integrations: 1, tekmetric: 1, protractor: 1, protractorConnectionId: 1 } }
+  );
+  
+  if (!shop) {
+    return { success: false, error: "Shop not found" };
+  }
+  
+  const integrations = shop.integrations || [];
+  const hasTekmetric = integrations.includes("tekmetric") && shop.tekmetric?.shopId;
+  const hasProtractor = integrations.includes("protractor") && (shop.protractor?.connectionId || shop.protractorConnectionId);
+  
+  // Combine date and time to create appointment datetime
+  const appointmentDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
+  const endDateTime = new Date(appointmentDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+  
+  // Try Tekmetric first if available
+  if (hasTekmetric) {
+    try {
+      const { createAppointment } = await import("@/lib/tekmetric");
+      
+      // We need Tekmetric customer and vehicle IDs
+      // Try to find them from cached data
+      const tekmetricCustomerId = await findTekmetricCustomerId(booking.shopId, booking.customerId, booking.customerName);
+      const tekmetricVehicleId = await findTekmetricVehicleId(booking.shopId, booking.vehicleId, booking.vin);
+      
+      if (!tekmetricCustomerId) {
+        console.log(`[Auto Booking] Could not find Tekmetric customer ID for ${booking.customerName}`);
+        // Fall through to Protractor if available
+      } else if (!tekmetricVehicleId) {
+        console.log(`[Auto Booking] Could not find Tekmetric vehicle ID for ${booking.vin || booking.vehicleId}`);
+        // Fall through to Protractor if available
+      } else {
+        const appointment = await createAppointment({
+          shopId: Number(shop.tekmetric.shopId),
+          customerId: tekmetricCustomerId,
+          vehicleId: tekmetricVehicleId,
+          startTime: appointmentDateTime.toISOString(),
+          endTime: endDateTime.toISOString(),
+          title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
+          note: `Auto-booked via MOS Oil Sticker. Service: ${booking.serviceType}`,
+        });
+        
+        return {
+          success: true,
+          externalId: String(appointment.id),
+          provider: "tekmetric",
+        };
+      }
+    } catch (err: any) {
+      console.error(`[Auto Booking] Tekmetric appointment creation failed:`, err.message);
+      // Fall through to Protractor if available
+    }
+  }
+  
+  // Try Protractor if available
+  if (hasProtractor) {
+    try {
+      const { createProtractorAppointment } = await import("@/lib/integrations/protractor");
+      
+      // We need Protractor contact and vehicle IDs
+      const protractorContactId = booking.customerId;
+      const protractorVehicleId = booking.vehicleId;
+      
+      if (!protractorContactId || !protractorVehicleId) {
+        return { 
+          success: false, 
+          error: "Missing Protractor contact or vehicle ID" 
+        };
+      }
+      
+      const result = await createProtractorAppointment({
+        shopId: booking.shopId,
+        contactId: protractorContactId,
+        vehicleId: protractorVehicleId,
+        scheduledTime: appointmentDateTime.toISOString(),
+        duration: 60,
+        notes: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}. Auto-booked via MOS.`,
+      });
+      
+      if (result.ok && result.appointmentId) {
+        return {
+          success: true,
+          externalId: result.appointmentId,
+          provider: "protractor",
+        };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (err: any) {
+      console.error(`[Auto Booking] Protractor appointment creation failed:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+  
+  return { success: false, error: "No supported SMS integration configured" };
+}
+
+async function findTekmetricCustomerId(
+  tekmetricShopId: number,
+  mosCustomerId?: string,
+  customerName?: string
+): Promise<number | null> {
+  const db = await getDb();
+  
+  // Try to parse as number directly (might already be Tekmetric ID)
+  if (mosCustomerId) {
+    const parsed = Number(mosCustomerId);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+    
+    // Try to find from cached customer data
+    const cachedCustomer = await db.collection("tekmetric_customers").findOne({
+      tekmetricShopId,
+      $or: [
+        { "data.id": Number(mosCustomerId) },
+        { customerId: mosCustomerId },
+      ]
+    });
+    
+    if (cachedCustomer?.data?.id) {
+      return cachedCustomer.data.id;
+    }
+  }
+  
+  // Try to search by customer name via Tekmetric API
+  if (customerName) {
+    try {
+      const { getCustomers } = await import("@/lib/tekmetric");
+      const result = await getCustomers(tekmetricShopId, { search: customerName, size: 5 });
+      
+      if (result.content && result.content.length > 0) {
+        // Return first match
+        console.log(`[Auto Booking] Found Tekmetric customer ${result.content[0].id} for name "${customerName}"`);
+        return result.content[0].id;
+      }
+    } catch (err: any) {
+      console.error(`[Auto Booking] Tekmetric customer search failed:`, err.message);
+    }
+  }
+  
+  return null;
+}
+
+async function findTekmetricVehicleId(
+  tekmetricShopId: number,
+  mosVehicleId?: string,
+  vin?: string
+): Promise<number | null> {
+  if (!mosVehicleId && !vin) return null;
+  
+  const db = await getDb();
+  
+  // Try to parse as number directly (might already be Tekmetric ID)
+  if (mosVehicleId) {
+    const parsed = Number(mosVehicleId);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  
+  // First try to find from cached vehicle data
+  const query: any = { tekmetricShopId };
+  const orConditions: any[] = [];
+  
+  if (mosVehicleId) {
+    orConditions.push({ "data.id": Number(mosVehicleId) });
+    orConditions.push({ vehicleId: mosVehicleId });
+  }
+  if (vin) {
+    orConditions.push({ "data.vin": vin.toUpperCase() });
+  }
+  
+  if (orConditions.length > 0) {
+    query.$or = orConditions;
+    const cachedVehicle = await db.collection("tekmetric_vehicles").findOne(query);
+    
+    if (cachedVehicle?.data?.id) {
+      return cachedVehicle.data.id;
+    }
+  }
+  
+  // Try to search by VIN via Tekmetric API
+  if (vin) {
+    try {
+      const { getVehicles } = await import("@/lib/tekmetric");
+      const result = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
+      
+      if (result.content && result.content.length > 0) {
+        // Find exact VIN match
+        const match = result.content.find(v => v.vin?.toUpperCase() === vin.toUpperCase());
+        if (match) {
+          console.log(`[Auto Booking] Found Tekmetric vehicle ${match.id} for VIN "${vin}"`);
+          return match.id;
+        }
+        // If no exact match, use first result
+        console.log(`[Auto Booking] Using first Tekmetric vehicle ${result.content[0].id} for VIN search "${vin}"`);
+        return result.content[0].id;
+      }
+    } catch (err: any) {
+      console.error(`[Auto Booking] Tekmetric vehicle search failed:`, err.message);
+    }
+  }
+  
+  return null;
 }
 
 export async function cancelBooking(bookingId: string): Promise<boolean> {
