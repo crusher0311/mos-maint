@@ -17,6 +17,7 @@ interface UserInfo {
   authenticated: boolean;
   isPlatformAdmin?: boolean;
   enterpriseId?: string | null;
+  hasEnterpriseBilling?: boolean;
   enabledFeatures?: string[];
 }
 
@@ -84,6 +85,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           isPlatformAdmin={userInfo?.isPlatformAdmin}
           currentShopId={userInfo?.shopId}
           enterpriseId={userInfo?.enterpriseId}
+          hasEnterpriseBilling={userInfo?.hasEnterpriseBilling}
           enabledFeatures={userInfo?.enabledFeatures}
           onQuickStickerClick={() => setQuickStickerOpen(true)}
         />
@@ -113,6 +115,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           isPlatformAdmin={userInfo?.isPlatformAdmin}
           currentShopId={userInfo?.shopId}
           enterpriseId={userInfo?.enterpriseId}
+          hasEnterpriseBilling={userInfo?.hasEnterpriseBilling}
           enabledFeatures={userInfo?.enabledFeatures}
           onQuickStickerClick={() => {
             setQuickStickerOpen(true);
