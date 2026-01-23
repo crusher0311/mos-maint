@@ -257,10 +257,54 @@ export async function queueBooking(
   };
   
   const result = await db.collection("auto_booking_queue").insertOne(queuedBooking);
+  const bookingId = result.insertedId.toString();
+  
+  // If auto mode, immediately push to SMS
+  if (settings.confirmationMode === "auto") {
+    console.log(`[Auto Booking] Auto mode - pushing booking ${bookingId} to SMS immediately`);
+    
+    // Update status to confirmed with timestamp
+    await db.collection("auto_booking_queue").updateOne(
+      { _id: result.insertedId },
+      { $set: { confirmedAt: new Date() } }
+    );
+    
+    // Get the inserted booking for SMS push
+    const insertedBooking = await db.collection("auto_booking_queue").findOne({ _id: result.insertedId });
+    if (insertedBooking) {
+      const pushResult = await pushAppointmentToSMS(insertedBooking as QueuedBooking & { _id: any });
+      
+      if (pushResult.success) {
+        await db.collection("auto_booking_queue").updateOne(
+          { _id: result.insertedId },
+          {
+            $set: {
+              status: "sent",
+              sentAt: new Date(),
+              externalAppointmentId: pushResult.externalId,
+              provider: pushResult.provider,
+            }
+          }
+        );
+        console.log(`[Auto Booking] Auto mode - booking ${bookingId} sent to ${pushResult.provider}`);
+      } else {
+        await db.collection("auto_booking_queue").updateOne(
+          { _id: result.insertedId },
+          {
+            $set: {
+              failedAt: new Date(),
+              failedReason: pushResult.error,
+            }
+          }
+        );
+        console.error(`[Auto Booking] Auto mode - failed to push ${bookingId}: ${pushResult.error}`);
+      }
+    }
+  }
   
   return {
     success: true,
-    bookingId: result.insertedId.toString(),
+    bookingId,
   };
 }
 
