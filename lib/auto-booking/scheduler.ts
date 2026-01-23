@@ -419,7 +419,7 @@ async function pushAppointmentToSMS(
           title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
           color: "blue",
-          appointmentOption: "DROP", // Drop-off Vehicle
+          appointmentOptionId: 2, // 1=STAY, 2=DROP, 3=TOW
         });
         
         return {

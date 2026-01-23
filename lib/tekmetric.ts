@@ -451,10 +451,11 @@ export interface CreateAppointmentParams {
   rideOption?: "LOANER" | "RIDE" | "NONE";
   status?: "NONE" | "ARRIVED" | "NO_SHOW" | "CANCELLED";
   appointmentOption?: "STAY" | "DROP" | "TOW"; // STAY = Stay With Vehicle, DROP = Drop-off, TOW = Towed-in
+  appointmentOptionId?: number; // 1=STAY, 2=DROP, 3=TOW - alternative ID-based field
 }
 
 export async function createAppointment(params: CreateAppointmentParams): Promise<TekmetricAppointment> {
-  const { shopId, customerId, vehicleId, startTime, endTime, title, description, color, dropoffTime, pickupTime, rideOption, status, appointmentOption } = params;
+  const { shopId, customerId, vehicleId, startTime, endTime, title, description, color, dropoffTime, pickupTime, rideOption, status, appointmentOption, appointmentOptionId } = params;
   
   const body: Record<string, any> = {
     shopId,
@@ -472,6 +473,7 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   if (rideOption) body.rideOption = rideOption;
   if (status) body.status = status;
   if (appointmentOption) body.appointmentOption = appointmentOption;
+  if (appointmentOptionId) body.appointmentOptionId = appointmentOptionId;
   
   console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
   console.log(`[Tekmetric] Appointment body:`, JSON.stringify(body, null, 2));
