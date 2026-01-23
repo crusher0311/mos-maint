@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
+import { createNotificationsForUsers } from "@/lib/notifications";
+import { SUPER_ADMINS } from "@/lib/super-admins";
 
 export async function GET(
   request: NextRequest,
@@ -94,6 +96,19 @@ export async function POST(
       },
       { returnDocument: "after" }
     );
+
+    try {
+      const adminUserIds = SUPER_ADMINS.map(email => `admin:${email}`);
+      await createNotificationsForUsers(adminUserIds, {
+        type: "ticket_message",
+        title: `User Reply: ${ticket.ticketNumber}`,
+        message: message.substring(0, 100) + (message.length > 100 ? "..." : ""),
+        link: `/platform-admin/tickets?id=${ticketId}`,
+        metadata: { ticketId, ticketNumber: ticket.ticketNumber }
+      });
+    } catch (notifErr) {
+      console.error("Failed to create admin notifications:", notifErr);
+    }
 
     return NextResponse.json({
       ok: true,

@@ -19,6 +19,7 @@ import {
   Ticket,
   X
 } from "lucide-react";
+import { NotificationBell } from "./NotificationBell";
 
 interface PlatformAdminSidebarProps {
   userEmail?: string;
@@ -134,15 +135,18 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               <p className="text-slate-400 text-xs">Platform Management</p>
             </div>
           </div>
-          {isMobile && onClose && (
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-              aria-label="Close menu"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <NotificationBell isPlatformAdmin={true} />
+            {isMobile && onClose && (
+              <button
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                aria-label="Close menu"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

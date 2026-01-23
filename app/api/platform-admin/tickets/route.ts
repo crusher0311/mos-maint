@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
+import { sendEmail, makeTicketUpdatedEmail } from "@/lib/email";
+import { createNotification } from "@/lib/notifications";
 
 export async function GET(request: NextRequest) {
   try {
@@ -209,6 +211,57 @@ export async function PATCH(request: NextRequest) {
 
     if (!result) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+
+    const ticket = result;
+    const statusLabels: Record<string, string> = {
+      open: "Open",
+      in_progress: "In Progress",
+      resolved: "Resolved",
+      closed: "Closed"
+    };
+    const statusLabel = statusLabels[ticket.status] || ticket.status;
+
+    if (ticket.userEmail && (status || message)) {
+      try {
+        const emailContent = makeTicketUpdatedEmail(
+          ticket.ticketNumber,
+          ticket.subject,
+          statusLabel,
+          message || undefined
+        );
+        await sendEmail({
+          to: ticket.userEmail,
+          subject: emailContent.subject,
+          html: emailContent.html,
+          text: emailContent.text
+        });
+      } catch (emailErr) {
+        console.error("Failed to send ticket update email:", emailErr);
+      }
+
+      try {
+        const shopUser = await db.collection("shop_users").findOne({ email: ticket.userEmail });
+        const userId = shopUser?._id?.toString() || ticket.userEmail;
+        
+        await createNotification({
+          userId,
+          shopId: ticket.shopId,
+          type: status === "resolved" ? "ticket_resolved" : message ? "ticket_message" : "ticket_updated",
+          title: status === "resolved" 
+            ? `Ticket Resolved: ${ticket.ticketNumber}`
+            : message 
+              ? `New Reply: ${ticket.ticketNumber}`
+              : `Ticket Updated: ${ticket.ticketNumber}`,
+          message: message 
+            ? message.substring(0, 100) + (message.length > 100 ? "..." : "")
+            : `Status changed to ${statusLabel}`,
+          link: `/dashboard/support?id=${ticketId}`,
+          metadata: { ticketId, ticketNumber: ticket.ticketNumber }
+        });
+      } catch (notifErr) {
+        console.error("Failed to create user notification:", notifErr);
+      }
     }
 
     return NextResponse.json({
