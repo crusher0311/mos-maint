@@ -472,17 +472,8 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   if (pickupTime) body.pickupTime = pickupTime;
   if (rideOption) body.rideOption = rideOption;
   if (status) body.status = status;
-  // Try sending as full object structure like Tekmetric returns
-  if (appointmentOptionId) {
-    const optionMap: Record<number, { id: number; code: string; name: string }> = {
-      1: { id: 1, code: "STAY", name: "Stay With Vehicle" },
-      2: { id: 2, code: "DROP", name: "Drop-off Vehicle" },
-      3: { id: 3, code: "TOW", name: "Towed-in Vehicle" },
-    };
-    body.appointmentOption = optionMap[appointmentOptionId] || optionMap[1];
-  } else if (appointmentOption) {
-    body.appointmentOption = appointmentOption;
-  }
+  // Don't include appointmentOption in create - it's only settable via PATCH
+  const savedAppointmentOptionId = appointmentOptionId;
   
   console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
   console.log(`[Tekmetric] Appointment body:`, JSON.stringify(body, null, 2));
@@ -492,8 +483,32 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
     body: JSON.stringify(body),
   }, shopId);
   
-  console.log(`[Tekmetric] Appointment created with ID: ${result.id}`);
-  return result;
+  const appointmentId = result.data || result.id;
+  console.log(`[Tekmetric] Appointment created with ID: ${appointmentId}`);
+  
+  // If appointmentOption was requested, update the appointment via PATCH
+  if (savedAppointmentOptionId && appointmentId) {
+    const optionMap: Record<number, { id: number; code: string; name: string }> = {
+      1: { id: 1, code: "STAY", name: "Stay With Vehicle" },
+      2: { id: 2, code: "DROP", name: "Drop-off Vehicle" },
+      3: { id: 3, code: "TOW", name: "Towed-in Vehicle" },
+    };
+    const appointmentOptionObj = optionMap[savedAppointmentOptionId] || optionMap[1];
+    
+    console.log(`[Tekmetric] Updating appointment ${appointmentId} with appointmentOption:`, appointmentOptionObj);
+    
+    try {
+      await tekmetricRequest(`/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ appointmentOption: appointmentOptionObj }),
+      }, shopId);
+      console.log(`[Tekmetric] Appointment ${appointmentId} updated with DROP option`);
+    } catch (patchError) {
+      console.error(`[Tekmetric] Failed to update appointment option:`, patchError);
+    }
+  }
+  
+  return { ...result, id: appointmentId };
 }
 
 export async function getAppointment(appointmentId: number): Promise<TekmetricAppointment> {
