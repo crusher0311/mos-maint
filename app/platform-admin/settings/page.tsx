@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Save, Loader2, CreditCard, Package, Link2, Gift, ExternalLink, Copy, Check } from "lucide-react";
+import { Settings, Save, Loader2, CreditCard, Package, Link2, Gift, ExternalLink, Copy, Check, Download, X } from "lucide-react";
 
 interface BillingSettings {
   mosProProductId: string;
@@ -35,6 +35,22 @@ interface PlatformSettings {
   };
 }
 
+interface StripePrice {
+  id: string;
+  unit_amount: number | null;
+  currency: string;
+  recurring: { interval: string } | null;
+  type: string;
+}
+
+interface StripeProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  metadata: Record<string, string>;
+  prices: StripePrice[];
+}
+
 export default function PlatformSettingsPage() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +61,9 @@ export default function PlatformSettingsPage() {
   const [vinLimit, setVinLimit] = useState("");
   const [bookDemoUrl, setBookDemoUrl] = useState("");
   const [billing, setBilling] = useState<BillingSettings | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [stripeProducts, setStripeProducts] = useState<StripeProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -94,6 +113,57 @@ export default function PlatformSettingsPage() {
     navigator.clipboard.writeText(text);
     setCopiedId(text);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const loadStripeProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await fetch("/api/platform-admin/stripe/products");
+      const data = await res.json();
+      if (data.ok) {
+        setStripeProducts(data.products);
+        setShowImportModal(true);
+      } else {
+        setMessage({ type: "error", text: "Failed to load Stripe products" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to connect to Stripe" });
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const applyProduct = (product: StripeProduct, priceId: string, targetField: string) => {
+    if (!billing) return;
+    const price = product.prices.find(p => p.id === priceId);
+    const priceValue = price?.unit_amount ? price.unit_amount / 100 : 0;
+    
+    const updates: Partial<BillingSettings> = {};
+    
+    if (targetField === "mosPro") {
+      updates.mosProProductId = product.id;
+      updates.mosProPriceId = priceId;
+      updates.mosProPrice = priceValue;
+    } else if (targetField === "vinPack100") {
+      updates.vinPack100ProductId = product.id;
+      updates.vinPack100PriceId = priceId;
+      updates.vinPack100Price = priceValue;
+    } else if (targetField === "vinPack250") {
+      updates.vinPack250ProductId = product.id;
+      updates.vinPack250PriceId = priceId;
+      updates.vinPack250Price = priceValue;
+    } else if (targetField === "vinPack500") {
+      updates.vinPack500ProductId = product.id;
+      updates.vinPack500PriceId = priceId;
+      updates.vinPack500Price = priceValue;
+    } else if (targetField === "onboarding") {
+      updates.onboardingProductId = product.id;
+      updates.onboardingPriceId = priceId;
+      updates.onboardingPrice = priceValue;
+    }
+    
+    setBilling({ ...billing, ...updates });
+    setMessage({ type: "success", text: `Applied ${product.name} to ${targetField}` });
   };
 
   if (loading) {
@@ -218,15 +288,25 @@ export default function PlatformSettingsPage() {
                 <p className="text-sm text-gray-500">Product and price IDs from your Stripe dashboard</p>
               </div>
             </div>
-            <a
-              href="https://dashboard.stripe.com/products"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-blue-600 hover:text-blue-500 flex items-center gap-1"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Stripe Dashboard
-            </a>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={loadStripeProducts}
+                disabled={loadingProducts}
+                className="text-sm bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                {loadingProducts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Import from Stripe
+              </button>
+              <a
+                href="https://dashboard.stripe.com/products"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-500 flex items-center gap-1"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Stripe Dashboard
+              </a>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -404,6 +484,105 @@ export default function PlatformSettingsPage() {
               {savingSection === "billing" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save Billing Settings
             </button>
+          </div>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Import Stripe Products</h2>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto p-4">
+              {stripeProducts.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No active products found in Stripe</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Select a product and price, then choose where to apply it. Click "Save Billing Settings" after importing to save changes.
+                  </p>
+                  {stripeProducts.map((product) => (
+                    <div key={product.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{product.name}</h3>
+                          {product.description && (
+                            <p className="text-sm text-gray-500">{product.description}</p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1 font-mono">{product.id}</p>
+                        </div>
+                      </div>
+                      
+                      {product.prices.length === 0 ? (
+                        <p className="text-sm text-gray-400">No active prices</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {product.prices.map((price) => (
+                            <div key={price.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                              <div>
+                                <span className="font-medium">
+                                  ${(price.unit_amount || 0) / 100} {price.currency.toUpperCase()}
+                                </span>
+                                {price.recurring && (
+                                  <span className="text-sm text-gray-500 ml-2">
+                                    / {price.recurring.interval}
+                                  </span>
+                                )}
+                                {price.type === "one_time" && (
+                                  <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded ml-2">
+                                    One-time
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-400 font-mono mt-1">{price.id}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <select
+                                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                                  defaultValue=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      applyProduct(product, price.id, e.target.value);
+                                      e.target.value = "";
+                                    }
+                                  }}
+                                >
+                                  <option value="">Apply to...</option>
+                                  <option value="mosPro">MOS Pro Subscription</option>
+                                  <option value="vinPack100">100 VIN Pack</option>
+                                  <option value="vinPack250">250 VIN Pack</option>
+                                  <option value="vinPack500">500 VIN Pack</option>
+                                  <option value="onboarding">Onboarding Fee</option>
+                                </select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
