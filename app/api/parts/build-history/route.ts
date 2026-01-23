@@ -18,6 +18,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+const SMS_DISPLAY_NAMES: Record<string, string> = {
+  tekmetric: "Tekmetric",
+  protractor: "Protractor",
+  autoflow: "AutoFlow",
+  shopware: "Shop-Ware",
+  shopmonkey: "Shop Monkey",
+  "stand-alone": "Stand-alone",
+};
+
 export async function POST() {
   const session = await getSession();
   if (!session) {
@@ -26,16 +35,28 @@ export async function POST() {
 
   const shopId = Number(session.shopId);
   console.log(`[Parts History] Session shopId: ${session.shopId}, parsed: ${shopId}`);
+  
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId });
+  const smsIntegration = shop?.smsIntegration || "stand-alone";
+  const smsDisplayName = SMS_DISPLAY_NAMES[smsIntegration] || smsIntegration;
+  
+  if (smsIntegration !== "protractor") {
+    return NextResponse.json(
+      { error: `Parts history builder is coming soon for ${smsDisplayName}. Currently only available for Protractor shops.` },
+      { status: 400 }
+    );
+  }
+  
   const config = await resolveProtractorConfig(shopId);
   
   if (!config.configured) {
     return NextResponse.json(
-      { error: "Protractor is not configured for this shop" },
+      { error: "Protractor is not configured for this shop. Please set up your Protractor integration first." },
       { status: 400 }
     );
   }
 
-  const db = await getDb();
   const endDate = new Date();
   const fiveYearsAgo = new Date();
   fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
