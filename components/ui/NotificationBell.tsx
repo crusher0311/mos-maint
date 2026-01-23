@@ -152,7 +152,7 @@ export function NotificationBell({ isPlatformAdmin = false }: NotificationBellPr
 
       {isOpen && (
         <div
-          className={`absolute right-0 mt-2 w-80 max-h-[480px] overflow-hidden rounded-lg shadow-lg border z-50 ${
+          className={`fixed left-64 top-12 w-80 max-h-[480px] overflow-hidden rounded-lg shadow-lg border z-[100] ${
             isPlatformAdmin
               ? "bg-slate-800 border-slate-700"
               : "bg-white border-slate-200"
