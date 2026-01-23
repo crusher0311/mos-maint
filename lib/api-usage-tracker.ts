@@ -665,7 +665,7 @@ export async function getErrorDetails(query: DrillDownQuery): Promise<{
 }
 
 export async function getShopRequests(
-  shopId: number,
+  shopId: number | null,
   query: { provider?: ApiProvider; since?: Date; limit?: number; cursor?: string }
 ): Promise<{
   requests: ErrorRecord[];

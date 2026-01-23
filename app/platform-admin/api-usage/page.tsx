@@ -74,7 +74,7 @@ interface ErrorRecord {
 interface DrawerState {
   type: 'errors' | 'shop' | null;
   provider?: string;
-  shopId?: number;
+  shopId?: number | null;
   shopName?: string;
 }
 
@@ -212,7 +212,7 @@ export default function ApiUsageDashboard() {
     }
   }, []);
 
-  const openShopDrawer = useCallback(async (shopId: number, provider?: string, shopName?: string) => {
+  const openShopDrawer = useCallback(async (shopId: number | null, provider?: string, shopName?: string) => {
     setDrawer({ type: 'shop', shopId, provider, shopName });
     setDrawerLoading(true);
     
@@ -220,7 +220,7 @@ export default function ApiUsageDashboard() {
       const params = new URLSearchParams({ hours: '24' });
       if (provider) params.set('provider', provider);
       
-      const res = await fetch(`/api/platform-admin/api-usage/shops/${shopId}?${params}`);
+      const res = await fetch(`/api/platform-admin/api-usage/shops/${shopId === null ? 'null' : shopId}?${params}`);
       const data = await res.json();
       
       setDrawerData({
