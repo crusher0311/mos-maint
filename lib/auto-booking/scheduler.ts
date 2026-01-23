@@ -355,11 +355,12 @@ async function pushAppointmentToSMS(
   if (hasTekmetric) {
     try {
       const { createAppointment } = await import("@/lib/tekmetric");
+      const tekmetricShopId = Number(shop.tekmetric.shopId);
       
       // We need Tekmetric customer and vehicle IDs
       // Try to find them from cached data
-      const tekmetricCustomerId = await findTekmetricCustomerId(booking.shopId, booking.customerId, booking.customerName);
-      const tekmetricVehicleId = await findTekmetricVehicleId(booking.shopId, booking.vehicleId, booking.vin);
+      const tekmetricCustomerId = await findTekmetricCustomerId(tekmetricShopId, booking.customerId, booking.customerName);
+      const tekmetricVehicleId = await findTekmetricVehicleId(tekmetricShopId, booking.vehicleId, booking.vin);
       
       if (!tekmetricCustomerId) {
         console.log(`[Auto Booking] Could not find Tekmetric customer ID for ${booking.customerName}`);
