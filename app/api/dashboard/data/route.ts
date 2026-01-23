@@ -494,7 +494,13 @@ export async function GET(request: NextRequest) {
           workOrderId: "$workOrderId",
           dviDone: { $ifNull: ["$dviDone", false] },
           source: { $literal: "tekmetric" },
-          displayStatus: { $ifNull: ["$status", "Open"] },
+          displayStatus: { 
+            $cond: {
+              if: { $and: [{ $ifNull: ["$label", false] }, { $ne: ["$label", ""] }] },
+              then: "$label",
+              else: { $ifNull: ["$status", "Open"] }
+            }
+          },
           label: { $ifNull: ["$label", null] },
           labelColor: { $ifNull: ["$labelColor", null] },
           af: {
