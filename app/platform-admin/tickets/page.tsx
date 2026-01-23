@@ -443,6 +443,17 @@ export default function PlatformTicketsPage() {
             </div>
 
             <div className="flex-1 overflow-auto p-4 space-y-4">
+              {selectedTicket.description && (
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="text-xs text-blue-600 font-medium mb-2">Original Description</div>
+                  <p className="text-gray-700 whitespace-pre-wrap">{selectedTicket.description}</p>
+                </div>
+              )}
+              
+              {selectedTicket.messages?.length > 0 && (
+                <div className="text-xs text-gray-500 uppercase font-medium pt-2">Conversation</div>
+              )}
+              
               {selectedTicket.messages?.map((msg) => (
                 <div
                   key={msg.id}
