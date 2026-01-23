@@ -174,13 +174,17 @@ export default function SupportChatWidget() {
           script.src = 'https://js.cobrowse.io/CobrowseIO.js';
           script.async = true;
           script.crossOrigin = 'anonymous';
-          script.onload = () => {
+          script.onload = async () => {
+            console.log('Cobrowse SDK loaded, license:', data.licenseKey?.substring(0, 8) + '...');
             window.CobrowseIO.license = data.licenseKey;
-            window.CobrowseIO.start();
             
-            window.CobrowseIO.on('session.loaded', () => {
-              console.log('Cobrowse session loaded');
-            });
+            try {
+              const startResult = await window.CobrowseIO.start();
+              console.log('Cobrowse start result:', startResult);
+              console.log('Cobrowse device id:', window.CobrowseIO.deviceId);
+            } catch (startErr) {
+              console.error('Cobrowse start error:', startErr);
+            }
             
             cobrowseInitialized = true;
             setTimeout(resolve, 2000);
@@ -190,6 +194,7 @@ export default function SupportChatWidget() {
         });
       }
       
+      console.log('Attempting createSessionCode, CobrowseIO:', typeof window.CobrowseIO, 'deviceId:', window.CobrowseIO?.deviceId);
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
