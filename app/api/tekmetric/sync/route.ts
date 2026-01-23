@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrder, TekmetricVehicle, TekmetricCustomer } from "@/lib/tekmetric";
+import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrderFull, TekmetricVehicle, TekmetricCustomer } from "@/lib/tekmetric";
 
 async function getUserShopId(): Promise<string | null> {
   const store = await cookies();
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     };
 
     const activeStatuses = ['Estimate', 'Pending', 'In Progress', 'Complete'];
-    const vehicleMap = new Map<number, { vehicle: TekmetricVehicle; ro: TekmetricRepairOrder; customer?: TekmetricCustomer }>();
+    const vehicleMap = new Map<number, { vehicle: TekmetricVehicle; ro: TekmetricRepairOrderFull; customer?: TekmetricCustomer }>();
 
     for (const status of activeStatuses) {
       let roPage = 0;
@@ -95,12 +95,18 @@ export async function POST(request: NextRequest) {
       const vin = vehicle.vin!.toUpperCase();
       const existing = await db.collection("vehicles").findOne({ vin });
       
+      // Get status and label from the full repair order structure
+      const roStatus = ro.repairOrderStatus?.name || "Work-In-Progress";
+      const roLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || null;
+      const roLabelColor = ro.color || null;
+      const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
+      
       // Build the active source entry for this work order
       const workOrderSource = {
         provider: "tekmetric",
         workOrderId: String(ro.id),
         workOrderNumber: ro.repairOrderNumber,
-        status: ro.status || "Open",
+        status: roStatus,
         addedAt: new Date(),
       };
       
@@ -124,10 +130,10 @@ export async function POST(request: NextRequest) {
             vehicleEngine: vehicle.engine,
             customerName,
             customerId: ro.customerId,
-            odometer: ro.mileageIn || ro.mileageOut || vehicle.mileageIn || vehicle.mileageOut,
-            status: ro.status || "Work-In-Progress",
-            label: ro.label?.text || null,
-            labelColor: ro.label?.colorCode || null,
+            odometer: roMileage,
+            status: roStatus,
+            label: roLabel,
+            labelColor: roLabelColor,
             fetchedAt: new Date(),
             updatedAt: new Date(),
           },
@@ -150,7 +156,7 @@ export async function POST(request: NextRequest) {
         licensePlate: vehicle.licensePlate,
         licensePlateState: vehicle.licensePlateState,
         color: vehicle.color,
-        mileage: ro.mileageIn || ro.mileageOut || vehicle.mileageIn || vehicle.mileageOut,
+        mileage: roMileage,
         customer: customer ? {
           firstName: customer.firstName,
           lastName: customer.lastName,
@@ -163,9 +169,9 @@ export async function POST(request: NextRequest) {
           shopId: vehicle.shopId,
           repairOrderId: ro.id,
           repairOrderNumber: ro.repairOrderNumber,
-          roStatus: ro.status,
-          roLabel: ro.label?.text || null,
-          roLabelColor: ro.label?.colorCode || null,
+          roStatus: roStatus,
+          roLabel: roLabel,
+          roLabelColor: roLabelColor,
           lastSynced: new Date(),
         },
         updatedAt: new Date(),
