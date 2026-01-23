@@ -334,8 +334,10 @@ async function pushAppointmentToSMS(
   }
   
   const integrations = shop.integrations || [];
-  const hasTekmetric = integrations.includes("tekmetric") && shop.tekmetric?.shopId;
-  const hasProtractor = integrations.includes("protractor") && (shop.protractor?.connectionId || shop.protractorConnectionId);
+  // Check for Tekmetric: either in integrations array OR has a valid tekmetric.shopId
+  const hasTekmetric = (integrations.includes("tekmetric") || shop.tekmetric?.shopId) && shop.tekmetric?.shopId;
+  // Check for Protractor: either in integrations array OR has a valid connectionId
+  const hasProtractor = (integrations.includes("protractor") || shop.protractor?.connectionId || shop.protractorConnectionId) && (shop.protractor?.connectionId || shop.protractorConnectionId);
   
   console.log(`[Auto Booking] Shop ${booking.shopId} SMS check:`, {
     integrations,
