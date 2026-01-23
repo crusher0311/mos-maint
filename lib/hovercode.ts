@@ -47,21 +47,22 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
   const startTime = Date.now();
   
   try {
+    // Use the dev domain for the logo URL (publicly accessible)
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
+    const defaultLogoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    
     const requestBody: Record<string, any> = {
       workspace: workspaceId,
       qr_data: destinationUrl,
       display_name: `MOS Sticker - ${options.shopName}`,
-      primary_color: options.primaryColor || "#1e40af",
+      primary_color: options.primaryColor || "#111111",
       background_color: options.backgroundColor || "#ffffff",
       dynamic: true,
       pattern: options.pattern || "Squares",
       eye_style: "Rounded",
+      logo_url: options.logoUrl || defaultLogoUrl,
       generate_png: true,
     };
-    
-    if (options.logoUrl) {
-      requestBody.logo_url = options.logoUrl;
-    }
     
     if (options.frame) {
       requestBody.frame = options.frame;

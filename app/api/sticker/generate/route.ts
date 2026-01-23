@@ -138,7 +138,11 @@ async function createHovercodeQR(
   }
 
   try {
-    console.log("[Sticker Generate] Creating HoverCode with pattern: Bubble, dynamic: true");
+    // Use the dev domain for the logo URL (publicly accessible)
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
+    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    
+    console.log("[Sticker Generate] Creating HoverCode with pattern: Squares, dynamic: true, logo:", logoUrl);
     
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
@@ -151,12 +155,12 @@ async function createHovercodeQR(
         qr_data: url,
         dynamic: true,
         display_name: displayName || "Oil Sticker QR",
-        primary_color: color,
+        primary_color: "#111111",
         background_color: backgroundColor,
         pattern: "Squares",
         eye_style: "Rounded",
         size: size,
-        logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+        logo_url: logoUrl,
         generate_png: true,
       }),
     });
