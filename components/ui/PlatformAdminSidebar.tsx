@@ -21,7 +21,8 @@ import {
   ChevronDown,
   ChevronRight,
   Monitor,
-  X
+  X,
+  Package
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -121,6 +122,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "Settings",
       href: "/platform-admin/settings",
       icon: <Settings className="w-5 h-5" />
+    },
+    {
+      name: "Features",
+      href: "/platform-admin/features",
+      icon: <Package className="w-5 h-5" />
     }
   ];
 
