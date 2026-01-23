@@ -301,7 +301,7 @@ export default function PlatformDatabasePage() {
                       }`}
                     >
                       <span className="font-medium truncate">{coll.name}</span>
-                      <span className="text-xs text-slate-400 ml-2">{coll.count.toLocaleString()}</span>
+                      {coll.count !== null && <span className="text-xs text-slate-400 ml-2">{coll.count.toLocaleString()}</span>}
                     </button>
                   </li>
                 ))}

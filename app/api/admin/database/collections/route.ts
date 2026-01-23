@@ -16,22 +16,10 @@ export async function GET(req: NextRequest) {
       coll => !coll.name.startsWith("system.")
     );
     
-    const collections = await Promise.all(
-      userCollections.map(async (coll) => {
-        try {
-          const count = await db.collection(coll.name).estimatedDocumentCount();
-          return {
-            name: coll.name,
-            count
-          };
-        } catch {
-          return {
-            name: coll.name,
-            count: 0
-          };
-        }
-      })
-    );
+    const collections = userCollections.map(coll => ({
+      name: coll.name,
+      count: null
+    }));
 
     collections.sort((a, b) => a.name.localeCompare(b.name));
 
