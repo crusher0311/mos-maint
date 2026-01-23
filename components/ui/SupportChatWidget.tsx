@@ -176,7 +176,6 @@ export default function SupportChatWidget() {
           script.crossOrigin = 'anonymous';
           script.onload = () => {
             window.CobrowseIO.license = data.licenseKey;
-            window.CobrowseIO.start();
             cobrowseInitialized = true;
             resolve();
           };
@@ -185,8 +184,10 @@ export default function SupportChatWidget() {
         });
       }
       
-      const CobrowseIO = await window.CobrowseIO.client();
-      const code = await CobrowseIO.createSessionCode();
+      await window.CobrowseIO.client();
+      window.CobrowseIO.start();
+      
+      const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
       console.error("Screen share error:", err?.message || err);
