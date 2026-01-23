@@ -104,6 +104,40 @@ export async function POST(request: NextRequest) {
         addedAt: new Date(),
       };
       
+      // Also upsert into tekmetric_work_orders (this is what the dashboard queries)
+      const customerName = customer 
+        ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer"
+        : "Unknown Customer";
+      
+      await db.collection("tekmetric_work_orders").updateOne(
+        { workOrderId: String(ro.id) },
+        {
+          $set: {
+            workOrderId: String(ro.id),
+            workOrderNumber: ro.repairOrderNumber,
+            shopId: String(userShopId),
+            tekmetricShopId: shopId,
+            vin,
+            vehicleYear: vehicle.year,
+            vehicleMake: vehicle.make,
+            vehicleModel: vehicle.model,
+            vehicleEngine: vehicle.engine,
+            customerName,
+            customerId: ro.customerId,
+            odometer: ro.mileageIn || ro.mileageOut || vehicle.mileageIn || vehicle.mileageOut,
+            status: ro.status || "Work-In-Progress",
+            label: ro.label?.text || null,
+            labelColor: ro.label?.colorCode || null,
+            fetchedAt: new Date(),
+            updatedAt: new Date(),
+          },
+          $setOnInsert: {
+            createdAt: new Date(),
+          }
+        },
+        { upsert: true }
+      );
+      
       const vehicleData: Record<string, any> = {
         vin,
         year: vehicle.year,
