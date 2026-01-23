@@ -418,7 +418,8 @@ async function pushAppointmentToSMS(
           endTime: endTimeStr,
           title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
-          dropoffTime: startTimeStr, // Setting dropoffTime indicates this is a drop-off appointment
+          // Note: Tekmetric API doesn't support setting waiter/drop-off option
+          // The appointmentOption field is read-only and defaults to "Stay With Vehicle"
         });
         
         return {
