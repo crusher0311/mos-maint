@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/ui/Sidebar";
 import QuickStickerModal from "@/components/stickers/QuickStickerModal";
+import SupportChatWidget from "@/components/ui/SupportChatWidget";
 import { Menu, X } from "lucide-react";
 
 interface UserInfo {
@@ -157,6 +158,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         isOpen={quickStickerOpen} 
         onClose={() => setQuickStickerOpen(false)} 
       />
+
+      <SupportChatWidget />
     </div>
   );
 }
