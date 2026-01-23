@@ -498,13 +498,15 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
     console.log(`[Tekmetric] Updating appointment ${appointmentId} with appointmentOption:`, appointmentOptionObj);
     
     try {
-      await tekmetricRequest(`/appointments/${appointmentId}`, {
+      const patchBody = { appointmentOption: appointmentOptionObj };
+      console.log(`[Tekmetric] PATCH body:`, JSON.stringify(patchBody));
+      const patchResult = await tekmetricRequest(`/appointments/${appointmentId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ appointmentOption: appointmentOptionObj }),
+        body: JSON.stringify(patchBody),
       }, shopId);
-      console.log(`[Tekmetric] Appointment ${appointmentId} updated with DROP option`);
-    } catch (patchError) {
-      console.error(`[Tekmetric] Failed to update appointment option:`, patchError);
+      console.log(`[Tekmetric] PATCH response:`, JSON.stringify(patchResult, null, 2));
+    } catch (patchError: any) {
+      console.error(`[Tekmetric] Failed to update appointment option:`, patchError?.message || patchError);
     }
   }
   
