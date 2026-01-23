@@ -46,6 +46,7 @@ const ICON_MAP: Record<string, any> = {
 };
 
 const SMS_OPTIONS = [
+  { value: "stand-alone", label: "Stand Alone" },
   { value: "tekmetric", label: "Tekmetric" },
   { value: "protractor", label: "Protractor" },
   { value: "autoflow", label: "AutoFlow" },
