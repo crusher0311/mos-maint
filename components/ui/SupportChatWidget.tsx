@@ -166,44 +166,29 @@ export default function SupportChatWidget() {
         return;
       }
 
-      if (!window.CobrowseIO) {
+      if (!window.CobrowseIO || !window.CobrowseIO.client) {
         await new Promise<void>((resolve, reject) => {
-          const existingScript = document.querySelector('script[src*="cobrowse.io"]');
-          if (existingScript) {
-            resolve();
-            return;
-          }
-          
-          (function(w: any, t: string, c: string, p: any, s: any, e: any) {
-            p = new Promise(function(r: any) {
-              w[c] = {
-                client: function() {
-                  if (!s) {
-                    s = document.createElement(t);
-                    s.src = 'https://js.cobrowse.io/CobrowseIO.js';
-                    s.async = 1;
-                    s.crossOrigin = 'anonymous';
-                    e = document.getElementsByTagName(t)[0];
-                    e.parentNode.insertBefore(s, e);
-                    s.onload = function() { r(w[c]); };
-                    s.onerror = function() { reject(new Error("Failed to load")); };
-                  }
-                  return p;
-                }
-              };
-            });
-          })(window, 'script', 'CobrowseIO', null, null, null);
-          
-          resolve();
+          const script = document.createElement('script');
+          script.src = 'https://js.cobrowse.io/CobrowseIO.js';
+          script.async = true;
+          script.crossOrigin = 'anonymous';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Failed to load SDK"));
+          document.head.appendChild(script);
         });
       }
 
       window.CobrowseIO.license = data.licenseKey;
       
-      await window.CobrowseIO.client();
-      await window.CobrowseIO.start();
+      const sdk = await window.CobrowseIO.client();
       
-      const code = await window.CobrowseIO.createSessionCode();
+      await new Promise<void>((resolve) => {
+        sdk.on('session.loaded', () => resolve());
+        sdk.start();
+        setTimeout(resolve, 2000);
+      });
+      
+      const code = await sdk.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
       console.error("Screen share error:", err);
