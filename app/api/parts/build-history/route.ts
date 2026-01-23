@@ -40,29 +40,86 @@ async function buildTekmetricPartsHistory(shopId: number) {
   
   const allJobIndexEntries: any[] = [];
   
+  // Try job_index collection first - this has detailed job data from backfills
+  const existingJobs = await db.collection("job_index")
+    .find({ shopId, "metadata.sourceType": "tekmetric" })
+    .toArray();
+  
+  if (existingJobs.length > 0) {
+    console.log(`[Parts History] Found ${existingJobs.length} existing Tekmetric jobs in index`);
+    
+    // Just update part cross-references from existing job data
+    const partsUpdated = await updatePartCrossReferences(existingJobs);
+    results.workOrdersProcessed = existingJobs.length;
+    results.jobsIndexed = existingJobs.length;
+    results.partsIndexed = partsUpdated;
+    
+    return results;
+  }
+  
+  // Fallback: try to build from cached work orders
   const workOrders = await db.collection("tekmetric_work_orders")
     .find({ shopId: { $in: [String(shopId), Number(shopId)] } })
     .toArray();
   
   console.log(`[Parts History] Building from ${workOrders.length} Tekmetric work orders...`);
   
+  if (workOrders.length > 0 && !workOrders[0].data?.jobs) {
+    console.log(`[Parts History] Work orders don't have detailed job data. Need to run job backfill first.`);
+    console.log(`[Parts History] Sample WO fields:`, Object.keys(workOrders[0]).join(", "));
+  }
+  
   for (const wo of workOrders) {
     try {
       results.workOrdersProcessed++;
       
+      // The raw data is stored in the 'data' field
+      const rawData = wo.data || wo;
+      
       const vehicleData = {
         vin: wo.vin,
-        year: wo.year,
-        make: wo.make,
-        model: wo.model,
+        year: wo.vehicleYear || rawData.vehicle?.year,
+        make: wo.vehicleMake || rawData.vehicle?.make,
+        model: wo.vehicleModel || rawData.vehicle?.model,
       };
       
-      const jobEntries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicleData);
-      if (jobEntries.length > 0) {
-        for (const entry of jobEntries) {
-          entry.metadata.sourceType = "tekmetric";
+      // Tekmetric stores jobs differently - check for jobs array
+      if (rawData.jobs && Array.isArray(rawData.jobs)) {
+        for (const job of rawData.jobs) {
+          const entry = {
+            shopId,
+            workOrderId: String(wo.workOrderId),
+            workOrderNumber: wo.workOrderNumber,
+            servicePackageId: String(job.id),
+            performedAt: wo.completedDate ? new Date(wo.completedDate) : new Date(wo.createdDate),
+            vehicle: vehicleData,
+            job: {
+              title: job.name || job.description || "Unknown",
+              description: job.description,
+              keywords: [],
+            },
+            lines: (job.laborItems || []).concat(job.partItems || []).map((item: any) => ({
+              lineType: item.partNumber ? "part" : "labor",
+              description: item.description || item.name || "",
+              partNumber: item.partNumber,
+              manufacturer: item.brand,
+              quantity: item.quantity || 1,
+              unitPrice: item.unitPrice || item.price || 0,
+              extendedPrice: item.totalPrice || item.amount || 0,
+            })),
+            totals: {
+              laborHours: job.laborHours || 0,
+              laborAmount: job.laborTotal || 0,
+              partsAmount: job.partsTotal || 0,
+              totalAmount: job.total || 0,
+            },
+            metadata: {
+              indexedAt: new Date(),
+              sourceType: "tekmetric" as const,
+            },
+          };
+          allJobIndexEntries.push(entry);
         }
-        allJobIndexEntries.push(...jobEntries);
       }
     } catch (err: any) {
       console.log(`[Parts History] Error for WO ${wo.workOrderId}: ${err.message}`);
@@ -83,6 +140,8 @@ async function buildTekmetricPartsHistory(shopId: number) {
       console.log(`[Parts History] Indexing error: ${indexErr.message}`);
       results.errors.push(`Indexing: ${indexErr.message}`);
     }
+  } else {
+    console.log(`[Parts History] No job entries found. Work orders may need job backfill.`);
   }
   
   return results;
@@ -125,6 +184,7 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       message: `Built parts history from ${results.workOrdersProcessed} work orders`,
+      invoicesFetched: results.workOrdersProcessed,
       ...results,
     });
   }
