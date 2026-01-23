@@ -12,13 +12,24 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const collectionsCursor = await db.listCollections().toArray();
     
+    const userCollections = collectionsCursor.filter(
+      coll => !coll.name.startsWith("system.")
+    );
+    
     const collections = await Promise.all(
-      collectionsCursor.map(async (coll) => {
-        const count = await db.collection(coll.name).estimatedDocumentCount();
-        return {
-          name: coll.name,
-          count
-        };
+      userCollections.map(async (coll) => {
+        try {
+          const count = await db.collection(coll.name).estimatedDocumentCount();
+          return {
+            name: coll.name,
+            count
+          };
+        } catch {
+          return {
+            name: coll.name,
+            count: 0
+          };
+        }
       })
     );
 
