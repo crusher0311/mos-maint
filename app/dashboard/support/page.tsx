@@ -52,6 +52,7 @@ export default function SupportPage() {
   const [loading, setLoading] = useState(true);
   const [showNewTicket, setShowNewTicket] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
   const [newTicket, setNewTicket] = useState({
     subject: "",
     description: "",
@@ -65,7 +66,20 @@ export default function SupportPage() {
 
   useEffect(() => {
     loadTickets();
+    loadUserEmail();
   }, []);
+
+  const loadUserEmail = async () => {
+    try {
+      const res = await fetch("/api/user/profile");
+      const data = await res.json();
+      if (data.ok && data.user?.email) {
+        setUserEmail(data.user.email);
+      }
+    } catch (error) {
+      console.error("Error loading user email:", error);
+    }
+  };
 
   const loadTickets = async () => {
     try {
@@ -344,6 +358,15 @@ export default function SupportPage() {
             </div>
 
             <form onSubmit={createTicket} className="p-6 space-y-4">
+              {userEmail && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Your Email
+                  </label>
+                  <p className="text-sm text-gray-900">{userEmail}</p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Category
