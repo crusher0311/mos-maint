@@ -25,7 +25,7 @@ const DEFAULT_FEATURES = [
     status: "active",
     icon: "Search",
     compatibleSMS: ["stand-alone", "protractor", "tekmetric", "autoflow", "shopware", "shopmonkey"],
-    includedInTiers: ["starter", "plus", "elite", "enterprise"],
+    includedInTiers: ["plus", "elite", "enterprise"],
   },
   {
     order: 3,
@@ -36,7 +36,7 @@ const DEFAULT_FEATURES = [
     status: "active",
     icon: "AlertTriangle",
     compatibleSMS: ["stand-alone", "protractor", "tekmetric", "autoflow", "shopware", "shopmonkey"],
-    includedInTiers: ["starter", "plus", "elite", "enterprise"],
+    includedInTiers: ["elite", "enterprise"],
   },
   {
     order: 4,
@@ -58,7 +58,7 @@ const DEFAULT_FEATURES = [
     status: "active",
     icon: "Tag",
     compatibleSMS: ["stand-alone", "protractor", "tekmetric", "autoflow", "shopware", "shopmonkey"],
-    includedInTiers: ["starter", "plus", "elite", "enterprise"],
+    includedInTiers: ["elite", "enterprise"],
   },
   {
     order: 6,
@@ -69,7 +69,7 @@ const DEFAULT_FEATURES = [
     status: "active",
     icon: "RefreshCw",
     compatibleSMS: ["stand-alone", "protractor", "tekmetric", "autoflow", "shopware", "shopmonkey"],
-    includedInTiers: ["starter", "plus", "elite", "enterprise"],
+    includedInTiers: ["elite", "enterprise"],
   },
   // ADD-ON ONLY - Requires Oil Sticker to be active
   {
@@ -81,7 +81,7 @@ const DEFAULT_FEATURES = [
     status: "active",
     icon: "Calendar",
     compatibleSMS: ["tekmetric"],
-    includedInTiers: ["plus", "elite", "enterprise"],
+    includedInTiers: ["elite", "enterprise"],
     requiresFeature: "oil_sticker",
   },
   // BUNDLED FEATURES - Enabled with Maintenance, not sold separately
