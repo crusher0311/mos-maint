@@ -99,7 +99,17 @@ export async function POST() {
   
   const db = await getDb();
   const shop = await db.collection("shops").findOne({ shopId });
-  const smsIntegration = shop?.smsIntegration || "stand-alone";
+  
+  const hasTekmetric = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
+  const hasProtractor = shop?.protractor?.configured || shop?.protractorConnectionId;
+  
+  let smsIntegration = "stand-alone";
+  if (hasTekmetric) {
+    smsIntegration = "tekmetric";
+  } else if (hasProtractor) {
+    smsIntegration = "protractor";
+  }
+  
   const smsDisplayName = SMS_DISPLAY_NAMES[smsIntegration] || smsIntegration;
   
   if (smsIntegration === "tekmetric") {
