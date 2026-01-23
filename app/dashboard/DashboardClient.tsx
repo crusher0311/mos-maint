@@ -723,27 +723,25 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   }, []);
 
   useEffect(() => {
-    const eventSource = new EventSource('/api/dashboard/events');
+    let lastUpdate = Date.now();
     
-    eventSource.onmessage = (event) => {
+    const checkForUpdates = async () => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'refresh') {
-          loadData(currentPage, searchQuery, showArchived);
+        const response = await fetch('/api/dashboard/updates');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.lastUpdate > lastUpdate) {
+            lastUpdate = data.lastUpdate;
+            loadData(currentPage, searchQuery, showArchived);
+          }
         }
       } catch (e) {
-        // Ignore parse errors (keepalive messages)
+        // Ignore errors
       }
     };
     
-    eventSource.onerror = () => {
-      eventSource.close();
-      setTimeout(() => {
-        // Reconnect after 5 seconds on error
-      }, 5000);
-    };
-    
-    return () => eventSource.close();
+    const interval = setInterval(checkForUpdates, 3000);
+    return () => clearInterval(interval);
   }, [currentPage, searchQuery, showArchived]);
 
   useEffect(() => {

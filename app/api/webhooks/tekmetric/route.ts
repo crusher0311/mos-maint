@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
 import { getVehicle, getCustomer } from "@/lib/tekmetric";
-import { notifyDashboardClients } from "@/app/api/dashboard/events/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -240,7 +239,11 @@ export async function POST(req: NextRequest) {
       receivedAt: new Date()
     });
     
-    notifyDashboardClients();
+    await db.collection("dashboard_updates").updateOne(
+      { _id: "lastUpdate" },
+      { $set: { timestamp: Date.now() } },
+      { upsert: true }
+    );
     
     return NextResponse.json({ success: true });
   } catch (error: any) {
