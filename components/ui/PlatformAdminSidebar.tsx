@@ -20,6 +20,7 @@ import {
   BarChart3,
   ChevronDown,
   ChevronRight,
+  Monitor,
   X
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
@@ -125,7 +126,8 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
 
   const ticketSubItems = [
     { name: "All Tickets", href: "/platform-admin/tickets" },
-    { name: "Reports", href: "/platform-admin/tickets/reports" }
+    { name: "Reports", href: "/platform-admin/tickets/reports" },
+    { name: "Remote Support", href: "/platform-admin/cobrowse" }
   ];
 
   const handleNavClick = () => {
@@ -224,6 +226,8 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                     >
                       {subItem.name === "Reports" ? (
                         <BarChart3 className="w-4 h-4" />
+                      ) : subItem.name === "Remote Support" ? (
+                        <Monitor className="w-4 h-4" />
                       ) : (
                         <Ticket className="w-4 h-4" />
                       )}
