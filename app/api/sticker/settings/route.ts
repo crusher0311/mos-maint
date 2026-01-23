@@ -5,6 +5,42 @@ import { getDb } from "@/lib/mongo";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
+const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
+
+async function updateHovercodeDestination(hovercodeId: string, newUrl: string): Promise<boolean> {
+  if (!HOVERCODE_API_TOKEN || !hovercodeId) {
+    return false;
+  }
+
+  try {
+    console.log(`[Sticker Settings] Updating HoverCode ${hovercodeId} destination to: ${newUrl}`);
+    
+    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/update/`, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        qr_data: newUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Sticker Settings] HoverCode update error:", response.status, errorText);
+      return false;
+    }
+
+    console.log("[Sticker Settings] HoverCode destination updated successfully");
+    return true;
+  } catch (error) {
+    console.error("[Sticker Settings] HoverCode update failed:", error);
+    return false;
+  }
+}
+
 interface IntervalConfig {
   mileage: number;
   months: number;
@@ -199,6 +235,27 @@ export async function PUT(req: NextRequest) {
     }
 
     const db = await getDb();
+    
+    // Check if appointmentUrl is being updated - if so, update HoverCode destination
+    if (body.appointmentUrl) {
+      const existingShop = await db.collection("shops").findOne(
+        { shopId },
+        { projection: { "stickerConfig.hovercodeQRId": 1, "stickerConfig.appointmentUrl": 1 } }
+      );
+      
+      const existingUrl = existingShop?.stickerConfig?.appointmentUrl;
+      const hovercodeId = existingShop?.stickerConfig?.hovercodeQRId;
+      
+      // Only update HoverCode if the URL actually changed and we have a HoverCode ID
+      if (hovercodeId && body.appointmentUrl !== existingUrl) {
+        console.log(`[Sticker Settings] Appointment URL changed from "${existingUrl}" to "${body.appointmentUrl}"`);
+        const updated = await updateHovercodeDestination(hovercodeId, body.appointmentUrl);
+        if (!updated) {
+          console.warn("[Sticker Settings] Failed to update HoverCode destination, but continuing with save");
+        }
+      }
+    }
+    
     const result = await db.collection("shops").updateOne(
       { shopId },
       {
