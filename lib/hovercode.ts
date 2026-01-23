@@ -54,7 +54,7 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
       primary_color: options.primaryColor || "#1e40af",
       background_color: options.backgroundColor || "#ffffff",
       dynamic: true,
-      pattern: options.pattern || "Diamonds",
+      pattern: options.pattern || "Squares",
       generate_png: true,
     };
     

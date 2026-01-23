@@ -153,7 +153,7 @@ async function createHovercodeQR(
         display_name: displayName || "Oil Sticker QR",
         primary_color: color,
         background_color: backgroundColor,
-        pattern: "Diamonds",
+        pattern: "Squares",
         size: size,
         logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,

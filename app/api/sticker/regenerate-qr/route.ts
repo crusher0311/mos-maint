@@ -64,9 +64,9 @@ async function createHovercodeQR(
       qr_data: redirectUrl,
       dynamic: true,
       display_name: options.displayName || "Oil Sticker QR",
-      primary_color: options.color || "#1976d2",
+      primary_color: "#111111",
       background_color: options.backgroundColor || "#ffffff",
-      pattern: "Diamonds",
+      pattern: "Squares",
       generate_png: true,
     };
     
@@ -74,7 +74,7 @@ async function createHovercodeQR(
       requestBody.logo_url = options.logoUrl;
     }
     
-    console.log("[Regenerate QR] Creating HoverCode with pattern: Bubble, dynamic: true");
+    console.log("[Regenerate QR] Creating HoverCode with pattern: Squares, dynamic: true, color: #111111");
     
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
@@ -136,15 +136,22 @@ export async function POST(req: NextRequest) {
 
     let qrDataUrl: string | null = null;
 
-    // Always create a new HoverCode QR with proper styling (dynamic + Bubble pattern)
+    // Get the shop's appointment logo if available
+    const appointmentLogo = config.appointmentLogo || shop.appointmentLogo;
+    let logoUrl = "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png";
+    if (appointmentLogo) {
+      logoUrl = `https://mos-maintenance-mvp.replit.app/api/files/${appointmentLogo}`;
+    }
+
+    // Always create a new HoverCode QR with proper styling (dynamic + Squares pattern)
     // This ensures existing static QR codes get replaced with properly styled dynamic ones
-    console.log("[Regenerate QR] Creating new HoverCode QR with Bubble pattern and dynamic=true");
+    console.log("[Regenerate QR] Creating new HoverCode QR with Squares pattern, dynamic=true, logo:", logoUrl);
     const newQR = await createHovercodeQR(redirectUrl, {
       size: 300,
-      color: qrColor,
+      color: "#111111",
       backgroundColor: qrBgColor,
       displayName: `${shopName} - Oil Sticker`,
-      logoUrl: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+      logoUrl: logoUrl,
     });
 
     // Save HoverCode ID even if we don't get dataUri
