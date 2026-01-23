@@ -156,8 +156,6 @@ export default function SupportChatWidget() {
       const res = await fetch("/api/cobrowse/config");
       const data = await res.json();
       
-      console.log("Cobrowse config:", data);
-      
       if (!data.licenseKey) {
         setMessages(prev => [...prev, {
           role: "assistant",
@@ -169,46 +167,49 @@ export default function SupportChatWidget() {
       }
 
       if (!window.CobrowseIO) {
-        console.log("Loading Cobrowse SDK...");
-        const script = document.createElement("script");
-        script.src = "https://js.cobrowse.io/CobrowseIO.js";
-        script.async = true;
-        script.crossOrigin = "anonymous";
-        
         await new Promise<void>((resolve, reject) => {
-          script.onload = () => {
-            console.log("Cobrowse SDK loaded");
+          const existingScript = document.querySelector('script[src*="cobrowse.io"]');
+          if (existingScript) {
             resolve();
-          };
-          script.onerror = (e) => {
-            console.error("Failed to load SDK:", e);
-            reject(new Error("Failed to load screen sharing"));
-          };
-          document.head.appendChild(script);
+            return;
+          }
+          
+          (function(w: any, t: string, c: string, p: any, s: any, e: any) {
+            p = new Promise(function(r: any) {
+              w[c] = {
+                client: function() {
+                  if (!s) {
+                    s = document.createElement(t);
+                    s.src = 'https://js.cobrowse.io/CobrowseIO.js';
+                    s.async = 1;
+                    s.crossOrigin = 'anonymous';
+                    e = document.getElementsByTagName(t)[0];
+                    e.parentNode.insertBefore(s, e);
+                    s.onload = function() { r(w[c]); };
+                    s.onerror = function() { reject(new Error("Failed to load")); };
+                  }
+                  return p;
+                }
+              };
+            });
+          })(window, 'script', 'CobrowseIO', null, null, null);
+          
+          resolve();
         });
       }
 
-      console.log("CobrowseIO object:", typeof window.CobrowseIO);
       window.CobrowseIO.license = data.licenseKey;
       
-      console.log("Calling client()...");
-      const client = await window.CobrowseIO.client();
-      console.log("Client ready:", client);
+      await window.CobrowseIO.client();
+      await window.CobrowseIO.start();
       
-      console.log("Calling start()...");
-      await client.start();
-      console.log("Started");
-      
-      console.log("Creating session code...");
-      const code = await client.createSessionCode();
-      console.log("Session code:", code);
+      const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
-      console.error("Screen share error:", err?.message || err?.toString() || err);
-      console.error("Full error object:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      console.error("Screen share error:", err);
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: `Unable to start screen sharing: ${err?.message || "Unknown error"}. Please try again.`,
+        content: "Unable to start screen sharing. Please try again or contact support.",
         timestamp: new Date().toISOString()
       }]);
     } finally {
