@@ -472,7 +472,8 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   if (pickupTime) body.pickupTime = pickupTime;
   if (rideOption) body.rideOption = rideOption;
   if (status) body.status = status;
-  // Don't include appointmentOption in create - it's only settable via PATCH
+  // Try including appointmentOptionId in the create request
+  if (appointmentOptionId) body.appointmentOptionId = appointmentOptionId;
   const savedAppointmentOptionId = appointmentOptionId;
   
   console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
