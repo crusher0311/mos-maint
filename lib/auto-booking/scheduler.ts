@@ -13,6 +13,8 @@ export interface AutoBookingSettings {
     end: string;
   };
   maxBookingsPerDay: number;
+  maxBookingsPerSlot: number;
+  appointmentDuration: 30 | 60;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
@@ -351,7 +353,7 @@ async function pushAppointmentToSMS(
   // Get shop details to determine which SMS to use
   const shop = await db.collection("shops").findOne(
     { shopId: booking.shopId },
-    { projection: { integrations: 1, tekmetric: 1, protractor: 1, protractorConnectionId: 1 } }
+    { projection: { integrations: 1, tekmetric: 1, protractor: 1, protractorConnectionId: 1, autoBooking: 1, timezone: 1 } }
   );
   
   if (!shop) {
@@ -377,6 +379,8 @@ async function pushAppointmentToSMS(
   // Default to Central time (America/Chicago) - most common for US auto shops
   // Format: 2026-04-23T08:00:00-05:00
   const shopTimezone = shop.timezone || 'America/Chicago';
+  const autoBookingSettings = shop.autoBooking as AutoBookingSettings | undefined;
+  const appointmentDuration = autoBookingSettings?.appointmentDuration || 60; // Default 60 minutes
   
   // Calculate timezone offset for the scheduled date
   const scheduledDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
@@ -384,8 +388,12 @@ async function pushAppointmentToSMS(
   
   const startTimeStr = `${booking.scheduledDate}T${booking.scheduledTime}:00${tzOffset}`;
   const [hours, minutes] = booking.scheduledTime.split(':').map(Number);
-  const endHours = hours + 1; // 1 hour duration
-  const endTimeStr = `${booking.scheduledDate}T${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00${tzOffset}`;
+  
+  // Calculate end time based on appointment duration setting
+  const totalMinutes = hours * 60 + minutes + appointmentDuration;
+  const endHours = Math.floor(totalMinutes / 60);
+  const endMinutes = totalMinutes % 60;
+  const endTimeStr = `${booking.scheduledDate}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00${tzOffset}`;
   
   // Try Tekmetric first if available
   if (hasTekmetric) {
