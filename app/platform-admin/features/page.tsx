@@ -31,7 +31,7 @@ interface PlatformFeature {
   name: string;
   slug: string;
   description: string;
-  category: "core" | "addon";
+  category: "core" | "addon" | "bundled";
   status: "active" | "inactive";
   icon: string;
   compatibleSMS: string[];
@@ -39,6 +39,9 @@ interface PlatformFeature {
   stripeProductId?: string;
   stripePriceId?: string;
   pricePerMonth?: number;
+  requiresFeature?: string;
+  bundledWith?: string;
+  bundledFeatures?: string[];
 }
 
 const ICON_MAP: Record<string, any> = {
@@ -79,14 +82,16 @@ export default function FeaturesManagementPage() {
     name: "",
     slug: "",
     description: "",
-    category: "addon" as "core" | "addon",
+    category: "core" as "core" | "addon" | "bundled",
     status: "active" as "active" | "inactive",
     icon: "Package",
     compatibleSMS: [] as string[],
     includedInTiers: [] as string[],
     stripeProductId: "",
     stripePriceId: "",
-    pricePerMonth: ""
+    pricePerMonth: "",
+    requiresFeature: "",
+    bundledWith: ""
   });
 
   useEffect(() => {
@@ -153,7 +158,9 @@ export default function FeaturesManagementPage() {
         includedInTiers: feature.includedInTiers,
         stripeProductId: feature.stripeProductId || "",
         stripePriceId: feature.stripePriceId || "",
-        pricePerMonth: feature.pricePerMonth?.toString() || ""
+        pricePerMonth: feature.pricePerMonth?.toString() || "",
+        requiresFeature: feature.requiresFeature || "",
+        bundledWith: feature.bundledWith || ""
       });
     } else {
       setEditingFeature(null);
@@ -161,14 +168,16 @@ export default function FeaturesManagementPage() {
         name: "",
         slug: "",
         description: "",
-        category: "addon",
+        category: "core",
         status: "active",
         icon: "Package",
         compatibleSMS: [],
         includedInTiers: [],
         stripeProductId: "",
         stripePriceId: "",
-        pricePerMonth: ""
+        pricePerMonth: "",
+        requiresFeature: "",
+        bundledWith: ""
       });
     }
     setShowModal(true);
@@ -374,10 +383,18 @@ export default function FeaturesManagementPage() {
                     <span className={`px-2 py-1 text-xs font-medium rounded ${
                       feature.category === "core" 
                         ? "bg-blue-100 text-blue-700" 
+                        : feature.category === "bundled"
+                        ? "bg-amber-100 text-amber-700"
                         : "bg-gray-100 text-gray-700"
                     }`}>
-                      {feature.category}
+                      {feature.category === "core" ? "Core" : feature.category === "bundled" ? "Bundled" : "Add-on"}
                     </span>
+                    {feature.requiresFeature && (
+                      <span className="ml-1 text-xs text-gray-500">→ {feature.requiresFeature}</span>
+                    )}
+                    {feature.bundledWith && (
+                      <span className="ml-1 text-xs text-gray-500">⊂ {feature.bundledWith}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs font-medium rounded ${
@@ -477,11 +494,12 @@ export default function FeaturesManagementPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as "core" | "addon" })}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value as "core" | "addon" | "bundled" })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   >
-                    <option value="core">Core</option>
-                    <option value="addon">Add-on</option>
+                    <option value="core">Core (Purchasable)</option>
+                    <option value="addon">Add-on (Requires Feature)</option>
+                    <option value="bundled">Bundled (Included With)</option>
                   </select>
                 </div>
                 <div>
@@ -548,6 +566,34 @@ export default function FeaturesManagementPage() {
                   ))}
                 </div>
               </div>
+
+              {formData.category === "addon" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Requires Feature (slug)</label>
+                  <input
+                    type="text"
+                    value={formData.requiresFeature}
+                    onChange={(e) => setFormData({ ...formData, requiresFeature: e.target.value })}
+                    placeholder="e.g., oil_sticker"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This add-on is only available when the specified feature is active</p>
+                </div>
+              )}
+
+              {formData.category === "bundled" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bundled With (slug)</label>
+                  <input
+                    type="text"
+                    value={formData.bundledWith}
+                    onChange={(e) => setFormData({ ...formData, bundledWith: e.target.value })}
+                    placeholder="e.g., maintenance"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This feature is automatically included when the specified feature is purchased</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
                 <div>
