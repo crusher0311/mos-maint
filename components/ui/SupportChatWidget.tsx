@@ -168,34 +168,27 @@ export default function SupportChatWidget() {
         return;
       }
 
-      if (!cobrowseInitialized) {
-        (function(w: any, t: string, c: string, p?: Promise<any>, s?: HTMLScriptElement, e?: Element) {
-          p = new Promise(function(r) {
-            w[c] = {
-              client: function() {
-                if (!s) {
-                  s = document.createElement(t) as HTMLScriptElement;
-                  s.src = 'https://js.cobrowse.io/CobrowseIO.js';
-                  s.async = true;
-                  s.crossOrigin = 'anonymous';
-                  e = document.getElementsByTagName(t)[0];
-                  e?.parentNode?.insertBefore(s, e);
-                  s.onload = function() { r(w[c]); };
-                }
-                return p;
-              }
-            };
-          });
-        })(window, 'script', 'CobrowseIO');
-        cobrowseInitialized = true;
+      if (!cobrowseInitialized || !window.CobrowseIO?.createSessionCode) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://js.cobrowse.io/CobrowseIO.js';
+          script.async = true;
+          script.crossOrigin = 'anonymous';
+          script.onload = () => {
+            window.CobrowseIO.license = data.licenseKey;
+            window.CobrowseIO.start();
+            
+            window.CobrowseIO.on('session.loaded', () => {
+              console.log('Cobrowse session loaded');
+            });
+            
+            cobrowseInitialized = true;
+            setTimeout(resolve, 2000);
+          };
+          script.onerror = () => reject(new Error('Failed to load Cobrowse SDK'));
+          document.head.appendChild(script);
+        });
       }
-      
-      await window.CobrowseIO.client();
-      
-      window.CobrowseIO.license = data.licenseKey;
-      await window.CobrowseIO.start();
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
