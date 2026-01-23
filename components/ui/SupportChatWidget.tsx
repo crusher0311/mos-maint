@@ -177,24 +177,34 @@ export default function SupportChatWidget() {
           script.onload = async () => {
             console.log('Cobrowse SDK loaded, license:', data.licenseKey?.substring(0, 8) + '...');
             window.CobrowseIO.license = data.licenseKey;
+            window.CobrowseIO.trustedOrigins = ['*'];
             
-            try {
-              const startResult = await window.CobrowseIO.start();
-              console.log('Cobrowse start result:', startResult);
-              console.log('Cobrowse device id:', window.CobrowseIO.deviceId);
-            } catch (startErr) {
-              console.error('Cobrowse start error:', startErr);
-            }
+            window.CobrowseIO.on('error', (err: any) => {
+              console.error('Cobrowse error event:', err);
+            });
             
-            cobrowseInitialized = true;
-            setTimeout(resolve, 2000);
+            window.CobrowseIO.start().then(() => {
+              console.log('Cobrowse started, device id:', window.CobrowseIO.deviceId);
+              cobrowseInitialized = true;
+              resolve();
+            }).catch((err: any) => {
+              console.error('Cobrowse start error:', err);
+              reject(err);
+            });
           };
           script.onerror = () => reject(new Error('Failed to load Cobrowse SDK'));
           document.head.appendChild(script);
         });
+        
+        let attempts = 0;
+        while (!window.CobrowseIO.deviceId && attempts < 10) {
+          await new Promise(r => setTimeout(r, 500));
+          attempts++;
+          console.log('Waiting for device registration, attempt:', attempts);
+        }
       }
       
-      console.log('Attempting createSessionCode, CobrowseIO:', typeof window.CobrowseIO, 'deviceId:', window.CobrowseIO?.deviceId);
+      console.log('Creating session code, deviceId:', window.CobrowseIO?.deviceId);
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
