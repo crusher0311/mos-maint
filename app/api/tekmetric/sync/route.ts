@@ -101,6 +101,11 @@ export async function POST(request: NextRequest) {
       const roLabelColor = ro.color || null;
       const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
       
+      // Log first few for debugging
+      if (vehicleMap.size <= 3) {
+        console.log(`[Tekmetric Sync] Sample RO #${ro.repairOrderNumber}: status="${roStatus}", vin=${vin}, mileage=${roMileage}`);
+      }
+      
       // Build the active source entry for this work order
       const workOrderSource = {
         provider: "tekmetric",
