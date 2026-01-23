@@ -16,7 +16,10 @@ export async function POST(req: NextRequest) {
     
     const eventType = body.event || body.eventType || body.type || "";
     const data = body.data || body.payload || body;
-    const repairOrder = data.repairOrder || body.repairOrder;
+    
+    // Handle both nested (data.repairOrder) and flat (data is the repair order) structures
+    const repairOrder = data.repairOrder || body.repairOrder || 
+      (data.id && data.repairOrderNumber && data.shopId ? data : null);
     
     const isInspectionComplete = 
       eventType.toLowerCase().includes("inspection") && 
@@ -37,7 +40,9 @@ export async function POST(req: NextRequest) {
       eventType.toLowerCase().includes("invoiced") ||
       eventType.toLowerCase().includes("invoice");
     
-    if (isRepairOrderUpdate && repairOrder) {
+    console.log(`[Tekmetric Webhook] Parsed - eventType: "${eventType}", repairOrder found: ${!!repairOrder}, isRepairOrderUpdate: ${isRepairOrderUpdate}`);
+    
+    if (repairOrder) {
       const roId = repairOrder.id;
       const roNumber = repairOrder.repairOrderNumber;
       const tekmetricShopId = repairOrder.shopId;
