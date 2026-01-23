@@ -1,11 +1,28 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { CreditCard, Check, AlertCircle, Loader2, ExternalLink, RefreshCw, Receipt, Wallet, Calendar, Building2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { 
+  CreditCard, 
+  Check, 
+  AlertCircle, 
+  Loader2, 
+  ExternalLink, 
+  RefreshCw, 
+  Receipt, 
+  Wallet, 
+  Calendar, 
+  Building2,
+  Package,
+  ArrowUp,
+  ArrowDown,
+  Download,
+  ChevronRight
+} from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 interface BillingInfo {
   plan: string;
+  planSlug: string;
   status: string;
   vehicleCount: number;
   vehicleLimit: number;
@@ -13,246 +30,248 @@ interface BillingInfo {
   stripeCustomerId?: string;
   periodStart?: string;
   periodEnd?: string;
+  monthlyAmount?: number;
+  pendingPlanChange?: {
+    planId: string;
+    effectiveDate: string;
+  };
 }
 
-interface StripePrice {
+interface Plan {
+  name: string;
+  slug: string;
+  order: number;
+  monthlyPrice: number;
+  description: string;
+  features: string[];
+  stripeMonthlyPriceId?: string;
+  isPopular?: boolean;
+  isEnterprise?: boolean;
+}
+
+interface Invoice {
   id: string;
-  unitAmount: number;
-  currency: string;
-  interval: string;
-  intervalCount: number;
-  productName: string;
+  number: string;
+  amount: number;
+  status: string;
+  created: number;
+  hostedInvoiceUrl?: string;
+  invoicePdf?: string;
 }
 
-type TabType = "overview" | "plans" | "features";
+interface PaymentMethod {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  isDefault: boolean;
+}
 
-function BillingContent() {
+interface PlatformFeature {
+  _id: string;
+  name: string;
+  slug: string;
+  description: string;
+  includedInTiers: string[];
+}
+
+interface VinPack {
+  size: number;
+  price: number;
+  priceId: string;
+}
+
+type TabType = "overview" | "plans" | "addons" | "payment" | "history";
+
+export default function BillingSettingsPage() {
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [features, setFeatures] = useState<PlatformFeature[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [vinPacks, setVinPacks] = useState<VinPack[]>([]);
   const [loading, setLoading] = useState(true);
-  const [upgrading, setUpgrading] = useState(false);
-  const [portalLoading, setPortalLoading] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [prices, setPrices] = useState<StripePrice[]>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const searchParams = useSearchParams();
 
-  const success = searchParams.get("success");
-  const canceled = searchParams.get("canceled");
+  const checkoutSuccess = searchParams?.get("success");
+  const checkoutCanceled = searchParams?.get("canceled");
 
   useEffect(() => {
-    fetchBilling();
-    fetchPrices();
+    loadData();
   }, []);
 
-  async function fetchBilling() {
+  useEffect(() => {
+    if (checkoutSuccess) {
+      setSuccess("Payment successful! Your plan has been updated.");
+    } else if (checkoutCanceled) {
+      setError("Checkout canceled. No changes were made.");
+    }
+  }, [checkoutSuccess, checkoutCanceled]);
+
+  async function loadData() {
+    setLoading(true);
     try {
-      const res = await fetch("/api/settings/billing");
-      if (res.ok) {
-        const data = await res.json();
+      const [billingRes, plansRes, invoicesRes, paymentRes, addonsRes] = await Promise.all([
+        fetch("/api/settings/billing"),
+        fetch("/api/stripe/plans"),
+        fetch("/api/stripe/invoices"),
+        fetch("/api/stripe/payment-methods"),
+        fetch("/api/settings/addons"),
+      ]);
+
+      if (billingRes.ok) {
+        const data = await billingRes.json();
         setBilling(data);
       } else {
         setBilling({
           plan: "Free Trial",
+          planSlug: "starter",
           status: "trial",
           vehicleCount: 0,
           vehicleLimit: 10,
         });
       }
+
+      if (plansRes.ok) {
+        const data = await plansRes.json();
+        setPlans(data.plans || []);
+        setFeatures(data.features || []);
+      }
+
+      if (invoicesRes.ok) {
+        const data = await invoicesRes.json();
+        setInvoices(data.invoices || []);
+      }
+
+      if (paymentRes.ok) {
+        const data = await paymentRes.json();
+        setPaymentMethods(data.paymentMethods || []);
+      }
+
+      if (addonsRes.ok) {
+        const data = await addonsRes.json();
+        setVinPacks(data.vinPacks || []);
+      }
     } catch (err) {
-      setBilling({
-        plan: "Free Trial",
-        status: "trial",
-        vehicleCount: 0,
-        vehicleLimit: 10,
-      });
+      console.error("Error loading billing data:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchPrices() {
-    try {
-      const res = await fetch("/api/stripe/prices");
-      if (res.ok) {
-        const data = await res.json();
-        setPrices(data.prices || []);
+  async function handlePlanChange(plan: Plan, isDowngrade: boolean) {
+    if (!plan.stripeMonthlyPriceId) {
+      if (plan.isEnterprise) {
+        window.location.href = "mailto:support@mosmaintenance.com?subject=Enterprise Plan Inquiry";
+        return;
       }
-    } catch (err) {
-      console.error("Failed to fetch prices:", err);
+      setError("This plan is not yet available for purchase.");
+      return;
+    }
+
+    const action = isDowngrade ? "downgrade" : "upgrade";
+    if (!confirm(`Are you sure you want to ${action} to ${plan.name}? ${isDowngrade ? "Changes will take effect at the end of your billing cycle." : "Your card will be charged a prorated amount."}`)) {
+      return;
+    }
+
+    setActionLoading(plan.slug);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      if (!billing?.stripeCustomerId) {
+        const res = await fetch("/api/stripe/create-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId: plan.stripeMonthlyPriceId, plan: plan.slug }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error(data.error || "Failed to create checkout");
+        }
+        return;
+      }
+
+      const res = await fetch("/api/stripe/change-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priceId: plan.stripeMonthlyPriceId,
+          planId: plan.slug,
+          isDowngrade,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(data.message);
+        loadData();
+      } else {
+        throw new Error(data.error || "Failed to change plan");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(null);
     }
   }
 
-  async function handleUpgrade(priceId: string, plan: string) {
-    setUpgrading(true);
+  async function handleManageBilling() {
+    setActionLoading("portal");
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/billing-portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || "Failed to open billing portal");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleBuyVinPack(packSize: number, priceId: string) {
+    setActionLoading(`vin-${packSize}`);
     setError(null);
     try {
       const res = await fetch("/api/stripe/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, plan }),
+        body: JSON.stringify({ priceId, product: `vin-pack-${packSize}` }),
       });
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;
       } else {
-        setError(data.error || "Failed to create checkout session");
+        throw new Error(data.error || "Failed to create checkout");
       }
-    } catch (err) {
-      setError("Failed to start checkout. Please try again.");
+    } catch (err: any) {
+      setError(err.message);
     } finally {
-      setUpgrading(false);
+      setActionLoading(null);
     }
   }
 
-  async function handleManageBilling() {
-    setPortalLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/stripe/billing-portal", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setError(data.error || "Failed to open billing portal");
-      }
-    } catch (err) {
-      setError("Failed to open billing portal. Please try again.");
-    } finally {
-      setPortalLoading(false);
-    }
-  }
-
-  async function handleSync() {
-    setSyncLoading(true);
-    await fetchBilling();
-    setSyncLoading(false);
-  }
-
-  const monthlyPrice = prices.find(p => p.interval === "month");
   const isPaid = billing?.status === "active" && billing?.plan !== "Free Trial";
-
-  const plans = [
-    {
-      name: "Starter",
-      price: "Free",
-      period: "",
-      description: "Standalone Plan",
-      features: [
-        { name: "Auto Booking", included: false },
-        { name: "CarFax Integration", included: false },
-        { name: "Labor Rate Updater", included: false },
-        { name: "Maintenance Guide", included: false },
-        { name: "OEM Data Integration", included: false },
-        { name: "Printing", included: true },
-      ],
-      current: billing?.plan === "Free Trial" || billing?.status === "trial",
-      trial: true,
-    },
-    {
-      name: "Plus",
-      price: monthlyPrice ? `$${(monthlyPrice.unitAmount / 100).toFixed(2)}` : "$79.95",
-      period: "/month",
-      description: "Integrated Plan",
-      features: [
-        { name: "Labor Rate Updater", included: true },
-        { name: "CarFax Integration", included: true },
-        { name: "OEM Data Integration", included: true },
-        { name: "Promised Time Tool", included: true },
-        { name: "Auto Booking", included: true },
-        { name: "Printing", included: true },
-      ],
-      current: false,
-      popular: true,
-      priceId: monthlyPrice?.id,
-      planKey: "plus",
-    },
-    {
-      name: "Professional",
-      price: "$149.95",
-      period: "/month",
-      description: "Maintenance - Optimization - Stickers",
-      features: [
-        { name: "Auto Booking", included: true },
-        { name: "CarFax Integration", included: true },
-        { name: "Chrome Extension", included: true },
-        { name: "Labor Rate Updater", included: true },
-        { name: "Maintenance Guide", included: true },
-        { name: "OEM Data Integration", included: true },
-      ],
-      current: billing?.plan === "Professional" || billing?.plan === "professional",
-      highlight: true,
-      priceId: monthlyPrice?.id,
-      planKey: "professional",
-    },
-    {
-      name: "MOS",
-      price: "$1,000.00",
-      period: "/month",
-      description: "",
-      features: [
-        { name: "Auto Booking", included: true },
-        { name: "CarFax Integration", included: true },
-        { name: "Chrome Extension", included: true },
-        { name: "Labor Rate Updater", included: true },
-        { name: "Maintenance Guide", included: true },
-        { name: "OeM Data Integration", included: true },
-      ],
-      current: billing?.plan === "Multi-Shop" || billing?.plan === "enterprise",
-      contactSales: true,
-    },
-  ];
-
-  const features = [
-    {
-      name: "Printing",
-      description: "Core set of printing features",
-      enabled: true,
-      compatible: true,
-    },
-    {
-      name: "Chrome Extension",
-      description: "Chrome browser extension",
-      enabled: false,
-      compatible: false,
-      reason: "This feature is not compatible with your current shop management system.",
-    },
-    {
-      name: "Labor Rate Updater",
-      description: "Automated labor rate updates",
-      enabled: false,
-      compatible: false,
-      reason: "This feature is not compatible with your current shop management system.",
-    },
-    {
-      name: "CarFax Integration",
-      description: "CarFax data integration",
-      enabled: isPaid,
-      compatible: isPaid,
-      reason: isPaid ? undefined : "This feature is not compatible with your current shop management system.",
-    },
-    {
-      name: "Maintenance Guide",
-      description: "Maintenance Guide",
-      enabled: isPaid,
-      compatible: isPaid,
-      reason: isPaid ? undefined : "This feature is not compatible with your current shop management system.",
-    },
-    {
-      name: "OEM Data Integration",
-      description: "OEM Data Integration",
-      enabled: isPaid,
-      compatible: isPaid,
-      reason: isPaid ? undefined : "This feature is not compatible with your current shop management system.",
-    },
-  ];
+  const currentPlanIndex = plans.findIndex(p => p.slug === billing?.planSlug);
 
   const tabs = [
-    { id: "overview" as const, label: "Overview" },
-    { id: "plans" as const, label: "Plans" },
-    { id: "features" as const, label: "Features" },
+    { id: "overview" as const, label: "Overview", icon: Wallet },
+    { id: "plans" as const, label: "Plans", icon: Package },
+    { id: "addons" as const, label: "Add-Ons", icon: Package },
+    { id: "payment" as const, label: "Payment Methods", icon: CreditCard },
+    { id: "history" as const, label: "Billing History", icon: Receipt },
   ];
 
   if (loading) {
@@ -271,49 +290,41 @@ function BillingContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Billing & Subscription</h1>
           <p className="text-gray-500 mt-1">
-            Manage your subscription, payment methods, and billing history. Choose a plan to subscribe and unlock features for your shop.
+            Manage your subscription, payment methods, and billing history.
           </p>
         </div>
 
-        {success && (
+        {(success || checkoutSuccess) && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-green-800">
               <Check className="w-5 h-5" />
-              <span className="font-medium">Payment successful! Your plan has been upgraded.</span>
+              <span className="font-medium">{success || "Payment successful!"}</span>
             </div>
           </div>
         )}
 
-        {canceled && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-amber-800">
-              <AlertCircle className="w-5 h-5" />
-              <span className="font-medium">Checkout canceled. No charges were made.</span>
-            </div>
-          </div>
-        )}
-
-        {error && (
+        {(error || checkoutCanceled) && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-red-800">
               <AlertCircle className="w-5 h-5" />
-              <span className="font-medium">{error}</span>
+              <span className="font-medium">{error || "Checkout canceled."}</span>
             </div>
           </div>
         )}
 
         <div className="border-b border-gray-200">
-          <nav className="flex gap-6">
+          <nav className="flex gap-1 overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                className={`flex items-center gap-2 py-3 px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? "border-blue-600 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
+                <tab.icon className="w-4 h-4" />
                 {tab.label}
               </button>
             ))}
@@ -324,46 +335,39 @@ function BillingContent() {
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-lg font-semibold text-gray-900">Current Subscription</h2>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      billing?.status === "active" 
-                        ? "bg-green-100 text-green-700" 
-                        : "bg-blue-100 text-blue-700"
-                    }`}>
-                      {billing?.status === "active" ? "Active" : "Trial"}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-gray-900">Current Subscription</h2>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    billing?.status === "active" 
+                      ? "bg-green-100 text-green-700" 
+                      : "bg-blue-100 text-blue-700"
+                  }`}>
+                    {billing?.status === "active" ? "Active" : "Trial"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={handleSync}
-                    disabled={syncLoading}
-                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    onClick={loadData}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCw className="w-4 h-4" />
                     Sync
                   </button>
                   {isPaid && (
                     <button
                       onClick={handleManageBilling}
-                      disabled={portalLoading}
+                      disabled={actionLoading === "portal"}
                       className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
-                      {portalLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <ExternalLink className="w-4 h-4" />
-                      )}
+                      {actionLoading === "portal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
                       Manage Subscription
                     </button>
                   )}
                 </div>
               </div>
-              
-              <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+
+              <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <CreditCard className="w-5 h-5 text-blue-600" />
                   </div>
@@ -372,18 +376,20 @@ function BillingContent() {
                     <p className="font-semibold text-gray-900">{billing?.plan || "Free Trial"}</p>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+
+                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
                   <div className="p-2 bg-green-100 rounded-lg">
                     <Wallet className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Status</p>
-                    <p className="font-semibold text-gray-900 capitalize">{billing?.status || "trial"}</p>
+                    <p className="text-xs text-gray-500">Monthly Amount</p>
+                    <p className="font-semibold text-gray-900">
+                      {billing?.monthlyAmount ? `$${(billing.monthlyAmount / 100).toFixed(2)}` : "Free"}
+                    </p>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+
+                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
                   <div className="p-2 bg-purple-100 rounded-lg">
                     <Building2 className="w-5 h-5 text-purple-600" />
                   </div>
@@ -392,24 +398,35 @@ function BillingContent() {
                     <p className="font-semibold text-gray-900">{billing?.vehicleCount || 0} / {billing?.vehicleLimit || 10}</p>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+
+                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
                   <div className="p-2 bg-amber-100 rounded-lg">
                     <Calendar className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Period</p>
+                    <p className="text-xs text-gray-500">Billing Period</p>
                     <p className="font-semibold text-gray-900">
-                      {billing?.periodStart && billing?.periodEnd
-                        ? `${new Date(billing.periodStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(billing.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                      {billing?.periodEnd
+                        ? `Renews ${new Date(billing.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                         : "Monthly"}
                     </p>
                   </div>
                 </div>
               </div>
 
+              {billing?.pendingPlanChange && (
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <AlertCircle className="w-5 h-5" />
+                    <span>
+                      Your plan will change to <strong>{billing.pendingPlanChange.planId}</strong> on {new Date(billing.pendingPlanChange.effectiveDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {!isPaid && (
-                <div className="mt-4">
+                <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-600">Vehicle Usage</span>
                     <span className="text-sm font-medium text-gray-900">
@@ -449,215 +466,325 @@ function BillingContent() {
 
         {activeTab === "plans" && (
           <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-gray-900">Choose Your Plan</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Choose Your Plan</h2>
+              <p className="text-sm text-gray-500">
+                Upgrade immediately (prorated) or downgrade at end of cycle
+              </p>
+            </div>
+
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {plans.map((plan) => (
-                <div
-                  key={plan.name}
-                  className={`relative bg-white rounded-xl border-2 p-5 transition-all ${
-                    plan.current && !plan.trial
-                      ? "border-green-500 shadow-lg shadow-green-100"
-                      : plan.current
-                        ? "border-blue-500" 
-                        : plan.popular 
-                          ? "border-blue-300" 
+              {plans.map((plan, index) => {
+                const isCurrent = plan.slug === billing?.planSlug;
+                const isDowngrade = currentPlanIndex > index;
+                const isUpgrade = currentPlanIndex < index;
+
+                return (
+                  <div
+                    key={plan.slug}
+                    className={`relative bg-white rounded-xl border-2 p-5 transition-all ${
+                      isCurrent
+                        ? "border-green-500 shadow-lg shadow-green-100"
+                        : plan.isPopular
+                          ? "border-blue-300"
                           : "border-gray-200"
-                  }`}
-                >
-                  {plan.popular && !plan.highlight && (
-                    <div className="absolute -top-3 left-4">
-                      <span className="bg-blue-600 text-white text-xs font-medium px-3 py-1 rounded-full">
-                        Most Popular
-                      </span>
-                    </div>
-                  )}
-                  {plan.current && !plan.trial && (
-                    <div className="absolute -top-3 left-4">
-                      <span className="bg-green-600 text-white text-xs font-medium px-3 py-1 rounded-full">
-                        Current Plan
-                      </span>
-                    </div>
-                  )}
-                  
-                  <div className="mb-4 pt-2">
-                    <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-                    <div className="mt-2">
-                      <span className="text-2xl font-bold text-gray-900">{plan.price}</span>
-                      <span className="text-gray-500 text-sm">{plan.period}</span>
-                    </div>
-                    {plan.description && (
+                    }`}
+                  >
+                    {plan.isPopular && !isCurrent && (
+                      <div className="absolute -top-3 left-4">
+                        <span className="bg-blue-600 text-white text-xs font-medium px-3 py-1 rounded-full">
+                          Most Popular
+                        </span>
+                      </div>
+                    )}
+                    {isCurrent && (
+                      <div className="absolute -top-3 left-4">
+                        <span className="bg-green-600 text-white text-xs font-medium px-3 py-1 rounded-full">
+                          Current Plan
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="mb-4 pt-2">
+                      <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+                      <div className="mt-2">
+                        {plan.isEnterprise ? (
+                          <span className="text-2xl font-bold text-gray-900">Custom</span>
+                        ) : (
+                          <>
+                            <span className="text-2xl font-bold text-gray-900">
+                              ${plan.monthlyPrice.toFixed(2)}
+                            </span>
+                            <span className="text-gray-500 text-sm">/month</span>
+                          </>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 mt-1">{plan.description}</p>
-                    )}
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Included Features</p>
+                      <ul className="space-y-2">
+                        {features
+                          .filter(f => f.includedInTiers.includes(plan.slug))
+                          .slice(0, 6)
+                          .map((feature) => (
+                            <li key={feature.slug} className="flex items-center gap-2 text-sm">
+                              <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-green-100">
+                                <Check className="w-2.5 h-2.5 text-green-600" />
+                              </div>
+                              <span className="text-gray-700">{feature.name}</span>
+                            </li>
+                          ))}
+                        {features.filter(f => f.includedInTiers.includes(plan.slug)).length > 6 && (
+                          <li className="text-xs text-gray-500">
+                            +{features.filter(f => f.includedInTiers.includes(plan.slug)).length - 6} more
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <div className="mt-5">
+                      {isCurrent ? (
+                        <button
+                          disabled
+                          className="w-full py-2.5 px-4 rounded-lg font-medium bg-gray-100 text-gray-400 cursor-not-allowed text-sm"
+                        >
+                          Current Plan
+                        </button>
+                      ) : plan.isEnterprise ? (
+                        <a
+                          href="mailto:support@mosmaintenance.com?subject=Enterprise Plan Inquiry"
+                          className="block w-full py-2.5 px-4 rounded-lg font-medium bg-gray-900 text-white text-center hover:bg-gray-800 transition-colors text-sm"
+                        >
+                          Contact Sales
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => handlePlanChange(plan, isDowngrade)}
+                          disabled={actionLoading === plan.slug}
+                          className={`w-full py-2.5 px-4 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm ${
+                            isDowngrade
+                              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                              : "bg-blue-600 text-white hover:bg-blue-700"
+                          }`}
+                        >
+                          {actionLoading === plan.slug ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : isDowngrade ? (
+                            <ArrowDown className="w-4 h-4" />
+                          ) : (
+                            <ArrowUp className="w-4 h-4" />
+                          )}
+                          {isDowngrade ? "Downgrade" : "Upgrade"}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  
-                  <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Included Features</p>
-                    <ul className="space-y-2">
-                      {plan.features.map((feature) => (
-                        <li key={feature.name} className="flex items-center gap-2 text-sm">
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            feature.included ? "bg-green-100" : "bg-gray-100"
-                          }`}>
-                            <Check className={`w-2.5 h-2.5 ${feature.included ? "text-green-600" : "text-gray-400"}`} />
-                          </div>
-                          <span className={feature.included ? "text-gray-700" : "text-gray-400"}>
-                            {feature.name}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  
-                  <div className="mt-5">
-                    {plan.current ? (
-                      <button
-                        disabled
-                        className="w-full py-2.5 px-4 rounded-lg font-medium bg-gray-100 text-gray-400 cursor-not-allowed text-sm"
-                      >
-                        Current Plan
-                      </button>
-                    ) : plan.trial ? (
-                      <button
-                        disabled
-                        className="w-full py-2.5 px-4 rounded-lg font-medium bg-gray-100 text-gray-500 cursor-not-allowed text-sm"
-                      >
-                        Free Tier
-                      </button>
-                    ) : plan.contactSales ? (
-                      <a
-                        href="mailto:support@mosmaintenance.com?subject=Enterprise Plan Inquiry"
-                        className="block w-full py-2.5 px-4 rounded-lg font-medium bg-gray-900 text-white text-center hover:bg-gray-800 transition-colors text-sm"
-                      >
-                        Contact Sales
-                      </a>
-                    ) : plan.priceId ? (
-                      <button
-                        onClick={() => handleUpgrade(plan.priceId!, plan.planKey!)}
-                        disabled={upgrading}
-                        className="w-full py-2.5 px-4 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
-                      >
-                        {upgrading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        Select Plan
-                      </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="w-full py-2.5 px-4 rounded-lg font-medium bg-gray-100 text-gray-500 cursor-not-allowed text-sm"
-                      >
-                        Coming Soon
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {activeTab === "features" && (
+        {activeTab === "addons" && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="font-semibold text-gray-900">Printing</h3>
-                  <p className="text-sm text-gray-500">Core set of printing features</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" checked={true} disabled className="sr-only peer" />
-                    <div className="w-11 h-6 bg-blue-600 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
-                  </label>
-                  <button className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Settings
-                  </button>
-                </div>
-              </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">VIN Packs</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Purchase additional vehicle lookups to add to your account
+              </p>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="font-semibold text-gray-900 mb-2">Additional Features</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Features that require an upgrade or are not compatible with your system
-              </p>
-              
-              <div className="space-y-4">
-                {features.slice(1).map((feature) => (
-                  <div key={feature.name} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-medium text-gray-900">{feature.name}</h4>
-                        {!feature.compatible && (
-                          <span className="text-xs text-red-600 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            Not compatible
-                          </span>
-                        )}
+            {vinPacks.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="font-medium text-gray-900 mb-1">No add-ons available</h3>
+                <p className="text-sm text-gray-500">
+                  VIN pack add-ons are not yet configured. Contact support for more information.
+                </p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-3 gap-4">
+                {vinPacks.map((pack) => (
+                  <div
+                    key={pack.size}
+                    className="bg-white rounded-xl border border-gray-200 p-6 hover:border-blue-300 transition-colors"
+                  >
+                    <div className="text-center">
+                      <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl mb-4">
+                        <Package className="w-6 h-6 text-blue-600" />
                       </div>
-                      <p className="text-sm text-gray-500">{feature.description}</p>
-                      {feature.reason && (
-                        <p className="text-xs text-gray-400 mt-1">{feature.reason}</p>
-                      )}
+                      <h3 className="text-lg font-bold text-gray-900">{pack.size} VINs</h3>
+                      <div className="mt-2">
+                        <span className="text-3xl font-bold text-gray-900">${pack.price}</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        ${(pack.price / pack.size).toFixed(2)} per VIN
+                      </p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={feature.enabled} 
-                        disabled={!feature.compatible}
-                        className="sr-only peer" 
-                        readOnly
-                      />
-                      <div className={`w-11 h-6 rounded-full peer after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all ${
-                        feature.enabled 
-                          ? "bg-blue-600 peer-checked:after:translate-x-full" 
-                          : "bg-gray-200"
-                      } ${!feature.compatible ? "opacity-50 cursor-not-allowed" : ""}`}></div>
-                    </label>
+                    <button
+                      onClick={() => handleBuyVinPack(pack.size, pack.priceId)}
+                      disabled={!pack.priceId || actionLoading === `vin-${pack.size}`}
+                      className="w-full mt-6 py-2.5 px-4 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {actionLoading === `vin-${pack.size}` ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CreditCard className="w-4 h-4" />
+                      )}
+                      {pack.priceId ? "Purchase" : "Coming Soon"}
+                    </button>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "payment" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Payment Methods</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  Manage your saved payment methods
+                </p>
+              </div>
+              {isPaid && (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={actionLoading === "portal"}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading === "portal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+                  Manage in Stripe
+                </button>
+              )}
             </div>
 
-            {!isPaid && (
-              <div className="bg-amber-50 rounded-xl p-6 border border-amber-100">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="font-semibold text-amber-900">Upgrade to unlock more features</h3>
-                    <p className="text-sm text-amber-800 mt-1">
-                      Some features require a paid plan to be compatible with your shop management system.
-                    </p>
-                    <button
-                      onClick={() => setActiveTab("plans")}
-                      className="mt-3 text-sm font-medium text-amber-700 hover:text-amber-800"
-                    >
-                      View available plans →
-                    </button>
+            {paymentMethods.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="font-medium text-gray-900 mb-1">No payment methods</h3>
+                <p className="text-sm text-gray-500">
+                  Payment methods will appear here after you subscribe to a plan
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                {paymentMethods.map((method) => (
+                  <div key={method.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-gray-100 rounded-lg">
+                        <CreditCard className="w-5 h-5 text-gray-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 capitalize">
+                          {method.brand} ending in {method.last4}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Expires {method.expMonth}/{method.expYear}
+                        </p>
+                      </div>
+                    </div>
+                    {method.isDefault && (
+                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">
+                        Default
+                      </span>
+                    )}
                   </div>
-                </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "history" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Billing History</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                View and download your past invoices
+              </p>
+            </div>
+
+            {invoices.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="font-medium text-gray-900 mb-1">No invoices yet</h3>
+                <p className="text-sm text-gray-500">
+                  Your billing history will appear here after your first payment
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Invoice</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {invoices.map((invoice) => (
+                      <tr key={invoice.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {invoice.number || invoice.id.slice(-8)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {new Date(invoice.created * 1000).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          ${(invoice.amount / 100).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${
+                            invoice.status === "paid"
+                              ? "bg-green-100 text-green-700"
+                              : invoice.status === "open"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-gray-100 text-gray-700"
+                          }`}>
+                            {invoice.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {invoice.hostedInvoiceUrl && (
+                              <a
+                                href={invoice.hostedInvoiceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-500 text-sm flex items-center gap-1"
+                              >
+                                View <ChevronRight className="w-3 h-3" />
+                              </a>
+                            )}
+                            {invoice.invoicePdf && (
+                              <a
+                                href={invoice.invoicePdf}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 hover:bg-gray-100 rounded-lg"
+                              >
+                                <Download className="w-4 h-4 text-gray-500" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
         )}
       </div>
     </div>
-  );
-}
-
-function BillingFallback() {
-  return (
-    <div className="p-8 bg-gray-50">
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    </div>
-  );
-}
-
-export default function BillingSettingsPage() {
-  return (
-    <Suspense fallback={<BillingFallback />}>
-      <BillingContent />
-    </Suspense>
   );
 }
