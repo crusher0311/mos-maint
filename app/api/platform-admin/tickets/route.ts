@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const [tickets, totalCount] = await Promise.all([
+    const [rawTickets, totalCount] = await Promise.all([
       db.collection("support_tickets")
         .find(query)
         .sort({ createdAt: -1 })
@@ -50,6 +50,27 @@ export async function GET(request: NextRequest) {
         .toArray(),
       db.collection("support_tickets").countDocuments(query)
     ]);
+
+    const shopIds = rawTickets
+      .filter(t => t.shopId && !t.shopName)
+      .map(t => t.shopId);
+    
+    let shopMap: Record<number, string> = {};
+    if (shopIds.length > 0) {
+      const shops = await db.collection("shops")
+        .find({ id: { $in: shopIds } })
+        .project({ id: 1, name: 1 })
+        .toArray();
+      shopMap = shops.reduce((acc, shop) => {
+        acc[shop.id] = shop.name;
+        return acc;
+      }, {} as Record<number, string>);
+    }
+
+    const tickets = rawTickets.map(ticket => ({
+      ...ticket,
+      shopName: ticket.shopName || (ticket.shopId ? shopMap[ticket.shopId] : null) || null
+    }));
 
     const stats = await db.collection("support_tickets").aggregate([
       {
