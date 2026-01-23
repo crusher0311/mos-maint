@@ -416,7 +416,7 @@ async function pushAppointmentToSMS(
           vehicleId: tekmetricVehicleId,
           startTime: startTimeStr,
           endTime: endTimeStr,
-          title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
+          title: `[MOS Auto Book] Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
           color: "blue",
           appointmentOptionId: 2, // 1=STAY, 2=DROP, 3=TOW
