@@ -99,9 +99,13 @@ export async function getAutoBookingSettings(shopId: number): Promise<AutoBookin
   }
   
   const rawFeatures = shop.enabledFeatures;
-  const hasAutoBooking = Array.isArray(rawFeatures) 
+  const hasAutoBookingFeature = Array.isArray(rawFeatures) 
     ? rawFeatures.includes("auto_booking")
     : (rawFeatures && typeof rawFeatures === "object" && (rawFeatures as any).auto_booking === true);
+  
+  // Also allow if the shop has autoBooking settings enabled directly
+  const hasAutoBookingEnabled = shop.autoBooking?.enabled === true;
+  const hasAutoBooking = hasAutoBookingFeature || hasAutoBookingEnabled;
   
   // Allow if: has valid billing status/plan, OR if no billing status is set (dev/test environment)
   const hasNoBillingSet = !shop.billingStatus && !shop.plan;
@@ -109,7 +113,7 @@ export async function getAutoBookingSettings(shopId: number): Promise<AutoBookin
     shop.billingStatus === "active" || shop.billingStatus === "trial" || shop.billingStatus === "demo" || 
     shop.plan === "professional" || shop.plan === "enterprise" || shop.plan === "trial" || shop.plan === "demo";
   
-  console.log(`[Auto Booking] Shop ${shopId}: hasAutoBooking=${hasAutoBooking}, isAllowed=${isAllowed}, billingStatus=${shop.billingStatus}, plan=${shop.plan}, autoBooking.enabled=${shop.autoBooking?.enabled}`);
+  console.log(`[Auto Booking] Shop ${shopId}: hasAutoBookingFeature=${hasAutoBookingFeature}, hasAutoBookingEnabled=${hasAutoBookingEnabled}, hasAutoBooking=${hasAutoBooking}, isAllowed=${isAllowed}, billingStatus=${shop.billingStatus}, plan=${shop.plan}`);
   
   if (!isAllowed || !hasAutoBooking) return null;
   if (!shop.autoBooking?.enabled) return null;
