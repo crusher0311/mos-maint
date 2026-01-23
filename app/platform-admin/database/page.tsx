@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Database, Search, RefreshCw, ChevronDown, ChevronRight, Loader2, Copy, Check } from "lucide-react";
+import { Database, Search, RefreshCw, ChevronDown, ChevronRight, Loader2, Copy, Check, Plus, Pencil, Trash2, X, Save, AlertTriangle } from "lucide-react";
 
 interface CollectionInfo {
   name: string;
@@ -12,6 +12,12 @@ interface QueryResult {
   documents: any[];
   totalCount: number;
   executionTime: number;
+}
+
+interface Permissions {
+  canRead: boolean;
+  canWrite: boolean;
+  email: string;
 }
 
 export default function PlatformDatabasePage() {
@@ -28,10 +34,30 @@ export default function PlatformDatabasePage() {
   const [expandedDoc, setExpandedDoc] = useState<number | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [collectionSearch, setCollectionSearch] = useState("");
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
+  const [editingDoc, setEditingDoc] = useState<{ index: number; content: string } | null>(null);
+  const [insertDoc, setInsertDoc] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ index: number; id: string } | null>(null);
+  const [writeLoading, setWriteLoading] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
+  const [writeSuccess, setWriteSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCollections();
+    fetchPermissions();
   }, []);
+
+  const fetchPermissions = async () => {
+    try {
+      const res = await fetch("/api/admin/database/permissions");
+      if (res.ok) {
+        const data = await res.json();
+        setPermissions(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch permissions:", err);
+    }
+  };
 
   const fetchCollections = async () => {
     setLoading(true);
@@ -89,6 +115,9 @@ export default function PlatformDatabasePage() {
     setFilter("{}");
     setSkip(0);
     setExpandedDoc(null);
+    setEditingDoc(null);
+    setInsertDoc(null);
+    setDeleteConfirm(null);
     queryCollection(name);
   };
 
@@ -98,20 +127,118 @@ export default function PlatformDatabasePage() {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
+  const handleInsert = async () => {
+    if (!selectedCollection || !insertDoc) return;
+    
+    setWriteLoading(true);
+    setWriteError(null);
+    try {
+      const parsedDoc = JSON.parse(insertDoc);
+      const res = await fetch("/api/admin/database/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "insert",
+          collection: selectedCollection,
+          document: parsedDoc
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setWriteError(data.error || "Insert failed");
+      } else {
+        setWriteSuccess("Document inserted successfully");
+        setInsertDoc(null);
+        queryCollection();
+        setTimeout(() => setWriteSuccess(null), 3000);
+      }
+    } catch (err: any) {
+      setWriteError(err.message || "Invalid JSON");
+    } finally {
+      setWriteLoading(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedCollection || !editingDoc || !queryResult) return;
+    
+    const doc = queryResult.documents[editingDoc.index];
+    const docId = doc._id?.$oid || doc._id;
+    
+    setWriteLoading(true);
+    setWriteError(null);
+    try {
+      const parsedDoc = JSON.parse(editingDoc.content);
+      const res = await fetch("/api/admin/database/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update",
+          collection: selectedCollection,
+          documentId: docId,
+          document: parsedDoc
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setWriteError(data.error || "Update failed");
+      } else {
+        setWriteSuccess("Document updated successfully");
+        setEditingDoc(null);
+        queryCollection();
+        setTimeout(() => setWriteSuccess(null), 3000);
+      }
+    } catch (err: any) {
+      setWriteError(err.message || "Invalid JSON");
+    } finally {
+      setWriteLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedCollection || !deleteConfirm) return;
+    
+    setWriteLoading(true);
+    setWriteError(null);
+    try {
+      const res = await fetch("/api/admin/database/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          collection: selectedCollection,
+          documentId: deleteConfirm.id
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setWriteError(data.error || "Delete failed");
+      } else {
+        setWriteSuccess("Document deleted successfully");
+        setDeleteConfirm(null);
+        queryCollection();
+        setTimeout(() => setWriteSuccess(null), 3000);
+      }
+    } catch (err: any) {
+      setWriteError(err.message || "Delete failed");
+    } finally {
+      setWriteLoading(false);
+    }
+  };
+
+  const startEdit = (index: number) => {
+    if (!queryResult) return;
+    const doc = queryResult.documents[index];
+    setEditingDoc({ index, content: JSON.stringify(doc, null, 2) });
+    setExpandedDoc(index);
+  };
+
   const filteredCollections = collections.filter(c => 
     c.name.toLowerCase().includes(collectionSearch.toLowerCase())
   );
-
-  const formatValue = (value: any): string => {
-    if (value === null) return "null";
-    if (value === undefined) return "undefined";
-    if (typeof value === "object") {
-      if (value.$date) return new Date(value.$date).toLocaleString();
-      if (value.$oid) return value.$oid;
-      return JSON.stringify(value);
-    }
-    return String(value);
-  };
 
   return (
     <div className="p-6">
@@ -120,7 +247,12 @@ export default function PlatformDatabasePage() {
           <Database className="w-8 h-8 text-purple-600" />
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Database Explorer</h1>
-            <p className="text-slate-500 text-sm">Browse and query MongoDB collections</p>
+            <p className="text-slate-500 text-sm">
+              Browse and query MongoDB collections
+              {permissions?.canWrite && (
+                <span className="ml-2 text-green-600 font-medium">(Write access enabled)</span>
+              )}
+            </p>
           </div>
         </div>
         <button
@@ -132,6 +264,12 @@ export default function PlatformDatabasePage() {
           Refresh
         </button>
       </div>
+
+      {(writeError || writeSuccess) && (
+        <div className={`mb-4 p-3 rounded-lg ${writeError ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {writeError || writeSuccess}
+        </div>
+      )}
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -178,11 +316,22 @@ export default function PlatformDatabasePage() {
               <div className="p-4 border-b border-slate-200">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-slate-900">{selectedCollection}</h2>
-                  {queryResult && (
-                    <span className="text-xs text-slate-500">
-                      {queryResult.totalCount.toLocaleString()} documents ({queryResult.executionTime}ms)
-                    </span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {permissions?.canWrite && (
+                      <button
+                        onClick={() => setInsertDoc("{}")}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Insert
+                      </button>
+                    )}
+                    {queryResult && (
+                      <span className="text-xs text-slate-500">
+                        {queryResult.totalCount.toLocaleString()} documents ({queryResult.executionTime}ms)
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-12 gap-3">
@@ -253,6 +402,68 @@ export default function PlatformDatabasePage() {
                 </div>
               </div>
 
+              {insertDoc !== null && (
+                <div className="p-4 border-b border-slate-200 bg-green-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium text-green-800">Insert New Document</h3>
+                    <button onClick={() => setInsertDoc(null)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <textarea
+                    value={insertDoc}
+                    onChange={(e) => setInsertDoc(e.target.value)}
+                    rows={8}
+                    className="w-full px-3 py-2 border border-green-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                    placeholder='{"field": "value"}'
+                  />
+                  <div className="flex justify-end gap-2 mt-2">
+                    <button
+                      onClick={() => setInsertDoc(null)}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleInsert}
+                      disabled={writeLoading}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {writeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Insert
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {deleteConfirm && (
+                <div className="p-4 border-b border-slate-200 bg-red-50">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <div className="flex-1">
+                      <p className="font-medium text-red-800">Confirm Delete</p>
+                      <p className="text-sm text-red-600">Are you sure you want to delete document {deleteConfirm.id}?</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setDeleteConfirm(null)}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        disabled={writeLoading}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        {writeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="max-h-[500px] overflow-y-auto">
                 {queryLoading ? (
                   <div className="flex items-center justify-center py-12">
@@ -275,25 +486,79 @@ export default function PlatformDatabasePage() {
                           <span className="text-sm text-slate-600 truncate flex-1 font-mono">
                             {doc._id?.$oid || doc._id || "no _id"}
                           </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyDocument(doc, idx);
-                            }}
-                            className="p-1 hover:bg-slate-200 rounded transition-colors"
-                          >
-                            {copiedIndex === idx ? (
-                              <Check className="w-4 h-4 text-green-500" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-slate-400" />
+                          <div className="flex items-center gap-1">
+                            {permissions?.canWrite && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEdit(idx);
+                                  }}
+                                  className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                  title="Edit document"
+                                >
+                                  <Pencil className="w-4 h-4 text-blue-500" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteConfirm({ index: idx, id: doc._id?.$oid || doc._id });
+                                  }}
+                                  className="p-1 hover:bg-red-100 rounded transition-colors"
+                                  title="Delete document"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </button>
+                              </>
                             )}
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyDocument(doc, idx);
+                              }}
+                              className="p-1 hover:bg-slate-200 rounded transition-colors"
+                              title="Copy document"
+                            >
+                              {copiedIndex === idx ? (
+                                <Check className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-slate-400" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                         {expandedDoc === idx && (
                           <div className="px-4 pb-4 pl-16">
-                            <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-xs font-mono">
-                              {JSON.stringify(doc, null, 2)}
-                            </pre>
+                            {editingDoc?.index === idx ? (
+                              <div>
+                                <textarea
+                                  value={editingDoc.content}
+                                  onChange={(e) => setEditingDoc({ ...editingDoc, content: e.target.value })}
+                                  rows={12}
+                                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                />
+                                <div className="flex justify-end gap-2 mt-2">
+                                  <button
+                                    onClick={() => setEditingDoc(null)}
+                                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={handleUpdate}
+                                    disabled={writeLoading}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                  >
+                                    {writeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Save Changes
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-xs font-mono">
+                                {JSON.stringify(doc, null, 2)}
+                              </pre>
+                            )}
                           </div>
                         )}
                       </div>
