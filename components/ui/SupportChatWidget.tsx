@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { MessageCircle, X, Send, Loader2, ArrowRight, ThumbsUp, Monitor, Copy, Check } from "lucide-react";
 
 interface ChatMessage {
@@ -175,13 +175,7 @@ export default function SupportChatWidget() {
           script.async = true;
           script.crossOrigin = 'anonymous';
           script.onload = async () => {
-            console.log('Cobrowse SDK loaded, license:', data.licenseKey?.substring(0, 8) + '...');
             window.CobrowseIO.license = data.licenseKey;
-            
-            window.CobrowseIO.on('error', (err: any) => {
-              console.error('Cobrowse error event:', err);
-            });
-            
             window.CobrowseIO.start();
             cobrowseInitialized = true;
             
@@ -189,32 +183,27 @@ export default function SupportChatWidget() {
             const checkDevice = () => {
               attempts++;
               if (window.CobrowseIO.deviceId) {
-                console.log('Cobrowse registered, device id:', window.CobrowseIO.deviceId);
                 resolve();
               } else if (attempts < 20) {
-                console.log('Waiting for Cobrowse registration, attempt:', attempts);
                 setTimeout(checkDevice, 500);
               } else {
-                console.error('Cobrowse failed to register device after 10 seconds');
-                reject(new Error('Cobrowse.io failed to connect. Please check your license key.'));
+                reject(new Error('Screen sharing service unavailable. Please try again later.'));
               }
             };
             setTimeout(checkDevice, 500);
           };
-          script.onerror = () => reject(new Error('Failed to load Cobrowse SDK'));
+          script.onerror = () => reject(new Error('Failed to load screen sharing'));
           document.head.appendChild(script);
         });
       }
       
       if (!window.CobrowseIO?.deviceId) {
-        throw new Error('Cobrowse.io is not connected. Please contact support.');
+        throw new Error('Screen sharing is not connected. Please try again.');
       }
       
-      console.log('Creating session code, deviceId:', window.CobrowseIO.deviceId);
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
-      console.error("Screen share error:", err?.message || err);
       setMessages(prev => [...prev, {
         role: "assistant",
         content: "Unable to start screen sharing. Please try again or contact support.",
