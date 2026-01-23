@@ -13,6 +13,7 @@ import {
   QrCode,
   Activity,
   CreditCard,
+  Database,
   X
 } from "lucide-react";
 
@@ -69,6 +70,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "HoverCode QRs",
       href: "/platform-admin/hovercode",
       icon: <QrCode className="w-5 h-5" />
+    },
+    {
+      name: "Database",
+      href: "/platform-admin/database",
+      icon: <Database className="w-5 h-5" />
     },
     {
       name: "Settings",
