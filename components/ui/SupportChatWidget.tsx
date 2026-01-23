@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MessageCircle, X, Send, Loader2, ArrowRight, ThumbsUp, Monitor, Copy, Check } from "lucide-react";
 
 interface ChatMessage {
@@ -9,11 +9,7 @@ interface ChatMessage {
   timestamp: string;
 }
 
-declare global {
-  interface Window {
-    CobrowseIO: any;
-  }
-}
+let cobrowseSDK: any = null;
 
 export default function SupportChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -166,32 +162,19 @@ export default function SupportChatWidget() {
         return;
       }
 
-      if (!window.CobrowseIO || !window.CobrowseIO.client) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://js.cobrowse.io/CobrowseIO.js';
-          script.async = true;
-          script.crossOrigin = 'anonymous';
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Failed to load SDK"));
-          document.head.appendChild(script);
-        });
+      if (!cobrowseSDK) {
+        const CobrowseIO = (await import('cobrowse-sdk-js')).default;
+        CobrowseIO.license = data.licenseKey;
+        CobrowseIO.start();
+        cobrowseSDK = CobrowseIO;
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-
-      window.CobrowseIO.license = data.licenseKey;
       
-      const sdk = await window.CobrowseIO.client();
-      
-      await new Promise<void>((resolve) => {
-        sdk.on('session.loaded', () => resolve());
-        sdk.start();
-        setTimeout(resolve, 2000);
-      });
-      
-      const code = await sdk.createSessionCode();
+      const code = await cobrowseSDK.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
-      console.error("Screen share error:", err);
+      console.error("Screen share error:", err?.message || err);
       setMessages(prev => [...prev, {
         role: "assistant",
         content: "Unable to start screen sharing. Please try again or contact support.",
@@ -203,8 +186,8 @@ export default function SupportChatWidget() {
   };
 
   const endScreenShare = () => {
-    if (window.CobrowseIO?.currentSession) {
-      window.CobrowseIO.currentSession.end();
+    if (cobrowseSDK?.currentSession) {
+      cobrowseSDK.currentSession.end();
     }
     setScreenShareCode(null);
   };
