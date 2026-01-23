@@ -14,6 +14,7 @@ import {
   Activity,
   CreditCard,
   Database,
+  FileText,
   X
 } from "lucide-react";
 
@@ -65,6 +66,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "API Traffic",
       href: "/platform-admin/api-usage",
       icon: <Activity className="w-5 h-5" />
+    },
+    {
+      name: "Render Logs",
+      href: "/platform-admin/render",
+      icon: <FileText className="w-5 h-5" />
     },
     {
       name: "HoverCode QRs",
