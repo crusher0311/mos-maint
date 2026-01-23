@@ -410,9 +410,6 @@ async function pushAppointmentToSMS(
         console.log(`[Auto Booking] Could not find Tekmetric vehicle ID for ${booking.vin || booking.vehicleId}`);
         // Fall through to Protractor if available
       } else {
-        // Import Tekmetric appointment options
-        const { TEKMETRIC_APPOINTMENT_OPTIONS } = await import("@/lib/tekmetric");
-        
         const appointment = await createAppointment({
           shopId: Number(shop.tekmetric.shopId),
           customerId: tekmetricCustomerId,
@@ -420,9 +417,8 @@ async function pushAppointmentToSMS(
           startTime: startTimeStr,
           endTime: endTimeStr,
           title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
-          note: `Auto-booked via MOS Oil Sticker. Service: ${booking.serviceType}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
-          appointmentOptionId: TEKMETRIC_APPOINTMENT_OPTIONS.DROP_OFF,
+          dropoffTime: startTimeStr, // Setting dropoffTime indicates this is a drop-off appointment
         });
         
         return {
