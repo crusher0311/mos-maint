@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Save, Loader2, CreditCard, Package, Link2, Gift, ExternalLink, Copy, Check, Download, X } from "lucide-react";
+import { Settings, Save, Loader2, CreditCard, Package, Link2, Gift, ExternalLink, Copy, Check, Download, X, Plus } from "lucide-react";
 
 interface BillingSettings {
   mosProProductId: string;
@@ -64,6 +64,15 @@ export default function PlatformSettingsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [stripeProducts, setStripeProducts] = useState<StripeProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    description: "",
+    price: "",
+    type: "one_time" as "one_time" | "recurring",
+    interval: "month"
+  });
 
   useEffect(() => {
     loadSettings();
@@ -130,6 +139,38 @@ export default function PlatformSettingsPage() {
       setMessage({ type: "error", text: "Failed to connect to Stripe" });
     } finally {
       setLoadingProducts(false);
+    }
+  };
+
+  const createStripeProduct = async () => {
+    if (!newProduct.name || !newProduct.price) return;
+    
+    setCreatingProduct(true);
+    try {
+      const res = await fetch("/api/platform-admin/stripe/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProduct.name,
+          description: newProduct.description,
+          price: parseFloat(newProduct.price),
+          type: newProduct.type,
+          interval: newProduct.interval
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setStripeProducts(prev => [data.product, ...prev]);
+        setNewProduct({ name: "", description: "", price: "", type: "one_time", interval: "month" });
+        setShowCreateForm(false);
+        setMessage({ type: "success", text: `Product "${data.product.name}" created in Stripe!` });
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to create product" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to create product" });
+    } finally {
+      setCreatingProduct(false);
     }
   };
 
@@ -492,17 +533,105 @@ export default function PlatformSettingsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Import Stripe Products</h2>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+              <h2 className="text-lg font-semibold text-gray-900">Stripe Products</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowCreateForm(!showCreateForm)}
+                  className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Product
+                </button>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-auto p-4">
-              {stripeProducts.length === 0 ? (
+              {showCreateForm && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                  <h3 className="font-semibold text-green-900 mb-3">Create New Product in Stripe</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-green-700 mb-1">Product Name *</label>
+                      <input
+                        type="text"
+                        value={newProduct.name}
+                        onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                        placeholder="e.g., MOS Pro Subscription"
+                        className="w-full px-3 py-2 border border-green-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-green-700 mb-1">Price (USD) *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={newProduct.price}
+                        onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                        placeholder="e.g., 99.00"
+                        className="w-full px-3 py-2 border border-green-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-green-700 mb-1">Type</label>
+                      <select
+                        value={newProduct.type}
+                        onChange={(e) => setNewProduct({ ...newProduct, type: e.target.value as "one_time" | "recurring" })}
+                        className="w-full px-3 py-2 border border-green-300 rounded-md text-sm"
+                      >
+                        <option value="one_time">One-Time Payment</option>
+                        <option value="recurring">Recurring Subscription</option>
+                      </select>
+                    </div>
+                    {newProduct.type === "recurring" && (
+                      <div>
+                        <label className="block text-xs font-medium text-green-700 mb-1">Billing Interval</label>
+                        <select
+                          value={newProduct.interval}
+                          onChange={(e) => setNewProduct({ ...newProduct, interval: e.target.value })}
+                          className="w-full px-3 py-2 border border-green-300 rounded-md text-sm"
+                        >
+                          <option value="month">Monthly</option>
+                          <option value="year">Yearly</option>
+                        </select>
+                      </div>
+                    )}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-green-700 mb-1">Description (optional)</label>
+                      <input
+                        type="text"
+                        value={newProduct.description}
+                        onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                        placeholder="Brief description of the product"
+                        className="w-full px-3 py-2 border border-green-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={createStripeProduct}
+                      disabled={creatingProduct || !newProduct.name || !newProduct.price}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm"
+                    >
+                      {creatingProduct ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                      Create in Stripe
+                    </button>
+                    <button
+                      onClick={() => setShowCreateForm(false)}
+                      className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {stripeProducts.length === 0 && !showCreateForm ? (
                 <div className="text-center text-gray-500 py-8">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No active products found in Stripe</p>
