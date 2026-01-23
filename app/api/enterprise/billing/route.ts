@@ -75,16 +75,17 @@ export async function GET() {
       }
 
       return {
-        shopId: shop.shopId,
+        shopId: shop.shopId || shop.id,
         name: shop.name,
         locationIdentifier: shop.locationIdentifier || null,
-        plan: billing.plan || "trial",
-        planDisplay: billing.plan ? (billing.plan.charAt(0).toUpperCase() + billing.plan.slice(1)) : "Free Trial",
+        plan: billing.plan || shop.plan || "trial",
+        planDisplay: (billing.plan || shop.plan) ? ((billing.plan || shop.plan).charAt(0).toUpperCase() + (billing.plan || shop.plan).slice(1)) : "Free Trial",
         status: billing.status || "trial",
         vehicleCount,
-        vinLimit: shop.trialVinLimit || billing.vinLimit || null,
+        vinLimit: shop.trialVinLimit || billing.vinLimit || shop.vinLimit || null,
         nextBillingDate: billing.nextBillingDate || null,
-        stripeSubscriptionId: billing.stripeSubscriptionId || null,
+        stripeCustomerId: shop.stripeCustomerId || null,
+        stripeSubscriptionId: billing.stripeSubscriptionId || shop.stripeSubscriptionId || null,
         enabledFeatures: shop.enabledFeatures || [],
       };
     }));
