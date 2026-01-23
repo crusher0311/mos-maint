@@ -52,27 +52,37 @@ interface HovercodeCreateResult {
 
 async function createHovercodeQR(
   redirectUrl: string,
-  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string }
+  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string; logoUrl?: string }
 ): Promise<HovercodeCreateResult | null> {
   if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
     return null;
   }
 
   try {
+    const requestBody: Record<string, any> = {
+      workspace: HOVERCODE_WORKSPACE_ID,
+      qr_data: redirectUrl,
+      dynamic: true,
+      display_name: options.displayName || "Oil Sticker QR",
+      primary_color: options.color || "#1976d2",
+      background_color: options.backgroundColor || "#ffffff",
+      pattern: "Bubble",
+      generate_png: true,
+    };
+    
+    if (options.logoUrl) {
+      requestBody.logo_url = options.logoUrl;
+    }
+    
+    console.log("[Regenerate QR] Creating HoverCode with pattern: Bubble, dynamic: true");
+    
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
         Authorization: `Token ${HOVERCODE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        workspace: HOVERCODE_WORKSPACE_ID,
-        qr_data: redirectUrl,
-        dynamic: true,
-        display_name: options.displayName || "Oil Sticker QR",
-        primary_color: options.color || "#1976d2",
-        background_color: options.backgroundColor || "#ffffff",
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

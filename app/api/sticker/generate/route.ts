@@ -138,6 +138,8 @@ async function createHovercodeQR(
   }
 
   try {
+    console.log("[Sticker Generate] Creating HoverCode with pattern: Bubble, dynamic: true");
+    
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
@@ -151,8 +153,7 @@ async function createHovercodeQR(
         display_name: displayName || "Oil Sticker QR",
         primary_color: color,
         background_color: backgroundColor,
-        pattern: "Squares",
-        eye_style: "Rounded",
+        pattern: "Bubble",
         size: size,
         logo_url: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
         generate_png: true,
