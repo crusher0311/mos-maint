@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/protractor";
 import {
   extractJobIndexFromWorkOrder,
+  extractJobIndexFromCachedWorkOrder,
   upsertJobIndexEntries,
   updatePartCrossReferences,
 } from "@/lib/job-index";
@@ -27,6 +28,66 @@ const SMS_DISPLAY_NAMES: Record<string, string> = {
   "stand-alone": "Stand-alone",
 };
 
+async function buildTekmetricPartsHistory(shopId: number) {
+  const db = await getDb();
+  
+  const results = {
+    workOrdersProcessed: 0,
+    jobsIndexed: 0,
+    partsIndexed: 0,
+    errors: [] as string[],
+  };
+  
+  const allJobIndexEntries: any[] = [];
+  
+  const workOrders = await db.collection("tekmetric_work_orders")
+    .find({ shopId: { $in: [String(shopId), Number(shopId)] } })
+    .toArray();
+  
+  console.log(`[Parts History] Building from ${workOrders.length} Tekmetric work orders...`);
+  
+  for (const wo of workOrders) {
+    try {
+      results.workOrdersProcessed++;
+      
+      const vehicleData = {
+        vin: wo.vin,
+        year: wo.year,
+        make: wo.make,
+        model: wo.model,
+      };
+      
+      const jobEntries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicleData);
+      if (jobEntries.length > 0) {
+        for (const entry of jobEntries) {
+          entry.metadata.sourceType = "tekmetric";
+        }
+        allJobIndexEntries.push(...jobEntries);
+      }
+    } catch (err: any) {
+      console.log(`[Parts History] Error for WO ${wo.workOrderId}: ${err.message}`);
+      results.errors.push(`WO ${wo.workOrderId}: ${err.message}`);
+    }
+  }
+  
+  if (allJobIndexEntries.length > 0) {
+    try {
+      console.log(`[Parts History] Indexing ${allJobIndexEntries.length} jobs...`);
+      const indexResult = await upsertJobIndexEntries(allJobIndexEntries);
+      results.jobsIndexed = indexResult.inserted + indexResult.updated;
+      
+      const partsUpdated = await updatePartCrossReferences(allJobIndexEntries);
+      results.partsIndexed = partsUpdated;
+      console.log(`[Parts History] Parts indexed: ${partsUpdated}`);
+    } catch (indexErr: any) {
+      console.log(`[Parts History] Indexing error: ${indexErr.message}`);
+      results.errors.push(`Indexing: ${indexErr.message}`);
+    }
+  }
+  
+  return results;
+}
+
 export async function POST() {
   const session = await getSession();
   if (!session) {
@@ -41,9 +102,26 @@ export async function POST() {
   const smsIntegration = shop?.smsIntegration || "stand-alone";
   const smsDisplayName = SMS_DISPLAY_NAMES[smsIntegration] || smsIntegration;
   
+  if (smsIntegration === "tekmetric") {
+    const results = await buildTekmetricPartsHistory(shopId);
+    
+    if (results.workOrdersProcessed === 0) {
+      return NextResponse.json(
+        { error: "No Tekmetric work orders found. Please sync your shop data first." },
+        { status: 400 }
+      );
+    }
+    
+    return NextResponse.json({
+      ok: true,
+      message: `Built parts history from ${results.workOrdersProcessed} work orders`,
+      ...results,
+    });
+  }
+  
   if (smsIntegration !== "protractor") {
     return NextResponse.json(
-      { error: `Parts history builder is coming soon for ${smsDisplayName}. Currently only available for Protractor shops.` },
+      { error: `Parts history builder is coming soon for ${smsDisplayName}. Currently available for Tekmetric and Protractor shops.` },
       { status: 400 }
     );
   }
