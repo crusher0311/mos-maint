@@ -66,7 +66,7 @@ async function createHovercodeQR(
       display_name: options.displayName || "Oil Sticker QR",
       primary_color: options.color || "#1976d2",
       background_color: options.backgroundColor || "#ffffff",
-      pattern: "Bubble",
+      pattern: "Diamonds",
       generate_png: true,
     };
     
