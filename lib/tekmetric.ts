@@ -472,8 +472,17 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   if (pickupTime) body.pickupTime = pickupTime;
   if (rideOption) body.rideOption = rideOption;
   if (status) body.status = status;
-  if (appointmentOption) body.appointmentOption = appointmentOption;
-  if (appointmentOptionId) body.appointmentOptionId = appointmentOptionId;
+  // Try sending as full object structure like Tekmetric returns
+  if (appointmentOptionId) {
+    const optionMap: Record<number, { id: number; code: string; name: string }> = {
+      1: { id: 1, code: "STAY", name: "Stay With Vehicle" },
+      2: { id: 2, code: "DROP", name: "Drop-off Vehicle" },
+      3: { id: 3, code: "TOW", name: "Towed-in Vehicle" },
+    };
+    body.appointmentOption = optionMap[appointmentOptionId] || optionMap[1];
+  } else if (appointmentOption) {
+    body.appointmentOption = appointmentOption;
+  }
   
   console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
   console.log(`[Tekmetric] Appointment body:`, JSON.stringify(body, null, 2));
