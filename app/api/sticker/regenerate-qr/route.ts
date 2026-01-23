@@ -137,12 +137,9 @@ export async function POST(req: NextRequest) {
 
     let qrDataUrl: string | null = null;
 
-    // Get the shop's appointment logo if available
-    const appointmentLogo = config.appointmentLogo || shop.appointmentLogo;
-    let logoUrl = "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png";
-    if (appointmentLogo) {
-      logoUrl = `https://mos-maintenance-mvp.replit.app/api/files/${appointmentLogo}`;
-    }
+    // Use the appointment logo from public folder
+    const logoUrl = "https://mos-maintenance-mvp.replit.app/appointment-logo.png";
+    console.log("[Regenerate QR] Using logo URL:", logoUrl);
 
     // Always create a new HoverCode QR with proper styling (dynamic + Squares pattern)
     // This ensures existing static QR codes get replaced with properly styled dynamic ones
