@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
 import Stripe from "stripe";
 
@@ -47,5 +47,59 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+
+    const body = await request.json();
+    const { name, description, price, type, interval } = body;
+
+    if (!name || !price) {
+      return NextResponse.json({ error: "Name and price are required" }, { status: 400 });
+    }
+
+    const product = await stripe.products.create({
+      name,
+      description: description || undefined,
+    });
+
+    const priceData: Stripe.PriceCreateParams = {
+      product: product.id,
+      unit_amount: Math.round(price * 100),
+      currency: "usd",
+    };
+
+    if (type === "recurring") {
+      priceData.recurring = {
+        interval: interval || "month",
+      };
+    }
+
+    const stripePrice = await stripe.prices.create(priceData);
+
+    return NextResponse.json({
+      ok: true,
+      product: {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        prices: [{
+          id: stripePrice.id,
+          unit_amount: stripePrice.unit_amount,
+          currency: stripePrice.currency,
+          recurring: stripePrice.recurring,
+          type: stripePrice.type,
+        }],
+      },
+    });
+  } catch (error: any) {
+    console.error("Error creating Stripe product:", error);
+    if (error.message === "Unauthorized" || error.message === "Not a platform admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json({ error: error.message || "Failed to create product" }, { status: 500 });
   }
 }
