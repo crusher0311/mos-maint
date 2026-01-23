@@ -17,7 +17,7 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Integration Mechanisms**: Webhooks for real-time updates and an incremental sync system for shop management systems (e.g., Tekmetric, Protractor) with robust error handling, OAuth token management, and rate limiting.
 *   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based setup.
 *   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration for checkout and billing portal, and feature flags for modular functionality.
-*   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring across all external services, and a Chrome Extension Version API.
+*   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring across all external services, Chrome Extension Version API, and a support ticketing system for customer issue management.
 *   **Sticker & Keytag Generation**: QR code generation using HoverCode API, sticker image generation via `node-html-to-image`, and Dymo label printing for keytags with a visual designer.
 *   **AI & Recommendations**: AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor leveraging shop data and AI.
 *   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems, enabling a normalized, SMS-agnostic data layer with provenance tracking and dual-write ingestion.

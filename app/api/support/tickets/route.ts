@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import clientPromise from "@/lib/mongodb";
+import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
 export async function GET(request: NextRequest) {
@@ -10,8 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const tickets = await db.collection("support_tickets")
       .find({ userEmail: user.email })
@@ -42,8 +41,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Subject and description are required" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const shopInfo = await db.collection("shop_users").findOne({ email: user.email });
 
