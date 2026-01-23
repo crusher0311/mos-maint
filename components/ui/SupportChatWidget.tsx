@@ -174,18 +174,27 @@ export default function SupportChatWidget() {
         
         await new Promise<void>((resolve, reject) => {
           script.onload = () => resolve();
-          script.onerror = () => reject();
+          script.onerror = () => reject(new Error("Failed to load screen sharing"));
           document.head.appendChild(script);
         });
-        
-        window.CobrowseIO.license = data.licenseKey;
-        window.CobrowseIO.start();
       }
+
+      window.CobrowseIO.license = data.licenseKey;
+      
+      await window.CobrowseIO.client();
+      await window.CobrowseIO.start();
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Screen share error:", err);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "Unable to start screen sharing. Please try again or contact support.",
+        timestamp: new Date().toISOString()
+      }]);
     } finally {
       setScreenShareLoading(false);
     }
