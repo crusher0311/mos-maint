@@ -447,36 +447,38 @@ async function findTekmetricCustomerId(
 ): Promise<number | null> {
   const db = await getDb();
   
+  console.log(`[Auto Booking] findTekmetricCustomerId: tekmetricShopId=${tekmetricShopId}, mosCustomerId=${mosCustomerId}, customerName=${customerName}`);
+  
   // Try to parse as number directly (might already be Tekmetric ID)
   if (mosCustomerId) {
     const parsed = Number(mosCustomerId);
     if (!isNaN(parsed) && parsed > 0) {
+      console.log(`[Auto Booking] Using customer ID directly as Tekmetric ID: ${parsed}`);
       return parsed;
-    }
-    
-    // Try to find from cached customer data
-    const cachedCustomer = await db.collection("tekmetric_customers").findOne({
-      tekmetricShopId,
-      $or: [
-        { "data.id": Number(mosCustomerId) },
-        { customerId: mosCustomerId },
-      ]
-    });
-    
-    if (cachedCustomer?.data?.id) {
-      return cachedCustomer.data.id;
     }
   }
   
-  // Try to search by customer name via Tekmetric API
+  // Try to find customer from repair orders collection (where Tekmetric syncs data)
+  if (customerName) {
+    const repairOrder = await db.collection("tekmetric_repair_orders").findOne({
+      tekmetricShopId,
+      "data.customer.firstName": { $regex: customerName.split(' ')[0], $options: 'i' }
+    });
+    
+    if (repairOrder?.data?.customer?.id) {
+      console.log(`[Auto Booking] Found Tekmetric customer ${repairOrder.data.customer.id} from repair order for "${customerName}"`);
+      return repairOrder.data.customer.id;
+    }
+  }
+  
+  // Try to search by customer name via Tekmetric API (may fail with 403)
   if (customerName) {
     try {
       const { getCustomers } = await import("@/lib/tekmetric");
       const result = await getCustomers(tekmetricShopId, { search: customerName, size: 5 });
       
       if (result.content && result.content.length > 0) {
-        // Return first match
-        console.log(`[Auto Booking] Found Tekmetric customer ${result.content[0].id} for name "${customerName}"`);
+        console.log(`[Auto Booking] Found Tekmetric customer ${result.content[0].id} via API for name "${customerName}"`);
         return result.content[0].id;
       }
     } catch (err: any) {
