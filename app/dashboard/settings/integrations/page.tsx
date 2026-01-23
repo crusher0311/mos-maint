@@ -13,6 +13,8 @@ import {
   ClipboardCheck,
   Mail,
   ExternalLink,
+  Copy,
+  Link,
 } from "lucide-react";
 
 type ShopManagementChoice = "protractor" | "tekmetric" | "standalone" | null;
@@ -695,8 +697,27 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
   const [disconnecting, setDisconnecting] = useState(false);
   const [sendingInstructions, setSendingInstructions] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [webhookCopied, setWebhookCopied] = useState(false);
 
   const chromeExtensionUrl = "https://chromewebstore.google.com/detail/mos-tools/gkcehigbdlhjacjbgiffnlfhdnghlknd";
+  
+  const getWebhookUrl = () => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/api/webhooks/tekmetric`;
+    }
+    return "/api/webhooks/tekmetric";
+  };
+
+  const copyWebhookUrl = async () => {
+    const url = getWebhookUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      setWebhookCopied(true);
+      setTimeout(() => setWebhookCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   async function handleSendSetupInstructions() {
     if (!confirm("This will send setup instructions to the shop owner, including how to enable the integration in Tekmetric and install the Chrome extension. Continue?")) {
@@ -797,6 +818,28 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
             <CheckCircle className="w-4 h-4" />
             <span>Connected: {status.shopName || `Shop ${status.shopId}`}</span>
           </div>
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-blue-800 mb-2">
+            <Link className="w-4 h-4" />
+            <span className="font-medium">Webhook URL</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-white px-2 py-1.5 rounded border border-blue-200 text-gray-700 truncate">
+              {getWebhookUrl()}
+            </code>
+            <button
+              onClick={copyWebhookUrl}
+              className="px-2 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+              title="Copy webhook URL"
+            >
+              {webhookCopied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-blue-600 mt-2">
+            Add this URL in Tekmetric under Settings &rarr; Integrations &rarr; Webhooks
+          </p>
         </div>
         
         {message && (
