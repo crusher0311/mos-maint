@@ -10,6 +10,7 @@ export interface FeatureAddon {
   icon: string;
   monthlyPrice: number;
   stripePriceId?: string;
+  stripeProductId?: string;
   category: string;
   requiresFeature?: string;
 }
@@ -55,8 +56,9 @@ export async function GET() {
       name: f.name,
       description: f.description,
       icon: f.icon || "Package",
-      monthlyPrice: f.monthlyPrice || 0,
+      monthlyPrice: f.pricePerMonth || f.monthlyPrice || 0,
       stripePriceId: f.stripePriceId,
+      stripeProductId: f.stripeProductId,
       category: f.category,
       requiresFeature: f.requiresFeature,
     }));
