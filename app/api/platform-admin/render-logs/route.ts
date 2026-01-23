@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (environments.length === 0) {
     return NextResponse.json({
       error: 'No Render API keys configured',
-      hint: 'Set RENDER_API_KEY_PROD and RENDER_SERVICE_IDS_PROD (or _QA) environment variables',
+      hint: 'Set RENDER_API_KEY_PROD, RENDER_SERVICE_IDS_PROD, and RENDER_OWNER_ID_PROD (or _QA) environment variables',
     }, { status: 400 });
   }
 
@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
       try {
         const logsResponse = await fetchRenderLogs(env.apiKey, {
           serviceIds,
+          ownerId: env.ownerId,
           startTime,
           endTime,
           level,
