@@ -53,6 +53,11 @@ CARFAX_POST_URL = "https://servicesocket.carfax.com/data/1"
 CARFAX_PDI = "207625C61DD1C38E"
 EMAIL_FROM = "MOS Tools <noreply@mos.tools>"
 CHROMIUM_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium"
+RENDER_API_KEY_QA = "rnd_hadayrCnPvSlL1kFV8Nvb6BKhHWA"
+RENDER_OWNER_ID_PROD = "tea-d1je787fte5s73aqb600"
+RENDER_OWNER_ID_QA = "tea-d1je787fte5s73aqb600"
+RENDER_SERVICE_IDS_PROD = "srv-d55jaqkhg0os73a5dd8g"
+RENDER_SERVICE_IDS_QA = "srv-d5hb86i4d50c738vm4o0"
 
 [userenv.development]
 DEV_AUTO_LOGIN = "true"
