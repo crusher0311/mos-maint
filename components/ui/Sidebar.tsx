@@ -26,8 +26,7 @@ import {
   RefreshCw,
   X,
   Printer,
-  CalendarCheck,
-  Ticket
+  CalendarCheck
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
@@ -295,12 +294,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     },
-    {
-      name: "Support",
-      href: "/dashboard/support",
-      icon: <Ticket className="w-5 h-5" />
-    }
-  ];
+      ];
 
   const filteredNavItems = navItems.filter(item => {
     if (!item.featureId) return true;
@@ -577,11 +571,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                       {pendingBookingsCount > 99 ? "99+" : pendingBookingsCount}
                     </span>
                   )}
-                  {item.name === "Support" && openSupportTickets > 0 && (
-                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-blue-500 text-white rounded-full">
-                      {openSupportTickets > 99 ? "99+" : openSupportTickets}
-                    </span>
-                  )}
                 </Link>
               )}
             </li>
@@ -589,8 +578,26 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         </ul>
       </nav>
 
-      {isPlatformAdmin && (
-        <div className="px-3 pb-2">
+      <div className="px-3 pb-2 space-y-1">
+        <Link
+          href="/dashboard/support"
+          className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            isActive("/dashboard/support")
+              ? "bg-white/20 text-white"
+              : "text-white/80 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <img src="/icons/support-agent.png" alt="" className="w-5 h-5 invert" />
+            <span>Support</span>
+          </div>
+          {openSupportTickets > 0 && (
+            <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-blue-500 text-white rounded-full">
+              {openSupportTickets > 99 ? "99+" : openSupportTickets}
+            </span>
+          )}
+        </Link>
+        {isPlatformAdmin && (
           <Link
             href="/platform-admin"
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition-colors"
@@ -598,8 +605,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             <Shield className="w-5 h-5" />
             <span>MOS Admin Panel</span>
           </Link>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="p-4 border-t border-white/20">
         {enterpriseId && (userRole === "owner" || userRole === "admin") && (
