@@ -344,13 +344,14 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         </button>
       )}
       <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
-        <button 
-          onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
-          className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
-            hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
-          }`}
-        >
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <button 
+            onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
+            className={`flex-1 flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
+              hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
             {shopLogo && (
               <img 
                 src={shopLogo} 
@@ -368,7 +369,9 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           {hasMultipleShops && (
             <ChevronDown className={`w-4 h-4 text-mos-silver transition-transform flex-shrink-0 ${shopDropdownOpen ? "rotate-180" : ""}`} />
           )}
-        </button>
+          </button>
+          <NotificationBell isPlatformAdmin={false} />
+        </div>
         
         {shopDropdownOpen && hasMultipleShops && (
           <div className="absolute left-4 right-4 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
@@ -423,7 +426,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         )}
       </div>
 
-      <div className="p-4 space-y-3">
+      <div className="p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/70" />
           <input
@@ -433,9 +436,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-white/10 text-white placeholder-white/50 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/20"
           />
-        </div>
-        <div className="mt-2 flex justify-end">
-          <NotificationBell isPlatformAdmin={false} />
         </div>
       </div>
 
