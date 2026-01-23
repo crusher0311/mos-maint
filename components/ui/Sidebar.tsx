@@ -96,6 +96,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [showBookingBadge, setShowBookingBadge] = useState(false);
+  const [openSupportTickets, setOpenSupportTickets] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +135,24 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   useEffect(() => {
     refreshPendingCount();
   }, [enabledFeatures]);
+
+  useEffect(() => {
+    const fetchSupportTicketCount = async () => {
+      try {
+        const res = await fetch("/api/support/tickets/count");
+        const data = await res.json();
+        if (data.ok) {
+          setOpenSupportTickets(data.openCount);
+        }
+      } catch (error) {
+        console.error("Error fetching support ticket count:", error);
+      }
+    };
+
+    fetchSupportTicketCount();
+    const interval = setInterval(fetchSupportTicketCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleRefresh = () => refreshPendingCount();
@@ -551,6 +570,11 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                   {item.name === "Booking Review" && showBookingBadge && pendingBookingsCount > 0 && (
                     <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-red-500 text-white rounded-full">
                       {pendingBookingsCount > 99 ? "99+" : pendingBookingsCount}
+                    </span>
+                  )}
+                  {item.name === "Support" && openSupportTickets > 0 && (
+                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-blue-500 text-white rounded-full">
+                      {openSupportTickets > 99 ? "99+" : openSupportTickets}
                     </span>
                   )}
                 </Link>

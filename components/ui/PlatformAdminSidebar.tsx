@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   Building2, 
   Users, 
@@ -27,6 +28,25 @@ interface PlatformAdminSidebarProps {
 
 export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformAdminSidebarProps) {
   const pathname = usePathname();
+  const [openTicketCount, setOpenTicketCount] = useState(0);
+
+  useEffect(() => {
+    const fetchTicketCount = async () => {
+      try {
+        const res = await fetch("/api/platform-admin/tickets/count");
+        const data = await res.json();
+        if (data.ok) {
+          setOpenTicketCount(data.openCount);
+        }
+      } catch (error) {
+        console.error("Error fetching ticket count:", error);
+      }
+    };
+
+    fetchTicketCount();
+    const interval = setInterval(fetchTicketCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const isActive = (href: string) => {
     return pathname === href || pathname?.startsWith(href + "/");
@@ -133,14 +153,21 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               <Link
                 href={item.href}
                 onClick={handleNavClick}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
                     ? "bg-purple-600 text-white"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
-                {item.icon}
-                <span>{item.name}</span>
+                <div className="flex items-center gap-3">
+                  {item.icon}
+                  <span>{item.name}</span>
+                </div>
+                {item.name === "Support Tickets" && openTicketCount > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full min-w-[20px] text-center">
+                    {openTicketCount > 99 ? "99+" : openTicketCount}
+                  </span>
+                )}
               </Link>
             </li>
           ))}
