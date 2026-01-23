@@ -419,8 +419,7 @@ async function pushAppointmentToSMS(
           title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
           color: "blue",
-          // Note: Tekmetric API doesn't support setting waiter/drop-off option
-          // The appointmentOption field is read-only and defaults to "Stay With Vehicle"
+          appointmentOption: "DROP", // Drop-off Vehicle
         });
         
         return {
