@@ -498,7 +498,8 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
     console.log(`[Tekmetric] Updating appointment ${appointmentId} with appointmentOption:`, appointmentOptionObj);
     
     try {
-      const patchBody = { appointmentOption: appointmentOptionObj };
+      // Try sending just the appointmentOptionId instead of the full object
+      const patchBody = { appointmentOptionId: savedAppointmentOptionId };
       console.log(`[Tekmetric] PATCH body:`, JSON.stringify(patchBody));
       const patchResult = await tekmetricRequest(`/appointments/${appointmentId}`, {
         method: 'PATCH',
