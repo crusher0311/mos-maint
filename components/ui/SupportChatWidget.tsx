@@ -177,34 +177,40 @@ export default function SupportChatWidget() {
           script.onload = async () => {
             console.log('Cobrowse SDK loaded, license:', data.licenseKey?.substring(0, 8) + '...');
             window.CobrowseIO.license = data.licenseKey;
-            window.CobrowseIO.trustedOrigins = ['*'];
             
             window.CobrowseIO.on('error', (err: any) => {
               console.error('Cobrowse error event:', err);
             });
             
-            window.CobrowseIO.start().then(() => {
-              console.log('Cobrowse started, device id:', window.CobrowseIO.deviceId);
-              cobrowseInitialized = true;
-              resolve();
-            }).catch((err: any) => {
-              console.error('Cobrowse start error:', err);
-              reject(err);
-            });
+            window.CobrowseIO.start();
+            cobrowseInitialized = true;
+            
+            let attempts = 0;
+            const checkDevice = () => {
+              attempts++;
+              if (window.CobrowseIO.deviceId) {
+                console.log('Cobrowse registered, device id:', window.CobrowseIO.deviceId);
+                resolve();
+              } else if (attempts < 20) {
+                console.log('Waiting for Cobrowse registration, attempt:', attempts);
+                setTimeout(checkDevice, 500);
+              } else {
+                console.error('Cobrowse failed to register device after 10 seconds');
+                reject(new Error('Cobrowse.io failed to connect. Please check your license key.'));
+              }
+            };
+            setTimeout(checkDevice, 500);
           };
           script.onerror = () => reject(new Error('Failed to load Cobrowse SDK'));
           document.head.appendChild(script);
         });
-        
-        let attempts = 0;
-        while (!window.CobrowseIO.deviceId && attempts < 10) {
-          await new Promise(r => setTimeout(r, 500));
-          attempts++;
-          console.log('Waiting for device registration, attempt:', attempts);
-        }
       }
       
-      console.log('Creating session code, deviceId:', window.CobrowseIO?.deviceId);
+      if (!window.CobrowseIO?.deviceId) {
+        throw new Error('Cobrowse.io is not connected. Please contact support.');
+      }
+      
+      console.log('Creating session code, deviceId:', window.CobrowseIO.deviceId);
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
