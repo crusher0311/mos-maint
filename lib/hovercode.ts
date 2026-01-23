@@ -22,6 +22,9 @@ interface CreateQRCodeOptions {
   shopName: string;
   primaryColor?: string;
   backgroundColor?: string;
+  logoUrl?: string;
+  pattern?: string;
+  frame?: string;
 }
 
 export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
@@ -44,20 +47,37 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
   const startTime = Date.now();
   
   try {
+    const requestBody: Record<string, any> = {
+      workspace: workspaceId,
+      qr_data: destinationUrl,
+      display_name: `MOS Sticker - ${options.shopName}`,
+      primary_color: options.primaryColor || "#1e40af",
+      background_color: options.backgroundColor || "#ffffff",
+      dynamic: true,
+      pattern: options.pattern || "Bubble",
+      generate_png: true,
+    };
+    
+    if (options.logoUrl) {
+      requestBody.logo_url = options.logoUrl;
+    }
+    
+    if (options.frame) {
+      requestBody.frame = options.frame;
+    }
+    
+    console.log("[HoverCode] Creating QR with options:", {
+      ...requestBody,
+      workspace: "[redacted]"
+    });
+    
     const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/create/`, {
       method: "POST",
       headers: {
         Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        workspace: workspaceId,
-        qr_data: destinationUrl,
-        display_name: `MOS Sticker - ${options.shopName}`,
-        primary_color: options.primaryColor || "#1e40af",
-        background_color: options.backgroundColor || "#ffffff",
-        generate_png: true,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const latencyMs = Date.now() - startTime;
