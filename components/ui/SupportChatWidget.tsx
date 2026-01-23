@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2, ArrowRight, ThumbsUp } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, ArrowRight, ThumbsUp, Monitor, Copy, Check } from "lucide-react";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+}
+
+declare global {
+  interface Window {
+    CobrowseIO: any;
+  }
 }
 
 export default function SupportChatWidget() {
@@ -16,6 +22,9 @@ export default function SupportChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [showEscalate, setShowEscalate] = useState(false);
+  const [screenShareCode, setScreenShareCode] = useState<string | null>(null);
+  const [screenShareLoading, setScreenShareLoading] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
@@ -141,6 +150,62 @@ export default function SupportChatWidget() {
     }
   };
 
+  const startScreenShare = async () => {
+    setScreenShareLoading(true);
+    try {
+      const res = await fetch("/api/cobrowse/config");
+      const data = await res.json();
+      
+      if (!data.licenseKey) {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: "Screen sharing is not available at this time.",
+          timestamp: new Date().toISOString()
+        }]);
+        setScreenShareLoading(false);
+        return;
+      }
+
+      if (!window.CobrowseIO) {
+        const script = document.createElement("script");
+        script.src = "https://js.cobrowse.io/CobrowseIO.js";
+        script.async = true;
+        script.crossOrigin = "anonymous";
+        
+        await new Promise<void>((resolve, reject) => {
+          script.onload = () => resolve();
+          script.onerror = () => reject();
+          document.head.appendChild(script);
+        });
+        
+        window.CobrowseIO.license = data.licenseKey;
+        window.CobrowseIO.start();
+      }
+
+      const code = await window.CobrowseIO.createSessionCode();
+      setScreenShareCode(code);
+    } catch (err) {
+      console.error("Screen share error:", err);
+    } finally {
+      setScreenShareLoading(false);
+    }
+  };
+
+  const endScreenShare = () => {
+    if (window.CobrowseIO?.currentSession) {
+      window.CobrowseIO.currentSession.end();
+    }
+    setScreenShareCode(null);
+  };
+
+  const copyCode = () => {
+    if (screenShareCode) {
+      navigator.clipboard.writeText(screenShareCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    }
+  };
+
   return (
     <>
       {!isOpen && (
@@ -218,14 +283,47 @@ export default function SupportChatWidget() {
             </div>
           )}
 
+          {screenShareCode && (
+            <div className="px-4 py-3 bg-green-50 border-t border-green-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-green-700 flex items-center gap-1">
+                  <Monitor className="w-3 h-3" /> Screen Share Ready
+                </span>
+                <button onClick={endScreenShare} className="text-xs text-green-600 hover:text-green-800">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-white border border-green-300 rounded px-2 py-1 text-center">
+                  <span className="font-mono font-bold text-green-800 tracking-wider">{screenShareCode}</span>
+                </div>
+                <button onClick={copyCode} className="p-1 bg-green-600 text-white rounded hover:bg-green-700">
+                  {codeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-green-600 mt-1">Share this code with support</p>
+            </div>
+          )}
+
           {messages.length > 0 && (
             <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-              <button
-                onClick={resolveChat}
-                className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
-              >
-                <ThumbsUp className="w-3 h-3" /> Issue Resolved
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={resolveChat}
+                  className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+                >
+                  <ThumbsUp className="w-3 h-3" /> Resolved
+                </button>
+                {!screenShareCode && (
+                  <button
+                    onClick={startScreenShare}
+                    disabled={screenShareLoading}
+                    className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                  >
+                    <Monitor className="w-3 h-3" /> {screenShareLoading ? "Loading..." : "Share Screen"}
+                  </button>
+                )}
+              </div>
               <button
                 onClick={escalateToTicket}
                 disabled={isLoading}
