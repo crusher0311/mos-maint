@@ -9,7 +9,13 @@ interface ChatMessage {
   timestamp: string;
 }
 
-let cobrowseSDK: any = null;
+declare global {
+  interface Window {
+    CobrowseIO: any;
+  }
+}
+
+let cobrowseInitialized = false;
 
 export default function SupportChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -162,16 +168,25 @@ export default function SupportChatWidget() {
         return;
       }
 
-      if (!cobrowseSDK) {
-        const CobrowseIO = (await import('cobrowse-sdk-js')).default;
-        CobrowseIO.license = data.licenseKey;
-        CobrowseIO.start();
-        cobrowseSDK = CobrowseIO;
+      if (!cobrowseInitialized) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://js.cobrowse.io/CobrowseIO.js';
+          script.async = true;
+          script.crossOrigin = 'anonymous';
+          script.onload = () => {
+            window.CobrowseIO.license = data.licenseKey;
+            window.CobrowseIO.start();
+            cobrowseInitialized = true;
+            resolve();
+          };
+          script.onerror = () => reject(new Error("Failed to load Cobrowse SDK"));
+          document.head.appendChild(script);
+        });
       }
       
-      await cobrowseSDK.client();
-      
-      const code = await cobrowseSDK.createSessionCode();
+      const CobrowseIO = await window.CobrowseIO.client();
+      const code = await CobrowseIO.createSessionCode();
       setScreenShareCode(code);
     } catch (err: any) {
       console.error("Screen share error:", err?.message || err);
@@ -186,8 +201,8 @@ export default function SupportChatWidget() {
   };
 
   const endScreenShare = () => {
-    if (cobrowseSDK?.currentSession) {
-      cobrowseSDK.currentSession.end();
+    if (window.CobrowseIO?.currentSession) {
+      window.CobrowseIO.currentSession.end();
     }
     setScreenShareCode(null);
   };
