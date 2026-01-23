@@ -45,7 +45,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     };
 
     fetchTicketCount();
-    const interval = setInterval(fetchTicketCount, 60000);
+    const interval = setInterval(fetchTicketCount, 15000);
     return () => clearInterval(interval);
   }, []);
 
