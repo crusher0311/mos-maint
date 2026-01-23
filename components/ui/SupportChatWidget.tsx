@@ -193,7 +193,9 @@ export default function SupportChatWidget() {
       }
       
       await window.CobrowseIO.client();
-      window.CobrowseIO.start();
+      await window.CobrowseIO.start();
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
