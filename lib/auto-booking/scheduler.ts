@@ -422,7 +422,7 @@ async function pushAppointmentToSMS(
           title: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           note: `Auto-booked via MOS Oil Sticker. Service: ${booking.serviceType}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
-          appointmentOptionId: TEKMETRIC_APPOINTMENT_OPTIONS.DROP_OFF,
+          appointmentOption: TEKMETRIC_APPOINTMENT_OPTIONS.DROP_OFF,
         });
         
         return {
