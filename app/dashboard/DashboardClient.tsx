@@ -740,7 +740,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
     };
     
-    const interval = setInterval(checkForUpdates, 3000);
+    const interval = setInterval(checkForUpdates, 1000);
     return () => clearInterval(interval);
   }, [currentPage, searchQuery, showArchived]);
 
