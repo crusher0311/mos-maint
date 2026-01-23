@@ -187,15 +187,15 @@ export default function SupportChatWidget() {
             };
           });
         })(window, 'script', 'CobrowseIO');
-        
-        window.CobrowseIO.license = data.licenseKey;
         cobrowseInitialized = true;
       }
       
       await window.CobrowseIO.client();
+      
+      window.CobrowseIO.license = data.licenseKey;
       await window.CobrowseIO.start();
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const code = await window.CobrowseIO.createSessionCode();
       setScreenShareCode(code);
