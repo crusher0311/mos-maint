@@ -29,6 +29,7 @@ import {
   CalendarCheck,
   Ticket
 } from "lucide-react";
+import { NotificationBell } from "./NotificationBell";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
 interface NavChild {
@@ -432,6 +433,9 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-white/10 text-white placeholder-white/50 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-white/30 border border-white/20"
           />
+        </div>
+        <div className="mt-2 flex justify-end">
+          <NotificationBell isPlatformAdmin={false} />
         </div>
       </div>
 
