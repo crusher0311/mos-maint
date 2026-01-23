@@ -16,7 +16,14 @@ import {
   ArrowUp,
   ArrowDown,
   Download,
-  ChevronRight
+  ChevronRight,
+  Wrench,
+  Search,
+  AlertTriangle,
+  Droplet,
+  Tag,
+  Chrome,
+  Plus
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
@@ -82,7 +89,18 @@ interface VinPack {
   priceId: string;
 }
 
-type TabType = "overview" | "plans" | "addons" | "payment" | "history";
+interface FeatureAddon {
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  monthlyPrice: number;
+  stripePriceId?: string;
+  category: string;
+  requiresFeature?: string;
+}
+
+type TabType = "overview" | "plans" | "alacarte" | "payment" | "history";
 
 export default function BillingSettingsPage() {
   const [billing, setBilling] = useState<BillingInfo | null>(null);
@@ -91,6 +109,7 @@ export default function BillingSettingsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [vinPacks, setVinPacks] = useState<VinPack[]>([]);
+  const [featureAddons, setFeatureAddons] = useState<FeatureAddon[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +175,7 @@ export default function BillingSettingsPage() {
       if (addonsRes.ok) {
         const data = await addonsRes.json();
         setVinPacks(data.vinPacks || []);
+        setFeatureAddons(data.featureAddons || []);
       }
     } catch (err) {
       console.error("Error loading billing data:", err);
@@ -269,7 +289,7 @@ export default function BillingSettingsPage() {
   const tabs = [
     { id: "overview" as const, label: "Overview", icon: Wallet },
     { id: "plans" as const, label: "Plans", icon: Package },
-    { id: "addons" as const, label: "Add-Ons", icon: Package },
+    { id: "alacarte" as const, label: "A La Carte", icon: Package },
     { id: "payment" as const, label: "Payment Methods", icon: CreditCard },
     { id: "history" as const, label: "Billing History", icon: Receipt },
   ];
@@ -587,8 +607,8 @@ export default function BillingSettingsPage() {
           </div>
         )}
 
-        {activeTab === "addons" && (
-          <div className="space-y-6">
+        {activeTab === "alacarte" && (
+          <div className="space-y-8">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">VIN Packs</h2>
               <p className="text-gray-500 text-sm mt-1">
@@ -597,11 +617,11 @@ export default function BillingSettingsPage() {
             </div>
 
             {vinPacks.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <h3 className="font-medium text-gray-900 mb-1">No add-ons available</h3>
+                <h3 className="font-medium text-gray-900 mb-1">VIN packs not configured</h3>
                 <p className="text-sm text-gray-500">
-                  VIN pack add-ons are not yet configured. Contact support for more information.
+                  Contact support for more information.
                 </p>
               </div>
             ) : (
@@ -637,6 +657,93 @@ export default function BillingSettingsPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            <div className="border-t border-gray-200 pt-8">
+              <h2 className="text-lg font-semibold text-gray-900">Individual Features</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Add individual features to your subscription
+              </p>
+            </div>
+
+            {featureAddons.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+                <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="font-medium text-gray-900 mb-1">No features available</h3>
+                <p className="text-sm text-gray-500">
+                  Individual feature pricing is being configured.
+                </p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {featureAddons.map((feature) => {
+                  const FeatureIcon = {
+                    Wrench: Wrench,
+                    Search: Search,
+                    AlertTriangle: AlertTriangle,
+                    Droplet: Droplet,
+                    Tag: Tag,
+                    RefreshCw: RefreshCw,
+                    Calendar: Calendar,
+                    Chrome: Chrome,
+                  }[feature.icon] || Package;
+
+                  const isIncluded = features.find(f => f.slug === feature.slug)?.includedInTiers?.includes(billing?.planSlug || "");
+
+                  return (
+                    <div
+                      key={feature.slug}
+                      className={`bg-white rounded-xl border p-5 transition-colors ${
+                        isIncluded 
+                          ? "border-green-200 bg-green-50/30" 
+                          : "border-gray-200 hover:border-blue-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className={`p-2.5 rounded-xl ${isIncluded ? "bg-green-100" : "bg-blue-100"}`}>
+                          <FeatureIcon className={`w-5 h-5 ${isIncluded ? "text-green-600" : "text-blue-600"}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-gray-900">{feature.name}</h3>
+                            {feature.category === "addon" && feature.requiresFeature && (
+                              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                                Add-on
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                            {feature.description}
+                          </p>
+                          <div className="mt-3 flex items-center justify-between">
+                            {feature.monthlyPrice > 0 ? (
+                              <span className="font-bold text-gray-900">
+                                ${feature.monthlyPrice.toFixed(2)}/mo
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-500">Contact for pricing</span>
+                            )}
+                            {isIncluded ? (
+                              <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+                                <Check className="w-4 h-4" />
+                                Included
+                              </span>
+                            ) : (
+                              <button
+                                disabled={!feature.stripePriceId}
+                                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                {feature.stripePriceId ? "Add" : "Coming Soon"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

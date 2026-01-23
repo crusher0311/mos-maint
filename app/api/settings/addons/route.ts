@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getDb } from "@/lib/mongo";
 import { getBillingSettings } from "@/lib/stripe";
+
+export interface FeatureAddon {
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  monthlyPrice: number;
+  stripePriceId?: string;
+  category: string;
+  requiresFeature?: string;
+}
 
 export async function GET() {
   try {
@@ -9,6 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const db = await getDb();
     const settings = await getBillingSettings();
 
     const vinPacks = [
@@ -32,9 +45,26 @@ export async function GET() {
       },
     ];
 
+    const platformFeatures = await db.collection("platform_features")
+      .find({ status: "active", category: { $in: ["core", "addon"] } })
+      .sort({ order: 1 })
+      .toArray();
+
+    const featureAddons: FeatureAddon[] = platformFeatures.map(f => ({
+      slug: f.slug,
+      name: f.name,
+      description: f.description,
+      icon: f.icon || "Package",
+      monthlyPrice: f.monthlyPrice || 0,
+      stripePriceId: f.stripePriceId,
+      category: f.category,
+      requiresFeature: f.requiresFeature,
+    }));
+
     return NextResponse.json({
       ok: true,
       vinPacks,
+      featureAddons,
     });
   } catch (error) {
     console.error("Error fetching add-ons:", error);
