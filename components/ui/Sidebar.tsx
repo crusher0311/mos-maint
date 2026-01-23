@@ -82,6 +82,9 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
       pathname?.startsWith("/dashboard/settings/preferences")) {
     sections.add("Preferences");
   }
+  if (pathname?.startsWith("/dashboard/enterprise")) {
+    sections.add("Enterprise");
+  }
   return sections;
 }
 
@@ -194,6 +197,10 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
            pathname.startsWith("/dashboard/settings/keytags") ||
            pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
+        changed = true;
+      }
+      if (pathname.startsWith("/dashboard/enterprise") && !newExpanded.has("Enterprise")) {
+        newExpanded.add("Enterprise");
         changed = true;
       }
       
@@ -610,29 +617,53 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
 
       <div className="p-4 border-t border-white/20">
         {enterpriseId && (userRole === "owner" || userRole === "admin") && (
-          <div className="mb-3 space-y-1">
-            <Link
-              href="/dashboard/enterprise"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname === "/dashboard/enterprise"
+          <div className="mb-3">
+            <button
+              onClick={() => toggleSection("Enterprise")}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                pathname?.startsWith("/dashboard/enterprise")
                   ? "bg-white/20 text-white"
                   : "text-white/80 hover:bg-white/10 hover:text-white"
               }`}
             >
-              <Building2 className="w-5 h-5" />
-              <span>Enterprise</span>
-            </Link>
-            <Link
-              href="/dashboard/enterprise/billing"
-              className={`flex items-center gap-3 px-3 py-2 ml-8 rounded-lg text-sm font-medium transition-colors ${
-                pathname === "/dashboard/enterprise/billing"
-                  ? "bg-white/20 text-white"
-                  : "text-white/80 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <CreditCard className="w-4 h-4" />
-              <span>Billing</span>
-            </Link>
+              <div className="flex items-center gap-3">
+                <Building2 className="w-5 h-5" />
+                <span>Enterprise</span>
+              </div>
+              {expandedSections.has("Enterprise") ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            {expandedSections.has("Enterprise") && (
+              <ul className="mt-1 ml-4 space-y-1 border-l border-white/20 pl-4">
+                <li>
+                  <Link
+                    href="/dashboard/enterprise"
+                    className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                      pathname === "/dashboard/enterprise"
+                        ? "bg-white/20 text-white font-medium"
+                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    Overview
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/enterprise/billing"
+                    className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                      pathname === "/dashboard/enterprise/billing"
+                        ? "bg-white/20 text-white font-medium"
+                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    Billing
+                  </Link>
+                </li>
+              </ul>
+            )}
           </div>
         )}
         <div className="flex items-center gap-3">
