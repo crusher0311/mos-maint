@@ -17,6 +17,7 @@ import {
   Database,
   FileText,
   Ticket,
+  BarChart3,
   X
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
@@ -98,6 +99,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "Support Tickets",
       href: "/platform-admin/tickets",
       icon: <Ticket className="w-5 h-5" />
+    },
+    {
+      name: "Ticket Reports",
+      href: "/platform-admin/tickets/reports",
+      icon: <BarChart3 className="w-5 h-5" />
     },
     {
       name: "HoverCode QRs",
