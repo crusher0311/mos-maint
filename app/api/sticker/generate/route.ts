@@ -427,15 +427,15 @@ function generateStickerHtml(
       display: flex;
       flex-direction: column;
       justify-content: center;
-      overflow: hidden;
     }
     .service-label {
-      font-size: ${labelSize}px;
+      font-size: ${Math.min(labelSize, Math.round(14 * scaleFactor))}px;
       font-weight: ${serviceLabelFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
-      margin-bottom: ${Math.round(8 * scaleFactor)}px;
+      margin-bottom: ${Math.round(4 * scaleFactor)}px;
       white-space: nowrap;
+      overflow: visible;
     }
     .service-date {
       font-size: ${valueSize}px;
