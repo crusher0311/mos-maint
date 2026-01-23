@@ -11,34 +11,33 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const products = await stripe.products.list({
-      active: true,
-      limit: 100,
-    });
+    const [products, prices] = await Promise.all([
+      stripe.products.list({ active: true, limit: 100 }),
+      stripe.prices.list({ active: true, limit: 100 }),
+    ]);
 
-    const productsWithPrices = await Promise.all(
-      products.data.map(async (product) => {
-        const prices = await stripe.prices.list({
-          product: product.id,
-          active: true,
-          limit: 10,
-        });
+    const pricesByProduct = new Map<string, any[]>();
+    for (const price of prices.data) {
+      const productId = typeof price.product === 'string' ? price.product : price.product.id;
+      if (!pricesByProduct.has(productId)) {
+        pricesByProduct.set(productId, []);
+      }
+      pricesByProduct.get(productId)!.push({
+        id: price.id,
+        unit_amount: price.unit_amount,
+        currency: price.currency,
+        recurring: price.recurring,
+        type: price.type,
+      });
+    }
 
-        return {
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          metadata: product.metadata,
-          prices: prices.data.map((price) => ({
-            id: price.id,
-            unit_amount: price.unit_amount,
-            currency: price.currency,
-            recurring: price.recurring,
-            type: price.type,
-          })),
-        };
-      })
-    );
+    const productsWithPrices = products.data.map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      metadata: product.metadata,
+      prices: pricesByProduct.get(product.id) || [],
+    }));
 
     return NextResponse.json({
       ok: true,
