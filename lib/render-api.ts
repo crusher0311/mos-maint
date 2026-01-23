@@ -40,7 +40,7 @@ const RENDER_API_BASE = 'https://api.render.com/v1';
 async function makeRenderRequest<T>(
   endpoint: string,
   apiKey: string,
-  params?: Record<string, string>,
+  params?: Record<string, string | string[]>,
   environment: string = 'unknown'
 ): Promise<T> {
   const startTime = Date.now();
@@ -48,7 +48,13 @@ async function makeRenderRequest<T>(
   
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value) url.searchParams.set(key, value);
+      if (value) {
+        if (Array.isArray(value)) {
+          value.forEach(v => url.searchParams.append(key, v));
+        } else {
+          url.searchParams.set(key, value);
+        }
+      }
     });
   }
 
@@ -110,13 +116,13 @@ export async function fetchRenderLogs(
     environment?: string;
   }
 ): Promise<RenderLogsResponse> {
-  const params: Record<string, string> = {
+  const params: Record<string, string | string[]> = {
     startTime: options.startTime,
     endTime: options.endTime,
   };
 
   if (options.serviceIds?.length) {
-    params.resourceIds = options.serviceIds.join(',');
+    params.resourceIds = options.serviceIds;
   }
   if (options.level) {
     params.level = options.level;
