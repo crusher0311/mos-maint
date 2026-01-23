@@ -357,10 +357,15 @@ async function pushAppointmentToSMS(
       const { createAppointment } = await import("@/lib/tekmetric");
       const tekmetricShopId = Number(shop.tekmetric.shopId);
       
-      // We need Tekmetric customer and vehicle IDs
-      // Try to find them from cached data
-      const tekmetricCustomerId = await findTekmetricCustomerId(tekmetricShopId, booking.customerId, booking.customerName);
-      const tekmetricVehicleId = await findTekmetricVehicleId(tekmetricShopId, booking.vehicleId, booking.vin);
+      // Find both customer and vehicle IDs from cached data
+      const { customerId: tekmetricCustomerId, vehicleId: tekmetricVehicleId } = 
+        await findTekmetricCustomerAndVehicle(
+          tekmetricShopId, 
+          booking.customerId, 
+          booking.customerName,
+          booking.vehicleId,
+          booking.vin
+        );
       
       if (!tekmetricCustomerId) {
         console.log(`[Auto Booking] Could not find Tekmetric customer ID for ${booking.customerName}`);
@@ -440,117 +445,105 @@ async function pushAppointmentToSMS(
   };
 }
 
-async function findTekmetricCustomerId(
+async function findTekmetricCustomerAndVehicle(
   tekmetricShopId: number,
   mosCustomerId?: string,
-  customerName?: string
-): Promise<number | null> {
+  customerName?: string,
+  mosVehicleId?: string,
+  vin?: string
+): Promise<{ customerId: number | null; vehicleId: number | null }> {
   const db = await getDb();
   
-  console.log(`[Auto Booking] findTekmetricCustomerId: tekmetricShopId=${tekmetricShopId}, mosCustomerId=${mosCustomerId}, customerName=${customerName}`);
+  console.log(`[Auto Booking] findTekmetricCustomerAndVehicle: tekmetricShopId=${tekmetricShopId}, mosCustomerId=${mosCustomerId}, customerName=${customerName}, vin=${vin}`);
+  
+  let customerId: number | null = null;
+  let vehicleId: number | null = null;
   
   // Try to parse as number directly (might already be Tekmetric ID)
   if (mosCustomerId) {
     const parsed = Number(mosCustomerId);
     if (!isNaN(parsed) && parsed > 0) {
       console.log(`[Auto Booking] Using customer ID directly as Tekmetric ID: ${parsed}`);
-      return parsed;
+      customerId = parsed;
     }
   }
   
-  // Try to find customer from repair orders collection (where Tekmetric syncs data)
-  if (customerName) {
-    const repairOrder = await db.collection("tekmetric_repair_orders").findOne({
-      tekmetricShopId,
-      "data.customer.firstName": { $regex: customerName.split(' ')[0], $options: 'i' }
-    });
-    
-    if (repairOrder?.data?.customer?.id) {
-      console.log(`[Auto Booking] Found Tekmetric customer ${repairOrder.data.customer.id} from repair order for "${customerName}"`);
-      return repairOrder.data.customer.id;
-    }
-  }
-  
-  // Try to search by customer name via Tekmetric API (may fail with 403)
-  if (customerName) {
-    try {
-      const { getCustomers } = await import("@/lib/tekmetric");
-      const result = await getCustomers(tekmetricShopId, { search: customerName, size: 5 });
-      
-      if (result.content && result.content.length > 0) {
-        console.log(`[Auto Booking] Found Tekmetric customer ${result.content[0].id} via API for name "${customerName}"`);
-        return result.content[0].id;
-      }
-    } catch (err: any) {
-      console.error(`[Auto Booking] Tekmetric customer search failed:`, err.message);
-    }
-  }
-  
-  return null;
-}
-
-async function findTekmetricVehicleId(
-  tekmetricShopId: number,
-  mosVehicleId?: string,
-  vin?: string
-): Promise<number | null> {
-  if (!mosVehicleId && !vin) return null;
-  
-  const db = await getDb();
-  
-  // Try to parse as number directly (might already be Tekmetric ID)
   if (mosVehicleId) {
     const parsed = Number(mosVehicleId);
     if (!isNaN(parsed) && parsed > 0) {
-      return parsed;
+      console.log(`[Auto Booking] Using vehicle ID directly as Tekmetric ID: ${parsed}`);
+      vehicleId = parsed;
     }
   }
   
-  // First try to find from cached vehicle data
-  const query: any = { tekmetricShopId };
-  const orConditions: any[] = [];
-  
-  if (mosVehicleId) {
-    orConditions.push({ "data.id": Number(mosVehicleId) });
-    orConditions.push({ vehicleId: mosVehicleId });
+  // If we already have both, return them
+  if (customerId && vehicleId) {
+    return { customerId, vehicleId };
   }
+  
+  // Try to find from repair order by VIN - this gives us both customer and vehicle
   if (vin) {
-    orConditions.push({ "data.vin": vin.toUpperCase() });
+    const repairOrder = await db.collection("tekmetric_repair_orders").findOne({
+      tekmetricShopId,
+      "data.vehicle.vin": vin.toUpperCase()
+    });
+    
+    if (repairOrder?.data) {
+      if (!customerId && repairOrder.data.customer?.id) {
+        console.log(`[Auto Booking] Found Tekmetric customer ${repairOrder.data.customer.id} from repair order by VIN`);
+        customerId = repairOrder.data.customer.id;
+      }
+      if (!vehicleId && repairOrder.data.vehicle?.id) {
+        console.log(`[Auto Booking] Found Tekmetric vehicle ${repairOrder.data.vehicle.id} from repair order by VIN`);
+        vehicleId = repairOrder.data.vehicle.id;
+      }
+    }
   }
   
-  if (orConditions.length > 0) {
-    query.$or = orConditions;
-    const cachedVehicle = await db.collection("tekmetric_vehicles").findOne(query);
+  // If still missing vehicle, check tekmetric_vehicles collection
+  if (!vehicleId && vin) {
+    const cachedVehicle = await db.collection("tekmetric_vehicles").findOne({
+      tekmetricShopId,
+      "data.vin": vin.toUpperCase()
+    });
     
     if (cachedVehicle?.data?.id) {
-      return cachedVehicle.data.id;
+      console.log(`[Auto Booking] Found Tekmetric vehicle ${cachedVehicle.data.id} from vehicles cache by VIN`);
+      vehicleId = cachedVehicle.data.id;
+      
+      // If vehicle has customerId reference, use it
+      if (!customerId && cachedVehicle.data.customerId) {
+        customerId = cachedVehicle.data.customerId;
+        console.log(`[Auto Booking] Found customer ${customerId} from vehicle record`);
+      }
     }
   }
   
-  // Try to search by VIN via Tekmetric API
-  if (vin) {
+  // Fallback: Try API for vehicle if still missing
+  if (!vehicleId && vin) {
     try {
       const { getVehicles } = await import("@/lib/tekmetric");
       const result = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
       
       if (result.content && result.content.length > 0) {
-        // Find exact VIN match
         const match = result.content.find(v => v.vin?.toUpperCase() === vin.toUpperCase());
         if (match) {
-          console.log(`[Auto Booking] Found Tekmetric vehicle ${match.id} for VIN "${vin}"`);
-          return match.id;
+          console.log(`[Auto Booking] Found Tekmetric vehicle ${match.id} via API for VIN "${vin}"`);
+          vehicleId = match.id;
+          if (!customerId && match.customerId) {
+            customerId = match.customerId;
+            console.log(`[Auto Booking] Found customer ${customerId} from vehicle API response`);
+          }
         }
-        // If no exact match, use first result
-        console.log(`[Auto Booking] Using first Tekmetric vehicle ${result.content[0].id} for VIN search "${vin}"`);
-        return result.content[0].id;
       }
     } catch (err: any) {
-      console.error(`[Auto Booking] Tekmetric vehicle search failed:`, err.message);
+      console.error(`[Auto Booking] Tekmetric vehicle API search failed:`, err.message);
     }
   }
   
-  return null;
+  return { customerId, vehicleId };
 }
+
 
 export async function cancelBooking(bookingId: string): Promise<boolean> {
   const db = await getDb();
