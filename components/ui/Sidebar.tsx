@@ -26,7 +26,8 @@ import {
   RefreshCw,
   X,
   Printer,
-  CalendarCheck
+  CalendarCheck,
+  Ticket
 } from "lucide-react";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
@@ -272,6 +273,11 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
+    },
+    {
+      name: "Support",
+      href: "/dashboard/support",
+      icon: <Ticket className="w-5 h-5" />
     }
   ];
 
