@@ -660,6 +660,7 @@ export async function findAvailableSlotFromDate(
 ): Promise<ScheduleResult> {
   const attempts: BookingSlot[] = [];
   let currentDate = new Date(startDate);
+  console.log(`[Auto Booking] findAvailableSlotFromDate: starting from ${startDate.toISOString()}`);
   
   for (let i = 0; i < maxAttempts; i++) {
     const dateStr = formatDate(currentDate);
@@ -676,14 +677,19 @@ export async function findAvailableSlotFromDate(
     if (isWeekend(currentDate, settings)) {
       slot.available = false;
       slot.reason = getDayOfWeek(currentDate) === 6 ? "Saturday blocked" : "Sunday blocked";
+      console.log(`[Auto Booking] Slot ${dateStr}: ${slot.reason}`);
     } else if (isHoliday(dateStr, settings)) {
       slot.available = false;
       slot.reason = "Holiday blocked";
+      console.log(`[Auto Booking] Slot ${dateStr}: ${slot.reason}`);
     } else {
       const existingCount = await getExistingBookingsCount(shopId, dateStr);
       if (existingCount >= settings.maxBookingsPerDay) {
         slot.available = false;
         slot.reason = `Max bookings reached (${existingCount}/${settings.maxBookingsPerDay})`;
+        console.log(`[Auto Booking] Slot ${dateStr}: ${slot.reason}`);
+      } else {
+        console.log(`[Auto Booking] Slot ${dateStr}: AVAILABLE (existing=${existingCount}, max=${settings.maxBookingsPerDay})`);
       }
     }
     
