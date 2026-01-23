@@ -420,7 +420,13 @@ async function pushAppointmentToSMS(
     }
   }
   
-  return { success: false, error: "No supported SMS integration configured" };
+  // No SMS integration - booking confirmed but will stay in local queue only
+  console.log(`[Auto Booking] No SMS integration configured for shop ${booking.shopId}, booking will remain local only`);
+  return { 
+    success: true, 
+    externalId: "local-only",
+    provider: "none"
+  };
 }
 
 async function findTekmetricCustomerId(
