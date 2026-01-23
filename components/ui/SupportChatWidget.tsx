@@ -169,19 +169,27 @@ export default function SupportChatWidget() {
       }
 
       if (!cobrowseInitialized) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://js.cobrowse.io/CobrowseIO.js';
-          script.async = true;
-          script.crossOrigin = 'anonymous';
-          script.onload = () => {
-            window.CobrowseIO.license = data.licenseKey;
-            cobrowseInitialized = true;
-            resolve();
-          };
-          script.onerror = () => reject(new Error("Failed to load Cobrowse SDK"));
-          document.head.appendChild(script);
-        });
+        (function(w: any, t: string, c: string, p?: Promise<any>, s?: HTMLScriptElement, e?: Element) {
+          p = new Promise(function(r) {
+            w[c] = {
+              client: function() {
+                if (!s) {
+                  s = document.createElement(t) as HTMLScriptElement;
+                  s.src = 'https://js.cobrowse.io/CobrowseIO.js';
+                  s.async = true;
+                  s.crossOrigin = 'anonymous';
+                  e = document.getElementsByTagName(t)[0];
+                  e?.parentNode?.insertBefore(s, e);
+                  s.onload = function() { r(w[c]); };
+                }
+                return p;
+              }
+            };
+          });
+        })(window, 'script', 'CobrowseIO');
+        
+        window.CobrowseIO.license = data.licenseKey;
+        cobrowseInitialized = true;
       }
       
       await window.CobrowseIO.client();
