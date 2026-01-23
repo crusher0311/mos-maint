@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
+import { getVehicle, getCustomer } from "@/lib/tekmetric";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,19 +112,79 @@ export async function POST(req: NextRequest) {
         
         console.log(`[Tekmetric Webhook] Updated ${result.modifiedCount} cache entries for RO #${roNumber} to ${statusName || "Posted"}`);
       } else {
-        const result = await db.collection("tekmetric_work_orders").updateMany(
-          { workOrderId: String(roId) },
-          { 
-            $set: { 
-              status: statusName,
-              statusCode: statusCode,
-              updatedAt: new Date()
-            }
-          }
-        );
+        // Check if this work order already exists
+        const existingWO = await db.collection("tekmetric_work_orders").findOne({
+          workOrderId: String(roId)
+        });
         
-        if (result.modifiedCount > 0) {
+        if (existingWO) {
+          // Update existing work order
+          await db.collection("tekmetric_work_orders").updateOne(
+            { workOrderId: String(roId) },
+            { 
+              $set: { 
+                status: statusName,
+                statusCode: statusCode,
+                label: repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null,
+                labelColor: repairOrder.color || null,
+                updatedAt: new Date()
+              }
+            }
+          );
           console.log(`[Tekmetric Webhook] Updated RO #${roNumber} status to ${statusName}`);
+        } else {
+          // New work order - fetch vehicle and customer details, then create
+          const shop = await db.collection("shops").findOne({
+            "tekmetric.shopId": tekmetricShopId
+          });
+          
+          if (shop && repairOrder.vehicleId) {
+            try {
+              const vehicle = await getVehicle(repairOrder.vehicleId);
+              
+              if (vehicle?.vin) {
+                let customerName = "Unknown Customer";
+                try {
+                  const customer = await getCustomer(repairOrder.customerId);
+                  customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer";
+                } catch (e) {
+                  // Customer fetch failed, use default
+                }
+                
+                const mileage = repairOrder.milesIn || repairOrder.milesOut || vehicle.mileageIn || vehicle.mileageOut;
+                
+                await db.collection("tekmetric_work_orders").insertOne({
+                  workOrderId: String(roId),
+                  workOrderNumber: roNumber,
+                  shopId: String(shop.shopId),
+                  tekmetricShopId: tekmetricShopId,
+                  vin: vehicle.vin.toUpperCase(),
+                  vehicleYear: vehicle.year,
+                  vehicleMake: vehicle.make,
+                  vehicleModel: vehicle.model,
+                  vehicleEngine: vehicle.engine,
+                  customerName,
+                  customerId: repairOrder.customerId,
+                  odometer: mileage,
+                  status: statusName || "Estimate",
+                  statusCode: statusCode,
+                  label: repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null,
+                  labelColor: repairOrder.color || null,
+                  fetchedAt: new Date(),
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                });
+                
+                console.log(`[Tekmetric Webhook] Created new work order #${roNumber} for VIN ${vehicle.vin}`);
+              } else {
+                console.log(`[Tekmetric Webhook] Skipped RO #${roNumber} - vehicle has no VIN`);
+              }
+            } catch (err: any) {
+              console.error(`[Tekmetric Webhook] Failed to fetch vehicle ${repairOrder.vehicleId}:`, err.message);
+            }
+          } else {
+            console.log(`[Tekmetric Webhook] Skipped RO #${roNumber} - shop not found or no vehicleId`);
+          }
         }
       }
     }
