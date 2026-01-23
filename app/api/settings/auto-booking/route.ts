@@ -48,6 +48,8 @@ export interface AutoBookingSettings {
     end: string;
   };
   maxBookingsPerDay: number;
+  maxBookingsPerSlot: number;
+  appointmentDuration: 30 | 60;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
@@ -66,6 +68,8 @@ const DEFAULT_SETTINGS: AutoBookingSettings = {
     end: "17:00",
   },
   maxBookingsPerDay: 10,
+  maxBookingsPerSlot: 2,
+  appointmentDuration: 60,
   confirmationMode: "review",
   preferredTimeSlot: "morning",
   timezone: "America/New_York",
@@ -156,6 +160,12 @@ export async function POST(req: NextRequest) {
     if (typeof body.maxBookingsPerDay === "number" && body.maxBookingsPerDay >= 1 && body.maxBookingsPerDay <= 100) {
       settings.maxBookingsPerDay = body.maxBookingsPerDay;
     }
+    if (typeof body.maxBookingsPerSlot === "number" && body.maxBookingsPerSlot >= 1 && body.maxBookingsPerSlot <= 20) {
+      settings.maxBookingsPerSlot = body.maxBookingsPerSlot;
+    }
+    if (body.appointmentDuration === 30 || body.appointmentDuration === 60) {
+      settings.appointmentDuration = body.appointmentDuration;
+    }
     if (body.confirmationMode === "auto" || body.confirmationMode === "review") {
       settings.confirmationMode = body.confirmationMode;
     }
@@ -166,7 +176,7 @@ export async function POST(req: NextRequest) {
       settings.timezone = body.timezone;
     }
 
-    settings.updatedAt = new Date();
+    (settings as any).updatedAt = new Date();
     await db.collection("shops").updateOne(
       { shopId },
       {

@@ -37,6 +37,8 @@ interface AutoBookingSettings {
     end: string;
   };
   maxBookingsPerDay: number;
+  maxBookingsPerSlot: number;
+  appointmentDuration: 30 | 60;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
@@ -353,6 +355,40 @@ export default function AutoBookingSettingsPage() {
             />
             <p className="text-xs text-gray-500 mt-1">
               Limits auto-booked appointments per day (doesn't affect manual bookings)
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Maximum Bookings Per Time Slot
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={settings.maxBookingsPerSlot || 2}
+              onChange={(e) => setSettings({ ...settings, maxBookingsPerSlot: Number(e.target.value) })}
+              className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Maximum appointments that can be scheduled at the same time
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Appointment Duration
+            </label>
+            <select
+              value={settings.appointmentDuration || 60}
+              onChange={(e) => setSettings({ ...settings, appointmentDuration: Number(e.target.value) as 30 | 60 })}
+              className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={30}>30 minutes</option>
+              <option value={60}>1 hour</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Duration of each auto-booked appointment
             </p>
           </div>
         </div>
