@@ -337,6 +337,14 @@ async function pushAppointmentToSMS(
   const hasTekmetric = integrations.includes("tekmetric") && shop.tekmetric?.shopId;
   const hasProtractor = integrations.includes("protractor") && (shop.protractor?.connectionId || shop.protractorConnectionId);
   
+  console.log(`[Auto Booking] Shop ${booking.shopId} SMS check:`, {
+    integrations,
+    hasTekmetric,
+    tekmetricShopId: shop.tekmetric?.shopId,
+    hasProtractor,
+    protractorConnectionId: shop.protractor?.connectionId || shop.protractorConnectionId,
+  });
+  
   // Combine date and time to create appointment datetime
   const appointmentDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
   const endDateTime = new Date(appointmentDateTime.getTime() + 60 * 60 * 1000); // 1 hour duration
