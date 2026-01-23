@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function GET() {
   try {
-    await requirePlatformAdmin();
+    const session = await getSession();
+    if (!session?.isPlatformAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const products = await stripe.products.list({
       active: true,
@@ -43,16 +46,16 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Error fetching Stripe products:", error);
-    if (error.message === "Unauthorized" || error.message === "Not a platform admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Failed to fetch products" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await requirePlatformAdmin();
+    const session = await getSession();
+    if (!session?.isPlatformAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = await request.json();
     const { name, description, price, type, interval } = body;
@@ -97,9 +100,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Error creating Stripe product:", error);
-    if (error.message === "Unauthorized" || error.message === "Not a platform admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
     return NextResponse.json({ error: error.message || "Failed to create product" }, { status: 500 });
   }
 }
