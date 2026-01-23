@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import clientPromise from "@/lib/mongodb";
+import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
 export async function GET(request: NextRequest) {
@@ -15,8 +15,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const query: Record<string, any> = {};
 
@@ -101,8 +100,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const ticketCount = await db.collection("support_tickets").countDocuments();
     const ticketNumber = `TKT-${String(ticketCount + 1).padStart(5, "0")}`;
@@ -164,8 +162,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Invalid ticket ID format" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const updateFields: Record<string, any> = {
       updatedAt: new Date()

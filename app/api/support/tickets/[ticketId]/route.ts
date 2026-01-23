@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import clientPromise from "@/lib/mongodb";
+import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
 export async function GET(
@@ -19,8 +19,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const ticket = await db.collection("support_tickets").findOne({
       _id: new ObjectId(ticketId),
@@ -63,8 +62,7 @@ export async function POST(
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
+    const db = await getDb();
 
     const ticket = await db.collection("support_tickets").findOne({
       _id: new ObjectId(ticketId),
