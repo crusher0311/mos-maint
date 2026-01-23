@@ -136,37 +136,28 @@ export async function POST(req: NextRequest) {
 
     let qrDataUrl: string | null = null;
 
-    // First try existing HoverCode
-    if (config.hovercodeQRId) {
-      console.log(`[Regenerate QR] Fetching existing HoverCode: ${config.hovercodeQRId}`);
-      const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
-      if (existingQR.dataUri) {
-        qrDataUrl = existingQR.dataUri;
-      }
+    // Always create a new HoverCode QR with proper styling (dynamic + Bubble pattern)
+    // This ensures existing static QR codes get replaced with properly styled dynamic ones
+    console.log("[Regenerate QR] Creating new HoverCode QR with Bubble pattern and dynamic=true");
+    const newQR = await createHovercodeQR(redirectUrl, {
+      size: 300,
+      color: qrColor,
+      backgroundColor: qrBgColor,
+      displayName: `${shopName} - Oil Sticker`,
+      logoUrl: "https://mos-maintenance-mvp.replit.app/sticker-qr-logo.png",
+    });
+
+    // Save HoverCode ID even if we don't get dataUri
+    if (newQR?.id) {
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
+      );
+      console.log(`[Regenerate QR] Saved new HoverCode ID: ${newQR.id}`);
     }
 
-    // If no existing QR, create new HoverCode
-    if (!qrDataUrl) {
-      console.log("[Regenerate QR] Creating new HoverCode QR");
-      const newQR = await createHovercodeQR(redirectUrl, {
-        size: 300,
-        color: qrColor,
-        backgroundColor: qrBgColor,
-        displayName: `${shopName} - Oil Sticker`,
-      });
-
-      // Save HoverCode ID even if we don't get dataUri
-      if (newQR?.id) {
-        await db.collection("shops").updateOne(
-          { shopId },
-          { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-        );
-        console.log(`[Regenerate QR] Saved HoverCode ID: ${newQR.id}`);
-      }
-
-      if (newQR?.dataUri) {
-        qrDataUrl = newQR.dataUri;
-      }
+    if (newQR?.dataUri) {
+      qrDataUrl = newQR.dataUri;
     }
 
     // Require a valid QR code - no fallback
