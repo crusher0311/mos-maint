@@ -33,6 +33,7 @@ export interface RenderEnvironment {
   name: string;
   apiKey: string;
   serviceIds: string[];
+  ownerId: string;
 }
 
 const RENDER_API_BASE = 'https://api.render.com/v1';
@@ -108,6 +109,7 @@ export async function fetchRenderLogs(
   apiKey: string,
   options: {
     serviceIds?: string[];
+    ownerId: string;
     startTime: string;
     endTime: string;
     level?: string;
@@ -117,18 +119,19 @@ export async function fetchRenderLogs(
   }
 ): Promise<RenderLogsResponse> {
   const params: Record<string, string | string[]> = {
+    ownerId: options.ownerId,
     startTime: options.startTime,
     endTime: options.endTime,
   };
 
   if (options.serviceIds?.length) {
-    params.resourceIds = options.serviceIds;
+    params.resource = options.serviceIds;
   }
   if (options.level) {
-    params.level = options.level;
+    params.level = [options.level];
   }
   if (options.text) {
-    params.text = options.text;
+    params.text = [options.text];
   }
   if (options.limit) {
     params.limit = options.limit.toString();
@@ -222,27 +225,30 @@ export async function fetchRenderDeploys(
 export function getRenderEnvironments(): RenderEnvironment[] {
   const environments: RenderEnvironment[] = [];
 
-  if (process.env.RENDER_API_KEY_PROD && process.env.RENDER_SERVICE_IDS_PROD) {
+  if (process.env.RENDER_API_KEY_PROD && process.env.RENDER_SERVICE_IDS_PROD && process.env.RENDER_OWNER_ID_PROD) {
     environments.push({
       name: 'Production',
       apiKey: process.env.RENDER_API_KEY_PROD,
       serviceIds: process.env.RENDER_SERVICE_IDS_PROD.split(',').map(s => s.trim()),
+      ownerId: process.env.RENDER_OWNER_ID_PROD,
     });
   }
 
-  if (process.env.RENDER_API_KEY_QA && process.env.RENDER_SERVICE_IDS_QA) {
+  if (process.env.RENDER_API_KEY_QA && process.env.RENDER_SERVICE_IDS_QA && process.env.RENDER_OWNER_ID_QA) {
     environments.push({
       name: 'QA',
       apiKey: process.env.RENDER_API_KEY_QA,
       serviceIds: process.env.RENDER_SERVICE_IDS_QA.split(',').map(s => s.trim()),
+      ownerId: process.env.RENDER_OWNER_ID_QA,
     });
   }
 
-  if (process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_IDS) {
+  if (process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_IDS && process.env.RENDER_OWNER_ID) {
     environments.push({
       name: 'Default',
       apiKey: process.env.RENDER_API_KEY,
       serviceIds: process.env.RENDER_SERVICE_IDS.split(',').map(s => s.trim()),
+      ownerId: process.env.RENDER_OWNER_ID,
     });
   }
 
