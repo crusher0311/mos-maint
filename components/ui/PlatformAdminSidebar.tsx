@@ -15,6 +15,7 @@ import {
   CreditCard,
   Database,
   FileText,
+  Ticket,
   X
 } from "lucide-react";
 
@@ -71,6 +72,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "Render Logs",
       href: "/platform-admin/render",
       icon: <FileText className="w-5 h-5" />
+    },
+    {
+      name: "Support Tickets",
+      href: "/platform-admin/tickets",
+      icon: <Ticket className="w-5 h-5" />
     },
     {
       name: "HoverCode QRs",
