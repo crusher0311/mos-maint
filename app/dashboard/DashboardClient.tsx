@@ -723,10 +723,27 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadData(currentPage, searchQuery, showArchived);
-    }, 30000);
-    return () => clearInterval(interval);
+    const eventSource = new EventSource('/api/dashboard/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'refresh') {
+          loadData(currentPage, searchQuery, showArchived);
+        }
+      } catch (e) {
+        // Ignore parse errors (keepalive messages)
+      }
+    };
+    
+    eventSource.onerror = () => {
+      eventSource.close();
+      setTimeout(() => {
+        // Reconnect after 5 seconds on error
+      }, 5000);
+    };
+    
+    return () => eventSource.close();
   }, [currentPage, searchQuery, showArchived]);
 
   useEffect(() => {
