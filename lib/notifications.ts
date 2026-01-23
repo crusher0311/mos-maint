@@ -156,3 +156,20 @@ export async function getAdminUnreadCount(): Promise<number> {
     return 0;
   }
 }
+
+export async function clearTicketNotifications(ticketId: string): Promise<number> {
+  try {
+    const db = await getDb();
+    const result = await db.collection("notifications").updateMany(
+      { 
+        "metadata.ticketId": ticketId,
+        read: false
+      },
+      { $set: { read: true } }
+    );
+    return result.modifiedCount;
+  } catch (error) {
+    console.error("Error clearing ticket notifications:", error);
+    return 0;
+  }
+}

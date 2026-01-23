@@ -3,7 +3,7 @@ import { requirePlatformAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { sendEmail, makeTicketUpdatedEmail } from "@/lib/email";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, clearTicketNotifications } from "@/lib/notifications";
 
 export async function GET(request: NextRequest) {
   try {
@@ -216,9 +216,11 @@ export async function PATCH(request: NextRequest) {
       updateFields.status = status;
       if (status === "resolved") {
         updateFields.resolvedAt = new Date();
+        await clearTicketNotifications(ticketId);
       }
       if (status === "closed") {
         updateFields.closedAt = new Date();
+        await clearTicketNotifications(ticketId);
       }
     }
 
