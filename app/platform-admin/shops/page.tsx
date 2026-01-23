@@ -59,7 +59,7 @@ interface Shop {
   billing: ShopBilling;
   isLocked?: boolean;
   integrationDetails?: IntegrationDetails;
-  enabledFeatures?: ShopFeatures;
+  enabledFeatures?: ShopFeatures | string[];
   backfill?: BackfillStatus | null;
   stickerCount?: number;
   stickerCountThisMonth?: number;
@@ -177,7 +177,19 @@ export default function PlatformShopsPage() {
 
   const openFeatureModal = (shop: Shop) => {
     setSelectedShop(shop);
-    setFeatureEdits(shop.enabledFeatures || {});
+    
+    // Convert enabledFeatures to object format if it's an array
+    let features: ShopFeatures = {};
+    if (Array.isArray(shop.enabledFeatures)) {
+      // Convert array format to object format
+      shop.enabledFeatures.forEach((f: string) => {
+        features[f as keyof ShopFeatures] = true;
+      });
+    } else if (shop.enabledFeatures && typeof shop.enabledFeatures === 'object') {
+      features = shop.enabledFeatures;
+    }
+    
+    setFeatureEdits(features);
     setBillingEdits({ 
       plan: shop.billing.plan || "trial", 
       status: shop.billing.status || "trial" 
