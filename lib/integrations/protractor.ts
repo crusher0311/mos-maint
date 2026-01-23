@@ -2095,3 +2095,113 @@ export async function fetchCannedJobsWithCache(
     source: "enriched",
   };
 }
+
+// ============= Appointment Functions =============
+
+export interface CreateProtractorAppointmentParams {
+  shopId: number;
+  contactId: string;
+  vehicleId: string;
+  scheduledTime: string; // ISO 8601 format
+  duration?: number; // in minutes
+  notes?: string;
+  serviceAdvisorId?: string;
+}
+
+export interface ProtractorAppointmentResult {
+  ok: boolean;
+  appointmentId?: string;
+  workOrderNumber?: number;
+  error?: string;
+}
+
+export async function createProtractorAppointment(
+  params: CreateProtractorAppointmentParams
+): Promise<ProtractorAppointmentResult> {
+  const { shopId, contactId, vehicleId, scheduledTime, duration, notes, serviceAdvisorId } = params;
+  
+  console.log(`[Protractor] Creating appointment for contact ${contactId}, vehicle ${vehicleId} at ${scheduledTime}`);
+  
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+  
+  const body: Record<string, any> = {
+    Type: "Appointment",
+    ContactID: contactId,
+    ServiceItemID: vehicleId,
+    ScheduledTime: scheduledTime,
+  };
+  
+  if (duration) body.Duration = duration;
+  if (notes) body.Notes = notes;
+  if (serviceAdvisorId) body.ServiceAdvisorID = serviceAdvisorId;
+  
+  const result = await protractorFetch<ProtractorWorkOrder>(
+    `/WorkOrder`,
+    config,
+    { method: "POST", body: JSON.stringify(body) },
+    0,
+    shopId
+  );
+  
+  if (!result.ok || !result.data) {
+    console.error(`[Protractor] Failed to create appointment: ${result.error}`);
+    return { ok: false, error: result.error || "Failed to create appointment" };
+  }
+  
+  console.log(`[Protractor] Appointment created with ID: ${result.data.ID}, WorkOrderNumber: ${result.data.WorkOrderNumber}`);
+  return { 
+    ok: true, 
+    appointmentId: result.data.ID,
+    workOrderNumber: result.data.WorkOrderNumber,
+  };
+}
+
+export async function getProtractorAppointments(
+  shopId: number,
+  params: {
+    startDate?: string;
+    endDate?: string;
+    skip?: number;
+    top?: number;
+  } = {}
+): Promise<{ ok: boolean; appointments?: ProtractorWorkOrder[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+  
+  const queryParams = new URLSearchParams();
+  queryParams.set("type", "Appointment");
+  
+  if (params.startDate) queryParams.set("startDate", params.startDate);
+  if (params.endDate) queryParams.set("endDate", params.endDate);
+  
+  const skip = params.skip || 0;
+  const top = params.top || 100;
+  queryParams.set("skip", String(skip));
+  queryParams.set("take", String(top));
+  
+  const queryStr = `?${queryParams.toString()}`;
+  
+  const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
+    `/WorkOrder${queryStr}`,
+    config,
+    {},
+    0,
+    shopId
+  );
+  
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+  
+  // Filter to only appointment types in case the API doesn't filter properly
+  const appointments = (result.data?.ItemCollection || []).filter(
+    wo => wo.Type === "Appointment"
+  );
+  
+  return { ok: true, appointments };
+}

@@ -419,3 +419,99 @@ export async function validateShopAccess(shopId: number): Promise<{ valid: boole
     return { valid: false, error: error.message || 'Failed to validate shop access' };
   }
 }
+
+// ============= Appointment Functions =============
+
+export interface TekmetricAppointment {
+  id: number;
+  shopId: number;
+  customerId: number;
+  vehicleId: number;
+  startTime: string;
+  endTime: string;
+  title?: string;
+  note?: string;
+  color?: string;
+  appointmentType?: string;
+  createdDate?: string;
+  updatedDate?: string;
+}
+
+export interface CreateAppointmentParams {
+  shopId: number;
+  customerId: number;
+  vehicleId: number;
+  startTime: string; // ISO 8601 format
+  endTime: string; // ISO 8601 format
+  title?: string;
+  note?: string;
+  color?: string;
+}
+
+export async function createAppointment(params: CreateAppointmentParams): Promise<TekmetricAppointment> {
+  const { shopId, customerId, vehicleId, startTime, endTime, title, note, color } = params;
+  
+  const body: Record<string, any> = {
+    shopId,
+    customerId,
+    vehicleId,
+    startTime,
+    endTime,
+  };
+  
+  if (title) body.title = title;
+  if (note) body.note = note;
+  if (color) body.color = color;
+  
+  console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
+  
+  const result = await tekmetricRequest('/appointments', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, shopId);
+  
+  console.log(`[Tekmetric] Appointment created with ID: ${result.id}`);
+  return result;
+}
+
+export async function getAppointment(appointmentId: number): Promise<TekmetricAppointment> {
+  return tekmetricRequest(`/appointments/${appointmentId}`);
+}
+
+export async function updateAppointment(
+  appointmentId: number,
+  updates: Partial<Omit<CreateAppointmentParams, 'shopId'>>
+): Promise<TekmetricAppointment> {
+  return tekmetricRequest(`/appointments/${appointmentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteAppointment(appointmentId: number): Promise<void> {
+  await tekmetricRequest(`/appointments/${appointmentId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getAppointments(
+  shopId: number,
+  params: {
+    startTime?: string;
+    endTime?: string;
+    customerId?: number;
+    vehicleId?: number;
+    page?: number;
+    size?: number;
+  } = {}
+): Promise<PaginatedResponse<TekmetricAppointment>> {
+  const queryParams = new URLSearchParams({ shop: shopId.toString() });
+  if (params.startTime) queryParams.set('startTime', params.startTime);
+  if (params.endTime) queryParams.set('endTime', params.endTime);
+  if (params.customerId) queryParams.set('customerId', params.customerId.toString());
+  if (params.vehicleId) queryParams.set('vehicleId', params.vehicleId.toString());
+  if (params.page !== undefined) queryParams.set('page', params.page.toString());
+  if (params.size !== undefined) queryParams.set('size', params.size.toString());
+  
+  return tekmetricRequest(`/appointments?${queryParams}`, {}, shopId);
+}
