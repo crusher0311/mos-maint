@@ -27,12 +27,26 @@ export default function SupportChatWidget() {
   const [screenShareCode, setScreenShareCode] = useState<string | null>(null);
   const [screenShareLoading, setScreenShareLoading] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
       fetchSession();
+      fetchUserEmail();
     }
   }, [isOpen]);
+
+  const fetchUserEmail = async () => {
+    try {
+      const res = await fetch("/api/user/profile");
+      const data = await res.json();
+      if (data.ok && data.user?.email) {
+        setUserEmail(data.user.email);
+      }
+    } catch (error) {
+      // Ignore errors
+    }
+  };
 
   useEffect(() => {
     const el = document.getElementById("chat-messages-end");
@@ -244,9 +258,14 @@ export default function SupportChatWidget() {
       {isOpen && (
         <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-lg shadow-2xl flex flex-col z-50 border border-gray-200">
           <div className="bg-blue-600 text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5" />
-              <span className="font-medium">AI Support</span>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5" />
+                <span className="font-medium">AI Support</span>
+              </div>
+              {userEmail && (
+                <span className="text-xs text-white/70 ml-7">{userEmail}</span>
+              )}
             </div>
             <button
               onClick={() => setIsOpen(false)}
