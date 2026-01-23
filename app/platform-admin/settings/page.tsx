@@ -73,6 +73,7 @@ export default function PlatformSettingsPage() {
     type: "one_time" as "one_time" | "recurring",
     interval: "month"
   });
+  const [appliedMappings, setAppliedMappings] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadSettings();
@@ -204,7 +205,19 @@ export default function PlatformSettingsPage() {
     }
     
     setBilling({ ...billing, ...updates });
+    setAppliedMappings({ ...appliedMappings, [priceId]: targetField });
     setMessage({ type: "success", text: `Applied ${product.name} to ${targetField}` });
+  };
+
+  const getAppliedLabel = (targetField: string) => {
+    const labels: Record<string, string> = {
+      mosPro: "MOS Pro",
+      vinPack100: "100 VIN Pack",
+      vinPack250: "250 VIN Pack",
+      vinPack500: "500 VIN Pack",
+      onboarding: "Onboarding",
+    };
+    return labels[targetField] || targetField;
   };
 
   if (loading) {
@@ -675,24 +688,42 @@ export default function PlatformSettingsPage() {
                                 )}
                                 <p className="text-xs text-gray-400 font-mono mt-1">{price.id}</p>
                               </div>
-                              <div className="flex gap-2">
-                                <select
-                                  className="text-sm border border-gray-300 rounded px-2 py-1"
-                                  defaultValue=""
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      applyProduct(product, price.id, e.target.value);
-                                      e.target.value = "";
-                                    }
-                                  }}
-                                >
-                                  <option value="">Apply to...</option>
-                                  <option value="mosPro">MOS Pro Subscription</option>
-                                  <option value="vinPack100">100 VIN Pack</option>
-                                  <option value="vinPack250">250 VIN Pack</option>
-                                  <option value="vinPack500">500 VIN Pack</option>
-                                  <option value="onboarding">Onboarding Fee</option>
-                                </select>
+                              <div className="flex items-center gap-2">
+                                {appliedMappings[price.id] ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded font-medium">
+                                      <Check className="w-3 h-3 inline mr-1" />
+                                      {getAppliedLabel(appliedMappings[price.id])}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        const newMappings = { ...appliedMappings };
+                                        delete newMappings[price.id];
+                                        setAppliedMappings(newMappings);
+                                      }}
+                                      className="text-xs text-gray-500 hover:text-red-600"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <select
+                                    className="text-sm border border-gray-300 rounded px-2 py-1"
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        applyProduct(product, price.id, e.target.value);
+                                      }
+                                    }}
+                                  >
+                                    <option value="">Apply to...</option>
+                                    <option value="mosPro">MOS Pro Subscription</option>
+                                    <option value="vinPack100">100 VIN Pack</option>
+                                    <option value="vinPack250">250 VIN Pack</option>
+                                    <option value="vinPack500">500 VIN Pack</option>
+                                    <option value="onboarding">Onboarding Fee</option>
+                                  </select>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -704,13 +735,41 @@ export default function PlatformSettingsPage() {
               )}
             </div>
             
-            <div className="p-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-              >
-                Done
-              </button>
+            <div className="p-4 border-t border-gray-200 flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                {Object.keys(appliedMappings).length > 0 && (
+                  <span>{Object.keys(appliedMappings).length} product(s) mapped</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setAppliedMappings({});
+                  }}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (billing && Object.keys(appliedMappings).length > 0) {
+                      await saveSection("billing", billing);
+                    }
+                    setShowImportModal(false);
+                    setAppliedMappings({});
+                  }}
+                  disabled={savingSection === "billing"}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingSection === "billing" ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save & Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
