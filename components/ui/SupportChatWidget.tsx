@@ -165,10 +165,13 @@ export default function SupportChatWidget() {
       if (!cobrowseSDK) {
         const CobrowseIO = (await import('cobrowse-sdk-js')).default;
         CobrowseIO.license = data.licenseKey;
-        CobrowseIO.start();
-        cobrowseSDK = CobrowseIO;
         
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await CobrowseIO.start();
+        cobrowseSDK = CobrowseIO;
+      }
+      
+      if (!cobrowseSDK.isStarted || !cobrowseSDK.isStarted()) {
+        await cobrowseSDK.start();
       }
       
       const code = await cobrowseSDK.createSessionCode();
