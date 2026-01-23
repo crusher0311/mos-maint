@@ -25,6 +25,31 @@ const US_HOLIDAYS = new Set([
   "2026-07-04", "2026-09-07", "2026-10-12", "2026-11-11", "2026-11-26", "2026-12-25",
 ]);
 
+// Helper to get timezone offset string like "-05:00" or "-06:00"
+function getTimezoneOffset(timezone: string, date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'shortOffset'
+    });
+    const parts = formatter.formatToParts(date);
+    const tzPart = parts.find(p => p.type === 'timeZoneName');
+    if (tzPart?.value) {
+      // Convert "GMT-5" or "GMT-6" to "-05:00" or "-06:00"
+      const match = tzPart.value.match(/GMT([+-])(\d+)/);
+      if (match) {
+        const sign = match[1];
+        const hours = match[2].padStart(2, '0');
+        return `${sign}${hours}:00`;
+      }
+    }
+  } catch (e) {
+    console.error('[Auto Booking] Failed to get timezone offset:', e);
+  }
+  // Default to Central time offset
+  return '-06:00';
+}
+
 export interface BookingSlot {
   date: string;
   time: string;
@@ -348,11 +373,19 @@ async function pushAppointmentToSMS(
   });
   
   // Combine date and time to create appointment datetime
-  // Format as local time string (no timezone) - Tekmetric expects local shop time
-  const startTimeStr = `${booking.scheduledDate}T${booking.scheduledTime}:00`;
+  // Tekmetric requires ZonedDateTime format - use shop's timezone offset
+  // Default to Central time (America/Chicago) - most common for US auto shops
+  // Format: 2026-04-23T08:00:00-05:00
+  const shopTimezone = shop.timezone || 'America/Chicago';
+  
+  // Calculate timezone offset for the scheduled date
+  const scheduledDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
+  const tzOffset = getTimezoneOffset(shopTimezone, scheduledDateTime);
+  
+  const startTimeStr = `${booking.scheduledDate}T${booking.scheduledTime}:00${tzOffset}`;
   const [hours, minutes] = booking.scheduledTime.split(':').map(Number);
   const endHours = hours + 1; // 1 hour duration
-  const endTimeStr = `${booking.scheduledDate}T${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+  const endTimeStr = `${booking.scheduledDate}T${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00${tzOffset}`;
   
   // Try Tekmetric first if available
   if (hasTekmetric) {
