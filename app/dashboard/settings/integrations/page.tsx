@@ -83,11 +83,17 @@ export default function IntegrationsPage() {
 
       setStatuses(newStatuses);
 
-      // Auto-select based on what's configured
-      if (newStatuses.protractor.configured) {
-        setShopManagement("protractor");
+      // Fetch saved smsProvider preference
+      const integrationsRes = await fetch("/api/settings/integrations").catch(() => null);
+      const integrationsData = integrationsRes?.ok ? await integrationsRes.json() : {};
+      
+      // Use saved preference if available, otherwise auto-select based on what's configured
+      if (integrationsData.smsProvider) {
+        setShopManagement(integrationsData.smsProvider);
       } else if (newStatuses.tekmetric.configured) {
         setShopManagement("tekmetric");
+      } else if (newStatuses.protractor.configured) {
+        setShopManagement("protractor");
       }
 
       if (newStatuses.autoflow.configured) {
@@ -99,6 +105,20 @@ export default function IntegrationsPage() {
       console.error("Failed to fetch integration statuses:", err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleShopManagementChange(provider: ShopManagementChoice) {
+    setShopManagement(provider);
+    try {
+      await fetch("/api/settings/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ smsProvider: provider }),
+      });
+    } catch (err) {
+      console.error("Failed to save SMS provider preference:", err);
     }
   }
 
@@ -159,7 +179,7 @@ export default function IntegrationsPage() {
                   type="radio"
                   name="shopManagement"
                   checked={shopManagement === "protractor"}
-                  onChange={() => setShopManagement("protractor")}
+                  onChange={() => handleShopManagementChange("protractor")}
                   className="w-4 h-4 text-blue-600"
                 />
                 <span className="flex-1 font-medium text-gray-700">Protractor</span>
@@ -170,7 +190,7 @@ export default function IntegrationsPage() {
                   type="radio"
                   name="shopManagement"
                   checked={shopManagement === "tekmetric"}
-                  onChange={() => setShopManagement("tekmetric")}
+                  onChange={() => handleShopManagementChange("tekmetric")}
                   className="w-4 h-4 text-blue-600"
                 />
                 <span className="flex-1 font-medium text-gray-700">Tekmetric</span>
@@ -181,7 +201,7 @@ export default function IntegrationsPage() {
                   type="radio"
                   name="shopManagement"
                   checked={shopManagement === "standalone"}
-                  onChange={() => setShopManagement("standalone")}
+                  onChange={() => handleShopManagementChange("standalone")}
                   className="w-4 h-4 text-blue-600"
                 />
                 <span className="flex-1 font-medium text-gray-700">Stand Alone</span>
