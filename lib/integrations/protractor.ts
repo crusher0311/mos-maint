@@ -2268,18 +2268,19 @@ export async function createProtractorAppointment(
   // - Set WorkOrderNumber to 0 for new work orders
   // - "If the work order exists by ID then the work order will be updated. 
   //    Otherwise a new work order will be created."
+  // Note: Protractor expects nested objects for Contact and ServiceItem, not just IDs
   const body: Record<string, any> = {
     ID: newWorkOrderId,
     WorkOrderNumber: 0,  // Required for new work orders
     Type: "Appointment",
-    ContactID: contactId,
-    ServiceItemID: vehicleId,
+    Contact: { ID: contactId },
+    ServiceItem: { ID: vehicleId },
     ScheduledTime: scheduledTime,
   };
   
   if (duration) body.Duration = duration;
-  if (notes) body.Notes = notes;
-  if (serviceAdvisorId) body.ServiceAdvisorID = serviceAdvisorId;
+  if (notes) body.Note = notes;  // Field is "Note" not "Notes"
+  if (serviceAdvisorId) body.ServiceAdvisor = { ID: serviceAdvisorId };
   
   console.log(`[Protractor] POST /WorkOrder/${newWorkOrderId} with body:`, JSON.stringify(body));
   
