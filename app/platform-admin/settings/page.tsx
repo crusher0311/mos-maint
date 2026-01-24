@@ -4,10 +4,25 @@ import { useState, useEffect } from "react";
 import { Settings, Save, Loader2, CreditCard, Package, Link2, Gift, ExternalLink, Copy, Check, Download, X, Plus } from "lucide-react";
 
 interface BillingSettings {
+  // Tier-specific pricing
+  starterProductId: string;
+  starterPriceId: string;
+  starterPrice: number;
+  starterIncludedVins: number;
+  plusProductId: string;
+  plusPriceId: string;
+  plusPrice: number;
+  plusIncludedVins: number;
+  eliteProductId: string;
+  elitePriceId: string;
+  elitePrice: number;
+  eliteIncludedVins: number;
+  // Legacy mosPro fields
   mosProProductId: string;
   mosProPriceId: string;
   mosProPrice: number;
   mosProIncludedVins: number;
+  // VIN packs
   vinPack100ProductId: string;
   vinPack100PriceId: string;
   vinPack100Price: number;
@@ -17,12 +32,15 @@ interface BillingSettings {
   vinPack500ProductId: string;
   vinPack500PriceId: string;
   vinPack500Price: number;
+  // Onboarding
   onboardingProductId: string;
   onboardingPriceId: string;
   onboardingPrice: number;
+  // Trial settings
   trialVinLimit: number;
   skipTrialBonusVins: number;
   foundingShopPricing: boolean;
+  defaultVinLimit: number;
 }
 
 interface PlatformSettings {
@@ -182,7 +200,19 @@ export default function PlatformSettingsPage() {
     
     const updates: Partial<BillingSettings> = {};
     
-    if (targetField === "mosPro") {
+    if (targetField === "starter") {
+      updates.starterProductId = product.id;
+      updates.starterPriceId = priceId;
+      updates.starterPrice = priceValue;
+    } else if (targetField === "plus") {
+      updates.plusProductId = product.id;
+      updates.plusPriceId = priceId;
+      updates.plusPrice = priceValue;
+    } else if (targetField === "elite") {
+      updates.eliteProductId = product.id;
+      updates.elitePriceId = priceId;
+      updates.elitePrice = priceValue;
+    } else if (targetField === "mosPro") {
       updates.mosProProductId = product.id;
       updates.mosProPriceId = priceId;
       updates.mosProPrice = priceValue;
@@ -211,7 +241,10 @@ export default function PlatformSettingsPage() {
 
   const getAppliedLabel = (targetField: string) => {
     const labels: Record<string, string> = {
-      mosPro: "MOS Pro",
+      starter: "Starter",
+      plus: "Plus",
+      elite: "Elite",
+      mosPro: "MOS Pro (Legacy)",
       vinPack100: "100 VIN Pack",
       vinPack250: "250 VIN Pack",
       vinPack500: "500 VIN Pack",
@@ -364,18 +397,71 @@ export default function PlatformSettingsPage() {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <CreditCard className="w-4 h-4" />
-                MOS Pro Subscription - ${billing.mosProPrice}/month
+                Starter - ${billing.starterPrice || 199.95}/month
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <p className="text-xs text-gray-500 mb-3">Maintenance + Oil Sticker</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Product ID</label>
+                  <input
+                    type="text"
+                    value={billing.starterProductId || ""}
+                    onChange={(e) => setBilling({ ...billing, starterProductId: e.target.value })}
+                    placeholder="prod_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Price ID</label>
+                  <input
+                    type="text"
+                    value={billing.starterPriceId || ""}
+                    onChange={(e) => setBilling({ ...billing, starterPriceId: e.target.value })}
+                    placeholder="price_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={billing.starterPrice || 199.95}
+                    onChange={(e) => setBilling({ ...billing, starterPrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Included VINs</label>
+                  <input
+                    type="number"
+                    value={billing.starterIncludedVins || 300}
+                    onChange={(e) => setBilling({ ...billing, starterIncludedVins: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-blue-900 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  Plus - ${billing.plusPrice || 229.95}/month
+                </h3>
+                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Most Popular</span>
+              </div>
+              <p className="text-xs text-blue-700 mb-3">Maintenance + Job Lookup + Oil Sticker</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-blue-700 mb-1">Product ID</label>
                   <input
                     type="text"
-                    value={billing.mosProProductId}
-                    onChange={(e) => setBilling({ ...billing, mosProProductId: e.target.value })}
+                    value={billing.plusProductId || billing.mosProProductId || ""}
+                    onChange={(e) => setBilling({ ...billing, plusProductId: e.target.value })}
                     placeholder="prod_..."
                     className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
@@ -384,8 +470,8 @@ export default function PlatformSettingsPage() {
                   <label className="block text-xs font-medium text-blue-700 mb-1">Price ID</label>
                   <input
                     type="text"
-                    value={billing.mosProPriceId}
-                    onChange={(e) => setBilling({ ...billing, mosProPriceId: e.target.value })}
+                    value={billing.plusPriceId || billing.mosProPriceId || ""}
+                    onChange={(e) => setBilling({ ...billing, plusPriceId: e.target.value })}
                     placeholder="price_..."
                     className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
@@ -394,8 +480,9 @@ export default function PlatformSettingsPage() {
                   <label className="block text-xs font-medium text-blue-700 mb-1">Price ($)</label>
                   <input
                     type="number"
-                    value={billing.mosProPrice}
-                    onChange={(e) => setBilling({ ...billing, mosProPrice: parseInt(e.target.value) || 0 })}
+                    step="0.01"
+                    value={billing.plusPrice || 229.95}
+                    onChange={(e) => setBilling({ ...billing, plusPrice: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
@@ -403,9 +490,61 @@ export default function PlatformSettingsPage() {
                   <label className="block text-xs font-medium text-blue-700 mb-1">Included VINs</label>
                   <input
                     type="number"
-                    value={billing.mosProIncludedVins}
-                    onChange={(e) => setBilling({ ...billing, mosProIncludedVins: parseInt(e.target.value) || 0 })}
+                    value={billing.plusIncludedVins || 300}
+                    onChange={(e) => setBilling({ ...billing, plusIncludedVins: parseInt(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-purple-900 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  Elite Easy Button - ${billing.elitePrice || 279.95}/month
+                </h3>
+                <span className="text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full">All Features</span>
+              </div>
+              <p className="text-xs text-purple-700 mb-3">All features included: Maintenance, Job Lookup, Oil Sticker, Keytags, Part Cross-Reference, Auto Booking</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-purple-700 mb-1">Product ID</label>
+                  <input
+                    type="text"
+                    value={billing.eliteProductId || ""}
+                    onChange={(e) => setBilling({ ...billing, eliteProductId: e.target.value })}
+                    placeholder="prod_..."
+                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ID</label>
+                  <input
+                    type="text"
+                    value={billing.elitePriceId || ""}
+                    onChange={(e) => setBilling({ ...billing, elitePriceId: e.target.value })}
+                    placeholder="price_..."
+                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={billing.elitePrice || 279.95}
+                    onChange={(e) => setBilling({ ...billing, elitePrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-purple-700 mb-1">Included VINs</label>
+                  <input
+                    type="number"
+                    value={billing.eliteIncludedVins || 300}
+                    onChange={(e) => setBilling({ ...billing, eliteIncludedVins: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
                   />
                 </div>
               </div>
