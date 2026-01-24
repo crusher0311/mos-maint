@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
       keys: safeKeys,
       availablePermissions: getAvailablePermissions(),
       rateLimitTiers: RATE_LIMIT_TIERS,
+      isPlatformAdmin: session.isPlatformAdmin || false,
     });
   } catch (err: any) {
     console.error("[API Keys] Error:", err);
@@ -68,7 +69,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tier: RateLimitTier = rateLimitTier || "standard";
+    let tier: RateLimitTier = "standard";
+    
+    if (rateLimitTier && rateLimitTier !== "standard") {
+      if (!session.isPlatformAdmin) {
+        return NextResponse.json(
+          { error: "Only platform admins can assign non-standard rate limit tiers" },
+          { status: 403 }
+        );
+      }
+      tier = rateLimitTier;
+    }
 
     const result = await generateApiKey(
       shopId,
@@ -111,7 +122,15 @@ export async function PATCH(req: NextRequest) {
     const updates: any = {};
     if (name !== undefined) updates.name = name;
     if (permissions !== undefined) updates.permissions = permissions;
-    if (rateLimitTier !== undefined) updates.rateLimitTier = rateLimitTier;
+    if (rateLimitTier !== undefined) {
+      if (!session.isPlatformAdmin) {
+        return NextResponse.json(
+          { error: "Only platform admins can modify rate limit tiers" },
+          { status: 403 }
+        );
+      }
+      updates.rateLimitTier = rateLimitTier;
+    }
     if (isActive !== undefined) updates.isActive = isActive;
     if (expiresAt !== undefined) updates.expiresAt = expiresAt ? new Date(expiresAt) : null;
 
