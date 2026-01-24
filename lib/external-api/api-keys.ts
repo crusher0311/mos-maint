@@ -1,6 +1,32 @@
 import { getDb } from "@/lib/mongo";
 import { randomBytes, createHash } from "crypto";
 
+export type RateLimitTier = "standard" | "professional" | "enterprise";
+
+export interface RateLimitConfig {
+  requestsPerMinute: number;
+  requestsPerDay: number;
+  burstLimit: number;
+}
+
+export const RATE_LIMIT_TIERS: Record<RateLimitTier, RateLimitConfig> = {
+  standard: {
+    requestsPerMinute: 60,
+    requestsPerDay: 10000,
+    burstLimit: 10,
+  },
+  professional: {
+    requestsPerMinute: 300,
+    requestsPerDay: 50000,
+    burstLimit: 25,
+  },
+  enterprise: {
+    requestsPerMinute: 1000,
+    requestsPerDay: -1,
+    burstLimit: 100,
+  },
+};
+
 export interface ApiKey {
   _id?: any;
   shopId: number;
@@ -9,6 +35,7 @@ export interface ApiKey {
   name: string;
   permissions: string[];
   rateLimit: number;
+  rateLimitTier?: RateLimitTier;
   isActive: boolean;
   lastUsedAt?: Date;
   usageCount: number;
@@ -52,12 +79,21 @@ export function validatePermissions(permissions: string[]): { valid: boolean; in
   return { valid: invalid.length === 0, invalid };
 }
 
+export function getRateLimitFromTier(tier: RateLimitTier): number {
+  return RATE_LIMIT_TIERS[tier].requestsPerMinute;
+}
+
+export function getTierConfig(tier: RateLimitTier): RateLimitConfig {
+  return RATE_LIMIT_TIERS[tier];
+}
+
 export async function generateApiKey(
   shopId: number,
   name: string,
   permissions: string[],
   createdBy: string,
   options?: {
+    rateLimitTier?: RateLimitTier;
     rateLimit?: number;
     expiresAt?: Date;
   }
@@ -73,13 +109,17 @@ export async function generateApiKey(
   const keyPrefix = rawKey.substring(0, 12);
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
   
+  const tier = options?.rateLimitTier || "standard";
+  const rateLimit = options?.rateLimit || getRateLimitFromTier(tier);
+  
   const apiKey: ApiKey = {
     shopId,
     keyHash,
     keyPrefix,
     name,
     permissions,
-    rateLimit: options?.rateLimit || 100,
+    rateLimit,
+    rateLimitTier: tier,
     isActive: true,
     usageCount: 0,
     createdAt: new Date(),
@@ -207,10 +247,14 @@ export async function getApiKeyById(keyId: string): Promise<ApiKey | null> {
 
 export async function updateApiKey(
   keyId: string,
-  updates: Partial<Pick<ApiKey, "name" | "permissions" | "rateLimit" | "isActive" | "expiresAt">>
+  updates: Partial<Pick<ApiKey, "name" | "permissions" | "rateLimit" | "rateLimitTier" | "isActive" | "expiresAt">>
 ): Promise<boolean> {
   const db = await getDb();
   const { ObjectId } = await import("mongodb");
+  
+  if (updates.rateLimitTier && !updates.rateLimit) {
+    updates.rateLimit = getRateLimitFromTier(updates.rateLimitTier);
+  }
   
   const result = await db.collection("api_keys").updateOne(
     { _id: new ObjectId(keyId) },

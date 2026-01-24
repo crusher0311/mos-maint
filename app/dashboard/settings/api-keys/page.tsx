@@ -4,12 +4,21 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Key, Plus, Trash2, Copy, AlertCircle, Loader2 } from "lucide-react";
 
+type RateLimitTier = "standard" | "professional" | "enterprise";
+
+interface RateLimitConfig {
+  requestsPerMinute: number;
+  requestsPerDay: number;
+  burstLimit: number;
+}
+
 interface ApiKey {
   id: string;
   name: string;
   keyPrefix: string;
   permissions: string[];
   rateLimit: number;
+  rateLimitTier: RateLimitTier;
   isActive: boolean;
   usageCount: number;
   lastUsedAt?: string;
@@ -18,16 +27,33 @@ interface ApiKey {
   expiresAt?: string;
 }
 
+const TIER_LABELS: Record<RateLimitTier, string> = {
+  standard: "Standard",
+  professional: "Professional",
+  enterprise: "Enterprise",
+};
+
+const TIER_COLORS: Record<RateLimitTier, string> = {
+  standard: "bg-gray-100 text-gray-800",
+  professional: "bg-blue-100 text-blue-800",
+  enterprise: "bg-purple-100 text-purple-800",
+};
+
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
+  const [rateLimitTiers, setRateLimitTiers] = useState<Record<RateLimitTier, RateLimitConfig>>({
+    standard: { requestsPerMinute: 60, requestsPerDay: 10000, burstLimit: 10 },
+    professional: { requestsPerMinute: 300, requestsPerDay: 50000, burstLimit: 25 },
+    enterprise: { requestsPerMinute: 1000, requestsPerDay: -1, burstLimit: 100 },
+  });
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKeyResult, setNewKeyResult] = useState<{ key: string; keyPrefix: string } | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     permissions: [] as string[],
-    rateLimit: 100,
+    rateLimitTier: "standard" as RateLimitTier,
   });
 
   useEffect(() => {
@@ -41,6 +67,9 @@ export default function ApiKeysPage() {
       if (data.keys) {
         setKeys(data.keys);
         setAvailablePermissions(data.availablePermissions || []);
+        if (data.rateLimitTiers) {
+          setRateLimitTiers(data.rateLimitTiers);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch API keys:", err);
@@ -59,7 +88,7 @@ export default function ApiKeysPage() {
       const data = await res.json();
       if (data.success) {
         setNewKeyResult({ key: data.key, keyPrefix: data.keyPrefix });
-        setFormData({ name: "", permissions: [], rateLimit: 100 });
+        setFormData({ name: "", permissions: [], rateLimitTier: "standard" });
         fetchKeys();
       } else {
         alert(data.error || "Failed to create key");
@@ -161,6 +190,7 @@ export default function ApiKeysPage() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Key Prefix</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tier</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permissions</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usage</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -170,7 +200,7 @@ export default function ApiKeysPage() {
             <tbody className="divide-y divide-gray-200">
               {keys.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                     No API keys yet. Create one to get started.
                   </td>
                 </tr>
@@ -187,6 +217,14 @@ export default function ApiKeysPage() {
                       <code className="text-sm bg-gray-100 px-2 py-1 rounded">
                         {key.keyPrefix}...
                       </code>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 text-xs rounded-full ${TIER_COLORS[key.rateLimitTier] || TIER_COLORS.standard}`}>
+                        {TIER_LABELS[key.rateLimitTier] || "Standard"}
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {key.rateLimit}/min
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
@@ -289,16 +327,20 @@ export default function ApiKeysPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Rate Limit (requests/minute)
+                    Rate Limit Tier
                   </label>
-                  <input
-                    type="number"
-                    value={formData.rateLimit}
-                    onChange={(e) => setFormData({ ...formData, rateLimit: Number(e.target.value) })}
+                  <select
+                    value={formData.rateLimitTier}
+                    onChange={(e) => setFormData({ ...formData, rateLimitTier: e.target.value as RateLimitTier })}
                     className="w-full border rounded-lg px-3 py-2"
-                    min={1}
-                    max={1000}
-                  />
+                  >
+                    <option value="standard">Standard (60/min, 10K/day)</option>
+                    <option value="professional">Professional (300/min, 50K/day)</option>
+                    <option value="enterprise">Enterprise (1000/min, Unlimited/day)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Contact support to upgrade partner tier limits.
+                  </p>
                 </div>
 
                 <div>
@@ -325,7 +367,7 @@ export default function ApiKeysPage() {
                 <button
                   onClick={() => {
                     setShowCreateModal(false);
-                    setFormData({ name: "", permissions: [], rateLimit: 100 });
+                    setFormData({ name: "", permissions: [], rateLimitTier: "standard" });
                   }}
                   className="px-4 py-2 border rounded-lg hover:bg-gray-50"
                 >
