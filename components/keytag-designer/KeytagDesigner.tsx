@@ -33,6 +33,10 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLayoutRef = useRef(initialLayout);
+  const hasInitializedRef = useRef(false);
 
   const layout = history.present;
 
@@ -95,6 +99,40 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo]);
+
+  // Auto-save effect - saves 1 second after user stops making changes
+  useEffect(() => {
+    // Skip the initial render
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      return;
+    }
+
+    // Clear any existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    setSaveStatus('unsaved');
+
+    // Set new timeout for auto-save
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        await onSave(layout);
+        setSaveStatus('saved');
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        setSaveStatus('unsaved');
+      }
+    }, 1000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [layout, onSave]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -165,14 +203,28 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
             <Download className="w-4 h-4" />
             Download
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save
-          </button>
+          <div className="flex items-center gap-2">
+            {saveStatus === 'saving' && (
+              <span className="text-xs text-gray-500 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Saving...
+              </span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="text-xs text-green-600">Auto-saved</span>
+            )}
+            {saveStatus === 'unsaved' && (
+              <span className="text-xs text-amber-600">Unsaved changes</span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving || saveStatus === 'saving'}
+              className="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save
+            </button>
+          </div>
         </div>
       </div>
 
