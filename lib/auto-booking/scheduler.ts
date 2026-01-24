@@ -28,7 +28,7 @@ const US_HOLIDAYS = new Set([
 ]);
 
 // Helper to get timezone offset string like "-05:00" or "-06:00"
-function getTimezoneOffset(timezone: string, date: Date): string {
+export function getTimezoneOffset(timezone: string, date: Date): string {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
@@ -537,7 +537,7 @@ async function pushAppointmentToSMS(
   };
 }
 
-async function findTekmetricCustomerAndVehicle(
+export async function findTekmetricCustomerAndVehicle(
   tekmetricShopId: number,
   mosCustomerId?: string,
   customerName?: string,
