@@ -14,7 +14,8 @@
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
     "migrate:shopid": "tsx scripts/migrate-shopid-to-numbers.ts",
     "setup:dev": "cp .env.template .env.local && echo 'Please edit .env.local with your configuration'",
-    "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\""
+    "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\"",
+    "generate:api-inventory": "tsx scripts/generate-api-inventory.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.18.0",
