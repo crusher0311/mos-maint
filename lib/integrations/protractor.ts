@@ -2380,7 +2380,8 @@ export async function addDeferredWorkToWorkOrder(
   
   // If still no lines, search the vehicle's invoice history (invoices have full ServicePackages with pricing)
   // Use vehicle ServiceItemID from deferred item OR from the work order we're adding to
-  const vehicleServiceItemId = deferredItem.ServiceItemID || existingWorkOrder.ServiceItemID;
+  // Note: Work order has ServiceItem.ID (nested), not ServiceItemID (flat)
+  const vehicleServiceItemId = deferredItem.ServiceItemID || existingWorkOrder.ServiceItemID || woAny.ServiceItem?.ID;
   
   if (originalServicePackageLines.length === 0 && vehicleServiceItemId) {
     console.log(`[Protractor] Searching invoice history for service package matching: "${title}" (code: ${deferredItem.Code})`);
