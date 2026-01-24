@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
 import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
 
@@ -88,6 +88,10 @@ export default function StickerSettingsPage() {
   const [designerLayout, setDesignerLayout] = useState<StickerLayout>(() => createDefaultLayout(DEFAULT_STICKER_SIZE));
   const [currentSize, setCurrentSize] = useState(DEFAULT_STICKER_SIZE);
   
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasInitializedRef = useRef(false);
+  
   const [expandedSections, setExpandedSections] = useState({
     content: true,
     intervals: true,
@@ -107,6 +111,68 @@ export default function StickerSettingsPage() {
       refreshQrPreview();
     }
   }, [config.showQRCode, loading]);
+
+  // Auto-save effect - saves 1.5 seconds after user stops making changes
+  useEffect(() => {
+    // Skip until initial load is complete
+    if (loading || !hasInitializedRef.current) {
+      if (!loading) {
+        hasInitializedRef.current = true;
+      }
+      return;
+    }
+
+    // Clear any existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    setSaveStatus('unsaved');
+
+    // Set new timeout for auto-save
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        const res = await fetch("/api/sticker/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: config.enabled,
+            logo: config.logo,
+            phone: config.phone,
+            tagline: config.tagline,
+            taglineLine2: config.taglineLine2,
+            serviceLabel: config.serviceLabel,
+            showQRCode: config.showQRCode,
+            roundMileage: config.roundMileage,
+            usePredictiveDate: config.usePredictiveDate,
+            defaultSize: currentSize,
+            appointmentUrl: config.appointmentUrl,
+            useKilometers: config.useKilometers,
+            intervals: config.intervals,
+            defaultOilType: config.defaultOilType,
+            designerLayout: designerLayout,
+          }),
+        });
+        
+        if (res.ok) {
+          setSaveStatus('saved');
+        } else {
+          console.error('Auto-save failed');
+          setSaveStatus('unsaved');
+        }
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        setSaveStatus('unsaved');
+      }
+    }, 1500);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [config, designerLayout, currentSize, loading]);
 
   async function fetchSettings() {
     try {
@@ -658,13 +724,30 @@ export default function StickerSettingsPage() {
           )}
         </div>
 
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          <div className="flex items-center gap-2">
+            {saveStatus === 'saving' && (
+              <span className="text-sm text-gray-500 flex items-center gap-1">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="text-sm text-green-600 flex items-center gap-1">
+                <Check className="w-4 h-4" />
+                Auto-saved
+              </span>
+            )}
+            {saveStatus === 'unsaved' && (
+              <span className="text-sm text-amber-600">Unsaved changes</span>
+            )}
+          </div>
           <button
             onClick={saveSettings}
-            disabled={saving}
+            disabled={saving || saveStatus === 'saving'}
             className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Settings
           </button>
           
