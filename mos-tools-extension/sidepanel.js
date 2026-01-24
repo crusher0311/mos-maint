@@ -615,6 +615,13 @@ function createServiceItemHTML(item, type) {
   const lastDoneHtml = lastDone ? 
     `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` : '';
   
+  // Check if we have full job details from canned job match
+  const hasFullDetails = item.laborItems && item.laborItems.length > 0;
+  const addLabel = hasFullDetails ? 'Add with Labor/Parts' : 'Add Generic Job';
+  const addIcon = hasFullDetails 
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  
   return `
     <li class="service-item ${type}">
       <div class="service-header">
@@ -624,6 +631,12 @@ function createServiceItemHTML(item, type) {
             + Add
           </button>
           <div id="${itemId}" class="add-dropdown-menu hidden">
+            ${hasFullDetails ? `
+            <button class="add-dropdown-item add-primary" data-action="add-generic" data-service='${JSON.stringify(item)}'>
+              ${addIcon}
+              ${addLabel}
+            </button>
+            ` : ''}
             <button class="add-dropdown-item" data-action="search-history" data-service='${JSON.stringify(item)}'>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -636,12 +649,12 @@ function createServiceItemHTML(item, type) {
               </svg>
               Search Canned Jobs
             </button>
+            ${!hasFullDetails ? `
             <button class="add-dropdown-item" data-action="add-generic" data-service='${JSON.stringify(item)}'>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add Generic Job
+              ${addIcon}
+              ${addLabel}
             </button>
+            ` : ''}
           </div>
         </div>
       </div>
@@ -1075,13 +1088,15 @@ function renderCannedJobs(jobs) {
 
 // ==================== JOB ACTIONS ====================
 async function handleAddService(service) {
+  // Check if we have full job details from matching canned job
+  const hasFullDetails = service.laborItems && service.laborItems.length > 0;
+  
   // Convert service recommendation to a job and add
   const jobData = {
     name: service.name,
-    laborItems: [{
-      name: service.name,
-      hours: service.laborHours || 1
-    }],
+    laborItems: hasFullDetails 
+      ? service.laborItems 
+      : [{ name: service.name, hours: service.laborHours || 1 }],
     parts: service.parts || []
   };
   
