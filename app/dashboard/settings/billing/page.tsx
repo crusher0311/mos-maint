@@ -23,7 +23,10 @@ import {
   Droplet,
   Tag,
   Chrome,
-  Plus
+  Plus,
+  ShoppingCart,
+  X,
+  Trash2
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
@@ -100,6 +103,17 @@ interface FeatureAddon {
   requiresFeature?: string;
 }
 
+interface CartItem {
+  id: string;
+  type: "vin-pack" | "feature";
+  name: string;
+  price: number;
+  priceId: string;
+  isRecurring: boolean;
+  slug?: string;
+  size?: number;
+}
+
 type TabType = "overview" | "plans" | "alacarte" | "payment" | "history";
 
 export default function BillingSettingsPage() {
@@ -115,6 +129,7 @@ export default function BillingSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const [cart, setCart] = useState<CartItem[]>([]);
   const searchParams = useSearchParams();
 
   const checkoutSuccess = searchParams?.get("success");
@@ -287,21 +302,99 @@ export default function BillingSettingsPage() {
     }
   }
 
-  async function handleAddFeature(feature: FeatureAddon) {
+  function addVinPackToCart(pack: VinPack) {
+    if (!pack.priceId) {
+      setError("VIN pack not configured. Please contact support.");
+      return;
+    }
+    const existingItem = cart.find(item => item.id === `vin-pack-${pack.size}`);
+    if (existingItem) {
+      setError("This VIN pack is already in your cart.");
+      return;
+    }
+    const newItem: CartItem = {
+      id: `vin-pack-${pack.size}`,
+      type: "vin-pack",
+      name: `${pack.size} VIN Pack`,
+      price: pack.price,
+      priceId: pack.priceId,
+      isRecurring: false,
+      size: pack.size,
+    };
+    setCart([...cart, newItem]);
+    setSuccess(`Added ${pack.size} VIN Pack to cart`);
+    setTimeout(() => setSuccess(null), 2000);
+  }
+
+  function addFeatureToCart(feature: FeatureAddon) {
     if (!feature.stripePriceId) {
       setError("Feature pricing not configured. Please contact support.");
       return;
     }
-    setActionLoading(`feature-${feature.slug}`);
+    const existingItem = cart.find(item => item.id === `feature-${feature.slug}`);
+    if (existingItem) {
+      setError("This feature is already in your cart.");
+      return;
+    }
+    const newItem: CartItem = {
+      id: `feature-${feature.slug}`,
+      type: "feature",
+      name: feature.name,
+      price: feature.monthlyPrice,
+      priceId: feature.stripePriceId,
+      isRecurring: true,
+      slug: feature.slug,
+    };
+    setCart([...cart, newItem]);
+    setSuccess(`Added ${feature.name} to cart`);
+    setTimeout(() => setSuccess(null), 2000);
+  }
+
+  function removeFromCart(itemId: string) {
+    setCart(cart.filter(item => item.id !== itemId));
+  }
+
+  function clearCart() {
+    setCart([]);
+  }
+
+  function isInCart(itemId: string) {
+    return cart.some(item => item.id === itemId);
+  }
+
+  const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
+  const recurringItems = cart.filter(item => item.isRecurring);
+  const oneTimeItems = cart.filter(item => !item.isRecurring);
+  const monthlyTotal = recurringItems.reduce((sum, item) => sum + item.price, 0);
+  const oneTimeTotal = oneTimeItems.reduce((sum, item) => sum + item.price, 0);
+
+  const hasMixedCart = recurringItems.length > 0 && oneTimeItems.length > 0;
+
+  async function handleCartCheckout() {
+    if (cart.length === 0) {
+      setError("Your cart is empty");
+      return;
+    }
+    if (hasMixedCart) {
+      setError("You have both subscriptions and one-time purchases in your cart. Please checkout VIN packs and features separately.");
+      return;
+    }
+    setActionLoading("checkout");
     setError(null);
     try {
+      const lineItems = cart.map(item => ({
+        priceId: item.priceId,
+        type: item.type,
+        slug: item.slug,
+        size: item.size,
+      }));
+      
       const res = await fetch("/api/stripe/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          priceId: feature.stripePriceId, 
-          featureSlug: feature.slug,
-          mode: "subscription" 
+          lineItems,
+          isCart: true,
         }),
       });
       const data = await res.json();
@@ -643,6 +736,89 @@ export default function BillingSettingsPage() {
 
         {activeTab === "alacarte" && (
           <div className="space-y-8">
+            {cart.length > 0 && (
+              <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
+                <div className="bg-blue-50 px-4 py-3 border-b border-blue-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-semibold text-blue-900">Your Cart ({cart.length} {cart.length === 1 ? 'item' : 'items'})</h3>
+                  </div>
+                  <button
+                    onClick={clearCart}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear
+                  </button>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {cart.map((item) => (
+                    <div key={item.id} className="px-4 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${item.type === 'vin-pack' ? 'bg-blue-100' : 'bg-purple-100'}`}>
+                          <Package className={`w-4 h-4 ${item.type === 'vin-pack' ? 'text-blue-600' : 'text-purple-600'}`} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{item.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {item.isRecurring ? 'Monthly subscription' : 'One-time purchase'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="font-semibold text-gray-900">
+                          ${item.price.toFixed(2)}{item.isRecurring ? '/mo' : ''}
+                        </span>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-gray-50 px-4 py-4 border-t border-gray-200">
+                  <div className="space-y-2 mb-4">
+                    {oneTimeTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">One-time purchases:</span>
+                        <span className="font-medium text-gray-900">${oneTimeTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {monthlyTotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Monthly subscriptions:</span>
+                        <span className="font-medium text-gray-900">${monthlyTotal.toFixed(2)}/mo</span>
+                      </div>
+                    )}
+                  </div>
+                  {hasMixedCart && (
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-sm text-amber-800">
+                        VIN packs and feature subscriptions must be checked out separately. 
+                        Remove one type to proceed.
+                      </p>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleCartCheckout}
+                    disabled={actionLoading === "checkout" || hasMixedCart}
+                    className="w-full py-3 px-4 rounded-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {actionLoading === "checkout" ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <CreditCard className="w-5 h-5" />
+                    )}
+                    Proceed to Checkout
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <h2 className="text-lg font-semibold text-gray-900">VIN Packs</h2>
               <p className="text-gray-500 text-sm mt-1">
@@ -677,18 +853,26 @@ export default function BillingSettingsPage() {
                         ${(pack.price / pack.size).toFixed(2)} per VIN
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleBuyVinPack(pack.size, pack.priceId)}
-                      disabled={!pack.priceId || actionLoading === `vin-${pack.size}`}
-                      className="w-full mt-6 py-2.5 px-4 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {actionLoading === `vin-${pack.size}` ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <CreditCard className="w-4 h-4" />
-                      )}
-                      {pack.priceId ? "Purchase" : "Coming Soon"}
-                    </button>
+                    {isInCart(`vin-pack-${pack.size}`) ? (
+                      <button
+                        onClick={() => removeFromCart(`vin-pack-${pack.size}`)}
+                        className="w-full mt-6 py-2.5 px-4 rounded-lg font-medium bg-green-600 text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-2 group"
+                      >
+                        <Check className="w-4 h-4 group-hover:hidden" />
+                        <X className="w-4 h-4 hidden group-hover:block" />
+                        <span className="group-hover:hidden">In Cart</span>
+                        <span className="hidden group-hover:inline">Remove</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => addVinPackToCart(pack)}
+                        disabled={!pack.priceId}
+                        className="w-full mt-6 py-2.5 px-4 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                        {pack.priceId ? "Add to Cart" : "Coming Soon"}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -763,18 +947,24 @@ export default function BillingSettingsPage() {
                                 <Check className="w-4 h-4" />
                                 Included
                               </span>
+                            ) : isInCart(`feature-${feature.slug}`) ? (
+                              <button
+                                onClick={() => removeFromCart(`feature-${feature.slug}`)}
+                                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-red-600 transition-colors flex items-center gap-1 group"
+                              >
+                                <Check className="w-3.5 h-3.5 group-hover:hidden" />
+                                <X className="w-3.5 h-3.5 hidden group-hover:block" />
+                                <span className="group-hover:hidden">In Cart</span>
+                                <span className="hidden group-hover:inline">Remove</span>
+                              </button>
                             ) : (
                               <button
-                                onClick={() => handleAddFeature(feature)}
-                                disabled={!feature.stripePriceId || actionLoading === `feature-${feature.slug}`}
+                                onClick={() => addFeatureToCart(feature)}
+                                disabled={!feature.stripePriceId}
                                 className="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                               >
-                                {actionLoading === `feature-${feature.slug}` ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Plus className="w-3.5 h-3.5" />
-                                )}
-                                {feature.stripePriceId ? "Add" : "Coming Soon"}
+                                <ShoppingCart className="w-3.5 h-3.5" />
+                                {feature.stripePriceId ? "Add to Cart" : "Coming Soon"}
                               </button>
                             )}
                           </div>
