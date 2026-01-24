@@ -526,27 +526,10 @@ async function pushAppointmentToSMS(
           provider: "protractor",
         };
       } else {
-        // Check if this is the 405 error (API doesn't support POST)
-        if (result.error?.includes("405") || result.error?.includes("does not support http method")) {
-          console.log(`[Auto Booking] Protractor API does not support appointment creation - booking will remain in MOS queue only`);
-          return { 
-            success: true, 
-            externalId: "mos-only",
-            provider: "protractor-manual",
-          };
-        }
         return { success: false, error: result.error };
       }
     } catch (err: any) {
       console.error(`[Auto Booking] Protractor appointment creation failed:`, err.message);
-      // Handle 405 error gracefully
-      if (err.message?.includes("405") || err.message?.includes("does not support http method")) {
-        return { 
-          success: true, 
-          externalId: "mos-only",
-          provider: "protractor-manual",
-        };
-      }
       return { success: false, error: err.message };
     }
   }
