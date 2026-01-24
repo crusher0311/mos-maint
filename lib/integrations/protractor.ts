@@ -2205,3 +2205,107 @@ export async function getProtractorAppointments(
   
   return { ok: true, appointments };
 }
+
+export async function addDeferredWorkToWorkOrder(
+  shopId: number,
+  workOrderGuid: string,
+  deferredId: string,
+  vin: string
+): Promise<{ ok: boolean; servicePackage?: { ID: string; Title: string }; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const db = await getDb();
+  const cachedDeferred = await db.collection("protractor_deferred_work").findOne({
+    shopId,
+    vin: vin.toUpperCase()
+  });
+
+  if (!cachedDeferred?.items) {
+    return { ok: false, error: "Deferred work not found in cache" };
+  }
+
+  const deferredItem = (cachedDeferred.items as ProtractorDeferredWork[]).find(
+    d => d.ID === deferredId || d.ServiceItemID === deferredId
+  );
+
+  if (!deferredItem) {
+    return { ok: false, error: `Deferred work item ${deferredId} not found` };
+  }
+
+  const title = deferredItem.Title 
+    || deferredItem.ServicePackageHeader?.Title 
+    || deferredItem.Code 
+    || deferredItem.Description 
+    || "Deferred Service";
+
+  const existingResult = await protractorFetch<ProtractorWorkOrder>(
+    `/WorkOrder/${workOrderGuid}`,
+    config,
+    {},
+    0,
+    shopId
+  );
+
+  if (!existingResult.ok || !existingResult.data) {
+    return { ok: false, error: `Failed to fetch work order: ${existingResult.error}` };
+  }
+
+  const existingWorkOrder = existingResult.data;
+  const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
+  const isArrayFormat = Array.isArray(existingPackagesRaw);
+  const existingPackages = isArrayFormat 
+    ? existingPackagesRaw 
+    : (existingPackagesRaw?.ItemCollection || []);
+
+  const newServicePackage = {
+    ID: "00000000-0000-0000-0000-000000000000",
+    Code: deferredItem.Code || title,
+    ServicePackageHeader: {
+      Title: title,
+      Description: deferredItem.Description || "[Previously Deferred - Added by MOS]",
+    },
+    ServicePackageLines: { ItemCollection: [] },
+    Status: "Pending",
+    Chapter: deferredItem.Chapter || "Service",
+  };
+
+  const updatedPackages = [...existingPackages, newServicePackage];
+  const updatedWorkOrder = {
+    ...existingWorkOrder,
+    ServicePackages: isArrayFormat 
+      ? updatedPackages 
+      : { ItemCollection: updatedPackages }
+  };
+
+  console.log(`[Protractor] Adding deferred work "${title}" to work order ${workOrderGuid}...`);
+
+  const updateResult = await protractorFetch<any>(
+    `/WorkOrder/${workOrderGuid}`,
+    config,
+    {
+      method: "POST",
+      body: JSON.stringify(updatedWorkOrder)
+    },
+    0,
+    shopId
+  );
+
+  if (updateResult.ok) {
+    console.log(`[Protractor] Successfully added deferred work "${title}"`);
+    return {
+      ok: true,
+      servicePackage: {
+        ID: deferredItem.ID,
+        Title: title
+      }
+    };
+  }
+
+  return { 
+    ok: false, 
+    error: `Failed to add deferred work: ${updateResult.error}` 
+  };
+}

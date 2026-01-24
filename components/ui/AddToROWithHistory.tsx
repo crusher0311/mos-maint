@@ -122,6 +122,7 @@ type Props = {
   cannedJobOptions?: CannedJobOption[];
   allCannedJobs?: CannedJobOption[]; // Fallback when no mapped options
   integration?: IntegrationType;
+  protractorDeferredId?: string;
 };
 
 export function AddToROWithHistory({
@@ -138,6 +139,7 @@ export function AddToROWithHistory({
   cannedJobOptions = [],
   allCannedJobs = [],
   integration = "protractor",
+  protractorDeferredId,
 }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -147,6 +149,8 @@ export function AddToROWithHistory({
   const [customQuery, setCustomQuery] = useState("");
   const [lastSearchQuery, setLastSearchQuery] = useState("");
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [deferredStatus, setDeferredStatus] = useState<"idle" | "adding" | "success" | "error">("idle");
+  const [deferredError, setDeferredError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -278,7 +282,40 @@ export function AddToROWithHistory({
     }
   }
 
-  if (status === "success") {
+  async function handleAddDeferred() {
+    if (!protractorDeferredId || !workOrderGuid) return;
+    
+    setDeferredStatus("adding");
+    setDeferredError(null);
+    
+    try {
+      const res = await fetch("/api/jobs/add-deferred", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderGuid,
+          deferredId: protractorDeferredId,
+          vin,
+          serviceTitle,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setDeferredStatus("error");
+        setDeferredError(data.error || "Failed to add deferred work");
+        return;
+      }
+      
+      setDeferredStatus("success");
+    } catch (err) {
+      setDeferredStatus("error");
+      setDeferredError("Network error");
+    }
+  }
+
+  if (status === "success" || deferredStatus === "success") {
     return (
       <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
         <Check className="w-3 h-3" />
@@ -289,6 +326,32 @@ export function AddToROWithHistory({
 
   return (
     <div className="flex items-center gap-2">
+      {/* Add Deferred button - only for Protractor deferred work items */}
+      {protractorDeferredId && workOrderGuid && integration === "protractor" && (
+        <button
+          onClick={handleAddDeferred}
+          disabled={deferredStatus === "adding"}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+          title="Add this previously deferred service directly to the work order"
+        >
+          {deferredStatus === "adding" ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Adding...
+            </>
+          ) : (
+            <>
+              <Plus className="w-3 h-3" />
+              Add Deferred
+            </>
+          )}
+        </button>
+      )}
+
+      {deferredStatus === "error" && deferredError && (
+        <span className="text-xs text-red-600">{deferredError}</span>
+      )}
+
       {/* Add History button */}
       <div className="relative" ref={dropdownRef}>
         <button
