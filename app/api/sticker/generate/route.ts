@@ -564,21 +564,24 @@ function generateStickerHtmlFromLayout(
     
     const isImage = element.type === 'logo' || element.type === 'qrCode';
     
-    // For text elements, match designer behavior exactly
-    // Note: Don't use flexbox for text - it breaks text-overflow: ellipsis
-    // Instead use line-height equal to height for vertical centering
-    const textStyles = !isImage ? `
-      font-size: ${element.fontSize}px;
-      font-weight: ${element.fontWeight};
-      font-style: ${element.fontStyle};
-      text-align: ${element.textAlign};
-      color: ${element.color};
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      line-height: ${element.height}px;
-    ` : '';
+    if (isImage) {
+      // Images just need the container
+      return `
+        <div style="
+          position: absolute;
+          left: ${element.x}px;
+          top: ${element.y}px;
+          width: ${element.width}px;
+          height: ${element.height}px;
+          ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
+        ">
+          ${content}
+        </div>
+      `;
+    }
     
+    // For text elements, match designer structure exactly:
+    // Outer div for positioning, inner span for text styles
     return `
       <div style="
         position: absolute;
@@ -586,10 +589,22 @@ function generateStickerHtmlFromLayout(
         top: ${element.y}px;
         width: ${element.width}px;
         height: ${element.height}px;
-        ${textStyles}
         ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
       ">
-        ${content}
+        <span style="
+          display: block;
+          width: 100%;
+          height: 100%;
+          font-size: ${element.fontSize}px;
+          font-weight: ${element.fontWeight};
+          font-style: ${element.fontStyle};
+          text-align: ${element.textAlign};
+          color: ${element.color};
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          line-height: ${element.height}px;
+        ">${typeof content === 'string' ? content : ''}</span>
       </div>
     `;
   }).join('');
@@ -608,7 +623,7 @@ function generateStickerHtmlFromLayout(
       overflow: hidden;
     }
     body {
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
     }
     #sticker-canvas {
       width: ${renderWidth}px;
@@ -745,6 +760,14 @@ export async function POST(req: NextRequest) {
     }
     
     if (designerLayout && designerLayout.elements) {
+      // Debug: Log element details
+      console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
+      designerLayout.elements.forEach(el => {
+        if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
+          console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
+        }
+      });
+      
       const dataConfig = body.dataConfig || {
         logo: config.logo,
         phone: config.phone,
