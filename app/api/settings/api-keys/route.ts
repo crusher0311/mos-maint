@@ -5,7 +5,9 @@ import {
   getApiKeysForShop, 
   revokeApiKey, 
   updateApiKey,
-  getAvailablePermissions 
+  getAvailablePermissions,
+  RATE_LIMIT_TIERS,
+  RateLimitTier
 } from "@/lib/external-api/api-keys";
 
 export const runtime = "nodejs";
@@ -27,6 +29,7 @@ export async function GET(req: NextRequest) {
       keyPrefix: key.keyPrefix,
       permissions: key.permissions,
       rateLimit: key.rateLimit,
+      rateLimitTier: key.rateLimitTier || "standard",
       isActive: key.isActive,
       usageCount: key.usageCount,
       lastUsedAt: key.lastUsedAt,
@@ -38,6 +41,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ 
       keys: safeKeys,
       availablePermissions: getAvailablePermissions(),
+      rateLimitTiers: RATE_LIMIT_TIERS,
     });
   } catch (err: any) {
     console.error("[API Keys] Error:", err);
@@ -55,7 +59,7 @@ export async function POST(req: NextRequest) {
     const shopId = Number(session.shopId);
     const body = await req.json();
     
-    const { name, permissions, rateLimit, expiresAt } = body;
+    const { name, permissions, rateLimitTier, expiresAt } = body;
     
     if (!name || !permissions || !Array.isArray(permissions)) {
       return NextResponse.json(
@@ -64,13 +68,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const tier: RateLimitTier = rateLimitTier || "standard";
+
     const result = await generateApiKey(
       shopId,
       name,
       permissions,
       session.email || "unknown",
       {
-        rateLimit: rateLimit || 100,
+        rateLimitTier: tier,
         expiresAt: expiresAt ? new Date(expiresAt) : undefined,
       }
     );
@@ -96,7 +102,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { keyId, name, permissions, rateLimit, isActive, expiresAt } = body;
+    const { keyId, name, permissions, rateLimitTier, isActive, expiresAt } = body;
     
     if (!keyId) {
       return NextResponse.json({ error: "keyId is required" }, { status: 400 });
@@ -105,7 +111,7 @@ export async function PATCH(req: NextRequest) {
     const updates: any = {};
     if (name !== undefined) updates.name = name;
     if (permissions !== undefined) updates.permissions = permissions;
-    if (rateLimit !== undefined) updates.rateLimit = rateLimit;
+    if (rateLimitTier !== undefined) updates.rateLimitTier = rateLimitTier;
     if (isActive !== undefined) updates.isActive = isActive;
     if (expiresAt !== undefined) updates.expiresAt = expiresAt ? new Date(expiresAt) : null;
 
