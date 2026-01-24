@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { 
   CreditCard, 
   Check, 
@@ -117,6 +117,14 @@ interface CartItem {
 type TabType = "overview" | "plans" | "alacarte" | "payment" | "history";
 
 export default function BillingSettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex-1 p-8"><div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div></div>}>
+      <BillingSettingsContent />
+    </Suspense>
+  );
+}
+
+function BillingSettingsContent() {
   const [billing, setBilling] = useState<BillingInfo | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [features, setFeatures] = useState<PlatformFeature[]>([]);

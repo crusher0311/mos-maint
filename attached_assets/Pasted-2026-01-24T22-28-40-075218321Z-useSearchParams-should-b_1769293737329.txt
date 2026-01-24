@@ -1,0 +1,50 @@
+2026-01-24T22:28:40.075218321Z  ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/dashboard/settings/billing". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+2026-01-24T22:28:40.075243002Z     at o (/opt/render/project/src/.next/server/chunks/4471.js:1:10524)
+2026-01-24T22:28:40.075245942Z     at d (/opt/render/project/src/.next/server/chunks/4471.js:1:21430)
+2026-01-24T22:28:40.075249442Z     at S (/opt/render/project/src/.next/server/app/dashboard/settings/billing/page.js:1:3487)
+2026-01-24T22:28:40.075252732Z     at nj (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46251)
+2026-01-24T22:28:40.075255812Z     at nM (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47571)
+2026-01-24T22:28:40.075259052Z     at nN (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+2026-01-24T22:28:40.075261922Z     at nI (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47010)
+2026-01-24T22:28:40.075264292Z     at nM (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47717)
+2026-01-24T22:28:40.075266812Z     at nM (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:61546)
+2026-01-24T22:28:40.075269492Z     at nN (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+2026-01-24T22:28:40.075271723Z 
+2026-01-24T22:28:40.075274152Z Error occurred prerendering page "/dashboard/settings/billing". Read more: https://nextjs.org/docs/messages/prerender-error
+2026-01-24T22:28:40.075276312Z 
+2026-01-24T22:28:40.818863201Z    Generating static pages (132/176) 
+2026-01-24T22:28:40.910915567Z Error fetching user shops: n [Error]: Dynamic server usage: Route /api/user/shops couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T22:28:40.910947597Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T22:28:40.910951197Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T22:28:40.910954817Z     at a (/opt/render/project/src/.next/server/app/api/admin/billing/sync-stripe/route.js:1:2339)
+2026-01-24T22:28:40.910958148Z     at c (/opt/render/project/src/.next/server/app/api/user/shops/route.js:1:955)
+2026-01-24T22:28:40.910980218Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T22:28:40.910983218Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T22:28:40.910986478Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T22:28:40.910989228Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T22:28:40.910992008Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+2026-01-24T22:28:40.910995829Z     at ProxyTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+2026-01-24T22:28:40.910999189Z   description: "Route /api/user/shops couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T22:28:40.911002418Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T22:28:40.911005099Z }
+2026-01-24T22:28:41.124402252Z [AutoVitals Extension] Download error: n [Error]: Dynamic server usage: Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T22:28:41.124426182Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T22:28:41.124428492Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T22:28:41.124431212Z     at l (/opt/render/project/src/.next/server/app/api/admin/audit-logs/route.js:1:3068)
+2026-01-24T22:28:41.124432962Z     at c (/opt/render/project/src/.next/server/app/api/admin/audit-logs/route.js:1:3626)
+2026-01-24T22:28:41.124435412Z     at p (/opt/render/project/src/.next/server/app/api/autovitals/extension/download/route.js:1:1936)
+2026-01-24T22:28:41.124437242Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T22:28:41.124439002Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T22:28:41.124441432Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T22:28:41.124443192Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T22:28:41.124445402Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093) {
+2026-01-24T22:28:41.124447753Z   description: "Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T22:28:41.124450642Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T22:28:41.124452513Z }
+2026-01-24T22:28:41.323664829Z ⚠️ Environment validation failed, using defaults
+2026-01-24T22:28:41.323810993Z  ✓ Generating static pages (176/176)
+2026-01-24T22:28:41.406919645Z 
+2026-01-24T22:28:41.406973576Z > Export encountered errors on following paths:
+2026-01-24T22:28:41.406980716Z 	/dashboard/settings/billing/page: /dashboard/settings/billing
+2026-01-24T22:28:41.612289315Z ==> Build failed 😞
+2026-01-24T22:28:41.612314055Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
