@@ -766,7 +766,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
     };
 
-    const pollInterval = setInterval(checkClosedOrders, 5000);
+    // Poll every 60 seconds instead of 5 to avoid hitting rate limits
+    const pollInterval = setInterval(checkClosedOrders, 60000);
     return () => clearInterval(pollInterval);
   }, [data.user?.shopId, currentPage, searchQuery, showArchived]);
 
