@@ -13,6 +13,7 @@ const loadingSteps = [
 export default function PlanLoading() {
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(5);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
     const stepInterval = setInterval(() => {
@@ -26,9 +27,14 @@ export default function PlanLoading() {
       });
     }, 250);
 
+    const secondsInterval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
     return () => {
       clearInterval(stepInterval);
       clearInterval(progressInterval);
+      clearInterval(secondsInterval);
     };
   }, []);
 
@@ -39,14 +45,21 @@ export default function PlanLoading() {
           <div className="relative mb-6">
             <div className="w-16 h-16 border-4 border-blue-200 rounded-full"></div>
             <div className="w-16 h-16 border-4 border-blue-600 rounded-full border-t-transparent animate-spin absolute top-0 left-0"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-blue-600 font-semibold text-sm">{elapsedSeconds}s</span>
+            </div>
           </div>
           
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
             Building Your Maintenance Plan
           </h2>
           
-          <p className="text-gray-500 mb-4 text-sm">
+          <p className="text-gray-500 mb-1 text-sm">
             We're gathering all the data for your personalized report
+          </p>
+          
+          <p className="text-orange-500 mb-4 text-xs">
+            Initial loads may take up to 30 seconds while we load your smart plan
           </p>
 
           <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
