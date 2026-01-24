@@ -657,7 +657,22 @@ export async function fetchInvoicesForVehicle(
     return { ok: false, error: result.error };
   }
 
-  return { ok: true, invoices: result.data?.ItemCollection || [] };
+  // Debug: Log the raw response structure
+  const rawData = result.data as any;
+  console.log(`[Protractor] Invoice fetch raw response keys:`, Object.keys(rawData || {}));
+  console.log(`[Protractor] Invoice fetch ItemCollection length:`, rawData?.ItemCollection?.length ?? 'undefined');
+  
+  // Check if data is returned in a different format (array directly, or different property name)
+  let invoices: ProtractorInvoice[] = [];
+  if (Array.isArray(rawData)) {
+    invoices = rawData;
+  } else if (rawData?.ItemCollection) {
+    invoices = rawData.ItemCollection;
+  } else if (rawData?.Invoices) {
+    invoices = rawData.Invoices;
+  }
+  
+  return { ok: true, invoices };
 }
 
 export async function fetchDeferredWork(
