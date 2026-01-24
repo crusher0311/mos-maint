@@ -2278,7 +2278,8 @@ export async function createProtractorAppointment(
     ScheduledTime: scheduledTime,
   };
   
-  if (duration) body.Duration = duration;
+  // Duration is passed in minutes but Protractor expects hours
+  if (duration) body.Duration = duration / 60;
   if (notes) body.Note = notes;  // Field is "Note" not "Notes"
   if (serviceAdvisorId) body.ServiceAdvisor = { ID: serviceAdvisorId };
   
