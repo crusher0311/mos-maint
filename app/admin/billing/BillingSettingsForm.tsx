@@ -116,8 +116,8 @@ export default function BillingSettingsForm({
                 <CreditCard className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">MOS Pro Subscription</h3>
-                <p className="text-sm text-gray-500">$199/month - 300 VINs included</p>
+                <h3 className="text-lg font-semibold text-gray-900">Subscription Tiers</h3>
+                <p className="text-sm text-gray-500">Configure Stripe product/price IDs for each tier</p>
               </div>
             </div>
             <a
@@ -131,52 +131,149 @@ export default function BillingSettingsForm({
             </a>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Product ID
-              </label>
-              <input
-                type="text"
-                value={settings.mosProProductId}
-                onChange={(e) => setSettings({ ...settings, mosProProductId: e.target.value })}
-                placeholder="prod_..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
+          <div className="space-y-6">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-medium text-gray-900">Starter - ${settings.starterPrice}/month</span>
+                <span className="text-xs text-gray-500">Maintenance + Oil Sticker</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
+                  <input
+                    type="text"
+                    value={settings.starterProductId}
+                    onChange={(e) => setSettings({ ...settings, starterProductId: e.target.value })}
+                    placeholder="prod_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
+                  <input
+                    type="text"
+                    value={settings.starterPriceId}
+                    onChange={(e) => setSettings({ ...settings, starterPriceId: e.target.value })}
+                    placeholder="price_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={settings.starterPrice}
+                    onChange={(e) => setSettings({ ...settings, starterPrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Included VINs</label>
+                  <input
+                    type="number"
+                    value={settings.starterIncludedVins}
+                    onChange={(e) => setSettings({ ...settings, starterIncludedVins: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price ID
-              </label>
-              <input
-                type="text"
-                value={settings.mosProPriceId}
-                onChange={(e) => setSettings({ ...settings, mosProPriceId: e.target.value })}
-                placeholder="price_..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
+
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-medium text-gray-900">Plus - ${settings.plusPrice}/month</span>
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Most Popular</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
+                  <input
+                    type="text"
+                    value={settings.plusProductId}
+                    onChange={(e) => setSettings({ ...settings, plusProductId: e.target.value })}
+                    placeholder="prod_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
+                  <input
+                    type="text"
+                    value={settings.plusPriceId}
+                    onChange={(e) => setSettings({ ...settings, plusPriceId: e.target.value })}
+                    placeholder="price_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={settings.plusPrice}
+                    onChange={(e) => setSettings({ ...settings, plusPrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Included VINs</label>
+                  <input
+                    type="number"
+                    value={settings.plusIncludedVins}
+                    onChange={(e) => setSettings({ ...settings, plusIncludedVins: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price ($)
-              </label>
-              <input
-                type="number"
-                value={settings.mosProPrice}
-                onChange={(e) => setSettings({ ...settings, mosProPrice: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Included VINs
-              </label>
-              <input
-                type="number"
-                value={settings.mosProIncludedVins}
-                onChange={(e) => setSettings({ ...settings, mosProIncludedVins: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
+
+            <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-medium text-gray-900">Elite Easy Button - ${settings.elitePrice}/month</span>
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">All Features</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
+                  <input
+                    type="text"
+                    value={settings.eliteProductId}
+                    onChange={(e) => setSettings({ ...settings, eliteProductId: e.target.value })}
+                    placeholder="prod_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
+                  <input
+                    type="text"
+                    value={settings.elitePriceId}
+                    onChange={(e) => setSettings({ ...settings, elitePriceId: e.target.value })}
+                    placeholder="price_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={settings.elitePrice}
+                    onChange={(e) => setSettings({ ...settings, elitePrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Included VINs</label>
+                  <input
+                    type="number"
+                    value={settings.eliteIncludedVins}
+                    onChange={(e) => setSettings({ ...settings, eliteIncludedVins: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -419,7 +516,7 @@ export default function BillingSettingsForm({
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p className="text-sm text-amber-800">
               <strong>Skip Trial Incentive:</strong> When a new shop skips the {settings.trialVinLimit} VIN free trial and subscribes immediately, 
-              they receive {settings.mosProIncludedVins} + {settings.skipTrialBonusVins} = <strong>{settings.mosProIncludedVins + settings.skipTrialBonusVins} VINs</strong> for their first month.
+              they receive {settings.defaultVinLimit} + {settings.skipTrialBonusVins} = <strong>{settings.defaultVinLimit + settings.skipTrialBonusVins} VINs</strong> for their first month.
             </p>
           </div>
 
