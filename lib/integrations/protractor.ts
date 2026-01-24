@@ -2591,12 +2591,20 @@ export async function addDeferredWorkToWorkOrder(
 
   // Create new service package for the active work order
   // Use Chapter: "Service" and Status: "Pending" to add to active work order (NOT deferred section)
+  // Get description from ServicePackageHeader (where Protractor stores it)
+  const originalDescription = deferredItem.ServicePackageHeader?.Description 
+    || deferredItem.Description 
+    || "";
+  const packageDescription = originalDescription 
+    ? `${originalDescription}\n[Previously Deferred - Added by MOS]`
+    : "[Previously Deferred - Added by MOS]";
+  
   const newServicePackage = {
     ID: "00000000-0000-0000-0000-000000000000",
     Code: deferredItem.Code || title,
     ServicePackageHeader: {
       Title: title,
-      Description: deferredItem.Description || "[Previously Deferred - Added by MOS]",
+      Description: packageDescription,
     },
     // Include the original labor and parts lines
     ServicePackageLines: { 
