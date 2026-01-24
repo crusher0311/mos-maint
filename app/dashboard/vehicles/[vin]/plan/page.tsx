@@ -403,6 +403,11 @@ type DeclinedServiceEntry = {
   declinedAt: string;
 };
 
+type MatchedDeferred = {
+  id: string;
+  title: string;
+};
+
 type TriagedItem = {
   key: string;
   serviceKey: string;
@@ -422,6 +427,7 @@ type TriagedItem = {
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
   protractorDeferredId?: string;
+  matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
 };
 
 type ShopIntervalOverride = {
@@ -572,10 +578,11 @@ function triage({
   const usedDviKeys = new Set<string>();
   const usedServiceKeys = new Set<string>(); // Dedupe items with same serviceKey
   
-  // Pre-compute deferred work service keys to match with OEM items
-  // This prevents showing both "Brake Fluid Change" (OEM) and "BG DOT4 Brake Fluid Service" (deferred)
-  const deferredServiceKeys = new Set<string>();
+  // Pre-compute deferred work info to match with OEM items
+  // Maps serviceKey → first matching deferred item (for attaching "+ deferred" button to OEM items)
+  const deferredByServiceKey = new Map<string, MatchedDeferred>();
   const seenDeferredTitles = new Set<string>();
+  const deferredServiceKeysUsedByOem = new Set<string>(); // Track which deferred items matched OEM
   for (const dw of protractorDeferredWork || []) {
     const title = dw.Title 
       || dw.ServicePackageHeader?.Title 
@@ -588,16 +595,18 @@ function triage({
     seenDeferredTitles.add(normalizedTitle);
     
     const serviceKey = toKeyFromName(title);
-    if (serviceKey) deferredServiceKeys.add(serviceKey);
+    if (serviceKey && !deferredByServiceKey.has(serviceKey)) {
+      deferredByServiceKey.set(serviceKey, { id: dw.ID, title });
+    }
   }
 
   for (const o of oemItems) {
     const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
     
-    // Skip OEM items that are covered by deferred work
-    // The deferred work is more specific (shop recommendation with pricing/parts)
-    if (deferredServiceKeys.has(serviceKey)) {
-      continue;
+    // Check if there's matching deferred work for this OEM item
+    const matchedDeferred = deferredByServiceKey.get(serviceKey);
+    if (matchedDeferred) {
+      deferredServiceKeysUsedByOem.add(serviceKey); // Mark as used so we hide it from deferred section
     }
     
     // Skip duplicate service keys - only keep first occurrence
@@ -688,6 +697,7 @@ function triage({
       dviSource: dviInfo?.dviSource,
       declined: declinedInfo,
       usingShopInterval,
+      matchedDeferred, // Attach matching deferred work for "+ deferred" button
     });
   }
 
@@ -732,6 +742,12 @@ function triage({
     seenDeferredTitles.delete(normalizedTitle);
     
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
+    
+    // Skip deferred items that matched an OEM item - they'll show the "+ deferred" button on the OEM row
+    if (deferredServiceKeysUsedByOem.has(protractorServiceKey)) {
+      continue;
+    }
+    
     triaged.push({
       key: `protractor_${dw.ID}`,
       serviceKey: protractorServiceKey,
@@ -1444,6 +1460,7 @@ async function PlanContent({ params }: PageProps) {
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
+                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}
@@ -1602,6 +1619,7 @@ async function PlanContent({ params }: PageProps) {
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
+                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}
@@ -1678,6 +1696,7 @@ async function PlanContent({ params }: PageProps) {
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
+                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}
@@ -1808,6 +1827,7 @@ async function PlanContent({ params }: PageProps) {
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
+                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}
