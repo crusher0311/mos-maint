@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 
 export async function GET(request: NextRequest) {
   try {
@@ -585,6 +586,12 @@ export async function GET(request: NextRequest) {
     }
     
     const distanceUnit = shop?.preferences?.distanceUnit || "miles";
+    
+    // Get enabled features for this shop from featureResolver
+    const shopIdNum = typeof user.shopId === 'string' ? parseInt(user.shopId, 10) : user.shopId;
+    const entitlements = await getFeatureEntitlements(shopIdNum);
+    const enabledFeatures: FeatureKey[] = (Object.keys(entitlements.effectiveFeatures) as FeatureKey[])
+      .filter(key => entitlements.effectiveFeatures[key]);
 
     // Add cache-control headers to prevent browser caching
     const response = NextResponse.json({
@@ -603,7 +610,8 @@ export async function GET(request: NextRequest) {
         shopId: user.shopId
       },
       smsType,
-      distanceUnit
+      distanceUnit,
+      enabledFeatures
     });
     
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
