@@ -2424,6 +2424,39 @@ export async function addDeferredWorkToWorkOrder(
       console.log(`[Protractor] Could not find original line items in any cached work order`);
     }
   }
+  
+  // If still no lines, try fetching from ServicePackageTemplate (canned job)
+  if (originalServicePackageLines.length === 0 && deferredItemAny.ServicePackageTemplateID) {
+    const templateId = deferredItemAny.ServicePackageTemplateID;
+    console.log(`[Protractor] Trying to fetch ServicePackageTemplate: ${templateId}`);
+    
+    const templateResult = await protractorFetch<any>(
+      `/ServicePackageTemplate/${templateId}`,
+      config,
+      {},
+      0,
+      shopId
+    );
+    
+    if (templateResult.ok && templateResult.data) {
+      const templateLinesRaw = templateResult.data.ServicePackageLines;
+      const templateLines = Array.isArray(templateLinesRaw) 
+        ? templateLinesRaw 
+        : (templateLinesRaw?.ItemCollection || []);
+      
+      if (templateLines.length > 0) {
+        originalServicePackageLines = templateLines;
+        console.log(`[Protractor] Found ${templateLines.length} lines from ServicePackageTemplate`);
+        templateLines.forEach((line: any, i: number) => {
+          console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+        });
+      } else {
+        console.log(`[Protractor] ServicePackageTemplate exists but has no lines`);
+      }
+    } else {
+      console.log(`[Protractor] Failed to fetch ServicePackageTemplate: ${templateResult.error}`);
+    }
+  }
 
   // Create new service package for the active work order
   // Use Chapter: "Service" and Status: "Pending" to add to active work order (NOT deferred section)
