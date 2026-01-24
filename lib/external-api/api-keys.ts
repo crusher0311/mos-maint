@@ -87,6 +87,17 @@ export function getTierConfig(tier: RateLimitTier): RateLimitConfig {
   return RATE_LIMIT_TIERS[tier];
 }
 
+export async function getDefaultTierForShop(shopId: number): Promise<RateLimitTier> {
+  return "standard";
+}
+
+export async function canShopUseTier(shopId: number, tier: RateLimitTier): Promise<boolean> {
+  if (tier === "standard") {
+    return true;
+  }
+  return false;
+}
+
 export async function generateApiKey(
   shopId: number,
   name: string,

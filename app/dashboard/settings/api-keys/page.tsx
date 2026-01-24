@@ -47,6 +47,7 @@ export default function ApiKeysPage() {
     professional: { requestsPerMinute: 300, requestsPerDay: 50000, burstLimit: 25 },
     enterprise: { requestsPerMinute: 1000, requestsPerDay: -1, burstLimit: 100 },
   });
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKeyResult, setNewKeyResult] = useState<{ key: string; keyPrefix: string } | null>(null);
@@ -70,6 +71,7 @@ export default function ApiKeysPage() {
         if (data.rateLimitTiers) {
           setRateLimitTiers(data.rateLimitTiers);
         }
+        setIsPlatformAdmin(data.isPlatformAdmin || false);
       }
     } catch (err) {
       console.error("Failed to fetch API keys:", err);
@@ -329,18 +331,26 @@ export default function ApiKeysPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Rate Limit Tier
                   </label>
-                  <select
-                    value={formData.rateLimitTier}
-                    onChange={(e) => setFormData({ ...formData, rateLimitTier: e.target.value as RateLimitTier })}
-                    className="w-full border rounded-lg px-3 py-2"
-                  >
-                    <option value="standard">Standard (60/min, 10K/day)</option>
-                    <option value="professional">Professional (300/min, 50K/day)</option>
-                    <option value="enterprise">Enterprise (1000/min, Unlimited/day)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Contact support to upgrade partner tier limits.
-                  </p>
+                  {isPlatformAdmin ? (
+                    <select
+                      value={formData.rateLimitTier}
+                      onChange={(e) => setFormData({ ...formData, rateLimitTier: e.target.value as RateLimitTier })}
+                      className="w-full border rounded-lg px-3 py-2"
+                    >
+                      <option value="standard">Standard (60/min, 10K/day)</option>
+                      <option value="professional">Professional (300/min, 50K/day)</option>
+                      <option value="enterprise">Enterprise (1000/min, Unlimited/day)</option>
+                    </select>
+                  ) : (
+                    <div className="w-full border rounded-lg px-3 py-2 bg-gray-50 text-gray-600">
+                      Standard (60/min, 10K/day)
+                    </div>
+                  )}
+                  {!isPlatformAdmin && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Contact support to request higher rate limits.
+                    </p>
+                  )}
                 </div>
 
                 <div>
