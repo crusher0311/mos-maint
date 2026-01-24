@@ -4,9 +4,34 @@ import { getDb } from "@/lib/mongo";
 import { fetchWorkOrderById } from "@/lib/integrations/protractor";
 import { getTekmetricWorkOrderWithMileage } from "@/lib/tekmetric";
 
-const BATCH_SIZE = 5;
-const BATCH_DELAY_MS = 2000;
-const MAX_VEHICLES_PER_REQUEST = 50;
+const BATCH_SIZE = 3; // Reduced from 5 to avoid rate limits
+const BATCH_DELAY_MS = 3000; // Increased from 2000
+const MAX_VEHICLES_PER_REQUEST = 20; // Reduced from 50 to limit API calls
+
+// In-memory cache to avoid re-checking same work orders frequently
+const recentlyCheckedOrders = new Map<string, { checkedAt: number; isClosed: boolean }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
+function getCachedResult(workOrderId: string): { isClosed: boolean } | null {
+  const cached = recentlyCheckedOrders.get(workOrderId);
+  if (cached && Date.now() - cached.checkedAt < CACHE_TTL_MS) {
+    return { isClosed: cached.isClosed };
+  }
+  return null;
+}
+
+function setCachedResult(workOrderId: string, isClosed: boolean) {
+  recentlyCheckedOrders.set(workOrderId, { checkedAt: Date.now(), isClosed });
+  // Clean up old entries periodically
+  if (recentlyCheckedOrders.size > 500) {
+    const now = Date.now();
+    for (const [key, value] of recentlyCheckedOrders) {
+      if (now - value.checkedAt > CACHE_TTL_MS) {
+        recentlyCheckedOrders.delete(key);
+      }
+    }
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
