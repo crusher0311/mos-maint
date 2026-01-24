@@ -2495,6 +2495,75 @@ export async function addDeferredWorkToWorkOrder(
       }
     } else {
       console.log(`[Protractor] No invoice history found for vehicle ServiceItemID: ${vehicleServiceItemId} - ${invoiceHistoryResult.error || 'empty result'}`);
+      
+      // Try VIN-based search as fallback - vehicle may have multiple ServiceItem records
+      console.log(`[Protractor] Trying VIN-based search fallback for invoices...`);
+      const vinSearchResult = await protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
+        `/ServiceItem/Search/${encodeURIComponent(vin)}`,
+        config,
+        {},
+        0,
+        shopId
+      );
+      
+      if (vinSearchResult.ok && vinSearchResult.data?.ItemCollection) {
+        const allVehicleRecords = vinSearchResult.data.ItemCollection.filter(
+          v => v.VIN?.toUpperCase() === vin.toUpperCase()
+        );
+        console.log(`[Protractor] Found ${allVehicleRecords.length} ServiceItem records for VIN ${vin}`);
+        
+        // Check invoices for each vehicle record (excluding the one we already checked)
+        for (const vehRecord of allVehicleRecords) {
+          if (vehRecord.ID === vehicleServiceItemId) continue; // Skip already checked
+          
+          console.log(`[Protractor] Checking invoices for alternate ServiceItemID: ${vehRecord.ID}`);
+          const altInvoiceResult = await fetchInvoicesForVehicle(shopId, vehRecord.ID);
+          
+          if (altInvoiceResult.ok && altInvoiceResult.invoices && altInvoiceResult.invoices.length > 0) {
+            console.log(`[Protractor] Found ${altInvoiceResult.invoices.length} invoices for alternate record`);
+            
+            // Search these invoices for matching service package
+            const sortedInvoices = [...altInvoiceResult.invoices].sort((a, b) => {
+              const dateA = a.InvoiceDate ? new Date(a.InvoiceDate).getTime() : 0;
+              const dateB = b.InvoiceDate ? new Date(b.InvoiceDate).getTime() : 0;
+              return dateB - dateA;
+            });
+            
+            const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const targetTitle = normalize(title);
+            const targetCode = normalize(deferredItem.Code || '');
+            
+            for (const invoice of sortedInvoices) {
+              const fullInvoiceResult = await fetchInvoiceById(shopId, invoice.ID);
+              if (!fullInvoiceResult.ok || !fullInvoiceResult.invoice) continue;
+              
+              const invoicePackagesRaw = (fullInvoiceResult.invoice as any).ServicePackages;
+              const invoicePackages = Array.isArray(invoicePackagesRaw) 
+                ? invoicePackagesRaw 
+                : (invoicePackagesRaw?.ItemCollection || []);
+              
+              for (const pkg of invoicePackages) {
+                const pkgCode = normalize(pkg.Code || '');
+                const pkgTitle = normalize(pkg.ServicePackageHeader?.Title || pkg.Title || '');
+                
+                if ((targetCode && pkgCode === targetCode) || 
+                    (targetTitle && pkgTitle.includes(targetTitle.slice(0, 15)))) {
+                  const linesRaw = pkg.ServicePackageLines;
+                  const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+                  
+                  if (lines.length > 0) {
+                    originalServicePackageLines = lines;
+                    console.log(`[Protractor] Found matching package in alternate record's invoice ${invoice.InvoiceNumber || invoice.ID} with ${lines.length} lines`);
+                    break;
+                  }
+                }
+              }
+              if (originalServicePackageLines.length > 0) break;
+            }
+          }
+          if (originalServicePackageLines.length > 0) break;
+        }
+      }
     }
   } else if (originalServicePackageLines.length === 0 && !vehicleServiceItemId) {
     console.log(`[Protractor] Cannot search invoice history - no ServiceItemID available on deferred item or work order`);
