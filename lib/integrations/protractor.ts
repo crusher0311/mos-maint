@@ -2372,6 +2372,7 @@ export async function addDeferredWorkToWorkOrder(
   // If still no lines, search the vehicle's invoice history (invoices have full ServicePackages with pricing)
   if (originalServicePackageLines.length === 0 && deferredItem.ServiceItemID) {
     console.log(`[Protractor] Searching invoice history for service package matching: "${title}" (code: ${deferredItem.Code})`);
+    console.log(`[Protractor] Vehicle ServiceItemID: ${deferredItem.ServiceItemID}`);
     
     const invoiceHistoryResult = await fetchInvoicesForVehicle(shopId, deferredItem.ServiceItemID);
     
@@ -2385,33 +2386,78 @@ export async function addDeferredWorkToWorkOrder(
         return dateB - dateA;
       });
       
+      // Helper function to normalize strings for matching
+      const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const targetTitle = normalize(title);
+      const targetCode = normalize(deferredItem.Code || '');
+      
       // Search invoices for a matching service package by code or title
       for (const invoice of sortedInvoices) {
         // Fetch full invoice details to get ServicePackages
         const fullInvoiceResult = await fetchInvoiceById(shopId, invoice.ID);
         
-        if (!fullInvoiceResult.ok || !fullInvoiceResult.invoice) continue;
+        if (!fullInvoiceResult.ok || !fullInvoiceResult.invoice) {
+          console.log(`[Protractor] Failed to fetch invoice ${invoice.ID}: ${fullInvoiceResult.error}`);
+          continue;
+        }
         
-        const invoicePackages = fullInvoiceResult.invoice.ServicePackages || [];
+        const invoicePackagesRaw = (fullInvoiceResult.invoice as any).ServicePackages;
+        const invoicePackages = Array.isArray(invoicePackagesRaw) 
+          ? invoicePackagesRaw 
+          : (invoicePackagesRaw?.ItemCollection || []);
         
-        // Look for matching service package by Code or Title
-        const matchingPackage = invoicePackages.find((pkg: any) => {
+        console.log(`[Protractor] Invoice ${invoice.InvoiceNumber || invoice.ID} has ${invoicePackages.length} packages`);
+        
+        // Look for matching service package with flexible matching
+        let matchingPackage = null;
+        let matchType = '';
+        
+        for (const pkg of invoicePackages) {
           const pkgTitle = pkg.Title || pkg.ServicePackageHeader?.Title || '';
           const pkgCode = pkg.Code || '';
-          return pkgCode === deferredItem.Code || 
-                 pkgTitle.toLowerCase() === title.toLowerCase();
-        });
+          const normalizedPkgTitle = normalize(pkgTitle);
+          const normalizedPkgCode = normalize(pkgCode);
+          
+          // Log all packages for debugging
+          console.log(`[Protractor]   Package: "${pkgTitle}" (code: ${pkgCode})`);
+          
+          // Exact code match
+          if (targetCode && normalizedPkgCode === targetCode) {
+            matchingPackage = pkg;
+            matchType = 'exact code';
+            break;
+          }
+          
+          // Exact title match
+          if (normalizedPkgTitle === targetTitle) {
+            matchingPackage = pkg;
+            matchType = 'exact title';
+            break;
+          }
+          
+          // Partial title match (title contains target or target contains title)
+          if (normalizedPkgTitle.includes(targetTitle) || targetTitle.includes(normalizedPkgTitle)) {
+            if (normalizedPkgTitle.length > 3 && targetTitle.length > 3) { // Avoid matching very short strings
+              matchingPackage = pkg;
+              matchType = 'partial title';
+              // Don't break - keep looking for better match
+            }
+          }
+        }
         
         if (matchingPackage) {
-          const lines = matchingPackage.ServicePackageLines || [];
+          const linesRaw = matchingPackage.ServicePackageLines;
+          const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
           
           if (lines.length > 0) {
             originalServicePackageLines = lines;
-            console.log(`[Protractor] Found matching package in invoice ${invoice.InvoiceNumber || invoice.ID} with ${lines.length} lines:`);
+            console.log(`[Protractor] Found matching package (${matchType}) in invoice ${invoice.InvoiceNumber || invoice.ID} with ${lines.length} lines:`);
             lines.forEach((line: any, i: number) => {
               console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:$${line.UnitPrice || 0}`);
             });
             break;
+          } else {
+            console.log(`[Protractor] Package matched but has no lines`);
           }
         }
       }
@@ -2420,55 +2466,14 @@ export async function addDeferredWorkToWorkOrder(
         console.log(`[Protractor] Could not find matching service package in any invoice`);
       }
     } else {
-      console.log(`[Protractor] No invoice history found for vehicle: ${invoiceHistoryResult.error || 'empty'}`);
+      console.log(`[Protractor] No invoice history found for vehicle ServiceItemID: ${deferredItem.ServiceItemID} - ${invoiceHistoryResult.error || 'empty result'}`);
     }
+  } else if (originalServicePackageLines.length === 0 && !deferredItem.ServiceItemID) {
+    console.log(`[Protractor] Cannot search invoice history - deferred item has no ServiceItemID`);
   }
   
-  // If still no lines, try fetching from ServicePackage/DeferredWorks endpoint with full details
-  if (originalServicePackageLines.length === 0) {
-    console.log(`[Protractor] Trying to fetch full ServicePackage from DeferredWorks endpoint for: ${deferredItem.ID}`);
-    
-    const deferredPackageResult = await protractorFetch<any>(
-      `/ServicePackage/DeferredWorks?serviceItemID=${deferredItem.ID}`,
-      config,
-      {},
-      0,
-      shopId
-    );
-    
-    if (deferredPackageResult.ok && deferredPackageResult.data) {
-      console.log(`[Protractor] DeferredWorks response keys:`, Object.keys(deferredPackageResult.data));
-      
-      // The response might be a single ServicePackage or an array
-      let servicePackage = deferredPackageResult.data;
-      if (Array.isArray(servicePackage)) {
-        servicePackage = servicePackage[0];
-      } else if (servicePackage.ItemCollection) {
-        servicePackage = servicePackage.ItemCollection[0];
-      } else if (servicePackage.ServicePackages?.ItemCollection) {
-        servicePackage = servicePackage.ServicePackages.ItemCollection[0];
-      }
-      
-      if (servicePackage) {
-        console.log(`[Protractor] ServicePackage from DeferredWorks:`, JSON.stringify(servicePackage, null, 2).substring(0, 2000));
-        
-        const linesRaw = servicePackage.ServicePackageLines;
-        const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
-        
-        if (lines.length > 0) {
-          originalServicePackageLines = lines;
-          console.log(`[Protractor] Found ${lines.length} lines from DeferredWorks endpoint`);
-          lines.forEach((line: any, i: number) => {
-            console.log(`[Protractor]   Line ${i}: ${line.Type || line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.Price || line.UnitPrice}`);
-          });
-        } else {
-          console.log(`[Protractor] DeferredWorks endpoint returned package but no lines`);
-        }
-      }
-    } else {
-      console.log(`[Protractor] Failed to fetch from DeferredWorks endpoint: ${deferredPackageResult.error}`);
-    }
-  }
+  // Note: /ServicePackage/DeferredWorks endpoint does NOT exist in Protractor API (returns 404)
+  // Skip that fallback and go straight to ServicePackageTemplate
   
   // If still no lines, try fetching from ServicePackageTemplate (canned job) - last resort
   if (originalServicePackageLines.length === 0 && deferredItemAny.ServicePackageTemplateID) {
