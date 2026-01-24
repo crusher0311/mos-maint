@@ -203,6 +203,8 @@ export function StickerDesignerCanvas({
   };
 
   const renderElementContent = (element: StickerElement) => {
+    // Use display: block (not flex) so text-overflow: ellipsis works correctly
+    // This matches the API rendering behavior
     const style: React.CSSProperties = {
       fontSize: `${element.fontSize}px`,
       fontWeight: element.fontWeight,
@@ -211,13 +213,11 @@ export function StickerDesignerCanvas({
       color: element.color,
       width: "100%",
       height: "100%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: element.textAlign === "center" ? "center" : element.textAlign === "right" ? "flex-end" : "flex-start",
+      display: "block",
       overflow: "hidden",
       whiteSpace: "nowrap",
       textOverflow: "ellipsis",
-      lineHeight: 1.2,
+      lineHeight: `${element.height}px`,
     };
 
     switch (element.type) {
