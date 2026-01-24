@@ -872,6 +872,20 @@ body {
   color: var(--gray-400);
 }
 
+.add-dropdown-item.add-primary {
+  background: var(--gray-50);
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.add-dropdown-item.add-primary:hover {
+  background: var(--gray-100);
+}
+
+.add-dropdown-item.add-primary svg {
+  color: var(--success);
+}
+
 /* ==================== Common Failures ==================== */
 .failures-source-badge {
   display: inline-flex;
