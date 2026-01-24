@@ -2369,59 +2369,58 @@ export async function addDeferredWorkToWorkOrder(
     console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - searching closed work orders...`);
   }
   
-  // If still no lines, search the vehicle's closed work orders for a service package with matching Code
-  if (originalServicePackageLines.length === 0 && deferredItem.Code) {
-    console.log(`[Protractor] Searching closed work orders for service package with code: "${deferredItem.Code}"`);
+  // If still no lines, search the vehicle's invoice history (invoices have full ServicePackages with pricing)
+  if (originalServicePackageLines.length === 0 && deferredItem.ServiceItemID) {
+    console.log(`[Protractor] Searching invoice history for service package matching: "${title}" (code: ${deferredItem.Code})`);
     
-    const cachedWorkOrders = await db.collection("protractor_work_orders").find({
-      shopId,
-      vin: vin.toUpperCase()
-    }).sort({ closedDate: -1 }).limit(20).toArray();
+    const invoiceHistoryResult = await fetchInvoicesForVehicle(shopId, deferredItem.ServiceItemID);
     
-    console.log(`[Protractor] Found ${cachedWorkOrders.length} cached work orders to search`);
-    
-    for (const cachedWo of cachedWorkOrders) {
-      const woId = cachedWo.workOrderId;
+    if (invoiceHistoryResult.ok && invoiceHistoryResult.invoices && invoiceHistoryResult.invoices.length > 0) {
+      console.log(`[Protractor] Found ${invoiceHistoryResult.invoices.length} invoices for vehicle`);
       
-      // Fetch the work order from Protractor to get service package details
-      const woResult = await protractorFetch<ProtractorWorkOrder>(
-        `/WorkOrder/${woId}`,
-        config,
-        {},
-        0,
-        shopId
-      );
+      // Sort by date descending to get most recent first
+      const sortedInvoices = [...invoiceHistoryResult.invoices].sort((a, b) => {
+        const dateA = a.InvoiceDate ? new Date(a.InvoiceDate).getTime() : 0;
+        const dateB = b.InvoiceDate ? new Date(b.InvoiceDate).getTime() : 0;
+        return dateB - dateA;
+      });
       
-      if (!woResult.ok || !woResult.data) continue;
-      
-      const woPackagesRaw = woResult.data.ServicePackages as any;
-      const woPackages = Array.isArray(woPackagesRaw) 
-        ? woPackagesRaw 
-        : (woPackagesRaw?.ItemCollection || []);
-      
-      // Look for matching service package by Code
-      const matchingPackage = woPackages.find((pkg: any) => 
-        pkg.Code === deferredItem.Code || 
-        pkg.ServicePackageHeader?.Title === title
-      );
-      
-      if (matchingPackage) {
-        const linesRaw = matchingPackage.ServicePackageLines;
-        const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+      // Search invoices for a matching service package by code or title
+      for (const invoice of sortedInvoices) {
+        // Fetch full invoice details to get ServicePackages
+        const fullInvoiceResult = await fetchInvoiceById(shopId, invoice.ID);
         
-        if (lines.length > 0) {
-          originalServicePackageLines = lines;
-          console.log(`[Protractor] Found matching package in WO ${woId} with ${lines.length} lines`);
-          lines.forEach((line: any, i: number) => {
-            console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
-          });
-          break;
+        if (!fullInvoiceResult.ok || !fullInvoiceResult.invoice) continue;
+        
+        const invoicePackages = fullInvoiceResult.invoice.ServicePackages || [];
+        
+        // Look for matching service package by Code or Title
+        const matchingPackage = invoicePackages.find((pkg: any) => {
+          const pkgTitle = pkg.Title || pkg.ServicePackageHeader?.Title || '';
+          const pkgCode = pkg.Code || '';
+          return pkgCode === deferredItem.Code || 
+                 pkgTitle.toLowerCase() === title.toLowerCase();
+        });
+        
+        if (matchingPackage) {
+          const lines = matchingPackage.ServicePackageLines || [];
+          
+          if (lines.length > 0) {
+            originalServicePackageLines = lines;
+            console.log(`[Protractor] Found matching package in invoice ${invoice.InvoiceNumber || invoice.ID} with ${lines.length} lines:`);
+            lines.forEach((line: any, i: number) => {
+              console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:$${line.UnitPrice || 0}`);
+            });
+            break;
+          }
         }
       }
-    }
-    
-    if (originalServicePackageLines.length === 0) {
-      console.log(`[Protractor] Could not find original line items in any cached work order`);
+      
+      if (originalServicePackageLines.length === 0) {
+        console.log(`[Protractor] Could not find matching service package in any invoice`);
+      }
+    } else {
+      console.log(`[Protractor] No invoice history found for vehicle: ${invoiceHistoryResult.error || 'empty'}`);
     }
   }
   
