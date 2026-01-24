@@ -565,19 +565,18 @@ function generateStickerHtmlFromLayout(
     const isImage = element.type === 'logo' || element.type === 'qrCode';
     
     // For text elements, match designer behavior exactly
+    // Note: Don't use flexbox for text - it breaks text-overflow: ellipsis
+    // Instead use line-height equal to height for vertical centering
     const textStyles = !isImage ? `
       font-size: ${element.fontSize}px;
       font-weight: ${element.fontWeight};
       font-style: ${element.fontStyle};
       text-align: ${element.textAlign};
       color: ${element.color};
-      display: flex;
-      align-items: center;
-      justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
-      line-height: 1.2;
+      line-height: ${element.height}px;
     ` : '';
     
     return `

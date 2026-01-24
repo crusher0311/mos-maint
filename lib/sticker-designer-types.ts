@@ -391,6 +391,8 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
   const newSize = getStickerSize(newSizeValue);
   const scaleX = newSize.canvasWidth / layout.canvasWidth;
   const scaleY = newSize.canvasHeight / layout.canvasHeight;
+  // Use uniform scale for fontSize to maintain proportions
+  const scale = Math.min(scaleX, scaleY);
   
   return {
     ...layout,
@@ -402,6 +404,7 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
       y: Math.round(el.y * scaleY),
       width: Math.round(el.width * scaleX),
       height: Math.round(el.height * scaleY),
+      fontSize: Math.round(el.fontSize * scale),
     })),
   };
 }
