@@ -247,15 +247,24 @@ body {
 
 .tab-btn {
   flex: 1;
-  padding: 12px 8px;
+  padding: 10px 4px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--gray-500);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.tab-btn svg {
+  flex-shrink: 0;
 }
 
 .tab-btn:hover {
@@ -265,6 +274,38 @@ body {
 .tab-btn.active {
   color: var(--primary);
   border-bottom-color: var(--primary);
+}
+
+.tab-btn.disabled {
+  color: var(--gray-300);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.tab-btn.disabled:hover {
+  color: var(--gray-300);
+}
+
+.tab-btn.disabled::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gray-800);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 100;
+}
+
+.tab-btn.disabled:hover::after {
+  opacity: 1;
 }
 
 /* ==================== Tab Content ==================== */

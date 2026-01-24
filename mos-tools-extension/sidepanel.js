@@ -8,6 +8,15 @@ let cannedJobSource = 'sms';
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
 let lookupJobsDataMap = new Map(); // Store lookup job objects by ID to avoid JSON in HTML
+let shopFeatures = {
+  maintenance: true,
+  job_lookup: false,
+  common_failures: false,
+  oil_sticker: false,
+  keytags: false,
+  auto_booking: false,
+  part_xref: false
+};
 
 // ==================== DOM ELEMENTS ====================
 const elements = {
@@ -113,7 +122,10 @@ function setupEventListeners() {
   
   // Tab navigation
   elements.tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      if (btn.classList.contains('disabled')) return;
+      switchTab(btn.dataset.tab);
+    });
   });
   
   // Canned job source tabs
@@ -235,6 +247,9 @@ function updateContext(context) {
       elements.mileageDisplay.classList.add('hidden');
     }
     
+    // Fetch features for this shop
+    fetchShopFeatures();
+    
     // Load tab data
     if (currentTab === 'plan') {
       loadPlan();
@@ -246,6 +261,57 @@ function updateContext(context) {
   } else {
     elements.noContext.classList.remove('hidden');
     elements.hasContext.classList.add('hidden');
+  }
+}
+
+async function fetchShopFeatures() {
+  if (!currentContext || !currentContext.shopId) return;
+  
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
+    });
+    
+    if (result && result.features) {
+      shopFeatures = result.features;
+      updateTabAccessibility();
+    }
+  } catch (err) {
+    console.error('[MOS] Error fetching features:', err);
+  }
+}
+
+function updateTabAccessibility() {
+  const featureMap = {
+    'plan': 'maintenance',
+    'failures': 'common_failures',
+    'lookup': 'job_lookup',
+    'canned': 'job_lookup',
+    'sticker': 'oil_sticker'
+  };
+  
+  elements.tabBtns.forEach(btn => {
+    const tab = btn.dataset.tab;
+    const featureKey = featureMap[tab];
+    const hasAccess = featureKey ? shopFeatures[featureKey] : true;
+    
+    if (hasAccess) {
+      btn.classList.remove('disabled');
+      btn.removeAttribute('data-tooltip');
+    } else {
+      btn.classList.add('disabled');
+      btn.setAttribute('data-tooltip', 'Upgrade to access');
+    }
+  });
+  
+  // If current tab is disabled, switch to first available tab
+  const currentTabBtn = document.querySelector(`.tab-btn[data-tab="${currentTab}"]`);
+  if (currentTabBtn && currentTabBtn.classList.contains('disabled')) {
+    const firstAvailable = document.querySelector('.tab-btn:not(.disabled)');
+    if (firstAvailable) {
+      switchTab(firstAvailable.dataset.tab);
+    }
   }
 }
 
