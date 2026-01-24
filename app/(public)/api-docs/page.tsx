@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 const endpoints = [
   {
@@ -215,20 +216,18 @@ export default function PublicApiDocsPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
+      <header className="text-white" style={{ background: "linear-gradient(to right, #3c81c3, #2d6299)" }}>
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 font-bold text-lg">M</span>
-              </div>
+              <Image src="/mos-icon.png" alt="MOS Tools" width={40} height={40} className="rounded-lg" />
               <div>
                 <h1 className="text-xl font-bold">MOS API</h1>
-                <p className="text-blue-200 text-sm">Developer Documentation</p>
+                <p className="text-white/70 text-sm">Developer Documentation</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="bg-blue-500/30 px-3 py-1 rounded-full text-sm">v1.0</span>
+              <span className="bg-white/20 px-3 py-1 rounded-full text-sm">v1.0</span>
               <Link href="/api-docs.html" className="text-sm hover:underline">
                 Swagger UI
               </Link>
@@ -246,7 +245,7 @@ export default function PublicApiDocsPage() {
                 <li>
                   <button
                     onClick={() => setActiveSection("overview")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "overview" ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "overview" ? "bg-[#3c81c3]/10 text-[#3c81c3] font-medium" : "text-gray-600 hover:bg-gray-50"}`}
                   >
                     Overview
                   </button>
@@ -254,7 +253,7 @@ export default function PublicApiDocsPage() {
                 <li>
                   <button
                     onClick={() => setActiveSection("authentication")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "authentication" ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "authentication" ? "bg-[#3c81c3]/10 text-[#3c81c3] font-medium" : "text-gray-600 hover:bg-gray-50"}`}
                   >
                     Authentication
                   </button>
@@ -262,7 +261,7 @@ export default function PublicApiDocsPage() {
                 <li>
                   <button
                     onClick={() => setActiveSection("rate-limits")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "rate-limits" ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "rate-limits" ? "bg-[#3c81c3]/10 text-[#3c81c3] font-medium" : "text-gray-600 hover:bg-gray-50"}`}
                   >
                     Rate Limits
                   </button>
@@ -270,7 +269,7 @@ export default function PublicApiDocsPage() {
                 <li>
                   <button
                     onClick={() => setActiveSection("errors")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "errors" ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === "errors" ? "bg-[#3c81c3]/10 text-[#3c81c3] font-medium" : "text-gray-600 hover:bg-gray-50"}`}
                   >
                     Error Handling
                   </button>
@@ -285,7 +284,7 @@ export default function PublicApiDocsPage() {
                   <li key={cat.category}>
                     <button
                       onClick={() => setActiveSection(cat.category.toLowerCase())}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === cat.category.toLowerCase() ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm ${activeSection === cat.category.toLowerCase() ? "bg-[#3c81c3]/10 text-[#3c81c3] font-medium" : "text-gray-600 hover:bg-gray-50"}`}
                     >
                       {cat.category}
                     </button>
@@ -308,8 +307,8 @@ export default function PublicApiDocsPage() {
 
               <div className="grid md:grid-cols-2 gap-6 mb-8">
                 <div className="border border-gray-200 rounded-xl p-6">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-12 h-12 bg-[#3c81c3]/10 rounded-lg flex items-center justify-center mb-4">
+                    <svg className="w-6 h-6 text-[#3c81c3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                   </div>
@@ -350,7 +349,7 @@ export default function PublicApiDocsPage() {
 
               <div className="bg-gray-50 rounded-xl p-6">
                 <h3 className="font-semibold mb-4">Base URL</h3>
-                <CodeBlock code="https://your-domain.com/api/external" language="text" />
+                <CodeBlock code="https://mos.tools/api/external" language="text" />
               </div>
             </section>
           )}
@@ -367,14 +366,14 @@ export default function PublicApiDocsPage() {
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Authorization Header</h3>
                   <p className="text-gray-600 mb-3">Include your API key in the Authorization header:</p>
-                  <CodeBlock code={`curl -X GET "https://your-domain.com/api/external/vehicles/1HGBH41JXMN109186" \\
+                  <CodeBlock code={`curl -X GET "https://mos.tools/api/external/vehicles/1HGBH41JXMN109186" \\
   -H "Authorization: Bearer mos_your_api_key_here"`} />
                 </div>
 
                 <div>
                   <h3 className="text-lg font-semibold mb-3">X-API-Key Header</h3>
                   <p className="text-gray-600 mb-3">Alternatively, use the X-API-Key header:</p>
-                  <CodeBlock code={`curl -X GET "https://your-domain.com/api/external/vehicles/1HGBH41JXMN109186" \\
+                  <CodeBlock code={`curl -X GET "https://mos.tools/api/external/vehicles/1HGBH41JXMN109186" \\
   -H "X-API-Key: mos_your_api_key_here"`} />
                 </div>
 
@@ -419,11 +418,47 @@ export default function PublicApiDocsPage() {
             <section>
               <h2 className="text-3xl font-bold text-gray-900 mb-4">Rate Limits</h2>
               <p className="text-gray-600 mb-8">
-                Each API key has a configured rate limit measured in requests per minute. 
-                Rate limit information is included in response headers.
+                API rate limits protect our infrastructure and ensure fair usage for all partners.
+                Rate limit information is included in all response headers.
               </p>
 
               <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Standard Rate Limits</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-3 px-4 font-semibold">Tier</th>
+                          <th className="text-left py-3 px-4 font-semibold">Requests/Minute</th>
+                          <th className="text-left py-3 px-4 font-semibold">Requests/Day</th>
+                          <th className="text-left py-3 px-4 font-semibold">Burst Limit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-3 px-4 font-medium">Standard</td>
+                          <td className="py-3 px-4 text-gray-600">60</td>
+                          <td className="py-3 px-4 text-gray-600">10,000</td>
+                          <td className="py-3 px-4 text-gray-600">10 req/sec</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-3 px-4 font-medium">Professional</td>
+                          <td className="py-3 px-4 text-gray-600">300</td>
+                          <td className="py-3 px-4 text-gray-600">50,000</td>
+                          <td className="py-3 px-4 text-gray-600">25 req/sec</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-3 px-4 font-medium">Enterprise</td>
+                          <td className="py-3 px-4 text-gray-600">1,000</td>
+                          <td className="py-3 px-4 text-gray-600">Unlimited</td>
+                          <td className="py-3 px-4 text-gray-600">100 req/sec</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Response Headers</h3>
                   <div className="overflow-x-auto">
@@ -437,7 +472,7 @@ export default function PublicApiDocsPage() {
                       <tbody>
                         <tr className="border-b border-gray-100">
                           <td className="py-3 px-4"><code className="bg-gray-100 px-2 py-1 rounded">X-RateLimit-Limit</code></td>
-                          <td className="py-3 px-4 text-gray-600">Maximum requests per minute</td>
+                          <td className="py-3 px-4 text-gray-600">Maximum requests per minute for your tier</td>
                         </tr>
                         <tr className="border-b border-gray-100">
                           <td className="py-3 px-4"><code className="bg-gray-100 px-2 py-1 rounded">X-RateLimit-Remaining</code></td>
@@ -445,7 +480,11 @@ export default function PublicApiDocsPage() {
                         </tr>
                         <tr className="border-b border-gray-100">
                           <td className="py-3 px-4"><code className="bg-gray-100 px-2 py-1 rounded">X-RateLimit-Reset</code></td>
-                          <td className="py-3 px-4 text-gray-600">When the rate limit resets (ISO 8601)</td>
+                          <td className="py-3 px-4 text-gray-600">When the rate limit resets (ISO 8601 timestamp)</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-3 px-4"><code className="bg-gray-100 px-2 py-1 rounded">Retry-After</code></td>
+                          <td className="py-3 px-4 text-gray-600">Seconds to wait before retrying (on 429 responses)</td>
                         </tr>
                       </tbody>
                     </table>
@@ -454,12 +493,22 @@ export default function PublicApiDocsPage() {
 
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Rate Limit Exceeded</h3>
-                  <p className="text-gray-600 mb-3">When you exceed your rate limit, you'll receive a 429 response:</p>
+                  <p className="text-gray-600 mb-3">When you exceed your rate limit, you&apos;ll receive a 429 response:</p>
                   <CodeBlock code={{
                     error: "Rate limit exceeded",
-                    message: "Rate limit of 100 requests per minute exceeded",
+                    message: "Rate limit of 60 requests per minute exceeded",
                     retryAfter: 45
                   }} />
+                </div>
+
+                <div className="bg-[#3c81c3]/10 border border-[#3c81c3]/20 rounded-xl p-6">
+                  <h4 className="font-semibold text-[#3c81c3] mb-2">Best Practices</h4>
+                  <ul className="text-gray-700 text-sm space-y-1">
+                    <li>Implement exponential backoff when receiving 429 responses</li>
+                    <li>Cache responses when possible to reduce API calls</li>
+                    <li>Monitor your usage via the X-RateLimit headers</li>
+                    <li>Contact us if you need higher rate limits for your integration</li>
+                  </ul>
                 </div>
               </div>
             </section>
@@ -558,7 +607,7 @@ export default function PublicApiDocsPage() {
                           
                           <div className="mb-4">
                             <span className="text-sm font-medium">Required Permission: </span>
-                            <code className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">{endpoint.permission}</code>
+                            <code className="bg-[#3c81c3]/10 text-[#3c81c3] px-2 py-1 rounded text-sm">{endpoint.permission}</code>
                           </div>
 
                           {endpoint.params && (
@@ -615,10 +664,10 @@ export default function PublicApiDocsPage() {
           <div className="flex items-center justify-between">
             <p className="text-gray-500 text-sm">MOS Maintenance API Documentation</p>
             <div className="flex items-center gap-4">
-              <Link href="/api-docs.html" className="text-blue-600 hover:underline text-sm">
+              <Link href="/api-docs.html" className="text-[#3c81c3] hover:underline text-sm">
                 OpenAPI Spec
               </Link>
-              <Link href="/dashboard/settings/api-keys" className="text-blue-600 hover:underline text-sm">
+              <Link href="/dashboard/settings/api-keys" className="text-[#3c81c3] hover:underline text-sm">
                 Manage API Keys
               </Link>
             </div>
