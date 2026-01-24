@@ -318,25 +318,43 @@ const SERVICE_KEYS: Record<string, string[]> = {
   tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels"],
   // Cabin air must come before engine air to avoid false matches
   cabin_air: ["cabin air filter", "cabin filter", "pollen filter", "hvac filter", "interior air filter"],
-  engine_air: ["engine air filter", "air cleaner element", "air filter element"],
+  engine_air: [
+    "engine air filter", "air cleaner element", "air filter element",
+    "remove & replace air filter", "air filter replace", "replace air filter"
+  ],
   coolant: [
     "engine coolant", "coolant flush", "replace coolant", "cooling system", 
-    "antifreeze", "radiator flush", "drain and fill coolant"
+    "antifreeze", "radiator flush", "drain and fill coolant", "coolant service",
+    "bg coolant", "cooling system service"
   ],
-  trans_auto: ["automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid"],
+  trans_auto: [
+    "automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid",
+    "transmission service", "transmission flush", "bg automatic transmission",
+    "transmission fluid service"
+  ],
   trans_manual: ["manual transmission fluid", "manual trans fluid", "mtf fluid"],
   transfer_case: ["transfer case fluid", "transfer case flush", "transfer case oil"],
   differential: [
     "differential fluid", "differential flush", "rear differential", 
-    "front differential", "rear axle fluid", "front axle fluid"
+    "front differential", "rear axle fluid", "front axle fluid",
+    "bg differential", "diff service", "differential service", "gear oil"
   ],
   serpentine_belt: ["serpentine belt", "drive belt", "accessory belt", "v-belt", "fan belt"],
-  fuel_system: ["fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction"],
+  fuel_system: [
+    "fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction",
+    "bg fuel", "bg platinum fuel", "induction cleaning", "throttle body cleaning"
+  ],
   fuel_filter: ["fuel filter"],
   brake_pads: [
     "brake pads", "brake linings", "brake rotor", "brake pads replaced", 
     "brake lining", "disc brake", "front brakes", "rear brakes", "brake shoes"
   ],
+  brake_fluid: [
+    "brake fluid", "dot4", "dot 4", "dot3", "dot 3", "brake flush", 
+    "brake fluid service", "brake fluid change", "brake fluid flush"
+  ],
+  spark_plugs: ["spark plug", "spark plugs", "ignition tune", "tune-up", "tune up"],
+  alignment: ["wheel alignment", "alignment", "all wheel alignment", "front alignment", "rear alignment"],
   emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
   power_steering: ["power steering fluid", "power steering flush", "power steering service"],
   battery: ["battery replaced", "battery replacement", "battery/charging", "replace battery", "new battery"],
@@ -553,9 +571,34 @@ function triage({
   const triaged: TriagedItem[] = [];
   const usedDviKeys = new Set<string>();
   const usedServiceKeys = new Set<string>(); // Dedupe items with same serviceKey
+  
+  // Pre-compute deferred work service keys to match with OEM items
+  // This prevents showing both "Brake Fluid Change" (OEM) and "BG DOT4 Brake Fluid Service" (deferred)
+  const deferredServiceKeys = new Set<string>();
+  const seenDeferredTitles = new Set<string>();
+  for (const dw of protractorDeferredWork || []) {
+    const title = dw.Title 
+      || dw.ServicePackageHeader?.Title 
+      || dw.Code 
+      || dw.Description 
+      || dw.ServicePackageHeader?.Description
+      || "Deferred Service";
+    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seenDeferredTitles.has(normalizedTitle)) continue;
+    seenDeferredTitles.add(normalizedTitle);
+    
+    const serviceKey = toKeyFromName(title);
+    if (serviceKey) deferredServiceKeys.add(serviceKey);
+  }
 
   for (const o of oemItems) {
     const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
+    
+    // Skip OEM items that are covered by deferred work
+    // The deferred work is more specific (shop recommendation with pricing/parts)
+    if (deferredServiceKeys.has(serviceKey)) {
+      continue;
+    }
     
     // Skip duplicate service keys - only keep first occurrence
     // This prevents "Change engine oil" and "Replace oil filter" from both showing
@@ -671,14 +714,22 @@ function triage({
 
   // Add Protractor deferred work (shop recommendations)
   // These are services that were recommended but not performed - they're already overdue
+  // seenDeferredTitles was already built above for OEM matching - reuse it here
   for (const dw of protractorDeferredWork || []) {
-    // Title can be at root level or nested in ServicePackageHeader
     const title = dw.Title 
       || dw.ServicePackageHeader?.Title 
       || dw.Code 
       || dw.Description 
       || dw.ServicePackageHeader?.Description
       || "Deferred Service";
+    
+    // Normalize title for deduplication (already computed above, check if seen)
+    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!seenDeferredTitles.has(normalizedTitle)) {
+      continue; // Only process items that were seen in pre-computation (handles dedup)
+    }
+    // Mark as processed by removing from set (first occurrence wins)
+    seenDeferredTitles.delete(normalizedTitle);
     
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
     triaged.push({
