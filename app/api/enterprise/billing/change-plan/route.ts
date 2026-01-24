@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
       const checkoutSession = await stripe.checkout.sessions.create({
         customer_email: targetShop.email,
         payment_method_types: ["card"],
+        allow_promotion_codes: true,
         line_items: [{ price: priceId, quantity: 1 }],
         mode: "subscription",
         success_url: `${process.env.NEXT_PUBLIC_BASE_URL || "https://mosmaintenance.com"}/dashboard/enterprise/billing?success=true&shopId=${shopId}`,

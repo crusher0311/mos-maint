@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
         const sessionConfig: any = {
           customer: customerId,
           mode: "subscription",
+          allow_promotion_codes: true,
           line_items: cartItems.map(item => ({
             price: item.priceId,
             quantity: 1,
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest) {
         const sessionConfig: any = {
           customer: customerId,
           mode: "payment",
+          allow_promotion_codes: true,
           line_items: cartItems.map(item => ({
             price: item.priceId,
             quantity: 1,
@@ -155,6 +157,7 @@ export async function POST(req: NextRequest) {
     const sessionConfig: any = {
       customer: customerId,
       mode: checkoutMode,
+      allow_promotion_codes: true,
       line_items: [
         {
           price: priceId,
