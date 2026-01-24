@@ -1003,24 +1003,36 @@ async function loadCannedJobs() {
         throw new Error('No Tekmetric session. Please navigate to a repair order.');
       }
       
-      const result = await sendMessage({
-        action: 'TEKMETRIC_API_REQUEST',
-        endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
-      });
-      
-      // Handle error responses from Tekmetric API
-      if (result.error || result.success === false) {
-        throw new Error(result.error || 'Failed to load canned jobs from Tekmetric');
+      try {
+        const result = await sendMessage({
+          action: 'TEKMETRIC_API_REQUEST',
+          endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
+        });
+        
+        // Handle error responses from Tekmetric API
+        if (result.error || result.success === false) {
+          // Check for 405 error - this API may not be available
+          if (result.error && result.error.includes('405')) {
+            throw new Error('SMS Library not available for this shop. Please use MOS Enriched tab instead.');
+          }
+          throw new Error(result.error || 'Failed to load canned jobs from Tekmetric');
+        }
+        
+        const jobsArray = Array.isArray(result.content) ? result.content : (Array.isArray(result) ? result : []);
+        jobs = jobsArray.map(job => ({
+          id: job.id,
+          name: job.name,
+          description: job.description,
+          amount: job.totalAmount || 0,
+          source: 'tekmetric'
+        }));
+      } catch (err) {
+        // Handle 405 errors more gracefully
+        if (err.message && err.message.includes('405')) {
+          throw new Error('SMS Library not available for this shop. Please use MOS Enriched tab instead.');
+        }
+        throw err;
       }
-      
-      const jobsArray = Array.isArray(result.content) ? result.content : (Array.isArray(result) ? result : []);
-      jobs = jobsArray.map(job => ({
-        id: job.id,
-        name: job.name,
-        description: job.description,
-        amount: job.totalAmount || 0,
-        source: 'tekmetric'
-      }));
     } else {
       // Fetch from MOS enriched library
       const result = await sendMessage({
