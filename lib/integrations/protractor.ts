@@ -2261,6 +2261,15 @@ export async function addDeferredWorkToWorkOrder(
     ? existingPackagesRaw 
     : (existingPackagesRaw?.ItemCollection || []);
 
+  // Debug: Log work order fields to find vehicle ID
+  const woAny = existingWorkOrder as any;
+  console.log(`[Protractor] Work order fields for vehicle lookup:`, JSON.stringify({
+    ServiceItemID: existingWorkOrder.ServiceItemID,
+    ServiceItem: woAny.ServiceItem ? { ID: woAny.ServiceItem.ID, VIN: woAny.ServiceItem.VIN } : null,
+    ContactID: existingWorkOrder.ContactID,
+    allTopLevelKeys: Object.keys(existingWorkOrder).slice(0, 20)
+  }, null, 2));
+
   // Try to get service package lines from the deferred item directly, or fetch from original work order
   let originalServicePackageLines: any[] = [];
   
