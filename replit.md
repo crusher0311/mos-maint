@@ -63,3 +63,29 @@ Two SSO approaches identified for future development:
 - Partner app registration system required
 
 **Implementation Order:** SAML first (enterprise shops already have IdPs), OAuth second (partner ecosystem)
+
+## Technical Debt & Modular Architecture
+
+A comprehensive technical debt review has been completed. See **`TECHNICAL_DEBT_REVIEW.md`** for:
+- Inventory of all technical debt items with priority levels
+- Proposed modular architecture for independent integration work
+- Phased implementation plan (Foundation → Protractor → Tekmetric → AutoFlow)
+- Unified interface definition for all SMS integrations
+
+**Key Stats:** ~414,000 lines TypeScript, 244 API routes, 8 integrations
+
+**Current Issues:**
+- Monolithic integration files (protractor.ts = 2,671 lines)
+- 46 direct DB access points in integration layer
+- Inconsistent SMS adapter implementations
+- Duplicate data transformation logic
+
+**Goal:** Enable working on Tekmetric without affecting Protractor (and vice versa)
+
+## Recent Changes
+
+**January 24, 2026:**
+- Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
+- Fixed Next.js Suspense boundary issues in setup pages using dynamic imports with `ssr: false`
+- Payment-first signup flow implemented (no free trial)
+- Protractor backfill runs inline on connection with adaptive chunk sizing
