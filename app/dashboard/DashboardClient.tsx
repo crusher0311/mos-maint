@@ -744,32 +744,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     return () => clearInterval(interval);
   }, [currentPage, searchQuery, showArchived]);
 
-  useEffect(() => {
-    if (!data.user?.shopId) return;
-    
-    const checkClosedOrders = async () => {
-      try {
-        const response = await fetch('/api/vehicles/check-closed-orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shopId: data.user.shopId })
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          if (result.closed > 0) {
-            loadData(currentPage, searchQuery, showArchived);
-          }
-        }
-      } catch (err) {
-        console.error('Error checking closed orders:', err);
-      }
-    };
-
-    // Poll every 60 seconds instead of 5 to avoid hitting rate limits
-    const pollInterval = setInterval(checkClosedOrders, 60000);
-    return () => clearInterval(pollInterval);
-  }, [data.user?.shopId, currentPage, searchQuery, showArchived]);
+  // NOTE: check-closed-orders polling disabled - Protractor webhooks now handle
+  // work order status updates in real-time via /api/webhooks/protractor/[token]
+  // This eliminates the need for polling and prevents API rate limiting issues.
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
