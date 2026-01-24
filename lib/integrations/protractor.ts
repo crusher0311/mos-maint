@@ -2261,7 +2261,7 @@ export async function addDeferredWorkToWorkOrder(
     ? existingPackagesRaw 
     : (existingPackagesRaw?.ItemCollection || []);
 
-  // Try to fetch the original work order/invoice to get full service package details
+  // Try to get service package lines from the deferred item directly, or fetch from original work order
   let originalServicePackageLines: any[] = [];
   
   // Log the deferred item details for debugging
@@ -2276,7 +2276,26 @@ export async function addDeferredWorkToWorkOrder(
     allKeys: Object.keys(deferredItem)
   }, null, 2));
   
-  if (deferredItem.OriginalWorkOrderID) {
+  // First, try to get ServicePackageLines directly from the deferred item (the API sometimes includes them)
+  const deferredItemAny = deferredItem as any;
+  if (deferredItemAny.ServicePackageLines) {
+    const linesRaw = deferredItemAny.ServicePackageLines;
+    if (Array.isArray(linesRaw)) {
+      originalServicePackageLines = linesRaw;
+    } else if (linesRaw?.ItemCollection) {
+      originalServicePackageLines = linesRaw.ItemCollection;
+    }
+    
+    if (originalServicePackageLines.length > 0) {
+      console.log(`[Protractor] Found ${originalServicePackageLines.length} lines directly on deferred item`);
+      originalServicePackageLines.forEach((line: any, i: number) => {
+        console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+      });
+    }
+  }
+  
+  // If no lines found on the deferred item, try to fetch from original work order
+  if (originalServicePackageLines.length === 0 && deferredItem.OriginalWorkOrderID) {
     console.log(`[Protractor] Fetching original work order ${deferredItem.OriginalWorkOrderID} for deferred work details...`);
     
     const originalWoResult = await protractorFetch<ProtractorWorkOrder>(
@@ -2340,8 +2359,8 @@ export async function addDeferredWorkToWorkOrder(
     } else {
       console.log(`[Protractor] Failed to fetch original work order: ${originalWoResult.error}`);
     }
-  } else {
-    console.log(`[Protractor] No OriginalWorkOrderID on deferred item - cannot fetch original details`);
+  } else if (originalServicePackageLines.length === 0) {
+    console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - service will be added without line items`);
   }
 
   // Create new service package for the active work order
