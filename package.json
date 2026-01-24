@@ -21,6 +21,8 @@
     "@types/archiver": "^7.0.0",
     "@types/jsdom": "^27.0.0",
     "@types/qrcode": "^1.5.6",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-react": "^5.18.0",
     "@uppy/aws-s3": "^5.1.0",
     "@uppy/core": "^5.2.0",
     "@uppy/dashboard": "^5.1.0",
@@ -55,6 +57,9 @@
     "server-only": "^0.0.1",
     "ssh2-sftp-client": "^12.0.1",
     "stripe": "^20.1.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-dist": "^5.31.0",
+    "swagger-ui-react": "^5.31.0",
     "unzipper": "^0.12.3",
     "zod": "^4.2.1",
     "zod-validation-error": "^5.0.0"
