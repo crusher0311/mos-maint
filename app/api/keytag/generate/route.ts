@@ -233,6 +233,11 @@ function generateLegacyHtml(
           color: ${textColor};
         }
         
+        .canvas {
+          width: ${DYMO_30252.renderWidth}px;
+          height: ${DYMO_30252.renderHeight}px;
+        }
+        
         .keytag {
           width: 100%;
           height: 100%;
@@ -299,7 +304,7 @@ function generateLegacyHtml(
       </style>
     </head>
     <body>
-      <div class="keytag">
+      <div class="canvas keytag">
         <div class="left-section">
           <div class="customer-name">${escapeHtml(data.customerName.toUpperCase())}</div>
           <div class="vehicle-info">${escapeHtml(data.vehicleInfo.toUpperCase())}</div>
