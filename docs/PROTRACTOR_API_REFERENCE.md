@@ -242,3 +242,22 @@ When a customer declines brake work, the pricing is stored in `DeferredServicePa
 |------|--------|
 | `lib/job-index.ts` | Added `isDeferred` field, extracts `DeferredServicePackages` |
 | `lib/integrations/protractor.ts` | Added `findCachedJobPricing()`, uses cache instead of live API |
+| `scripts/reindex-deferred-from-cache.ts` | Re-indexes deferred jobs from stored rawPayload (no API calls) |
+
+---
+
+## Re-indexing Deferred Work
+
+If you need to re-index deferred work from historical data (e.g., after updating extraction logic), run:
+
+```bash
+npx tsx scripts/reindex-deferred-from-cache.ts
+```
+
+**What it does:**
+1. Finds all shops with Protractor work orders
+2. Queries `protractor_work_orders` for records with `rawPayload.DeferredServicePackages.ItemCollection`
+3. Extracts deferred jobs using `extractJobIndexFromWorkOrder()`
+4. Upserts to `job_index` collection with `isDeferred: true`
+
+**Key insight:** Raw invoice data is stored in `protractor_work_orders.rawPayload`, so no API calls are needed for re-indexing.
