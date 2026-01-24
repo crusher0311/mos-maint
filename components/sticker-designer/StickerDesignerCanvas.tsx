@@ -307,6 +307,7 @@ export function StickerDesignerCanvas({
             width: layout.canvasWidth,
             height: layout.canvasHeight,
             backgroundColor: layout.backgroundColor,
+            fontFamily: 'Arial, Helvetica, sans-serif',
             backgroundImage: layout.showGrid
               ? `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`
               : "none",
