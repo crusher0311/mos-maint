@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
+import { sendEmail, makeWelcomeEmail } from "@/lib/email";
+import { createHovercodeQR } from "@/lib/hovercode";
 import Stripe from "stripe";
+import crypto from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,10 +87,105 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+        const isSignupFlow = session.metadata?.signupFlow === "true";
+        const pendingId = session.metadata?.pendingId;
+        
+        if (isSignupFlow && pendingId) {
+          const pending = await db.collection("pending_signups").findOne({ pendingId });
+          
+          if (!pending) {
+            console.error(`[Stripe] Pending signup not found: ${pendingId}`);
+            break;
+          }
+          
+          if (pending.completed) {
+            console.log(`[Stripe] Pending signup ${pendingId} already completed`);
+            break;
+          }
+          
+          const shopId = pending.reservedShopId;
+          const now = new Date();
+          const billingSettings = await getBillingSettings();
+          const baseVins = billingSettings.mosProIncludedVins || 300;
+          const bonusVins = billingSettings.skipTrialBonusVins || 50;
+          const webhookToken = crypto.randomBytes(12).toString("hex");
+          
+          const shopDoc = {
+            shopId,
+            name: pending.shopName,
+            webhookToken,
+            createdAt: now,
+            updatedAt: now,
+            billing: {
+              plan: "pro",
+              status: "active",
+              vinLimit: baseVins + bonusVins,
+              stripeSubscriptionId: session.subscription,
+              stripeCustomerId: session.customer,
+              skippedTrialBonus: bonusVins,
+              updatedAt: now,
+            },
+            enabledFeatures: {
+              maintenance: true,
+              job_lookup: true,
+              common_failures: true,
+              oil_sticker: true,
+              keytags: true,
+              auto_booking: true,
+              part_xref: true,
+            },
+          };
+          
+          await db.collection("shops").insertOne(shopDoc);
+          console.log(`[Stripe] Created shop ${shopId} (${pending.shopName}) from signup`);
+          
+          const userDoc = {
+            shopId,
+            email: pending.adminEmail,
+            emailLower: pending.adminEmail,
+            role: "owner",
+            passwordHash: pending.passwordHash,
+            createdAt: now,
+            updatedAt: now,
+          };
+          
+          await db.collection("users").insertOne(userDoc);
+          console.log(`[Stripe] Created user ${pending.adminEmail} for shop ${shopId}`);
+          
+          await db.collection("pending_signups").updateOne(
+            { pendingId },
+            { $set: { completed: true, completedAt: now, shopId } }
+          );
+          
+          createHovercodeQR({ shopId, shopName: pending.shopName }).then(async (result) => {
+            if (result.success && result.hovercodeId) {
+              await db.collection("shops").updateOne(
+                { shopId },
+                { 
+                  $set: { 
+                    "stickerConfig.hovercodeQRId": result.hovercodeId,
+                    "stickerConfig.hovercodeShortUrl": result.shortUrl,
+                    "stickerConfig.hovercodeProvisionedAt": new Date(),
+                  } 
+                }
+              );
+            }
+          }).catch(() => {});
+          
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+          try {
+            const welcomeMsg = makeWelcomeEmail(pending.shopName, `${baseUrl}/login`);
+            await sendEmail({ to: pending.adminEmail, ...welcomeMsg });
+          } catch (emailErr) {
+            console.error("[Stripe] Failed to send welcome email:", emailErr);
+          }
+          
+          break;
+        }
+        
         const shopId = Number(session.metadata?.shopId);
         const plan = session.metadata?.plan || "pro";
         const skippedTrial = session.metadata?.skippedTrial === "true";
-        const bonusVins = Number(session.metadata?.bonusVins) || 0;
         
         if (shopId) {
           const updateData: Record<string, any> = {
@@ -99,11 +197,8 @@ export async function POST(req: NextRequest) {
             "billing.pendingCheckoutSessionId": null,
           };
           
-          // If they skipped trial and got bonus VINs, ensure their VIN limit is set correctly
           if (skippedTrial) {
-            // Get the billing settings to calculate total VINs based on tier
             const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
-            // Use tier-specific included VINs, fallback to default
             let baseVins = billingSettings?.defaultVinLimit || 300;
             if (plan === "starter" && billingSettings?.starterIncludedVins) {
               baseVins = billingSettings.starterIncludedVins;
@@ -118,7 +213,6 @@ export async function POST(req: NextRequest) {
             console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus} (tier: ${plan})`);
           }
           
-          // Auto-enable all features for paid shops
           updateData["enabledFeatures.maintenance"] = true;
           updateData["enabledFeatures.job_lookup"] = true;
           updateData["enabledFeatures.common_failures"] = true;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface BillingConfig {
   mosProIncludedVins: number;
@@ -15,6 +16,9 @@ interface FormData {
 }
 
 export default function SetupWizard() {
+  const searchParams = useSearchParams();
+  const wasCancelled = searchParams.get("cancelled") === "true";
+  
   const [formData, setFormData] = useState<FormData>({
     shopName: "",
     adminEmail: "",
@@ -22,7 +26,7 @@ export default function SetupWizard() {
     confirmPassword: "",
   });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(wasCancelled ? "Payment was cancelled. You can try again when ready." : "");
   const [billingConfig, setBillingConfig] = useState<BillingConfig>({
     mosProIncludedVins: 300,
     mosProPrice: 199,
