@@ -671,7 +671,12 @@ function triage({
 
   // Add Protractor deferred work (shop recommendations)
   // These are services that were recommended but not performed - they're already overdue
+  console.log(`[Plan Debug] Deferred work items: ${protractorDeferredWork?.length || 0}`);
   for (const dw of protractorDeferredWork || []) {
+    console.log(`[Plan Debug] Deferred item - ID: ${dw.ID}, Title: ${dw.Title || dw.ServicePackageHeader?.Title || dw.Code}`);
+    if (!dw.ID) {
+      console.log(`[Plan Debug] WARNING: No ID found! Keys: ${Object.keys(dw).join(', ')}`);
+    }
     // Title can be at root level or nested in ServicePackageHeader
     const title = dw.Title 
       || dw.ServicePackageHeader?.Title 
