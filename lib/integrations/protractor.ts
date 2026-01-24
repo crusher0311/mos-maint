@@ -2425,10 +2425,56 @@ export async function addDeferredWorkToWorkOrder(
     }
   }
   
-  // If still no lines, try fetching from ServicePackageTemplate (canned job)
+  // If still no lines, try fetching from ServicePackage/DeferredWorks endpoint with full details
+  if (originalServicePackageLines.length === 0) {
+    console.log(`[Protractor] Trying to fetch full ServicePackage from DeferredWorks endpoint for: ${deferredItem.ID}`);
+    
+    const deferredPackageResult = await protractorFetch<any>(
+      `/ServicePackage/DeferredWorks?serviceItemID=${deferredItem.ID}`,
+      config,
+      {},
+      0,
+      shopId
+    );
+    
+    if (deferredPackageResult.ok && deferredPackageResult.data) {
+      console.log(`[Protractor] DeferredWorks response keys:`, Object.keys(deferredPackageResult.data));
+      
+      // The response might be a single ServicePackage or an array
+      let servicePackage = deferredPackageResult.data;
+      if (Array.isArray(servicePackage)) {
+        servicePackage = servicePackage[0];
+      } else if (servicePackage.ItemCollection) {
+        servicePackage = servicePackage.ItemCollection[0];
+      } else if (servicePackage.ServicePackages?.ItemCollection) {
+        servicePackage = servicePackage.ServicePackages.ItemCollection[0];
+      }
+      
+      if (servicePackage) {
+        console.log(`[Protractor] ServicePackage from DeferredWorks:`, JSON.stringify(servicePackage, null, 2).substring(0, 2000));
+        
+        const linesRaw = servicePackage.ServicePackageLines;
+        const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+        
+        if (lines.length > 0) {
+          originalServicePackageLines = lines;
+          console.log(`[Protractor] Found ${lines.length} lines from DeferredWorks endpoint`);
+          lines.forEach((line: any, i: number) => {
+            console.log(`[Protractor]   Line ${i}: ${line.Type || line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.Price || line.UnitPrice}`);
+          });
+        } else {
+          console.log(`[Protractor] DeferredWorks endpoint returned package but no lines`);
+        }
+      }
+    } else {
+      console.log(`[Protractor] Failed to fetch from DeferredWorks endpoint: ${deferredPackageResult.error}`);
+    }
+  }
+  
+  // If still no lines, try fetching from ServicePackageTemplate (canned job) - last resort
   if (originalServicePackageLines.length === 0 && deferredItemAny.ServicePackageTemplateID) {
     const templateId = deferredItemAny.ServicePackageTemplateID;
-    console.log(`[Protractor] Trying to fetch ServicePackageTemplate: ${templateId}`);
+    console.log(`[Protractor] Trying to fetch ServicePackageTemplate (fallback): ${templateId}`);
     
     const templateResult = await protractorFetch<any>(
       `/ServicePackageTemplate/${templateId}`,
