@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { stripe, STRIPE_PRODUCTS, getBaseUrl } from "@/lib/stripe";
+import { stripe, getBaseUrl } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,10 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { priceId, plan } = await req.json();
+  const body = await req.json();
+  const { priceId, plan, product, mode: requestedMode, featureSlug } = body;
   
-  if (!priceId || !plan) {
-    return NextResponse.json({ error: "Missing priceId or plan" }, { status: 400 });
+  if (!priceId) {
+    return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
   }
 
   const db = await getDb();
@@ -47,9 +48,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const isVinPack = product?.startsWith("vin-pack-");
+    const isFeatureAddon = !!featureSlug;
+    const checkoutMode = requestedMode || (isVinPack ? "payment" : "subscription");
+
+    const sessionConfig: any = {
       customer: customerId,
-      mode: "subscription",
+      mode: checkoutMode,
       line_items: [
         {
           price: priceId,
@@ -60,15 +65,32 @@ export async function POST(req: NextRequest) {
       cancel_url: `${baseUrl}/dashboard/settings/billing?canceled=true`,
       metadata: {
         shopId: String(sess.shopId),
-        plan,
+        ...(plan && { plan }),
+        ...(product && { product }),
+        ...(featureSlug && { featureSlug }),
       },
-      subscription_data: {
+    };
+
+    if (checkoutMode === "subscription") {
+      sessionConfig.subscription_data = {
         metadata: {
           shopId: String(sess.shopId),
-          plan,
+          ...(plan && { plan }),
+          ...(featureSlug && { featureSlug }),
         },
-      },
-    });
+      };
+    }
+
+    if (checkoutMode === "payment") {
+      sessionConfig.payment_intent_data = {
+        metadata: {
+          shopId: String(sess.shopId),
+          ...(product && { product }),
+        },
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     return NextResponse.json({ url: session.url });
   } catch (error: any) {

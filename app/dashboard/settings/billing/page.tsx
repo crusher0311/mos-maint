@@ -262,13 +262,47 @@ export default function BillingSettingsPage() {
   }
 
   async function handleBuyVinPack(packSize: number, priceId: string) {
+    if (!priceId) {
+      setError("VIN pack not configured. Please contact support.");
+      return;
+    }
     setActionLoading(`vin-${packSize}`);
     setError(null);
     try {
       const res = await fetch("/api/stripe/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, product: `vin-pack-${packSize}` }),
+        body: JSON.stringify({ priceId, product: `vin-pack-${packSize}`, mode: "payment" }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || "Failed to create checkout");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleAddFeature(feature: FeatureAddon) {
+    if (!feature.stripePriceId) {
+      setError("Feature pricing not configured. Please contact support.");
+      return;
+    }
+    setActionLoading(`feature-${feature.slug}`);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          priceId: feature.stripePriceId, 
+          featureSlug: feature.slug,
+          mode: "subscription" 
+        }),
       });
       const data = await res.json();
       if (data.url) {
@@ -731,10 +765,15 @@ export default function BillingSettingsPage() {
                               </span>
                             ) : (
                               <button
-                                disabled={!feature.stripePriceId}
+                                onClick={() => handleAddFeature(feature)}
+                                disabled={!feature.stripePriceId || actionLoading === `feature-${feature.slug}`}
                                 className="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                {actionLoading === `feature-${feature.slug}` ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Plus className="w-3.5 h-3.5" />
+                                )}
                                 {feature.stripePriceId ? "Add" : "Coming Soon"}
                               </button>
                             )}
