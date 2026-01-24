@@ -2366,7 +2366,63 @@ export async function addDeferredWorkToWorkOrder(
       console.log(`[Protractor] Failed to fetch original work order: ${originalWoResult.error}`);
     }
   } else if (originalServicePackageLines.length === 0) {
-    console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - service will be added without line items`);
+    console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - searching closed work orders...`);
+  }
+  
+  // If still no lines, search the vehicle's closed work orders for a service package with matching Code
+  if (originalServicePackageLines.length === 0 && deferredItem.Code) {
+    console.log(`[Protractor] Searching closed work orders for service package with code: "${deferredItem.Code}"`);
+    
+    const cachedWorkOrders = await db.collection("protractor_work_orders").find({
+      shopId,
+      vin: vin.toUpperCase()
+    }).sort({ closedDate: -1 }).limit(20).toArray();
+    
+    console.log(`[Protractor] Found ${cachedWorkOrders.length} cached work orders to search`);
+    
+    for (const cachedWo of cachedWorkOrders) {
+      const woId = cachedWo.workOrderId;
+      
+      // Fetch the work order from Protractor to get service package details
+      const woResult = await protractorFetch<ProtractorWorkOrder>(
+        `/WorkOrder/${woId}`,
+        config,
+        {},
+        0,
+        shopId
+      );
+      
+      if (!woResult.ok || !woResult.data) continue;
+      
+      const woPackagesRaw = woResult.data.ServicePackages as any;
+      const woPackages = Array.isArray(woPackagesRaw) 
+        ? woPackagesRaw 
+        : (woPackagesRaw?.ItemCollection || []);
+      
+      // Look for matching service package by Code
+      const matchingPackage = woPackages.find((pkg: any) => 
+        pkg.Code === deferredItem.Code || 
+        pkg.ServicePackageHeader?.Title === title
+      );
+      
+      if (matchingPackage) {
+        const linesRaw = matchingPackage.ServicePackageLines;
+        const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+        
+        if (lines.length > 0) {
+          originalServicePackageLines = lines;
+          console.log(`[Protractor] Found matching package in WO ${woId} with ${lines.length} lines`);
+          lines.forEach((line: any, i: number) => {
+            console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+          });
+          break;
+        }
+      }
+    }
+    
+    if (originalServicePackageLines.length === 0) {
+      console.log(`[Protractor] Could not find original line items in any cached work order`);
+    }
   }
 
   // Create new service package for the active work order
