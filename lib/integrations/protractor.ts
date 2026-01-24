@@ -677,6 +677,122 @@ export async function fetchInvoicesForVehicle(
   return { ok: true, invoices };
 }
 
+/**
+ * Search job_index (MongoDB) for historical job pricing instead of making live API calls.
+ * This uses data already backfilled from Protractor invoices.
+ */
+export async function findCachedJobPricing(
+  shopId: number,
+  options: {
+    serviceItemId?: string;
+    vin?: string;
+    jobTitle?: string;
+    jobCode?: string;
+  }
+): Promise<{
+  found: boolean;
+  lines?: Array<{
+    lineType: string;
+    description: string;
+    partNumber?: string;
+    manufacturer?: string;
+    quantity: number;
+    unitPrice: number;
+    extendedPrice: number;
+  }>;
+  source?: string;
+  workOrderNumber?: number;
+  performedAt?: Date;
+}> {
+  const db = await getDb();
+  
+  const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const targetTitle = options.jobTitle ? normalize(options.jobTitle) : '';
+  const targetCode = options.jobCode ? normalize(options.jobCode) : '';
+  
+  // Build query - search by serviceItemId OR VIN
+  const orConditions: any[] = [];
+  if (options.serviceItemId) {
+    orConditions.push({ 'vehicle.serviceItemId': options.serviceItemId });
+  }
+  if (options.vin) {
+    orConditions.push({ 'vehicle.vin': options.vin.toUpperCase() });
+    orConditions.push({ 'vehicle.vin': options.vin.toLowerCase() });
+  }
+  
+  if (orConditions.length === 0) {
+    console.log(`[Protractor Cache] No serviceItemId or VIN provided for job lookup`);
+    return { found: false };
+  }
+  
+  // Query job_index for this vehicle's history
+  const jobs = await db.collection('job_index').find({
+    shopId,
+    $or: orConditions,
+  }).sort({ performedAt: -1 }).limit(100).toArray();
+  
+  console.log(`[Protractor Cache] Found ${jobs.length} cached jobs for vehicle (shopId: ${shopId}, serviceItemId: ${options.serviceItemId || 'N/A'}, vin: ${options.vin || 'N/A'})`);
+  
+  if (jobs.length === 0) {
+    return { found: false };
+  }
+  
+  // Search for matching job by code or title
+  for (const job of jobs) {
+    const jobTitle = job.job?.title || '';
+    const jobCode = job.job?.code || '';
+    const normalizedJobTitle = normalize(jobTitle);
+    const normalizedJobCode = normalize(jobCode);
+    
+    let matched = false;
+    let matchType = '';
+    
+    // Exact code match
+    if (targetCode && normalizedJobCode === targetCode) {
+      matched = true;
+      matchType = 'exact code';
+    }
+    // Exact title match
+    else if (targetTitle && normalizedJobTitle === targetTitle) {
+      matched = true;
+      matchType = 'exact title';
+    }
+    // Partial title match
+    else if (targetTitle && targetTitle.length > 5 && 
+             (normalizedJobTitle.includes(targetTitle.slice(0, 15)) || 
+              targetTitle.includes(normalizedJobTitle.slice(0, 15)))) {
+      matched = true;
+      matchType = 'partial title';
+    }
+    
+    if (matched && job.lines && job.lines.length > 0) {
+      console.log(`[Protractor Cache] Found matching job (${matchType}): "${jobTitle}" with ${job.lines.length} lines from WO#${job.workOrderNumber}`);
+      
+      // Convert cached lines to Protractor format
+      const protractorLines = job.lines.map((line: any) => ({
+        lineType: line.lineType === 'labor' ? 'Labor' : 'Material',
+        description: line.description,
+        partNumber: line.partNumber,
+        manufacturer: line.manufacturer,
+        quantity: line.quantity || 1,
+        unitPrice: line.unitPrice || 0,
+        extendedPrice: line.extendedPrice || 0,
+      }));
+      
+      return {
+        found: true,
+        lines: protractorLines,
+        source: `cached from WO#${job.workOrderNumber}`,
+        workOrderNumber: job.workOrderNumber,
+        performedAt: job.performedAt,
+      };
+    }
+  }
+  
+  console.log(`[Protractor Cache] No matching job found for "${options.jobTitle}" (code: ${options.jobCode})`);
+  return { found: false };
+}
+
 export async function fetchDeferredWork(
   shopId: number,
   serviceItemId: string,
@@ -2395,180 +2511,44 @@ export async function addDeferredWorkToWorkOrder(
     console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - searching closed work orders...`);
   }
   
-  // If still no lines, search the vehicle's invoice history (invoices have full ServicePackages with pricing)
+  // If still no lines, search the vehicle's job history from CACHED data (job_index)
+  // This uses already-backfilled invoice data instead of making live API calls
   // Use vehicle ServiceItemID from deferred item OR from the work order we're adding to
   // Note: Work order has ServiceItem.ID (nested), not ServiceItemID (flat)
   const vehicleServiceItemId = deferredItem.ServiceItemID || existingWorkOrder.ServiceItemID || woAny.ServiceItem?.ID;
   
-  if (originalServicePackageLines.length === 0 && vehicleServiceItemId) {
-    console.log(`[Protractor] Searching invoice history for service package matching: "${title}" (code: ${deferredItem.Code})`);
-    console.log(`[Protractor] Vehicle ServiceItemID: ${vehicleServiceItemId} (source: ${deferredItem.ServiceItemID ? 'deferred item' : 'work order'})`);
+  if (originalServicePackageLines.length === 0) {
+    console.log(`[Protractor] Searching cached job history for service package matching: "${title}" (code: ${deferredItem.Code})`);
+    console.log(`[Protractor] Vehicle ServiceItemID: ${vehicleServiceItemId || 'N/A'}, VIN: ${vin}`);
     
-    const invoiceHistoryResult = await fetchInvoicesForVehicle(shopId, vehicleServiceItemId);
+    // Use cached job_index data instead of live API calls
+    const cachedResult = await findCachedJobPricing(shopId, {
+      serviceItemId: vehicleServiceItemId,
+      vin: vin,
+      jobTitle: title,
+      jobCode: deferredItem.Code,
+    });
     
-    if (invoiceHistoryResult.ok && invoiceHistoryResult.invoices && invoiceHistoryResult.invoices.length > 0) {
-      console.log(`[Protractor] Found ${invoiceHistoryResult.invoices.length} invoices for vehicle`);
+    if (cachedResult.found && cachedResult.lines && cachedResult.lines.length > 0) {
+      console.log(`[Protractor] Using cached pricing (${cachedResult.source}) with ${cachedResult.lines.length} lines:`);
       
-      // Sort by date descending to get most recent first
-      const sortedInvoices = [...invoiceHistoryResult.invoices].sort((a, b) => {
-        const dateA = a.InvoiceDate ? new Date(a.InvoiceDate).getTime() : 0;
-        const dateB = b.InvoiceDate ? new Date(b.InvoiceDate).getTime() : 0;
-        return dateB - dateA;
+      // Convert cached lines to Protractor ServicePackageLine format
+      originalServicePackageLines = cachedResult.lines.map((line, i) => {
+        console.log(`[Protractor]   Line ${i}: ${line.lineType} - "${line.description}" Qty:${line.quantity} Price:$${line.unitPrice}`);
+        return {
+          Type: line.lineType === 'Labor' ? 'Labor' : 'Material',
+          Description: line.description,
+          PartNumber: line.partNumber || '',
+          Manufacturer: line.manufacturer || '',
+          Quantity: line.quantity,
+          Price: line.unitPrice,
+          Total: line.extendedPrice,
+          ExtendedTotal: line.extendedPrice,
+        };
       });
-      
-      // Helper function to normalize strings for matching
-      const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const targetTitle = normalize(title);
-      const targetCode = normalize(deferredItem.Code || '');
-      
-      // Search invoices for a matching service package by code or title
-      for (const invoice of sortedInvoices) {
-        // Fetch full invoice details to get ServicePackages
-        const fullInvoiceResult = await fetchInvoiceById(shopId, invoice.ID);
-        
-        if (!fullInvoiceResult.ok || !fullInvoiceResult.invoice) {
-          console.log(`[Protractor] Failed to fetch invoice ${invoice.ID}: ${fullInvoiceResult.error}`);
-          continue;
-        }
-        
-        const invoicePackagesRaw = (fullInvoiceResult.invoice as any).ServicePackages;
-        const invoicePackages = Array.isArray(invoicePackagesRaw) 
-          ? invoicePackagesRaw 
-          : (invoicePackagesRaw?.ItemCollection || []);
-        
-        console.log(`[Protractor] Invoice ${invoice.InvoiceNumber || invoice.ID} has ${invoicePackages.length} packages`);
-        
-        // Look for matching service package with flexible matching
-        let matchingPackage = null;
-        let matchType = '';
-        
-        for (const pkg of invoicePackages) {
-          const pkgTitle = pkg.Title || pkg.ServicePackageHeader?.Title || '';
-          const pkgCode = pkg.Code || '';
-          const normalizedPkgTitle = normalize(pkgTitle);
-          const normalizedPkgCode = normalize(pkgCode);
-          
-          // Log all packages for debugging
-          console.log(`[Protractor]   Package: "${pkgTitle}" (code: ${pkgCode})`);
-          
-          // Exact code match
-          if (targetCode && normalizedPkgCode === targetCode) {
-            matchingPackage = pkg;
-            matchType = 'exact code';
-            break;
-          }
-          
-          // Exact title match
-          if (normalizedPkgTitle === targetTitle) {
-            matchingPackage = pkg;
-            matchType = 'exact title';
-            break;
-          }
-          
-          // Partial title match (title contains target or target contains title)
-          if (normalizedPkgTitle.includes(targetTitle) || targetTitle.includes(normalizedPkgTitle)) {
-            if (normalizedPkgTitle.length > 3 && targetTitle.length > 3) { // Avoid matching very short strings
-              matchingPackage = pkg;
-              matchType = 'partial title';
-              // Don't break - keep looking for better match
-            }
-          }
-        }
-        
-        if (matchingPackage) {
-          const linesRaw = matchingPackage.ServicePackageLines;
-          const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
-          
-          if (lines.length > 0) {
-            originalServicePackageLines = lines;
-            console.log(`[Protractor] Found matching package (${matchType}) in invoice ${invoice.InvoiceNumber || invoice.ID} with ${lines.length} lines:`);
-            lines.forEach((line: any, i: number) => {
-              console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:$${line.UnitPrice || 0}`);
-            });
-            break;
-          } else {
-            console.log(`[Protractor] Package matched but has no lines`);
-          }
-        }
-      }
-      
-      if (originalServicePackageLines.length === 0) {
-        console.log(`[Protractor] Could not find matching service package in any invoice`);
-      }
     } else {
-      console.log(`[Protractor] No invoice history found for vehicle ServiceItemID: ${vehicleServiceItemId} - ${invoiceHistoryResult.error || 'empty result'}`);
-      
-      // Try VIN-based search as fallback - vehicle may have multiple ServiceItem records
-      console.log(`[Protractor] Trying VIN-based search fallback for invoices...`);
-      const vinSearchResult = await protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
-        `/ServiceItem/Search/${encodeURIComponent(vin)}`,
-        config,
-        {},
-        0,
-        shopId
-      );
-      
-      if (vinSearchResult.ok && vinSearchResult.data?.ItemCollection) {
-        const allVehicleRecords = vinSearchResult.data.ItemCollection.filter(
-          v => v.VIN?.toUpperCase() === vin.toUpperCase()
-        );
-        console.log(`[Protractor] Found ${allVehicleRecords.length} ServiceItem records for VIN ${vin}`);
-        
-        // Check invoices for each vehicle record (excluding the one we already checked)
-        for (const vehRecord of allVehicleRecords) {
-          if (vehRecord.ID === vehicleServiceItemId) continue; // Skip already checked
-          
-          console.log(`[Protractor] Checking invoices for alternate ServiceItemID: ${vehRecord.ID}`);
-          const altInvoiceResult = await fetchInvoicesForVehicle(shopId, vehRecord.ID);
-          
-          if (altInvoiceResult.ok && altInvoiceResult.invoices && altInvoiceResult.invoices.length > 0) {
-            console.log(`[Protractor] Found ${altInvoiceResult.invoices.length} invoices for alternate record`);
-            
-            // Search these invoices for matching service package
-            const sortedInvoices = [...altInvoiceResult.invoices].sort((a, b) => {
-              const dateA = a.InvoiceDate ? new Date(a.InvoiceDate).getTime() : 0;
-              const dateB = b.InvoiceDate ? new Date(b.InvoiceDate).getTime() : 0;
-              return dateB - dateA;
-            });
-            
-            const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const targetTitle = normalize(title);
-            const targetCode = normalize(deferredItem.Code || '');
-            
-            for (const invoice of sortedInvoices) {
-              const fullInvoiceResult = await fetchInvoiceById(shopId, invoice.ID);
-              if (!fullInvoiceResult.ok || !fullInvoiceResult.invoice) continue;
-              
-              const invoicePackagesRaw = (fullInvoiceResult.invoice as any).ServicePackages;
-              const invoicePackages = Array.isArray(invoicePackagesRaw) 
-                ? invoicePackagesRaw 
-                : (invoicePackagesRaw?.ItemCollection || []);
-              
-              for (const pkg of invoicePackages) {
-                const pkgCode = normalize(pkg.Code || '');
-                const pkgTitle = normalize(pkg.ServicePackageHeader?.Title || pkg.Title || '');
-                
-                if ((targetCode && pkgCode === targetCode) || 
-                    (targetTitle && pkgTitle.includes(targetTitle.slice(0, 15)))) {
-                  const linesRaw = pkg.ServicePackageLines;
-                  const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
-                  
-                  if (lines.length > 0) {
-                    originalServicePackageLines = lines;
-                    console.log(`[Protractor] Found matching package in alternate record's invoice ${invoice.InvoiceNumber || invoice.ID} with ${lines.length} lines`);
-                    break;
-                  }
-                }
-              }
-              if (originalServicePackageLines.length > 0) break;
-            }
-          }
-          if (originalServicePackageLines.length > 0) break;
-        }
-      }
+      console.log(`[Protractor] No cached job pricing found for "${title}"`);
     }
-  } else if (originalServicePackageLines.length === 0 && !vehicleServiceItemId) {
-    console.log(`[Protractor] Cannot search invoice history - no ServiceItemID available on deferred item or work order`);
   }
   
   // Note: /ServicePackage/DeferredWorks endpoint does NOT exist in Protractor API (returns 404)
