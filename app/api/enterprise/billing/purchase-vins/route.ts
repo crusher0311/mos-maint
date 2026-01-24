@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
       customer: targetShop.stripeCustomerId || undefined,
       customer_email: targetShop.stripeCustomerId ? undefined : targetShop.email,
       payment_method_types: ["card"],
+      allow_promotion_codes: true,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "payment",
       success_url: `${process.env.NEXT_PUBLIC_BASE_URL || "https://mosmaintenance.com"}/dashboard/enterprise/billing?success=true&shopId=${shopId}&vins=${packSize}`,
