@@ -124,20 +124,6 @@ export default async function IntervalsPage() {
     revalidatePath("/dashboard/vehicles/[vin]/plan");
   }
 
-  async function resetToDefaults() {
-    "use server";
-    const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $unset: { "maintenance.intervals": "" },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    revalidatePath("/dashboard/settings/intervals");
-    revalidatePath("/dashboard/vehicles/[vin]/plan");
-  }
-
   return (
     <main className="p-6 space-y-6 max-w-4xl">
       <IntervalsHeader />
@@ -159,7 +145,6 @@ export default async function IntervalsPage() {
         intervals={intervals} 
         distanceUnit={distanceUnit}
         saveAction={saveIntervals}
-        resetAction={resetToDefaults}
       />
     </main>
   );

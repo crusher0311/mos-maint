@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Wrench, RotateCcw, Save, Check } from "lucide-react";
+import { Wrench, Save, Check } from "lucide-react";
 import type { ShopInterval } from "./page";
 
 type Props = {
   intervals: ShopInterval[];
   distanceUnit: "miles" | "kilometers";
   saveAction: (formData: FormData) => Promise<void>;
-  resetAction: () => Promise<void>;
 };
 
 const MILES_TO_KM = 1.60934;
@@ -18,9 +17,8 @@ function convertMilesToKm(miles: number | null): number | null {
   return Math.round(miles * MILES_TO_KM);
 }
 
-export default function IntervalsForm({ intervals, distanceUnit, saveAction, resetAction }: Props) {
+export default function IntervalsForm({ intervals, distanceUnit, saveAction }: Props) {
   const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -32,14 +30,6 @@ export default function IntervalsForm({ intervals, distanceUnit, saveAction, res
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleReset = async () => {
-    if (!confirm("Reset all intervals to OEM defaults? This will clear all your custom settings.")) return;
-    setResetting(true);
-    await resetAction();
-    setResetting(false);
-    window.location.reload();
   };
 
   const distanceLabel = distanceUnit === "kilometers" ? "KM" : "Miles";
@@ -54,17 +44,6 @@ export default function IntervalsForm({ intervals, distanceUnit, saveAction, res
             <Wrench className="w-5 h-5 text-gray-500" />
             Service Intervals
           </h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={resetting}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1.5"
-            >
-              <RotateCcw className={`w-4 h-4 ${resetting ? "animate-spin" : ""}`} />
-              Reset to OEM
-            </button>
-          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -85,9 +64,6 @@ export default function IntervalsForm({ intervals, distanceUnit, saveAction, res
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
                   Months
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-                  OEM Default
                 </th>
               </tr>
             </thead>
@@ -140,11 +116,6 @@ function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopI
   const displayDefaultDistance = distanceUnit === "kilometers"
     ? convertMilesToKm(interval.defaultMiles)
     : interval.defaultMiles;
-
-  const defaultDisplay = [
-    displayDefaultDistance ? `${displayDefaultDistance.toLocaleString()} ${distanceAbbr}` : null,
-    interval.defaultMonths ? `${interval.defaultMonths} mo` : null,
-  ].filter(Boolean).join(" / ") || "—";
 
   const isDisabled = excluded || !useShop;
   const rowClass = excluded ? "bg-red-50" : useShop ? "bg-green-50" : "";
@@ -208,9 +179,6 @@ function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopI
               : "border-gray-300 bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500"
           }`}
         />
-      </td>
-      <td className="px-4 py-3 text-center text-sm text-gray-500">
-        {defaultDisplay}
       </td>
     </tr>
   );
