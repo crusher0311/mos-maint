@@ -8,14 +8,6 @@ interface Shop {
   name: string;
   hovercodeQRId?: string;
   locationIdentifier?: string;
-  integrationDetails?: {
-    protractor?: {
-      locationName?: string;
-      shortName?: string;
-      address?: string;
-      phone?: string;
-    } | null;
-  };
 }
 
 export default function HovercodePage() {
@@ -41,7 +33,6 @@ export default function HovercodePage() {
           name: shop.name || `Shop ${shop.shopId}`,
           hovercodeQRId: shop.stickerConfig?.hovercodeQRId || "",
           locationIdentifier: shop.locationIdentifier || null,
-          integrationDetails: shop.integrationDetails || null,
         }));
         setShops(shopsWithQR);
       }
@@ -181,10 +172,7 @@ export default function HovercodePage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{shop.name}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {shop.integrationDetails?.protractor?.address || 
-                     shop.integrationDetails?.protractor?.shortName || 
-                     shop.locationIdentifier || 
-                     <span className="text-gray-400 italic">-</span>}
+                    {shop.locationIdentifier || <span className="text-gray-400 italic">-</span>}
                   </td>
                   <td className="px-4 py-3">
                     {editingShopId === shop.shopId ? (
