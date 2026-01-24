@@ -121,6 +121,7 @@ interface StickerConfig {
   appointmentUrl?: string;
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
+  defaultOilType?: "diesel" | "euro" | "synthetic" | "conventional";
   hovercodeQRId?: string;
   cachedQrCodeDataUri?: string;
   designerLayout?: DesignerLayout;
@@ -212,6 +213,7 @@ export async function PUT(req: NextRequest) {
       "appointmentUrl",
       "useKilometers",
       "intervals",
+      "defaultOilType",
       "hovercodeQRId",
       "cachedQrCodeDataUri",
       "designerLayout",

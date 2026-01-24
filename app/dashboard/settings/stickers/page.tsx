@@ -31,6 +31,7 @@ interface StickerDataConfig {
   appointmentUrl: string;
   useKilometers: boolean;
   intervals: IntervalsConfig;
+  defaultOilType: keyof IntervalsConfig;
   designerLayout?: StickerLayout;
 }
 
@@ -70,6 +71,7 @@ const DEFAULT_CONFIG: StickerDataConfig = {
   appointmentUrl: "",
   useKilometers: false,
   intervals: DEFAULT_INTERVALS,
+  defaultOilType: "synthetic",
 };
 
 export default function StickerSettingsPage() {
@@ -131,6 +133,7 @@ export default function StickerSettingsPage() {
               synthetic: data.config.intervals?.synthetic ?? DEFAULT_INTERVALS.synthetic,
               conventional: data.config.intervals?.conventional ?? DEFAULT_INTERVALS.conventional,
             },
+            defaultOilType: data.config.defaultOilType ?? DEFAULT_CONFIG.defaultOilType,
           };
           setConfig(fetchedConfig);
           setCurrentSize(fetchedConfig.defaultSize);
@@ -605,9 +608,15 @@ export default function StickerSettingsPage() {
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
               {OIL_TYPES.map((oilType) => {
                 const interval = config.intervals?.[oilType.key] ?? DEFAULT_INTERVALS[oilType.key];
+                const isDefault = config.defaultOilType === oilType.key;
                 return (
-                  <div key={oilType.key} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="font-medium text-gray-900 text-sm mb-2">{oilType.label}</div>
+                  <div key={oilType.key} className={`p-3 rounded-lg border-2 transition-colors ${isDefault ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-transparent"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium text-gray-900 text-sm">{oilType.label}</div>
+                      {isDefault && (
+                        <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded">Default</span>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       <div>
                         <label className="block text-xs text-gray-600">{config.useKilometers ? "km" : "Miles"}</label>
@@ -631,6 +640,16 @@ export default function StickerSettingsPage() {
                           max={24}
                         />
                       </div>
+                      <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="defaultOilType"
+                          checked={isDefault}
+                          onChange={() => setConfig(prev => ({ ...prev, defaultOilType: oilType.key }))}
+                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-600">Set as default</span>
+                      </label>
                     </div>
                   </div>
                 );

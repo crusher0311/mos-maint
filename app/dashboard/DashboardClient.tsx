@@ -496,10 +496,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             usePredictiveDate = true;
           }
           
-          // Use synthetic oil as default interval (most common)
-          if (intervals?.synthetic) {
+          // Use shop's configured default oil type (or fall back to synthetic)
+          const defaultOilType = config?.defaultOilType || 'synthetic';
+          if (intervals?.[defaultOilType]) {
+            intervalMileage = intervals[defaultOilType].mileage || 5000;
+            intervalMonths = intervals[defaultOilType].months || 6;
+          } else if (intervals?.synthetic) {
             intervalMileage = intervals.synthetic.mileage || 5000;
-            intervalMonths = intervals.synthetic.months || 3;
+            intervalMonths = intervals.synthetic.months || 6;
           } else if (intervals?.conventional) {
             intervalMileage = intervals.conventional.mileage || 3000;
             intervalMonths = intervals.conventional.months || 3;
