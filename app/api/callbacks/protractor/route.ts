@@ -25,7 +25,49 @@ async function checkRateLimit(db: Db, connectionId: string): Promise<{ allowed: 
 
 export async function POST(request: NextRequest) {
   try {
-    const payload = await request.json();
+    const contentType = request.headers.get("content-type") || "";
+    console.log("[Protractor Callback] Content-Type:", contentType);
+    
+    let payload: any = {};
+    
+    // Handle different content types
+    if (contentType.includes("application/json")) {
+      payload = await request.json();
+    } else if (contentType.includes("application/x-www-form-urlencoded")) {
+      const formData = await request.formData();
+      formData.forEach((value, key) => {
+        payload[key] = value;
+      });
+    } else if (contentType.includes("text/")) {
+      const text = await request.text();
+      console.log("[Protractor Callback] Raw text:", text.slice(0, 500));
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = { rawText: text };
+      }
+    } else {
+      // Try to read as text and parse
+      const text = await request.text();
+      console.log("[Protractor Callback] Raw body:", text.slice(0, 500));
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        // Try URL params
+        const params = new URLSearchParams(text);
+        params.forEach((value, key) => {
+          payload[key] = value;
+        });
+      }
+    }
+    
+    // Also capture query params
+    const url = new URL(request.url);
+    url.searchParams.forEach((value, key) => {
+      if (!payload[key]) {
+        payload[key] = value;
+      }
+    });
     
     console.log("[Protractor Callback] Received:", JSON.stringify(payload).slice(0, 500));
 
