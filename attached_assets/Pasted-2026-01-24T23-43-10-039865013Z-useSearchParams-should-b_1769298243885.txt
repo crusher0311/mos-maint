@@ -1,0 +1,50 @@
+2026-01-24T23:43:10.039865013Z  ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/setup/complete". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+2026-01-24T23:43:10.039895593Z     at o (/opt/render/project/src/.next/server/chunks/4471.js:1:10524)
+2026-01-24T23:43:10.039902084Z     at d (/opt/render/project/src/.next/server/chunks/4471.js:1:21430)
+2026-01-24T23:43:10.039905184Z     at c (/opt/render/project/src/.next/server/app/setup/complete/page.js:1:2775)
+2026-01-24T23:43:10.039910054Z     at nj (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46251)
+2026-01-24T23:43:10.039912914Z     at nM (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47571)
+2026-01-24T23:43:10.039915524Z     at nN (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+2026-01-24T23:43:10.039918034Z     at nI (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47010)
+2026-01-24T23:43:10.039920504Z     at nM (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47717)
+2026-01-24T23:43:10.039922914Z     at nM (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:61546)
+2026-01-24T23:43:10.039925465Z     at nN (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+2026-01-24T23:43:10.039927725Z 
+2026-01-24T23:43:10.039931245Z Error occurred prerendering page "/setup/complete". Read more: https://nextjs.org/docs/messages/prerender-error
+2026-01-24T23:43:10.039933375Z 
+2026-01-24T23:43:10.106704977Z    Generating static pages (132/177) 
+2026-01-24T23:43:10.200880429Z Error fetching user shops: n [Error]: Dynamic server usage: Route /api/user/shops couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T23:43:10.200910009Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T23:43:10.200913909Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T23:43:10.20091695Z     at l (/opt/render/project/src/.next/server/app/api/auth/me/route.js:1:2431)
+2026-01-24T23:43:10.20092059Z     at c (/opt/render/project/src/.next/server/app/api/user/shops/route.js:1:955)
+2026-01-24T23:43:10.20094134Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T23:43:10.200944601Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T23:43:10.200948221Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T23:43:10.200951121Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T23:43:10.200954051Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+2026-01-24T23:43:10.200957401Z     at ProxyTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+2026-01-24T23:43:10.200961641Z   description: "Route /api/user/shops couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T23:43:10.200965471Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T23:43:10.200968071Z }
+2026-01-24T23:43:10.302252437Z [AutoVitals Extension] Download error: n [Error]: Dynamic server usage: Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T23:43:10.302281078Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T23:43:10.302285388Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T23:43:10.302289068Z     at a (/opt/render/project/src/.next/server/app/api/admin/billing/sync-stripe/route.js:1:2339)
+2026-01-24T23:43:10.302292358Z     at d (/opt/render/project/src/.next/server/app/api/admin/billing/sync-stripe/route.js:1:2897)
+2026-01-24T23:43:10.30233748Z     at p (/opt/render/project/src/.next/server/app/api/autovitals/extension/download/route.js:1:1936)
+2026-01-24T23:43:10.30234783Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T23:43:10.3023516Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T23:43:10.30235522Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T23:43:10.30235808Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T23:43:10.30236203Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093) {
+2026-01-24T23:43:10.30236565Z   description: "Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T23:43:10.302369501Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T23:43:10.302372281Z }
+2026-01-24T23:43:10.636084929Z ⚠️ Environment validation failed, using defaults
+2026-01-24T23:43:10.636174211Z  ✓ Generating static pages (177/177)
+2026-01-24T23:43:10.778806028Z 
+2026-01-24T23:43:10.77888386Z > Export encountered errors on following paths:
+2026-01-24T23:43:10.77888904Z 	/setup/complete/page: /setup/complete
+2026-01-24T23:43:10.984957643Z ==> Build failed 😞
+2026-01-24T23:43:10.984973564Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
