@@ -108,6 +108,11 @@ function normalizeServiceTitle(title: string): string {
 
 type IntegrationType = "protractor" | "tekmetric";
 
+type MatchedDeferred = {
+  id: string;
+  title: string;
+};
+
 type Props = {
   vin: string;
   serviceTitle: string;
@@ -123,6 +128,7 @@ type Props = {
   allCannedJobs?: CannedJobOption[]; // Fallback when no mapped options
   integration?: IntegrationType;
   protractorDeferredId?: string;
+  matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
 };
 
 export function AddToROWithHistory({
@@ -140,6 +146,7 @@ export function AddToROWithHistory({
   allCannedJobs = [],
   integration = "protractor",
   protractorDeferredId,
+  matchedDeferred,
 }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -282,8 +289,9 @@ export function AddToROWithHistory({
     }
   }
 
-  async function handleAddDeferred() {
-    if (!protractorDeferredId || !workOrderGuid) return;
+  async function handleAddDeferred(deferredId?: string) {
+    const idToUse = deferredId || protractorDeferredId || matchedDeferred?.id;
+    if (!idToUse || !workOrderGuid) return;
     
     setDeferredStatus("adding");
     setDeferredError(null);
@@ -294,9 +302,9 @@ export function AddToROWithHistory({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workOrderGuid,
-          deferredId: protractorDeferredId,
+          deferredId: idToUse,
           vin,
-          serviceTitle,
+          serviceTitle: matchedDeferred?.title || serviceTitle,
         }),
       });
       
@@ -326,13 +334,13 @@ export function AddToROWithHistory({
 
   return (
     <div className="flex items-center gap-2">
-      {/* Add Deferred button - only for Protractor deferred work items */}
-      {protractorDeferredId && workOrderGuid && integration === "protractor" && (
+      {/* Add Deferred button - for Protractor deferred work items or OEM items with matched deferred */}
+      {(protractorDeferredId || matchedDeferred) && workOrderGuid && integration === "protractor" && (
         <button
-          onClick={handleAddDeferred}
+          onClick={() => handleAddDeferred()}
           disabled={deferredStatus === "adding"}
           className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-blue-100 border border-blue-300 text-blue-700 text-xs font-medium hover:bg-blue-200 transition-colors disabled:opacity-50"
-          title="Add this previously deferred service directly to the work order"
+          title={matchedDeferred ? `Add matching shop recommendation: ${matchedDeferred.title}` : "Add this previously deferred service directly to the work order"}
         >
           {deferredStatus === "adding" ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -342,7 +350,7 @@ export function AddToROWithHistory({
                 <img src="/protractor-icon.png" alt="" className="w-4 h-4 rounded-full" />
                 <Plus className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 text-blue-700 bg-blue-100 rounded-full" />
               </span>
-              <span className="ml-1">Deferred</span>
+              <span className="ml-1">{matchedDeferred ? "+" : ""}Deferred</span>
             </>
           )}
         </button>
