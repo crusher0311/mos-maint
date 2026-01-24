@@ -42,3 +42,24 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
+
+## Future Implementations
+
+### SSO (Single Sign-On) - Planned for Later
+Two SSO approaches identified for future development:
+
+**1. SAML SP (Service Provider) - For Enterprise Shops**
+- Let enterprise shops use existing identity providers (Azure AD, Okta, Google Workspace)
+- Employees log into MOS Tools with company credentials
+- MOS acts as Service Provider accepting logins from shop's IdP
+- Benefits: Centralized access control, auto-disable on employee departure
+- Priority for multi-location enterprise customers with existing IT infrastructure
+
+**2. OAuth 2.0 Provider - For Partner Apps (AppFueled, etc.)**
+- Partner apps can offer "Login with MOS Tools"
+- Users authorize access without sharing passwords
+- Scope-based permissions (profile, shop:read, appointments:write)
+- Endpoints needed: /oauth/authorize, /oauth/token, /oauth/userinfo
+- Partner app registration system required
+
+**Implementation Order:** SAML first (enterprise shops already have IdPs), OAuth second (partner ecosystem)
