@@ -1,0 +1,432 @@
+import { getDb } from "@/lib/mongo";
+import {
+  resolveProtractorConfig,
+  protractorFetch,
+  fetchInvoiceById,
+  fetchVehicleById,
+} from "@/lib/integrations/protractor";
+import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
+import { createIngestionService } from "@/lib/normalized-ingestion";
+import pLimit from "p-limit";
+
+const YEARS_TO_BACKFILL = 5;
+const MAX_CHUNKS_PER_RUN = 50;
+const MAX_WALL_CLOCK_MS = 240000; // 4 minutes max
+
+async function fetchInvoicesForDateRange(
+  shopId: number,
+  startDate: string,
+  endDate: string
+): Promise<any[]> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) return [];
+
+  const allInvoices: any[] = [];
+  const pageSize = 100;
+  let skip = 0;
+  const seenIds = new Set<string>();
+  const maxPages = 50;
+  let pageCount = 0;
+
+  while (pageCount < maxPages) {
+    const params = new URLSearchParams();
+    params.set("startDate", startDate);
+    params.set("endDate", endDate);
+    params.set("take", String(pageSize));
+    params.set("skip", String(skip));
+
+    const result = await protractorFetch<{ ItemCollection?: any[] }>(
+      `/Invoice/?${params.toString()}`,
+      config
+    );
+
+    if (!result.ok) {
+      console.error(`[Backfill] Shop ${shopId} Invoice error at skip=${skip}:`, result.error);
+      break;
+    }
+
+    const pageItems = result.data?.ItemCollection || [];
+    let newItems = 0;
+
+    for (const item of pageItems) {
+      if (item.ID && !seenIds.has(item.ID)) {
+        seenIds.add(item.ID);
+        allInvoices.push(item);
+        newItems++;
+      }
+    }
+
+    if (newItems === 0 || pageItems.length === 0) break;
+    if (pageItems.length < pageSize) break;
+
+    skip += pageSize;
+    pageCount++;
+    await new Promise(r => setTimeout(r, 30));
+  }
+
+  return allInvoices;
+}
+
+async function getOrFetchVehicle(
+  db: any,
+  shopId: number,
+  serviceItemId: string,
+  rateLimiter: ReturnType<typeof pLimit>
+): Promise<{ vin?: string; year?: number; make?: string; model?: string; engine?: string } | null> {
+  if (!serviceItemId) return null;
+  
+  const cached = await db.collection("protractor_service_items").findOne({ 
+    shopId, 
+    serviceItemId 
+  });
+  
+  if (cached) {
+    return {
+      vin: cached.vin,
+      year: cached.year,
+      make: cached.make,
+      model: cached.model,
+      engine: cached.engine,
+    };
+  }
+  
+  const result = await rateLimiter(async () => {
+    return fetchVehicleById(shopId, serviceItemId);
+  });
+  
+  if (result.ok && result.vehicle) {
+    const v = result.vehicle;
+    const vehicleData = {
+      shopId,
+      serviceItemId,
+      vin: v.VIN || null,
+      year: v.Year ? parseInt(String(v.Year)) : null,
+      make: v.Make || null,
+      model: v.Model || null,
+      engine: v.Engine || null,
+      fetchedAt: new Date(),
+    };
+    
+    await db.collection("protractor_service_items").updateOne(
+      { shopId, serviceItemId },
+      { $set: vehicleData },
+      { upsert: true }
+    );
+    
+    return {
+      vin: vehicleData.vin || undefined,
+      year: vehicleData.year || undefined,
+      make: vehicleData.make || undefined,
+      model: vehicleData.model || undefined,
+      engine: vehicleData.engine || undefined,
+    };
+  }
+  
+  return null;
+}
+
+async function backfillShopChunk(
+  db: any, 
+  shopId: number,
+  rateLimiter: ReturnType<typeof pLimit>
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number; normalizedCount: number }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { jobsIndexed: 0, skipped: 0, complete: false, message: "Not configured", vehiclesFetched: 0, normalizedCount: 0 };
+  }
+  
+  const shop = await db.collection("shops").findOne({ shopId });
+  const enterpriseId = shop?.enterpriseId;
+  
+  const ingestionService = createIngestionService(
+    db,
+    'protractor',
+    shopId,
+    enterpriseId,
+    { 
+      syncRunId: `backfill-${Date.now()}`,
+      createAuditLog: false,
+      dualWriteToJobIndex: false,
+      dualWriteToRepairPatterns: true,
+    }
+  );
+
+  let progress = await db.collection("backfill_progress").findOne({ shopId });
+  
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
+  const oldestDate = new Date();
+  oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+  oldestDate.setHours(0, 0, 0, 0);
+  
+  let chunkEnd: Date;
+  
+  if (progress?.currentChunkEnd && progress?.logicVersion === 4) {
+    chunkEnd = new Date(progress.currentChunkEnd);
+  } else {
+    chunkEnd = new Date(today);
+    await db.collection("backfill_progress").updateOne(
+      { shopId },
+      { 
+        $set: { 
+          shopId, 
+          startedAt: new Date(), 
+          currentChunkEnd: chunkEnd, 
+          completed: false,
+          logicVersion: 4
+        },
+        $unset: { currentChunkStart: "" }
+      },
+      { upsert: true }
+    );
+  }
+
+  let daysToProcess = 60;
+  const lastCount = progress?.lastInvoiceCount;
+  if (lastCount) {
+    if (lastCount > 1500) {
+      daysToProcess = 21;
+    } else if (lastCount > 800) {
+      daysToProcess = 30;
+    } else if (lastCount > 400) {
+      daysToProcess = 45;
+    } else if (lastCount < 150) {
+      daysToProcess = 120;
+    }
+  }
+  
+  const chunkStart = new Date(chunkEnd);
+  chunkStart.setDate(chunkStart.getDate() - daysToProcess);
+  if (chunkStart < oldestDate) {
+    chunkStart.setTime(oldestDate.getTime());
+  }
+
+  if (chunkEnd <= oldestDate) {
+    await db.collection("backfill_progress").updateOne(
+      { shopId },
+      { $set: { completed: true, completedAt: new Date() } }
+    );
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
+    );
+    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", vehiclesFetched: 0, normalizedCount: 0 };
+  }
+
+  const startStr = chunkStart.toISOString().split("T")[0];
+  const endStr = chunkEnd.toISOString().split("T")[0];
+
+  console.log(`[Backfill] Shop ${shopId}: ${startStr} to ${endStr} (${daysToProcess} days)`);
+
+  let jobsIndexed = 0;
+  let skippedUnchanged = 0;
+  let vehiclesFetched = 0;
+
+  const invoices = await fetchInvoicesForDateRange(shopId, startStr, endStr);
+  console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices`);
+
+  if (invoices.length === 0) {
+    const nextChunkEnd = chunkStart;
+    const isComplete = nextChunkEnd <= oldestDate;
+    await db.collection("backfill_progress").updateOne(
+      { shopId },
+      {
+        $set: {
+          currentChunkEnd: nextChunkEnd,
+          lastRunAt: new Date(),
+          lastInvoiceCount: 0,
+          completed: isComplete,
+          ...(isComplete ? { completedAt: new Date() } : {}),
+        }
+      }
+    );
+    if (isComplete) {
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
+      );
+    }
+    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices`, vehiclesFetched: 0, normalizedCount: 0 };
+  }
+
+  const allJobEntries: any[] = [];
+  const serviceItemIds = new Set<string>();
+  const invoicesForNormalized: any[] = [];
+
+  await Promise.all(
+    invoices.map((inv: any) =>
+      rateLimiter(async () => {
+        try {
+          const detailResult = await fetchInvoiceById(shopId, inv.ID);
+          if (!detailResult.ok || !detailResult.invoice) return;
+
+          const fullInv = detailResult.invoice as any;
+          invoicesForNormalized.push(fullInv);
+
+          if (fullInv.ServiceItemID) {
+            serviceItemIds.add(fullInv.ServiceItemID);
+          }
+
+          const jobEntries = extractJobIndexFromWorkOrder(shopId, fullInv, "protractor");
+          if (jobEntries.length > 0) {
+            for (const entry of jobEntries) {
+              (entry as any)._serviceItemId = fullInv.ServiceItemID;
+            }
+            allJobEntries.push(...jobEntries);
+          }
+        } catch (err) {
+        }
+      })
+    )
+  );
+
+  console.log(`[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch`);
+
+  const vehicleCache = new Map<string, any>();
+  const vehicleIdsToFetch = Array.from(serviceItemIds).filter(id => {
+    const entry = allJobEntries.find(e => (e as any)._serviceItemId === id);
+    return entry && (!entry.vehicle?.vin && !entry.vehicle?.year);
+  });
+
+  if (vehicleIdsToFetch.length > 0) {
+    console.log(`[Backfill] Shop ${shopId}: Fetching ${vehicleIdsToFetch.length} vehicles...`);
+    
+    for (const serviceItemId of vehicleIdsToFetch) {
+      const vehicleData = await getOrFetchVehicle(db, shopId, serviceItemId, rateLimiter);
+      if (vehicleData) {
+        vehicleCache.set(serviceItemId, vehicleData);
+        vehiclesFetched++;
+      }
+    }
+  }
+
+  for (const entry of allJobEntries) {
+    const serviceItemId = (entry as any)._serviceItemId;
+    if (serviceItemId && vehicleCache.has(serviceItemId)) {
+      const vehicleData = vehicleCache.get(serviceItemId);
+      entry.vehicle = {
+        ...entry.vehicle,
+        ...vehicleData,
+        serviceItemId,
+      };
+    }
+    delete (entry as any)._serviceItemId;
+  }
+
+  for (const entry of allJobEntries) {
+    const contentHash = computeJobHash(entry);
+    const filter = { 
+      shopId: entry.shopId, 
+      workOrderId: entry.workOrderId, 
+      servicePackageId: entry.servicePackageId 
+    };
+    
+    const existing = await db.collection("job_index").findOne(filter);
+    
+    if (existing && existing.contentHash === contentHash) {
+      skippedUnchanged++;
+      continue;
+    }
+    
+    await db.collection("job_index").updateOne(
+      filter,
+      { $set: { ...entry, contentHash, sourceSystem: "protractor" } },
+      { upsert: true }
+    );
+    jobsIndexed++;
+  }
+
+  if (jobsIndexed > 0) {
+    await updatePartCrossReferences(allJobEntries);
+  }
+
+  let normalizedCount = 0;
+  try {
+    const normalizedResult = await ingestionService.ingestWorkOrderBatchWithAllEntities(invoicesForNormalized);
+    normalizedCount = normalizedResult.workOrders.created + normalizedResult.workOrders.updated;
+    console.log(`[Backfill] Shop ${shopId}: Normalized ${normalizedCount} WOs`);
+  } catch (normalizedError) {
+    console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
+  }
+
+  const nextChunkEnd = chunkStart;
+  const isComplete = nextChunkEnd <= oldestDate;
+
+  await db.collection("backfill_progress").updateOne(
+    { shopId },
+    {
+      $set: {
+        currentChunkEnd: nextChunkEnd,
+        lastRunAt: new Date(),
+        lastInvoiceCount: invoices.length,
+        completed: isComplete,
+        ...(isComplete ? { completedAt: new Date() } : {}),
+      },
+      $inc: { totalJobsIndexed: jobsIndexed }
+    }
+  );
+
+  if (isComplete) {
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
+    );
+    console.log(`[Backfill] Shop ${shopId}: Marked protractorBackfillComplete=true`);
+  }
+  
+  return {
+    jobsIndexed,
+    skipped: skippedUnchanged,
+    complete: isComplete,
+    message: `${startStr} to ${endStr}: ${jobsIndexed} jobs, ${vehiclesFetched} vehicles fetched, ${normalizedCount} normalized, ${daysToProcess}d chunk`,
+    vehiclesFetched,
+    normalizedCount
+  };
+}
+
+export async function runProtractorBackfill(shopId: number): Promise<{
+  chunksProcessed: number;
+  totalJobsIndexed: number;
+  complete: boolean;
+  error?: string;
+}> {
+  const startTime = Date.now();
+  const db = await getDb();
+  const rateLimiter = pLimit(5);
+  
+  let chunksProcessed = 0;
+  let totalJobsIndexed = 0;
+  let complete = false;
+
+  console.log(`[Backfill] Starting inline backfill for shop ${shopId}`);
+
+  try {
+    while (chunksProcessed < MAX_CHUNKS_PER_RUN) {
+      if (Date.now() - startTime > MAX_WALL_CLOCK_MS) {
+        console.log(`[Backfill] Shop ${shopId}: Wall clock limit reached after ${chunksProcessed} chunks`);
+        break;
+      }
+
+      const result = await backfillShopChunk(db, shopId, rateLimiter);
+      chunksProcessed++;
+      totalJobsIndexed += result.jobsIndexed;
+
+      console.log(`[Backfill] Shop ${shopId} chunk ${chunksProcessed}: ${result.message}`);
+
+      if (result.complete) {
+        complete = true;
+        break;
+      }
+
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    console.log(`[Backfill] Shop ${shopId}: Completed ${chunksProcessed} chunks, ${totalJobsIndexed} jobs indexed, complete: ${complete}`);
+    
+    return { chunksProcessed, totalJobsIndexed, complete };
+  } catch (err: any) {
+    console.error(`[Backfill] Shop ${shopId}: Error during backfill:`, err.message);
+    return { chunksProcessed, totalJobsIndexed, complete: false, error: err.message };
+  }
+}
