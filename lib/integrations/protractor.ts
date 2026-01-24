@@ -644,11 +644,9 @@ export async function fetchInvoicesForVehicle(
   if (options?.startDate) params.set("startDate", options.startDate);
   if (options?.endDate) params.set("endDate", options.endDate);
 
-  // Use the correct endpoint: /Invoice?serviceItemID=xxx (per Protractor API docs)
-  params.set("serviceItemID", serviceItemId);
-  const queryStr = `?${params.toString()}`;
+  const queryStr = params.toString() ? `?${params.toString()}` : "";
   const result = await protractorFetch<{ ItemCollection?: ProtractorInvoice[] }>(
-    `/Invoice${queryStr}`,
+    `/ServiceItem/${serviceItemId}/Invoice${queryStr}`,
     config,
     {},
     0,
@@ -659,138 +657,7 @@ export async function fetchInvoicesForVehicle(
     return { ok: false, error: result.error };
   }
 
-  // Debug: Log the raw response structure
-  const rawData = result.data as any;
-  console.log(`[Protractor] Invoice fetch raw response keys:`, Object.keys(rawData || {}));
-  console.log(`[Protractor] Invoice fetch ItemCollection length:`, rawData?.ItemCollection?.length ?? 'undefined');
-  
-  // Check if data is returned in a different format (array directly, or different property name)
-  let invoices: ProtractorInvoice[] = [];
-  if (Array.isArray(rawData)) {
-    invoices = rawData;
-  } else if (rawData?.ItemCollection) {
-    invoices = rawData.ItemCollection;
-  } else if (rawData?.Invoices) {
-    invoices = rawData.Invoices;
-  }
-  
-  return { ok: true, invoices };
-}
-
-/**
- * Search job_index (MongoDB) for historical job pricing instead of making live API calls.
- * This uses data already backfilled from Protractor invoices.
- */
-export async function findCachedJobPricing(
-  shopId: number,
-  options: {
-    serviceItemId?: string;
-    vin?: string;
-    jobTitle?: string;
-    jobCode?: string;
-  }
-): Promise<{
-  found: boolean;
-  lines?: Array<{
-    lineType: string;
-    description: string;
-    partNumber?: string;
-    manufacturer?: string;
-    quantity: number;
-    unitPrice: number;
-    extendedPrice: number;
-  }>;
-  source?: string;
-  workOrderNumber?: number;
-  performedAt?: Date;
-}> {
-  const db = await getDb();
-  
-  const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const targetTitle = options.jobTitle ? normalize(options.jobTitle) : '';
-  const targetCode = options.jobCode ? normalize(options.jobCode) : '';
-  
-  // Build query - search by serviceItemId OR VIN
-  const orConditions: any[] = [];
-  if (options.serviceItemId) {
-    orConditions.push({ 'vehicle.serviceItemId': options.serviceItemId });
-  }
-  if (options.vin) {
-    orConditions.push({ 'vehicle.vin': options.vin.toUpperCase() });
-    orConditions.push({ 'vehicle.vin': options.vin.toLowerCase() });
-  }
-  
-  if (orConditions.length === 0) {
-    console.log(`[Protractor Cache] No serviceItemId or VIN provided for job lookup`);
-    return { found: false };
-  }
-  
-  // Query job_index for this vehicle's history
-  const jobs = await db.collection('job_index').find({
-    shopId,
-    $or: orConditions,
-  }).sort({ performedAt: -1 }).limit(100).toArray();
-  
-  console.log(`[Protractor Cache] Found ${jobs.length} cached jobs for vehicle (shopId: ${shopId}, serviceItemId: ${options.serviceItemId || 'N/A'}, vin: ${options.vin || 'N/A'})`);
-  
-  if (jobs.length === 0) {
-    return { found: false };
-  }
-  
-  // Search for matching job by code or title
-  for (const job of jobs) {
-    const jobTitle = job.job?.title || '';
-    const jobCode = job.job?.code || '';
-    const normalizedJobTitle = normalize(jobTitle);
-    const normalizedJobCode = normalize(jobCode);
-    
-    let matched = false;
-    let matchType = '';
-    
-    // Exact code match
-    if (targetCode && normalizedJobCode === targetCode) {
-      matched = true;
-      matchType = 'exact code';
-    }
-    // Exact title match
-    else if (targetTitle && normalizedJobTitle === targetTitle) {
-      matched = true;
-      matchType = 'exact title';
-    }
-    // Partial title match
-    else if (targetTitle && targetTitle.length > 5 && 
-             (normalizedJobTitle.includes(targetTitle.slice(0, 15)) || 
-              targetTitle.includes(normalizedJobTitle.slice(0, 15)))) {
-      matched = true;
-      matchType = 'partial title';
-    }
-    
-    if (matched && job.lines && job.lines.length > 0) {
-      console.log(`[Protractor Cache] Found matching job (${matchType}): "${jobTitle}" with ${job.lines.length} lines from WO#${job.workOrderNumber}`);
-      
-      // Convert cached lines to Protractor format
-      const protractorLines = job.lines.map((line: any) => ({
-        lineType: line.lineType === 'labor' ? 'Labor' : 'Material',
-        description: line.description,
-        partNumber: line.partNumber,
-        manufacturer: line.manufacturer,
-        quantity: line.quantity || 1,
-        unitPrice: line.unitPrice || 0,
-        extendedPrice: line.extendedPrice || 0,
-      }));
-      
-      return {
-        found: true,
-        lines: protractorLines,
-        source: `cached from WO#${job.workOrderNumber}`,
-        workOrderNumber: job.workOrderNumber,
-        performedAt: job.performedAt,
-      };
-    }
-  }
-  
-  console.log(`[Protractor Cache] No matching job found for "${options.jobTitle}" (code: ${options.jobCode})`);
-  return { found: false };
+  return { ok: true, invoices: result.data?.ItemCollection || [] };
 }
 
 export async function fetchDeferredWork(
@@ -2117,24 +1984,37 @@ export async function fetchCannedJobsWithCache(
     };
   }
 
-  // If no enriched cache exists, return basic list immediately and run enrichment in background
-  if (!isEnriched || !hasItems) {
-    console.log(`[Protractor] No enriched cache found for shop ${shopId}, fetching basic list...`);
+  // Check if we have any cache at all (even basic "api" source)
+  // Only fetch and enrich if completely missing
+  const hasAnyCache = cached?.items?.length > 0;
+  const isCurrentlyEnriching = cached?.source === "enriching";
+  
+  // If we have cache (enriched or api/enriching in progress), use it without triggering new enrichment
+  if (hasAnyCache && (isEnriched || isCurrentlyEnriching || cached?.source === "api")) {
+    if (isEnriched) {
+      console.log(`[Protractor] Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
+    } else if (isCurrentlyEnriching) {
+      console.log(`[Protractor] Enrichment in progress for shop ${shopId}, using current cache (${cached.items.length} items)`);
+    } else {
+      console.log(`[Protractor] Using basic cache for shop ${shopId} (${cached.items.length} items) - run sync to refresh`);
+    }
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(cached.items),
+      source: cached.source || "cache",
+    };
+  }
+  
+  // No cache at all - fetch basic list and start enrichment
+  if (!hasAnyCache) {
+    console.log(`[Protractor] No cache found for shop ${shopId}, fetching basic list...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
-      // Fall back to whatever cache exists
-      if (cached?.items?.length) {
-        return {
-          ok: true,
-          cannedJobs: normalizeCachedItems(cached.items),
-          source: "cache",
-        };
-      }
       return { ok: false, error: listResult.error };
     }
 
-    // Save basic list immediately so page loads fast
+    // Mark as "enriching" to prevent concurrent enrichment runs
     const now = new Date();
     await db.collection("protractor_canned_jobs").updateOne(
       { shopId },
@@ -2142,7 +2022,7 @@ export async function fetchCannedJobsWithCache(
         $set: {
           items: listResult.cannedJobs,
           fetchedAt: now,
-          source: "api",
+          source: "enriching",
         },
         $setOnInsert: { createdAt: now },
       },
@@ -2166,15 +2046,20 @@ export async function fetchCannedJobsWithCache(
         );
         console.log(`[Protractor] Background enrichment complete: ${enrichedJobs.length} jobs saved`);
       })
-      .catch((err) => {
+      .catch(async (err) => {
         console.error(`[Protractor] Background enrichment failed:`, err);
+        // Reset source to "api" so future loads can retry
+        await db.collection("protractor_canned_jobs").updateOne(
+          { shopId },
+          { $set: { source: "api" } }
+        );
       });
 
     // Return basic list immediately
     return {
       ok: true,
       cannedJobs: normalizeCachedItems(listResult.cannedJobs),
-      source: "api",
+      source: "api", // Type-safe: enriching is internal state only
     };
   }
 
@@ -2226,446 +2111,5 @@ export async function fetchCannedJobsWithCache(
     ok: true,
     cannedJobs: normalizeCachedItems(cached?.items || []),
     source: "enriched",
-  };
-}
-
-// ============= Appointment Functions =============
-
-export interface CreateProtractorAppointmentParams {
-  shopId: number;
-  contactId: string;
-  vehicleId: string;
-  scheduledTime: string; // ISO 8601 format
-  duration?: number; // in minutes
-  notes?: string;
-  serviceAdvisorId?: string;
-}
-
-export interface ProtractorAppointmentResult {
-  ok: boolean;
-  appointmentId?: string;
-  workOrderNumber?: number;
-  error?: string;
-}
-
-export async function createProtractorAppointment(
-  params: CreateProtractorAppointmentParams
-): Promise<ProtractorAppointmentResult> {
-  const { shopId, contactId, vehicleId, scheduledTime, duration, notes, serviceAdvisorId } = params;
-  
-  console.log(`[Protractor] Creating appointment for contact ${contactId}, vehicle ${vehicleId} at ${scheduledTime}`);
-  
-  const config = await resolveProtractorConfig(shopId);
-  if (!config.configured) {
-    return { ok: false, error: "Protractor not configured for this shop" };
-  }
-  
-  // Generate a new GUID for the work order - crypto.randomUUID() creates a v4 UUID
-  const newWorkOrderId = crypto.randomUUID();
-  
-  // Per Protractor API docs section 1.9.3:
-  // - POST to /WorkOrder/{workOrderID} with a new GUID
-  // - Set WorkOrderNumber to 0 for new work orders
-  // - "If the work order exists by ID then the work order will be updated. 
-  //    Otherwise a new work order will be created."
-  // Note: Protractor expects nested objects for Contact and ServiceItem, not just IDs
-  const body: Record<string, any> = {
-    ID: newWorkOrderId,
-    WorkOrderNumber: 0,  // Required for new work orders
-    Type: "Appointment",
-    Contact: { ID: contactId },
-    ServiceItem: { ID: vehicleId },
-    ScheduledTime: scheduledTime,
-  };
-  
-  // Duration is passed in minutes but Protractor expects hours
-  if (duration) body.Duration = duration / 60;
-  if (notes) body.Note = notes;  // Field is "Note" not "Notes"
-  if (serviceAdvisorId) body.ServiceAdvisor = { ID: serviceAdvisorId };
-  
-  console.log(`[Protractor] POST /WorkOrder/${newWorkOrderId} with body:`, JSON.stringify(body));
-  
-  const result = await protractorFetch<ProtractorWorkOrder>(
-    `/WorkOrder/${newWorkOrderId}`,
-    config,
-    { method: "POST", body: JSON.stringify(body) },
-    0,
-    shopId
-  );
-  
-  if (!result.ok || !result.data) {
-    console.error(`[Protractor] Failed to create appointment: ${result.error}`);
-    return { ok: false, error: result.error || "Failed to create appointment" };
-  }
-  
-  console.log(`[Protractor] Appointment created with ID: ${result.data.ID}, WorkOrderNumber: ${result.data.WorkOrderNumber}`);
-  return { 
-    ok: true, 
-    appointmentId: result.data.ID,
-    workOrderNumber: result.data.WorkOrderNumber,
-  };
-}
-
-export async function getProtractorAppointments(
-  shopId: number,
-  params: {
-    startDate?: string;
-    endDate?: string;
-    skip?: number;
-    top?: number;
-  } = {}
-): Promise<{ ok: boolean; appointments?: ProtractorWorkOrder[]; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
-  if (!config.configured) {
-    return { ok: false, error: "Protractor not configured for this shop" };
-  }
-  
-  const queryParams = new URLSearchParams();
-  queryParams.set("type", "Appointment");
-  
-  if (params.startDate) queryParams.set("startDate", params.startDate);
-  if (params.endDate) queryParams.set("endDate", params.endDate);
-  
-  const skip = params.skip || 0;
-  const top = params.top || 100;
-  queryParams.set("skip", String(skip));
-  queryParams.set("take", String(top));
-  
-  const queryStr = `?${queryParams.toString()}`;
-  
-  const result = await protractorFetch<{ ItemCollection?: ProtractorWorkOrder[] }>(
-    `/WorkOrder${queryStr}`,
-    config,
-    {},
-    0,
-    shopId
-  );
-  
-  if (!result.ok) {
-    return { ok: false, error: result.error };
-  }
-  
-  // Filter to only appointment types in case the API doesn't filter properly
-  const appointments = (result.data?.ItemCollection || []).filter(
-    wo => wo.Type === "Appointment"
-  );
-  
-  return { ok: true, appointments };
-}
-
-export async function addDeferredWorkToWorkOrder(
-  shopId: number,
-  workOrderGuid: string,
-  deferredId: string,
-  vin: string
-): Promise<{ ok: boolean; servicePackage?: { ID: string; Title: string }; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
-  if (!config.configured) {
-    return { ok: false, error: "Protractor not configured for this shop" };
-  }
-
-  const db = await getDb();
-  const cachedDeferred = await db.collection("protractor_deferred_work").findOne({
-    shopId,
-    vin: vin.toUpperCase()
-  });
-
-  if (!cachedDeferred?.items) {
-    return { ok: false, error: "Deferred work not found in cache" };
-  }
-
-  const deferredItem = (cachedDeferred.items as ProtractorDeferredWork[]).find(
-    d => d.ID === deferredId || d.ServiceItemID === deferredId
-  );
-
-  if (!deferredItem) {
-    return { ok: false, error: `Deferred work item ${deferredId} not found` };
-  }
-
-  const title = deferredItem.Title 
-    || deferredItem.ServicePackageHeader?.Title 
-    || deferredItem.Code 
-    || deferredItem.Description 
-    || "Deferred Service";
-
-  // Fetch the current work order
-  const existingResult = await protractorFetch<ProtractorWorkOrder>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {},
-    0,
-    shopId
-  );
-
-  if (!existingResult.ok || !existingResult.data) {
-    return { ok: false, error: `Failed to fetch work order: ${existingResult.error}` };
-  }
-
-  const existingWorkOrder = existingResult.data;
-  const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
-  const isArrayFormat = Array.isArray(existingPackagesRaw);
-  const existingPackages = isArrayFormat 
-    ? existingPackagesRaw 
-    : (existingPackagesRaw?.ItemCollection || []);
-
-  // Debug: Log work order fields to find vehicle ID
-  const woAny = existingWorkOrder as any;
-  console.log(`[Protractor] Work order fields for vehicle lookup:`, JSON.stringify({
-    ServiceItemID: existingWorkOrder.ServiceItemID,
-    ServiceItem: woAny.ServiceItem ? { ID: woAny.ServiceItem.ID, VIN: woAny.ServiceItem.VIN } : null,
-    ContactID: existingWorkOrder.ContactID,
-    allTopLevelKeys: Object.keys(existingWorkOrder).slice(0, 20)
-  }, null, 2));
-
-  // Try to get service package lines from the deferred item directly, or fetch from original work order
-  let originalServicePackageLines: any[] = [];
-  
-  // Log the deferred item details for debugging
-  console.log(`[Protractor] Deferred item details:`, JSON.stringify({
-    ID: deferredItem.ID,
-    ServiceItemID: deferredItem.ServiceItemID,
-    OriginalWorkOrderID: deferredItem.OriginalWorkOrderID,
-    Code: deferredItem.Code,
-    Title: deferredItem.Title,
-    hasEstimatedCost: !!deferredItem.EstimatedCost,
-    estimatedCost: deferredItem.EstimatedCost,
-    allKeys: Object.keys(deferredItem)
-  }, null, 2));
-  
-  // First, try to get ServicePackageLines directly from the deferred item (the API sometimes includes them)
-  const deferredItemAny = deferredItem as any;
-  
-  // Log what ServicePackageLines actually contains
-  console.log(`[Protractor] ServicePackageLines on deferred item:`, JSON.stringify(deferredItemAny.ServicePackageLines, null, 2));
-  
-  if (deferredItemAny.ServicePackageLines) {
-    const linesRaw = deferredItemAny.ServicePackageLines;
-    if (Array.isArray(linesRaw)) {
-      originalServicePackageLines = linesRaw;
-    } else if (linesRaw?.ItemCollection) {
-      originalServicePackageLines = linesRaw.ItemCollection;
-    }
-    
-    if (originalServicePackageLines.length > 0) {
-      console.log(`[Protractor] Found ${originalServicePackageLines.length} lines directly on deferred item`);
-      originalServicePackageLines.forEach((line: any, i: number) => {
-        console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
-      });
-    } else {
-      console.log(`[Protractor] ServicePackageLines exists but is empty (array/ItemCollection length = 0)`);
-    }
-  }
-  
-  // If no lines found on the deferred item, try to fetch from original work order
-  if (originalServicePackageLines.length === 0 && deferredItem.OriginalWorkOrderID) {
-    console.log(`[Protractor] Fetching original work order ${deferredItem.OriginalWorkOrderID} for deferred work details...`);
-    
-    const originalWoResult = await protractorFetch<ProtractorWorkOrder>(
-      `/WorkOrder/${deferredItem.OriginalWorkOrderID}`,
-      config,
-      {},
-      0,
-      shopId
-    );
-    
-    if (originalWoResult.ok && originalWoResult.data) {
-      const originalWo = originalWoResult.data;
-      const originalPackagesRaw = originalWo.ServicePackages as any;
-      const originalPackages = Array.isArray(originalPackagesRaw) 
-        ? originalPackagesRaw 
-        : (originalPackagesRaw?.ItemCollection || []);
-      
-      console.log(`[Protractor] Original work order has ${originalPackages.length} service packages`);
-      
-      // Log all package titles for debugging
-      originalPackages.forEach((pkg: any, i: number) => {
-        const pkgTitle = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.Code || 'Unknown';
-        const linesRaw = pkg.ServicePackageLines;
-        const lineCount = Array.isArray(linesRaw) ? linesRaw.length : (linesRaw?.ItemCollection?.length || 0);
-        console.log(`[Protractor]   Package ${i}: "${pkgTitle}" (ID: ${pkg.ID}, Lines: ${lineCount})`);
-      });
-      
-      // Find the matching service package by ID or title (case-insensitive)
-      const titleLower = title.toLowerCase();
-      const codeLower = (deferredItem.Code || '').toLowerCase();
-      const matchingPackage = originalPackages.find((pkg: any) => {
-        const pkgTitle = (pkg.ServicePackageHeader?.Title || pkg.Title || '').toLowerCase();
-        const pkgCode = (pkg.Code || '').toLowerCase();
-        return (
-          pkg.ID === deferredItem.ID || 
-          pkgTitle === titleLower ||
-          pkgCode === codeLower ||
-          pkgTitle.includes(titleLower) ||
-          titleLower.includes(pkgTitle)
-        );
-      });
-      
-      if (matchingPackage) {
-        // Extract the service package lines (labor and parts)
-        const linesRaw = matchingPackage.ServicePackageLines;
-        if (Array.isArray(linesRaw)) {
-          originalServicePackageLines = linesRaw;
-        } else if (linesRaw?.ItemCollection) {
-          originalServicePackageLines = linesRaw.ItemCollection;
-        }
-        
-        console.log(`[Protractor] Found matching package with ${originalServicePackageLines.length} lines`);
-        
-        // Log line details
-        originalServicePackageLines.forEach((line: any, i: number) => {
-          console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
-        });
-      } else {
-        console.log(`[Protractor] Could not find matching service package. Looking for: "${title}" or code: "${deferredItem.Code}"`);
-      }
-    } else {
-      console.log(`[Protractor] Failed to fetch original work order: ${originalWoResult.error}`);
-    }
-  } else if (originalServicePackageLines.length === 0) {
-    console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - searching closed work orders...`);
-  }
-  
-  // If still no lines, search the vehicle's job history from CACHED data (job_index)
-  // This uses already-backfilled invoice data instead of making live API calls
-  // Use vehicle ServiceItemID from deferred item OR from the work order we're adding to
-  // Note: Work order has ServiceItem.ID (nested), not ServiceItemID (flat)
-  const vehicleServiceItemId = deferredItem.ServiceItemID || existingWorkOrder.ServiceItemID || woAny.ServiceItem?.ID;
-  
-  if (originalServicePackageLines.length === 0) {
-    console.log(`[Protractor] Searching cached job history for service package matching: "${title}" (code: ${deferredItem.Code})`);
-    console.log(`[Protractor] Vehicle ServiceItemID: ${vehicleServiceItemId || 'N/A'}, VIN: ${vin}`);
-    
-    // Use cached job_index data instead of live API calls
-    const cachedResult = await findCachedJobPricing(shopId, {
-      serviceItemId: vehicleServiceItemId,
-      vin: vin,
-      jobTitle: title,
-      jobCode: deferredItem.Code,
-    });
-    
-    if (cachedResult.found && cachedResult.lines && cachedResult.lines.length > 0) {
-      console.log(`[Protractor] Using cached pricing (${cachedResult.source}) with ${cachedResult.lines.length} lines:`);
-      
-      // Convert cached lines to Protractor ServicePackageLine format
-      originalServicePackageLines = cachedResult.lines.map((line, i) => {
-        console.log(`[Protractor]   Line ${i}: ${line.lineType} - "${line.description}" Qty:${line.quantity} Price:$${line.unitPrice}`);
-        return {
-          Type: line.lineType === 'Labor' ? 'Labor' : 'Material',
-          Description: line.description,
-          PartNumber: line.partNumber || '',
-          Manufacturer: line.manufacturer || '',
-          Quantity: line.quantity,
-          Price: line.unitPrice,
-          Total: line.extendedPrice,
-          ExtendedTotal: line.extendedPrice,
-        };
-      });
-    } else {
-      console.log(`[Protractor] No cached job pricing found for "${title}"`);
-    }
-  }
-  
-  // Note: /ServicePackage/DeferredWorks endpoint does NOT exist in Protractor API (returns 404)
-  // Skip that fallback and go straight to ServicePackageTemplate
-  
-  // If still no lines, try fetching from ServicePackageTemplate (canned job) - last resort
-  if (originalServicePackageLines.length === 0 && deferredItemAny.ServicePackageTemplateID) {
-    const templateId = deferredItemAny.ServicePackageTemplateID;
-    console.log(`[Protractor] Trying to fetch ServicePackageTemplate (fallback): ${templateId}`);
-    
-    const templateResult = await protractorFetch<any>(
-      `/ServicePackageTemplate/${templateId}`,
-      config,
-      {},
-      0,
-      shopId
-    );
-    
-    if (templateResult.ok && templateResult.data) {
-      const templateLinesRaw = templateResult.data.ServicePackageLines;
-      const templateLines = Array.isArray(templateLinesRaw) 
-        ? templateLinesRaw 
-        : (templateLinesRaw?.ItemCollection || []);
-      
-      if (templateLines.length > 0) {
-        originalServicePackageLines = templateLines;
-        console.log(`[Protractor] Found ${templateLines.length} lines from ServicePackageTemplate`);
-        console.log(`[Protractor] Template raw response keys:`, Object.keys(templateResult.data));
-        templateLines.forEach((line: any, i: number) => {
-          console.log(`[Protractor]   Line ${i} keys:`, Object.keys(line));
-          console.log(`[Protractor]   Line ${i} raw:`, JSON.stringify(line, null, 2));
-        });
-      } else {
-        console.log(`[Protractor] ServicePackageTemplate exists but has no lines`);
-      }
-    } else {
-      console.log(`[Protractor] Failed to fetch ServicePackageTemplate: ${templateResult.error}`);
-    }
-  }
-
-  // Create new service package for the active work order
-  // Use Chapter: "Service" and Status: "Pending" to add to active work order (NOT deferred section)
-  // Get description from ServicePackageHeader (where Protractor stores it)
-  const originalDescription = deferredItem.ServicePackageHeader?.Description 
-    || deferredItem.Description 
-    || "";
-  const packageDescription = originalDescription 
-    ? `${originalDescription}\n[Previously Deferred - Added by MOS]`
-    : "[Previously Deferred - Added by MOS]";
-  
-  const newServicePackage = {
-    ID: "00000000-0000-0000-0000-000000000000",
-    Code: deferredItem.Code || title,
-    ServicePackageHeader: {
-      Title: title,
-      Description: packageDescription,
-    },
-    // Include the original labor and parts lines
-    ServicePackageLines: { 
-      ItemCollection: originalServicePackageLines.map(line => ({
-        ...line,
-        ID: "00000000-0000-0000-0000-000000000000", // New line ID for the new package
-        Status: "Pending", // Reset status to pending
-      }))
-    },
-    Status: "Pending", // Pending status for active work
-    Chapter: "Service", // Force Chapter to "Service" to add to active work order, not deferred
-  };
-
-  const updatedPackages = [...existingPackages, newServicePackage];
-  const updatedWorkOrder = {
-    ...existingWorkOrder,
-    ServicePackages: isArrayFormat 
-      ? updatedPackages 
-      : { ItemCollection: updatedPackages }
-  };
-
-  console.log(`[Protractor] Adding deferred work "${title}" to work order ${workOrderGuid} with ${originalServicePackageLines.length} lines...`);
-
-  const updateResult = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(updatedWorkOrder)
-    },
-    0,
-    shopId
-  );
-
-  if (updateResult.ok) {
-    console.log(`[Protractor] Successfully added deferred work "${title}" with all details`);
-    return {
-      ok: true,
-      servicePackage: {
-        ID: deferredItem.ID,
-        Title: title
-      }
-    };
-  }
-
-  return { 
-    ok: false, 
-    error: `Failed to add deferred work: ${updateResult.error}` 
   };
 }

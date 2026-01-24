@@ -175,127 +175,49 @@ Need help? Contact support@mos.tools`;
   return { subject, html, text, to: ownerEmail };
 }
 
-export function makeTicketCreatedEmail(ticketNumber: string, subject: string, category: string) {
-  const emailSubject = `Support Ticket Created: ${ticketNumber}`;
+export function makePendingBookingsReminderEmail(
+  shopName: string,
+  pendingCount: number,
+  queueUrl: string
+) {
+  const subject = `${pendingCount} appointment${pendingCount === 1 ? "" : "s"} awaiting review - ${shopName}`;
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
-      <div style="background:#3b82f6;color:white;padding:20px;border-radius:8px 8px 0 0">
-        <h2 style="margin:0">Support Ticket Created</h2>
+      <div style="text-align:center;margin-bottom:30px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
       </div>
-      <div style="background:#f8fafc;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
-        <p>Your support ticket has been submitted successfully. Our team will review it and respond as soon as possible.</p>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Ticket Number</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${ticketNumber}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Subject</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${subject}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Category</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${category}</div>
-        </div>
-        <p style="margin-top:20px">You can view your ticket status and add comments in your dashboard.</p>
+      
+      <h1 style="color:#1f2937;font-size:24px;margin-bottom:16px">Appointments Awaiting Review</h1>
+      
+      <p style="color:#4b5563;font-size:16px">
+        <b>${shopName}</b> has <b style="color:#d97706">${pendingCount} pending appointment${pendingCount === 1 ? "" : "s"}</b> that need${pendingCount === 1 ? "s" : ""} your review.
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Auto-booked appointments are waiting for staff approval before being sent to your shop schedule.
+      </p>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${queueUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Review Appointments</a>
       </div>
-      <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:20px">MOS Maintenance Support</p>
+      
+      <div style="background:#fef3c7;border-radius:8px;padding:16px;margin:20px 0">
+        <p style="color:#92400e;font-size:14px;margin:0">
+          <b>Tip:</b> You can change the confirmation mode to "Automatic" in Auto Booking settings to skip the review step.
+        </p>
+      </div>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      
+      <p style="color:#9ca3af;font-size:14px;text-align:center">
+        MOS Tools - Smarter Maintenance for Auto Shops<br />
+        <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
+      </p>
     </div>`;
-  const text = `Support Ticket Created: ${ticketNumber}\n\nSubject: ${subject}\nCategory: ${category}\n\nYou can view your ticket status in your dashboard.`;
-  return { subject: emailSubject, html, text };
-}
-
-export function makeTicketUpdatedEmail(ticketNumber: string, subject: string, status: string, message?: string) {
-  const emailSubject = `Ticket Updated: ${ticketNumber}`;
-  const statusColors: Record<string, string> = {
-    'open': 'background:#dbeafe;color:#1d4ed8',
-    'in progress': 'background:#fef3c7;color:#92400e',
-    'resolved': 'background:#d1fae5;color:#065f46',
-    'closed': 'background:#f1f5f9;color:#475569',
-  };
-  const statusStyle = statusColors[status.toLowerCase()] || 'background:#f1f5f9;color:#475569';
-  
-  const messageHtml = message ? `
-    <div style="background:white;padding:15px;border-left:4px solid #3b82f6;border-radius:4px;margin:15px 0">
-      <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase;margin-bottom:8px">New Message</div>
-      <div style="white-space:pre-wrap">${message}</div>
-    </div>
-  ` : '';
-  
-  const html = `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
-      <div style="background:#8b5cf6;color:white;padding:20px;border-radius:8px 8px 0 0">
-        <h2 style="margin:0">Ticket Updated</h2>
-      </div>
-      <div style="background:#f8fafc;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
-        <p>There's been an update to your support ticket.</p>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Ticket Number</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${ticketNumber}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Subject</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${subject}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Status</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">
-            <span style="${statusStyle};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">${status}</span>
-          </div>
-        </div>
-        ${messageHtml}
-        <p style="margin-top:20px">Log in to your dashboard to view the full ticket details and respond.</p>
-      </div>
-      <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:20px">MOS Maintenance Support</p>
-    </div>`;
-  const text = `Ticket Updated: ${ticketNumber}\n\nSubject: ${subject}\nStatus: ${status}${message ? `\n\nNew Message:\n${message}` : ''}\n\nLog in to your dashboard to view details.`;
-  return { subject: emailSubject, html, text };
-}
-
-export function makeNewTicketAdminEmail(ticketNumber: string, subject: string, category: string, priority: string, shopName: string) {
-  const emailSubject = `New Support Ticket: ${ticketNumber} - ${subject}`;
-  const priorityColors: Record<string, string> = {
-    'urgent': 'background:#fee2e2;color:#dc2626',
-    'high': 'background:#fed7aa;color:#ea580c',
-    'medium': 'background:#fef3c7;color:#ca8a04',
-    'low': 'background:#d1fae5;color:#059669',
-  };
-  const priorityStyle = priorityColors[priority.toLowerCase()] || 'background:#fef3c7;color:#ca8a04';
-  
-  const html = `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
-      <div style="background:#dc2626;color:white;padding:20px;border-radius:8px 8px 0 0">
-        <h2 style="margin:0">New Support Ticket</h2>
-      </div>
-      <div style="background:#f8fafc;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
-        <p>A new support ticket has been submitted and requires attention.</p>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Ticket Number</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${ticketNumber}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Shop</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${shopName}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Subject</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${subject}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Category</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">${category}</div>
-        </div>
-        <div style="background:white;padding:15px;border-radius:6px;margin:15px 0">
-          <div style="font-weight:600;color:#64748b;font-size:12px;text-transform:uppercase">Priority</div>
-          <div style="color:#1e293b;font-size:14px;margin-top:4px">
-            <span style="${priorityStyle};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">${priority}</span>
-          </div>
-        </div>
-        <p style="margin-top:20px">Log in to the Platform Admin panel to review and respond to this ticket.</p>
-      </div>
-      <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:20px">MOS Maintenance Platform</p>
-    </div>`;
-  const text = `New Support Ticket: ${ticketNumber}\n\nShop: ${shopName}\nSubject: ${subject}\nCategory: ${category}\nPriority: ${priority}\n\nLog in to Platform Admin to respond.`;
-  return { subject: emailSubject, html, text };
+  const text = `${shopName} has ${pendingCount} pending appointment${pendingCount === 1 ? "" : "s"} awaiting review.\n\nReview them here: ${queueUrl}`;
+  return { subject, html, text };
 }
 
 export function makeWelcomeEmail(shopName: string, loginUrl: string) {

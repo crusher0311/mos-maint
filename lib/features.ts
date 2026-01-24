@@ -6,11 +6,8 @@ import "@/lib/sms-adapters/protractor-adapter";
 
 export type FeatureId = 
   | "maintenance"      // OEM schedules, recommendations, DVI insights
-  | "job_lookup"       // Historical job search, parts intelligence, smart autocomplete
-  | "common_failures"  // Common Failures Advisor - predictive repairs
+  | "job_lookup"       // Historical job search, parts intelligence (aka History Writer)
   | "oil_sticker"      // Oil change sticker platform
-  | "keytags"          // Key identification tags for vehicles in shop
-  | "auto_booking"     // Auto booking for oil change appointments
   | "part_xref";       // Part cross-reference tool
 
 export type FeatureConfig = {
@@ -51,36 +48,12 @@ export const FEATURES: FeatureConfig[] = [
     smsProviders: [],
   },
   {
-    id: "common_failures",
-    name: "Common Failures Advisor",
-    description: "Predict common repairs by vehicle, powertrain, and mileage using shop data and AI",
-    icon: "AlertTriangle",
-    requiresSMS: true,
-    smsProviders: ["protractor", "tekmetric"],
-  },
-  {
     id: "part_xref",
     name: "Part Cross-Reference",
     description: "Find interchangeable parts across manufacturers based on vehicle compatibility",
     icon: "RefreshCw",
     requiresSMS: true,
     smsProviders: ["protractor", "tekmetric"],
-  },
-  {
-    id: "keytags",
-    name: "Keytags",
-    description: "Print customer and vehicle info on Dymo labels for key identification while vehicles are in the shop",
-    icon: "Tag",
-    requiresSMS: false,
-    smsProviders: [],
-  },
-  {
-    id: "auto_booking",
-    name: "Auto Booking",
-    description: "Automated appointment booking for oil change reminders",
-    icon: "Calendar",
-    requiresSMS: false,
-    smsProviders: [],
   },
 ];
 

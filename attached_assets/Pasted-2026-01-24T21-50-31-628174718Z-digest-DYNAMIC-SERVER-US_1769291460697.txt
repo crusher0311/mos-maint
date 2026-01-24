@@ -1,0 +1,50 @@
+2026-01-24T21:50:31.628174718Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T21:50:31.628178128Z }
+2026-01-24T21:50:31.628776Z Error syncing from Stripe: n [Error]: Dynamic server usage: Route /api/admin/billing/sync-stripe couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T21:50:31.628798311Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T21:50:31.628801591Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T21:50:31.628805191Z     at u (/opt/render/project/src/.next/server/app/api/platform-admin/users/[userId]/route.js:1:5434)
+2026-01-24T21:50:31.628807671Z     at d (/opt/render/project/src/.next/server/app/api/platform-admin/users/[userId]/route.js:1:5988)
+2026-01-24T21:50:31.628810141Z     at d (/opt/render/project/src/.next/server/app/api/admin/billing/sync-stripe/route.js:1:1123)
+2026-01-24T21:50:31.628812441Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T21:50:31.628834831Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T21:50:31.628838171Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T21:50:31.628841152Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T21:50:31.628844532Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093) {
+2026-01-24T21:50:31.628848012Z   description: "Route /api/admin/billing/sync-stripe couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T21:50:31.628851002Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T21:50:31.628853572Z }
+2026-01-24T21:50:33.20272267Z    Generating static pages (65/131) 
+2026-01-24T21:50:33.412525018Z    Generating static pages (98/131) 
+2026-01-24T21:50:33.413045309Z Error fetching user shops: n [Error]: Dynamic server usage: Route /api/user/shops couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T21:50:33.413057069Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T21:50:33.413060389Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T21:50:33.413063069Z     at l (/opt/render/project/src/.next/server/chunks/9396.js:1:432)
+2026-01-24T21:50:33.413066629Z     at c (/opt/render/project/src/.next/server/app/api/user/shops/route.js:1:955)
+2026-01-24T21:50:33.41307014Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T21:50:33.413072749Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T21:50:33.41307596Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T21:50:33.41307863Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T21:50:33.41308127Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+2026-01-24T21:50:33.41308479Z     at ProxyTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+2026-01-24T21:50:33.41308844Z   description: "Route /api/user/shops couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T21:50:33.413141231Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T21:50:33.413144021Z }
+2026-01-24T21:50:33.833085844Z [AutoVitals Extension] Download error: n [Error]: Dynamic server usage: Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+2026-01-24T21:50:33.833109455Z     at l (/opt/render/project/src/.next/server/chunks/8948.js:1:37249)
+2026-01-24T21:50:33.833114085Z     at f (/opt/render/project/src/.next/server/chunks/4054.js:1:1855)
+2026-01-24T21:50:33.833117315Z     at l (/opt/render/project/src/.next/server/chunks/9396.js:1:432)
+2026-01-24T21:50:33.833120555Z     at d (/opt/render/project/src/.next/server/chunks/9396.js:1:986)
+2026-01-24T21:50:33.833124855Z     at p (/opt/render/project/src/.next/server/app/api/autovitals/extension/download/route.js:1:1936)
+2026-01-24T21:50:33.833128655Z     at /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36264
+2026-01-24T21:50:33.833143606Z     at /opt/render/project/src/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+2026-01-24T21:50:33.833146555Z     at NoopContextManager.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+2026-01-24T21:50:33.833148646Z     at ContextAPI.with (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+2026-01-24T21:50:33.833151076Z     at NoopTracer.startActiveSpan (/opt/render/project/src/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093) {
+2026-01-24T21:50:33.833154066Z   description: "Route /api/autovitals/extension/download couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+2026-01-24T21:50:33.833156516Z   digest: 'DYNAMIC_SERVER_USAGE'
+2026-01-24T21:50:33.833158686Z }
+2026-01-24T21:50:33.888666547Z ⚠️ Environment validation failed, using defaults
+2026-01-24T21:50:33.88881998Z  ✓ Generating static pages (131/131)
+2026-01-24T21:50:35.149916036Z    Finalizing page optimization ...
+2026-01-24T21:50:35.149940867Z    Collecting build traces ...

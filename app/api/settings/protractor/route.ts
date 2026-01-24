@@ -2,35 +2,6 @@ import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { testConnection, resolveProtractorConfig } from "@/lib/integrations/protractor";
-import crypto from "crypto";
-
-async function triggerJobHistoryBackfill(shopId: number) {
-  try {
-    const db = await getDb();
-    await db.collection("backfill_progress").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          shopId, 
-          queuedAt: new Date(),
-          completed: false,
-          logicVersion: 4
-        },
-        $setOnInsert: { startedAt: null }
-      },
-      { upsert: true }
-    );
-    
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: { protractorBackfillComplete: false } }
-    );
-    
-    console.log(`[Protractor Settings] Queued job history backfill for shop ${shopId}`);
-  } catch (err: any) {
-    console.error(`[Protractor Settings] Failed to queue backfill for shop ${shopId}:`, err.message);
-  }
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,17 +19,8 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { protractor: 1, protractorWebhookToken: 1 } }
+      { projection: { protractor: 1 } }
     );
-
-    let webhookToken = shop?.protractorWebhookToken;
-    if (config.configured && !webhookToken) {
-      webhookToken = crypto.randomBytes(16).toString("hex");
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: { protractorWebhookToken: webhookToken } }
-      );
-    }
 
     return NextResponse.json({
       configured: config.configured,
@@ -66,7 +28,6 @@ export async function GET(req: NextRequest) {
       hasApiKey: Boolean(config.apiKey),
       updateWorkOrderPackage: shop?.protractor?.updateWorkOrderPackage ?? false,
       updateWorkOrderLine: shop?.protractor?.updateWorkOrderLine ?? false,
-      webhookToken: config.configured ? webhookToken : null,
     });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
@@ -104,15 +65,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const webhookToken = crypto.randomBytes(16).toString("hex");
-    
     await db.collection("shops").updateOne(
       { shopId },
       {
         $set: {
           protractorConnectionId: cleanConnectionId,
           protractorApiKey: cleanApiKey,
-          protractorWebhookToken: webhookToken,
           "protractor.configured": true,
           "protractor.configuredAt": new Date(),
           "protractor.locations": testResult.locations,
@@ -132,14 +90,10 @@ export async function POST(req: NextRequest) {
     await db.collection("protractor_work_orders").deleteMany({ shopId });
     await db.collection("protractor_deferred_work").deleteMany({ shopId });
 
-    // Queue the 5-year job history backfill (runs via cron)
-    triggerJobHistoryBackfill(shopId).catch(() => {});
-
     return NextResponse.json({
       ok: true,
       message: "Protractor connected successfully",
       locations: testResult.locations,
-      jobHistoryBackfill: "queued"
     });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);

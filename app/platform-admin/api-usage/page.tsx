@@ -74,7 +74,7 @@ interface ErrorRecord {
 interface DrawerState {
   type: 'errors' | 'shop' | null;
   provider?: string;
-  shopId?: number | null;
+  shopId?: number;
   shopName?: string;
 }
 
@@ -92,20 +92,20 @@ export default function ApiUsageDashboard() {
   } | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<number | null>(null);
-  const [cardOrder, setCardOrder] = useState<string[]>([]);
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
+      if (savedOrder) {
+        return JSON.parse(savedOrder);
+      }
+    } catch (e) {
+      console.error("Failed to parse saved card order");
+    }
+    return [];
+  });
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
   const dragOverCard = useRef<string | null>(null);
-
-  useEffect(() => {
-    const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
-    if (savedOrder) {
-      try {
-        setCardOrder(JSON.parse(savedOrder));
-      } catch (e) {
-        console.error("Failed to parse saved card order");
-      }
-    }
-  }, []);
 
   const getOrderedProviders = useCallback(() => {
     if (!data?.providers) return [];
@@ -212,7 +212,7 @@ export default function ApiUsageDashboard() {
     }
   }, []);
 
-  const openShopDrawer = useCallback(async (shopId: number | null, provider?: string, shopName?: string) => {
+  const openShopDrawer = useCallback(async (shopId: number, provider?: string, shopName?: string) => {
     setDrawer({ type: 'shop', shopId, provider, shopName });
     setDrawerLoading(true);
     
@@ -220,7 +220,7 @@ export default function ApiUsageDashboard() {
       const params = new URLSearchParams({ hours: '24' });
       if (provider) params.set('provider', provider);
       
-      const res = await fetch(`/api/platform-admin/api-usage/shops/${shopId === null ? 'null' : shopId}?${params}`);
+      const res = await fetch(`/api/platform-admin/api-usage/shops/${shopId}?${params}`);
       const data = await res.json();
       
       setDrawerData({

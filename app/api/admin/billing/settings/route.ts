@@ -15,25 +15,10 @@ export async function POST(req: NextRequest) {
 
     const updateData = {
       type: "billing",
-      // Tier-specific pricing
-      starterProductId: body.starterProductId || "",
-      starterPriceId: body.starterPriceId || "",
-      starterPrice: body.starterPrice ?? 199.95,
-      starterIncludedVins: body.starterIncludedVins ?? 300,
-      plusProductId: body.plusProductId || "",
-      plusPriceId: body.plusPriceId || "",
-      plusPrice: body.plusPrice ?? 229.95,
-      plusIncludedVins: body.plusIncludedVins ?? 300,
-      eliteProductId: body.eliteProductId || "",
-      elitePriceId: body.elitePriceId || "",
-      elitePrice: body.elitePrice ?? 279.95,
-      eliteIncludedVins: body.eliteIncludedVins ?? 300,
-      // Legacy mosPro fields
       mosProProductId: body.mosProProductId || "",
       mosProPriceId: body.mosProPriceId || "",
       mosProPrice: body.mosProPrice ?? 199,
       mosProIncludedVins: body.mosProIncludedVins ?? 300,
-      // VIN packs
       vinPack100ProductId: body.vinPack100ProductId || "",
       vinPack100PriceId: body.vinPack100PriceId || "",
       vinPack100Price: body.vinPack100Price ?? 39,
@@ -43,11 +28,9 @@ export async function POST(req: NextRequest) {
       vinPack500ProductId: body.vinPack500ProductId || "",
       vinPack500PriceId: body.vinPack500PriceId || "",
       vinPack500Price: body.vinPack500Price ?? 149,
-      // Onboarding
       onboardingProductId: body.onboardingProductId || "",
       onboardingPriceId: body.onboardingPriceId || "",
       onboardingPrice: body.onboardingPrice ?? 495,
-      // Trial settings
       trialDays: body.trialDays ?? 14,
       trialVinLimit: body.trialVinLimit ?? 10,
       defaultVinLimit: body.defaultVinLimit ?? 300,

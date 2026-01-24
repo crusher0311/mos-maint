@@ -1,0 +1,38 @@
+Feature ID,Feature Name,Category,Description,Requires Oil Sticker,Protractor,Tekmetric,AutoFlow,AutoVitals,Prerequisites,Billing Code,Notes
+multi_shop_management,Multi-Shop User Management,core,Manage multiple shop locations and users,no,yes,yes,yes,no,,CORE,Universal feature
+vehicle_dashboard,Vehicle/Customer Dashboard,core,View vehicle details and customer information,no,yes,yes,yes,no,,CORE,Universal feature
+manual_vehicle_entry,Manual Vehicle Entry,core,Add vehicles manually with VIN decode for standalone shops,no,yes,yes,yes,no,,CORE,For shops without SMS/DVI integration
+ai_analysis,AI-Powered Maintenance Analysis,core,AI recommendations using DataOne and CARFAX data,no,yes,yes,yes,no,,CORE,Universal feature
+maintenance_planning,Maintenance Planning & Prefetching,core,Plan upcoming maintenance with intelligent prefetching,no,yes,yes,yes,no,,CORE,Universal feature
+declined_services,Declined Services Tracking,core,Track and manage declined service recommendations,no,yes,yes,yes,no,,CORE,Universal feature
+enterprise_analytics,Enterprise Analytics,core,Multi-location analytics and reporting,no,yes,yes,yes,no,,ENTERPRISE,Requires enterprise plan
+platform_admin,Platform Admin Panel,core,Administrative tools for platform management,no,yes,yes,yes,no,,ADMIN,Admin only
+parts_crossref,Parts Cross-Reference,addon,Search parts by number/description or by vehicle from invoice history,no,yes,yes,no,no,,PARTS_CROSSREF,Uses invoice data (5 years)
+parts_history_build,Parts History Database,addon,Build searchable parts database from invoice history,no,yes,yes,no,no,parts_crossref,PARTS_CROSSREF,Protractor and Tekmetric
+qr_provisioning,QR Code Provisioning,oil_sticker,Automatic QR code generation via HoverCode,yes,yes,yes,yes,no,,STICKER,Part of oil sticker plan
+sticker_customization,Sticker Customization & Preview,oil_sticker,Customize sticker appearance and preview before printing,yes,yes,yes,yes,no,,STICKER,Part of oil sticker plan
+sticker_generation,Sticker Image Generation,oil_sticker,Generate printable sticker images,yes,yes,yes,yes,no,,STICKER,Part of oil sticker plan
+quick_sticker,Quick Sticker Printing,oil_sticker,Rapid sticker printing workflow,yes,yes,yes,yes,no,,STICKER,Part of oil sticker plan
+auto_booking,Auto Booking System,addon,Automatic appointment scheduling from oil sticker predictions,yes,yes,yes,yes,no,oil_sticker,AUTO_BOOKING,Separately billable add-on
+daily_reminders,Daily Email Reminders,addon,Configurable email reminders for pending bookings,yes,yes,yes,yes,no,auto_booking,AUTO_BOOKING,Part of auto booking
+queue_expiry,Queue Expiry,addon,Automatic expiry of stale booking requests,yes,yes,yes,yes,no,auto_booking,AUTO_BOOKING,Part of auto booking
+holiday_management,Dynamic Holiday Management,addon,Configure holidays to skip for booking and reminders,yes,yes,yes,yes,no,auto_booking,AUTO_BOOKING,Part of auto booking
+job_lookup,Job Lookup (AI-Scored),addon,AI-scored job matching with history,no,yes,yes,no,no,,JOB_LOOKUP,Requires SMS with job data
+common_failures,Common Failures Advisor,addon,Predict common repairs based on shop data,no,yes,yes,no,no,,COMMON_FAILURES,Uses shop data + AI fallback
+job_autocomplete,Smart Job Autocomplete,addon,Autocomplete with historical job data,no,yes,yes,no,no,,JOB_AUTOCOMPLETE,Requires SMS with job data
+canned_jobs_sync,Canned Jobs Sync,addon,Sync canned jobs from shop management system,no,yes,yes,no,no,,CANNED_JOBS,Requires SMS integration
+chrome_ext,MOS Tools Chrome Extension,chrome_extension,Browser extension for in-SMS workflow integration,no,no,yes,no,no,,CHROME_EXT,Tekmetric only (web-based)
+chrome_ext_maintenance_plans,Maintenance Plans (Chrome),chrome_extension,View maintenance plans inside Tekmetric RO screen,no,no,yes,no,no,chrome_ext,CHROME_EXT,Tekmetric only
+chrome_ext_job_lookup,Job Lookup (Chrome),chrome_extension,Search job history without leaving the RO screen,no,no,yes,no,no,chrome_ext,CHROME_EXT,Tekmetric only
+chrome_ext_add_to_ro,Add-to-RO (Chrome),chrome_extension,Add jobs directly to repair orders via extension,no,no,yes,no,no,chrome_ext,CHROME_EXT,Tekmetric only
+chrome_ext_sticker_print,Sticker Printing (Chrome),chrome_extension,Print oil stickers directly from SMS workflow,yes,no,yes,no,no,chrome_ext;oil_sticker,CHROME_EXT,Tekmetric only - requires oil sticker plan
+chrome_ext_common_failures,Common Failures (Chrome),chrome_extension,View common failures advisor in extension,no,no,yes,no,no,chrome_ext,CHROME_EXT,Tekmetric only
+initial_sync,Initial/Incremental Data Sync,integration,Sync shop data from management system,no,yes,yes,yes,no,,SYNC,Webhook for AutoFlow
+open_work_orders,Open Work Order Surfacing,integration,View and manage open work orders,no,yes,yes,no,no,,WORK_ORDERS,Not available for AutoFlow
+oauth_token_mgmt,OAuth Token Management,integration,Automatic OAuth token refresh,no,no,yes,no,no,,OAUTH,Tekmetric only
+webhook_callbacks,Webhook Callbacks,integration,Receive real-time updates from SMS,no,yes,yes,yes,no,,WEBHOOKS,System integration
+sms_adapter,SMS Adapter (Confirmations),integration,Send booking confirmations via SMS system,no,yes,yes,yes,no,,SMS,For auto booking confirmations
+dvi_inspection_sync,DVI Inspection Sync,dvi,Sync inspection data from DVI system,no,no,no,no,yes,,DVI,AutoVitals only
+dvi_vehicle_sync,DVI Vehicle Data Sync,dvi,Sync vehicle data from DVI system,no,no,no,no,yes,,DVI,AutoVitals only
+dvi_appointment_lookup,DVI Appointment Lookup,dvi,Look up appointments from DVI system,no,no,no,no,yes,,DVI,AutoVitals only
+dvi_settings,DVI Settings UI,dvi,Configure DVI integration settings,no,no,no,no,yes,,DVI,AutoVitals only

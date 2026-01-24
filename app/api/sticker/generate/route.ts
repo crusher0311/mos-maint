@@ -2,15 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
-import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
 import nodeHtmlToImage from "node-html-to-image";
+import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
-import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
+
+function getLogoUrl(): string {
+  if (process.env.HOVERCODE_LOGO_URL) {
+    return process.env.HOVERCODE_LOGO_URL;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
+  return `${baseUrl}/appointment.png`;
+}
 
 const storage = new Storage({
   credentials: {
@@ -138,12 +146,6 @@ async function createHovercodeQR(
   }
 
   try {
-    // Use the dev domain for the logo URL (publicly accessible)
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
-    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
-    
-    console.log("[Sticker Generate] Creating HoverCode with pattern: Squares, dynamic: true, logo:", logoUrl);
-    
     const response = await fetch(`${HOVERCODE_API_BASE}/create/`, {
       method: "POST",
       headers: {
@@ -153,14 +155,12 @@ async function createHovercodeQR(
       body: JSON.stringify({
         workspace: HOVERCODE_WORKSPACE_ID,
         qr_data: url,
+        qr_type: "Link",
         dynamic: true,
         display_name: displayName || "Oil Sticker QR",
-        primary_color: "#111111",
-        background_color: backgroundColor,
         pattern: "Squares",
-        eye_style: "Rounded",
-        size: size,
-        logo_url: logoUrl,
+        background_color: backgroundColor,
+        logo_url: getLogoUrl(),
         generate_png: true,
       }),
     });
@@ -189,6 +189,15 @@ async function createHovercodeQR(
   }
 }
 
+async function fallbackQRGeneration(url: string, color: string = "#1976d2"): Promise<string> {
+  const qrDataUrl = await QRCode.toDataURL(url, {
+    width: 300,
+    margin: 2,
+    color: { dark: color, light: "#ffffff" },
+    errorCorrectionLevel: "H",
+  });
+  return qrDataUrl;
+}
 
 interface FontStyle {
   bold?: boolean;
@@ -224,7 +233,6 @@ interface StickerConfig {
   appointmentUrl?: string;
   useKilometers?: boolean;
   hovercodeQRId?: string;
-  cachedQrCodeDataUri?: string;
   roundMileage?: boolean;
 }
 
@@ -236,67 +244,19 @@ interface StickerRequest {
   currentMileage?: number;
   nextServiceMileage?: number;
   nextServiceDate?: string;
-  size?: "1.5x2.25" | "2x2" | "2x2.5" | "2x3" | "2x3.5";
+  size?: "2x2" | "2x2.5" | "2x3" | "2x3.5";
   includeQR?: boolean;
   previewConfig?: StickerConfig;
   useKilometers?: boolean;
   useHours?: boolean;
-  designerLayout?: DesignerLayout;
-  dataConfig?: {
-    logo?: string;
-    phone?: string;
-    tagline?: string;
-    taglineLine2?: string;
-    serviceLabel?: string;
-    useKilometers?: boolean;
-    roundMileage?: boolean;
-  };
-  // Customer data for auto booking
-  customerId?: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  vehicleId?: string;
-  roNumber?: string;
 }
 
-interface DesignerElement {
-  id: string;
-  type: string;
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  fontWeight: 'normal' | 'bold';
-  fontStyle: 'normal' | 'italic';
-  textAlign: 'left' | 'center' | 'right';
-  color: string;
-  backgroundColor?: string;
-  visible: boolean;
-  showLabel?: boolean;
-  imageFit?: 'contain' | 'cover';
-  content?: string;
-}
-
-interface DesignerLayout {
-  elements: DesignerElement[];
-  canvasWidth: number;
-  canvasHeight: number;
-  gridSize: number;
-  showGrid: boolean;
-  backgroundColor: string;
-  version?: number;
-}
-
-// 300 DPI output dimensions for crisp label printing
 const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "1.5x2.25": { width: 450, height: 675 },  // 1.5" x 2.25" at 300 DPI
-  "2x2": { width: 600, height: 600 },        // 2" x 2" at 300 DPI
-  "2x2.5": { width: 600, height: 750 },      // 2" x 2.5" at 300 DPI
-  "2x3": { width: 600, height: 900 },        // 2" x 3" at 300 DPI
-  "2x3.5": { width: 600, height: 1050 },     // 2" x 3.5" at 300 DPI
+  "1.5x2.25": { width: 443, height: 665 },
+  "2x2": { width: 591, height: 591 },
+  "2x2.5": { width: 591, height: 739 },
+  "2x3": { width: 591, height: 887 },
+  "2x3.5": { width: 591, height: 1035 },
 };
 
 function generateStickerHtml(
@@ -427,15 +387,15 @@ function generateStickerHtml(
       display: flex;
       flex-direction: column;
       justify-content: center;
+      overflow: hidden;
     }
     .service-label {
-      font-size: ${Math.min(labelSize, Math.round(14 * scaleFactor))}px;
+      font-size: ${labelSize}px;
       font-weight: ${serviceLabelFontStyle.bold ? "bold" : "normal"};
       font-style: ${serviceLabelFontStyle.italic ? "italic" : "normal"};
       color: ${serviceLabelColor};
-      margin-bottom: ${Math.round(4 * scaleFactor)}px;
+      margin-bottom: ${Math.round(8 * scaleFactor)}px;
       white-space: nowrap;
-      overflow: visible;
     }
     .service-date {
       font-size: ${valueSize}px;
@@ -496,155 +456,6 @@ function generateStickerHtml(
   `;
 }
 
-function generateStickerHtmlFromLayout(
-  layout: DesignerLayout,
-  dataConfig: StickerRequest['dataConfig'],
-  data: StickerRequest,
-  dimensions: { width: number; height: number },
-  logoDataUrl: string | null,
-  qrDataUrl: string | null
-): { html: string; renderWidth: number; renderHeight: number; outputWidth: number; outputHeight: number } {
-  // Render at canvas size for pixel-perfect matching, then scale up the image
-  const renderWidth = layout.canvasWidth;
-  const renderHeight = layout.canvasHeight;
-  
-  const useKilometers = dataConfig?.useKilometers ?? false;
-  const roundMileage = dataConfig?.roundMileage ?? true;
-  const distanceUnit = useKilometers ? "km" : "mi";
-  
-  const formattedDate = data.nextServiceDate
-    ? new Date(data.nextServiceDate).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "";
-  
-  let mileageValue = data.nextServiceMileage;
-  if (mileageValue && roundMileage) {
-    mileageValue = Math.round(mileageValue / 100) * 100;
-  }
-  const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
-  
-  const getElementContent = (element: DesignerElement): string => {
-    switch (element.type) {
-      case 'logo':
-        if (logoDataUrl) {
-          return `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:${element.imageFit || 'contain'};" />`;
-        }
-        return '';
-      case 'qrCode':
-        if (qrDataUrl) {
-          return `<img src="${qrDataUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
-        }
-        return '';
-      case 'phone':
-        return dataConfig?.phone || '';
-      case 'tagline':
-        return dataConfig?.tagline || '';
-      case 'taglineLine2':
-        return dataConfig?.taglineLine2 || '';
-      case 'serviceLabel':
-        return element.content || dataConfig?.serviceLabel || 'Next Oil Service';
-      case 'serviceDate':
-        return formattedDate;
-      case 'serviceMileage':
-        return formattedMileage ? `${formattedMileage} ${distanceUnit}` : '';
-      default:
-        return element.content || '';
-    }
-  };
-  
-  const visibleElements = layout.elements.filter(el => el.visible);
-  
-  // Render at 1:1 scale with canvas coordinates - no scaling needed
-  const elementsHtml = visibleElements.map(element => {
-    const content = getElementContent(element);
-    if (!content) return '';
-    
-    const isImage = element.type === 'logo' || element.type === 'qrCode';
-    
-    if (isImage) {
-      // Images just need the container
-      return `
-        <div style="
-          position: absolute;
-          left: ${element.x}px;
-          top: ${element.y}px;
-          width: ${element.width}px;
-          height: ${element.height}px;
-          ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
-        ">
-          ${content}
-        </div>
-      `;
-    }
-    
-    // For text elements, match designer structure exactly:
-    // Outer div for positioning, inner span for text styles
-    return `
-      <div style="
-        position: absolute;
-        left: ${element.x}px;
-        top: ${element.y}px;
-        width: ${element.width}px;
-        height: ${element.height}px;
-        ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
-      ">
-        <span style="
-          display: block;
-          width: 100%;
-          height: 100%;
-          font-size: ${element.fontSize}px;
-          font-weight: ${element.fontWeight};
-          font-style: ${element.fontStyle};
-          text-align: ${element.textAlign};
-          color: ${element.color};
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          line-height: ${element.height}px;
-        ">${typeof content === 'string' ? content : ''}</span>
-      </div>
-    `;
-  }).join('');
-  
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: ${renderWidth}px;
-      height: ${renderHeight}px;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-    }
-    #sticker-canvas {
-      width: ${renderWidth}px;
-      height: ${renderHeight}px;
-      background: ${layout.backgroundColor};
-      position: relative;
-      overflow: hidden;
-    }
-  </style>
-</head>
-<body>
-  <div id="sticker-canvas">
-    ${elementsHtml}
-  </div>
-</body>
-</html>
-  `;
-  
-  return { html, renderWidth, renderHeight, outputWidth: dimensions.width, outputHeight: dimensions.height };
-}
-
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -684,132 +495,55 @@ export async function POST(req: NextRequest) {
       const qrColor = config.colors?.primary || "#1976d2";
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
-      
-      // First, try to use cached QR code (fastest, most reliable)
-      if (config.cachedQrCodeDataUri) {
-        console.log("[Sticker Generate] Using cached QR code from config");
-        qrDataUrl = config.cachedQrCodeDataUri;
-      }
-      
-      // If no cached QR, try existing HoverCode
-      if (!qrDataUrl && config.hovercodeQRId) {
-        console.log(`[Sticker Generate] Fetching HoverCode QR: ${config.hovercodeQRId}`);
-        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
-        if (existingQR.dataUri) {
-          qrDataUrl = existingQR.dataUri;
-          // Cache it for next time
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
-          );
-          console.log("[Sticker Generate] Cached HoverCode QR for future use");
-        }
-      }
-      
-      // If still no QR, create a new HoverCode
-      if (!qrDataUrl) {
-        const newQR = await createHovercodeQR(redirectUrl, {
-          size: 300,
-          color: qrColor,
-          backgroundColor: qrBgColor,
-          displayName: `${shopName} - Oil Sticker`,
-        });
-        
-        if (newQR?.dataUri) {
-          qrDataUrl = newQR.dataUri;
-          
-          // Save both the HoverCode ID and cache the QR image
-          const updateFields: Record<string, string> = {
-            "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
-          };
-          if (newQR.id && !config.hovercodeQRId) {
-            updateFields["stickerConfig.hovercodeQRId"] = newQR.id;
+      // Always use HoverCode QR (has styled icon in center) - QR is typically black/white regardless of sticker colors
+      {
+        if (config.hovercodeQRId) {
+          console.log(`[Sticker Generate] Using existing HoverCode QR: ${config.hovercodeQRId}`);
+          const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+          if (existingQR.dataUri) {
+            qrDataUrl = existingQR.dataUri;
           }
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: updateFields }
-          );
-          console.log(`[Sticker Generate] Created and cached new HoverCode QR: ${newQR.id}`);
         }
-      }
-      
-      // Require a valid QR code - no fallback
-      if (!qrDataUrl) {
-        console.error("[Sticker Generate] Failed to get QR code from HoverCode");
-        return NextResponse.json({ error: "Failed to generate QR code. Please try refreshing the QR code in settings." }, { status: 500 });
+        
+        if (!qrDataUrl) {
+          const newQR = await createHovercodeQR(redirectUrl, {
+            size: 300,
+            color: qrColor,
+            backgroundColor: qrBgColor,
+            displayName: `${shopName} - Oil Sticker`,
+          });
+          
+          if (newQR?.dataUri) {
+            qrDataUrl = newQR.dataUri;
+            
+            if (newQR.id && !config.hovercodeQRId) {
+              await db.collection("shops").updateOne(
+                { shopId },
+                { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
+              );
+              console.log(`[Sticker Generate] Saved new HoverCode QR ID: ${newQR.id}`);
+            }
+          }
+        }
+        
+        if (!qrDataUrl) {
+          console.log("[Sticker Generate] HoverCode failed, using fallback QR");
+          qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+        }
       }
     }
 
-    let html: string;
-    let renderWidth = dimensions.width;
-    let renderHeight = dimensions.height;
-    let outputWidth = dimensions.width;
-    let outputHeight = dimensions.height;
-    
-    let designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
-    
-    // Scale the layout to match the requested sticker size
-    // This ensures the designer preview matches the printed output exactly
-    if (designerLayout && designerLayout.elements) {
-      const targetSize = getStickerSize(size);
-      if (designerLayout.canvasWidth !== targetSize.canvasWidth || 
-          designerLayout.canvasHeight !== targetSize.canvasHeight) {
-        console.log(`[Generate API] Scaling layout from ${designerLayout.canvasWidth}x${designerLayout.canvasHeight} to ${targetSize.canvasWidth}x${targetSize.canvasHeight}`);
-        designerLayout = scaleLayoutToSize(designerLayout, size);
-      }
-    }
-    
-    if (designerLayout && designerLayout.elements) {
-      // Debug: Log element details
-      console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
-      designerLayout.elements.forEach(el => {
-        if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
-          console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
-        }
-      });
-      
-      const dataConfig = body.dataConfig || {
-        logo: config.logo,
-        phone: config.phone,
-        tagline: config.tagline,
-        taglineLine2: config.taglineLine2,
-        serviceLabel: config.serviceLabel,
-        useKilometers: config.useKilometers,
-        roundMileage: config.roundMileage,
-      };
-      const result = generateStickerHtmlFromLayout(
-        designerLayout,
-        dataConfig,
-        body,
-        dimensions,
-        logoDataUrl,
-        qrDataUrl
-      );
-      html = result.html;
-      renderWidth = result.renderWidth;
-      renderHeight = result.renderHeight;
-      outputWidth = result.outputWidth;
-      outputHeight = result.outputHeight;
-    } else {
-      html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
-    }
+    const html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
 
-    // Render at canvas size, then scale up the image for pixel-perfect matching
-    const scaleUp = outputWidth / renderWidth;
+    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH || "/nix/store/$(ls /nix/store | grep -m1 chromium)/bin/chromium";
     
     const image = await nodeHtmlToImage({
       html,
       type: "png",
       transparent: false,
-      selector: "#sticker-canvas",
       puppeteerArgs: {
         executablePath: process.env.CHROMIUM_PATH || undefined,
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-        defaultViewport: {
-          width: renderWidth,
-          height: renderHeight,
-          deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
-        },
       },
     });
 
@@ -823,29 +557,6 @@ export async function POST(req: NextRequest) {
       vehicleModel: body.vehicleModel || null,
       size,
     });
-
-    // Trigger auto booking if customer data is provided and we have a service date
-    if (body.nextServiceDate && (body.customerName || body.customerId)) {
-      const bookingData: StickerBookingData = {
-        customerId: body.customerId,
-        customerName: body.customerName,
-        customerPhone: body.customerPhone,
-        customerEmail: body.customerEmail,
-        vehicleId: body.vehicleId,
-        vin: body.vin,
-        vehicleYear: body.vehicleYear,
-        vehicleMake: body.vehicleMake,
-        vehicleModel: body.vehicleModel,
-        roNumber: body.roNumber,
-      };
-      const bookingResult = await triggerAutoBookingFromSticker(
-        shopId,
-        body.nextServiceDate,
-        body.nextServiceMileage || 0,
-        bookingData
-      );
-      console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
-    }
 
     const imageBuffer = image as Buffer;
     return new NextResponse(new Uint8Array(imageBuffer), {

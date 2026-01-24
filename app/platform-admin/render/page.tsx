@@ -129,7 +129,7 @@ export default function RenderObservabilityDashboard() {
   };
 
   const getLevelIcon = (level: string) => {
-    switch ((level || 'info').toLowerCase()) {
+    switch (level.toLowerCase()) {
       case 'error':
         return <XCircle className="w-4 h-4 text-red-500" />;
       case 'warn':
@@ -143,7 +143,7 @@ export default function RenderObservabilityDashboard() {
   };
 
   const getLevelBgColor = (level: string) => {
-    switch ((level || 'info').toLowerCase()) {
+    switch (level.toLowerCase()) {
       case 'error':
         return 'bg-red-50 border-red-100';
       case 'warn':

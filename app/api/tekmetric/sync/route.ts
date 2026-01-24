@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrderFull, TekmetricVehicle, TekmetricCustomer } from "@/lib/tekmetric";
+import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrder, TekmetricVehicle, TekmetricCustomer } from "@/lib/tekmetric";
 
 async function getUserShopId(): Promise<string | null> {
   const store = await cookies();
@@ -37,8 +37,6 @@ export async function POST(request: NextRequest) {
     }
 
     const shopId = shop.tekmetric.shopId;
-    console.log(`[Tekmetric Sync] Starting sync for shop ${userShopId}, Tekmetric shopId: ${shopId}`);
-    
     const stats = {
       repairOrdersFound: 0,
       vehiclesImported: 0,
@@ -47,7 +45,7 @@ export async function POST(request: NextRequest) {
     };
 
     const activeStatuses = ['Estimate', 'Pending', 'In Progress', 'Complete'];
-    const vehicleMap = new Map<number, { vehicle: TekmetricVehicle; ro: TekmetricRepairOrderFull; customer?: TekmetricCustomer }>();
+    const vehicleMap = new Map<number, { vehicle: TekmetricVehicle; ro: TekmetricRepairOrder; customer?: TekmetricCustomer }>();
 
     for (const status of activeStatuses) {
       let roPage = 0;
@@ -95,59 +93,14 @@ export async function POST(request: NextRequest) {
       const vin = vehicle.vin!.toUpperCase();
       const existing = await db.collection("vehicles").findOne({ vin });
       
-      // Get status and label from the full repair order structure
-      const roStatus = ro.repairOrderStatus?.name || "Work-In-Progress";
-      const roLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || null;
-      const roLabelColor = ro.color || null;
-      const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
-      
-      // Log first few for debugging
-      if (vehicleMap.size <= 3) {
-        console.log(`[Tekmetric Sync] Sample RO #${ro.repairOrderNumber}: status="${roStatus}", vin=${vin}, mileage=${roMileage}`);
-      }
-      
       // Build the active source entry for this work order
       const workOrderSource = {
         provider: "tekmetric",
         workOrderId: String(ro.id),
         workOrderNumber: ro.repairOrderNumber,
-        status: roStatus,
+        status: ro.status || "Open",
         addedAt: new Date(),
       };
-      
-      // Also upsert into tekmetric_work_orders (this is what the dashboard queries)
-      const customerName = customer 
-        ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer"
-        : "Unknown Customer";
-      
-      await db.collection("tekmetric_work_orders").updateOne(
-        { workOrderId: String(ro.id) },
-        {
-          $set: {
-            workOrderId: String(ro.id),
-            workOrderNumber: ro.repairOrderNumber,
-            shopId: String(userShopId),
-            tekmetricShopId: shopId,
-            vin,
-            vehicleYear: vehicle.year,
-            vehicleMake: vehicle.make,
-            vehicleModel: vehicle.model,
-            vehicleEngine: vehicle.engine,
-            customerName,
-            customerId: ro.customerId,
-            odometer: roMileage,
-            status: roStatus,
-            label: roLabel,
-            labelColor: roLabelColor,
-            fetchedAt: new Date(),
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            createdAt: new Date(),
-          }
-        },
-        { upsert: true }
-      );
       
       const vehicleData: Record<string, any> = {
         vin,
@@ -161,7 +114,7 @@ export async function POST(request: NextRequest) {
         licensePlate: vehicle.licensePlate,
         licensePlateState: vehicle.licensePlateState,
         color: vehicle.color,
-        mileage: roMileage,
+        mileage: ro.mileageIn || ro.mileageOut || vehicle.mileageIn || vehicle.mileageOut,
         customer: customer ? {
           firstName: customer.firstName,
           lastName: customer.lastName,
@@ -174,9 +127,9 @@ export async function POST(request: NextRequest) {
           shopId: vehicle.shopId,
           repairOrderId: ro.id,
           repairOrderNumber: ro.repairOrderNumber,
-          roStatus: roStatus,
-          roLabel: roLabel,
-          roLabelColor: roLabelColor,
+          roStatus: ro.status,
+          roLabel: ro.label?.text || null,
+          roLabelColor: ro.label?.colorCode || null,
           lastSynced: new Date(),
         },
         updatedAt: new Date(),
@@ -230,11 +183,6 @@ export async function POST(request: NextRequest) {
       { shopId: { $in: [userShopId, Number(userShopId)] } },
       { $set: { "tekmetric.lastSync": new Date() } }
     );
-
-    console.log(`[Tekmetric Sync] Complete - ROs: ${stats.repairOrdersFound}, Imported: ${stats.vehiclesImported}, Updated: ${stats.vehiclesUpdated}, Errors: ${stats.errors.length}`);
-    if (stats.errors.length > 0) {
-      console.log(`[Tekmetric Sync] Errors:`, stats.errors.slice(0, 5));
-    }
 
     return NextResponse.json({
       success: true,

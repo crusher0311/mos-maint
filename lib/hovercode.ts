@@ -2,6 +2,15 @@ import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2";
 
+function getLogoUrl(): string {
+  if (process.env.HOVERCODE_LOGO_URL) {
+    return process.env.HOVERCODE_LOGO_URL;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://app.myoilsticker.com");
+  return `${baseUrl}/appointment.png`;
+}
+
 interface HovercodeCreateResponse {
   id: string;
   qr_data: string;
@@ -22,9 +31,6 @@ interface CreateQRCodeOptions {
   shopName: string;
   primaryColor?: string;
   backgroundColor?: string;
-  logoUrl?: string;
-  pattern?: string;
-  frame?: string;
 }
 
 export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
@@ -47,39 +53,23 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
   const startTime = Date.now();
   
   try {
-    // Use the dev domain for the logo URL (publicly accessible)
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
-    const defaultLogoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
-    
-    const requestBody: Record<string, any> = {
-      workspace: workspaceId,
-      qr_data: destinationUrl,
-      display_name: `MOS Sticker - ${options.shopName}`,
-      primary_color: options.primaryColor || "#111111",
-      background_color: options.backgroundColor || "#ffffff",
-      dynamic: true,
-      pattern: options.pattern || "Squares",
-      eye_style: "Rounded",
-      logo_url: options.logoUrl || defaultLogoUrl,
-      generate_png: true,
-    };
-    
-    if (options.frame) {
-      requestBody.frame = options.frame;
-    }
-    
-    console.log("[HoverCode] Creating QR with options:", {
-      ...requestBody,
-      workspace: "[redacted]"
-    });
-    
     const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/create/`, {
       method: "POST",
       headers: {
         Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        workspace: workspaceId,
+        qr_data: destinationUrl,
+        qr_type: "Link",
+        display_name: `MOS Sticker - ${options.shopName}`,
+        pattern: "Squares",
+        dynamic: true,
+        background_color: options.backgroundColor || "#ffffff",
+        logo_url: getLogoUrl(),
+        generate_png: true,
+      }),
     });
 
     const latencyMs = Date.now() - startTime;

@@ -47,25 +47,10 @@ export type VinPackConfig = {
 };
 
 export type BillingSettings = {
-  // Tier-specific pricing (Starter, Plus, Elite)
-  starterProductId: string;
-  starterPriceId: string;
-  starterPrice: number;
-  starterIncludedVins: number;
-  plusProductId: string;
-  plusPriceId: string;
-  plusPrice: number;
-  plusIncludedVins: number;
-  eliteProductId: string;
-  elitePriceId: string;
-  elitePrice: number;
-  eliteIncludedVins: number;
-  // Legacy mosPro fields (for backward compatibility)
   mosProProductId: string;
   mosProPriceId: string;
   mosProPrice: number;
   mosProIncludedVins: number;
-  // VIN packs
   vinPack100ProductId: string;
   vinPack100PriceId: string;
   vinPack100Price: number;
@@ -75,11 +60,9 @@ export type BillingSettings = {
   vinPack500ProductId: string;
   vinPack500PriceId: string;
   vinPack500Price: number;
-  // Onboarding
   onboardingProductId: string;
   onboardingPriceId: string;
   onboardingPrice: number;
-  // Trial settings
   trialDays: number;
   trialVinLimit: number;
   defaultVinLimit: number;
@@ -88,25 +71,10 @@ export type BillingSettings = {
 };
 
 const DEFAULT_BILLING_SETTINGS: BillingSettings = {
-  // Tier-specific pricing
-  starterProductId: "",
-  starterPriceId: "",
-  starterPrice: 199.95,
-  starterIncludedVins: 300,
-  plusProductId: "",
-  plusPriceId: "",
-  plusPrice: 229.95,
-  plusIncludedVins: 300,
-  eliteProductId: "",
-  elitePriceId: "",
-  elitePrice: 279.95,
-  eliteIncludedVins: 300,
-  // Legacy mosPro fields
   mosProProductId: "",
   mosProPriceId: "",
   mosProPrice: 199,
   mosProIncludedVins: 300,
-  // VIN packs
   vinPack100ProductId: "",
   vinPack100PriceId: "",
   vinPack100Price: 39,
@@ -116,11 +84,9 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   vinPack500ProductId: "",
   vinPack500PriceId: "",
   vinPack500Price: 149,
-  // Onboarding
   onboardingProductId: "",
   onboardingPriceId: "",
   onboardingPrice: 495,
-  // Trial settings
   trialDays: 14,
   trialVinLimit: 10,
   defaultVinLimit: 300,
@@ -138,25 +104,10 @@ export async function getBillingSettings(): Promise<BillingSettings> {
     }
 
     return {
-      // Tier-specific pricing
-      starterProductId: settings.starterProductId || "",
-      starterPriceId: settings.starterPriceId || "",
-      starterPrice: settings.starterPrice ?? 199.95,
-      starterIncludedVins: settings.starterIncludedVins ?? 300,
-      plusProductId: settings.plusProductId || "",
-      plusPriceId: settings.plusPriceId || "",
-      plusPrice: settings.plusPrice ?? 229.95,
-      plusIncludedVins: settings.plusIncludedVins ?? 300,
-      eliteProductId: settings.eliteProductId || "",
-      elitePriceId: settings.elitePriceId || "",
-      elitePrice: settings.elitePrice ?? 279.95,
-      eliteIncludedVins: settings.eliteIncludedVins ?? 300,
-      // Legacy mosPro fields
       mosProProductId: settings.mosProProductId || "",
       mosProPriceId: settings.mosProPriceId || "",
       mosProPrice: settings.mosProPrice ?? 199,
       mosProIncludedVins: settings.mosProIncludedVins ?? 300,
-      // VIN packs
       vinPack100ProductId: settings.vinPack100ProductId || "",
       vinPack100PriceId: settings.vinPack100PriceId || "",
       vinPack100Price: settings.vinPack100Price ?? 39,
@@ -166,11 +117,9 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       vinPack500ProductId: settings.vinPack500ProductId || "",
       vinPack500PriceId: settings.vinPack500PriceId || "",
       vinPack500Price: settings.vinPack500Price ?? 149,
-      // Onboarding
       onboardingProductId: settings.onboardingProductId || "",
       onboardingPriceId: settings.onboardingPriceId || "",
       onboardingPrice: settings.onboardingPrice ?? 495,
-      // Trial settings
       trialDays: settings.trialDays ?? 14,
       trialVinLimit: settings.trialVinLimit ?? 10,
       defaultVinLimit: settings.defaultVinLimit ?? 300,

@@ -8,15 +8,6 @@ let cannedJobSource = 'sms';
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
 let lookupJobsDataMap = new Map(); // Store lookup job objects by ID to avoid JSON in HTML
-let shopFeatures = {
-  maintenance: true,
-  job_lookup: false,
-  common_failures: false,
-  oil_sticker: false,
-  keytags: false,
-  auto_booking: false,
-  part_xref: false
-};
 
 // ==================== DOM ELEMENTS ====================
 const elements = {
@@ -122,10 +113,7 @@ function setupEventListeners() {
   
   // Tab navigation
   elements.tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.classList.contains('disabled')) return;
-      switchTab(btn.dataset.tab);
-    });
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
   
   // Canned job source tabs
@@ -247,9 +235,6 @@ function updateContext(context) {
       elements.mileageDisplay.classList.add('hidden');
     }
     
-    // Fetch features for this shop
-    fetchShopFeatures();
-    
     // Load tab data
     if (currentTab === 'plan') {
       loadPlan();
@@ -261,57 +246,6 @@ function updateContext(context) {
   } else {
     elements.noContext.classList.remove('hidden');
     elements.hasContext.classList.add('hidden');
-  }
-}
-
-async function fetchShopFeatures() {
-  if (!currentContext || !currentContext.shopId) return;
-  
-  try {
-    const result = await sendMessage({
-      action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
-    });
-    
-    if (result && result.features) {
-      shopFeatures = result.features;
-      updateTabAccessibility();
-    }
-  } catch (err) {
-    console.error('[MOS] Error fetching features:', err);
-  }
-}
-
-function updateTabAccessibility() {
-  const featureMap = {
-    'plan': 'maintenance',
-    'failures': 'common_failures',
-    'lookup': 'job_lookup',
-    'canned': null,  // Canned jobs always available (integration-based, not plan-gated)
-    'sticker': 'oil_sticker'
-  };
-  
-  elements.tabBtns.forEach(btn => {
-    const tab = btn.dataset.tab;
-    const featureKey = featureMap[tab];
-    const hasAccess = featureKey ? shopFeatures[featureKey] : true;
-    
-    if (hasAccess) {
-      btn.classList.remove('disabled');
-      btn.removeAttribute('data-tooltip');
-    } else {
-      btn.classList.add('disabled');
-      btn.setAttribute('data-tooltip', 'Upgrade to access');
-    }
-  });
-  
-  // If current tab is disabled, switch to first available tab
-  const currentTabBtn = document.querySelector(`.tab-btn[data-tab="${currentTab}"]`);
-  if (currentTabBtn && currentTabBtn.classList.contains('disabled')) {
-    const firstAvailable = document.querySelector('.tab-btn:not(.disabled)');
-    if (firstAvailable) {
-      switchTab(firstAvailable.dataset.tab);
-    }
   }
 }
 
@@ -615,13 +549,6 @@ function createServiceItemHTML(item, type) {
   const lastDoneHtml = lastDone ? 
     `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` : '';
   
-  // Check if we have full job details from canned job match
-  const hasFullDetails = item.laborItems && item.laborItems.length > 0;
-  const addLabel = hasFullDetails ? 'Add with Labor/Parts' : 'Add Generic Job';
-  const addIcon = hasFullDetails 
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
-  
   return `
     <li class="service-item ${type}">
       <div class="service-header">
@@ -631,12 +558,6 @@ function createServiceItemHTML(item, type) {
             + Add
           </button>
           <div id="${itemId}" class="add-dropdown-menu hidden">
-            ${hasFullDetails ? `
-            <button class="add-dropdown-item add-primary" data-action="add-generic" data-service='${JSON.stringify(item)}'>
-              ${addIcon}
-              ${addLabel}
-            </button>
-            ` : ''}
             <button class="add-dropdown-item" data-action="search-history" data-service='${JSON.stringify(item)}'>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -649,12 +570,12 @@ function createServiceItemHTML(item, type) {
               </svg>
               Search Canned Jobs
             </button>
-            ${!hasFullDetails ? `
             <button class="add-dropdown-item" data-action="add-generic" data-service='${JSON.stringify(item)}'>
-              ${addIcon}
-              ${addLabel}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Generic Job
             </button>
-            ` : ''}
           </div>
         </div>
       </div>
@@ -1003,47 +924,24 @@ async function loadCannedJobs() {
         throw new Error('No Tekmetric session. Please navigate to a repair order.');
       }
       
-      try {
-        const result = await sendMessage({
-          action: 'TEKMETRIC_API_REQUEST',
-          endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
-        });
-        
-        // Handle error responses from Tekmetric API
-        if (result.error || result.success === false) {
-          // Check for 405 error - this API may not be available
-          if (result.error && result.error.includes('405')) {
-            throw new Error('SMS Library not available for this shop. Please use MOS Enriched tab instead.');
-          }
-          throw new Error(result.error || 'Failed to load canned jobs from Tekmetric');
-        }
-        
-        const jobsArray = Array.isArray(result.content) ? result.content : (Array.isArray(result) ? result : []);
-        jobs = jobsArray.map(job => ({
-          id: job.id,
-          name: job.name,
-          description: job.description,
-          amount: job.totalAmount || 0,
-          source: 'tekmetric'
-        }));
-      } catch (err) {
-        // Handle 405 errors more gracefully
-        if (err.message && err.message.includes('405')) {
-          throw new Error('SMS Library not available for this shop. Please use MOS Enriched tab instead.');
-        }
-        throw err;
-      }
+      const result = await sendMessage({
+        action: 'TEKMETRIC_API_REQUEST',
+        endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
+      });
+      
+      jobs = (result.content || result || []).map(job => ({
+        id: job.id,
+        name: job.name,
+        description: job.description,
+        amount: job.totalAmount || 0,
+        source: 'tekmetric'
+      }));
     } else {
       // Fetch from MOS enriched library
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
         endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
       });
-      
-      // Handle error responses from MOS API
-      if (result.error || result.success === false) {
-        throw new Error(result.error || 'Failed to load canned jobs from MOS');
-      }
       
       jobs = result.jobs || [];
     }
@@ -1100,15 +998,13 @@ function renderCannedJobs(jobs) {
 
 // ==================== JOB ACTIONS ====================
 async function handleAddService(service) {
-  // Check if we have full job details from matching canned job
-  const hasFullDetails = service.laborItems && service.laborItems.length > 0;
-  
   // Convert service recommendation to a job and add
   const jobData = {
     name: service.name,
-    laborItems: hasFullDetails 
-      ? service.laborItems 
-      : [{ name: service.name, hours: service.laborHours || 1 }],
+    laborItems: [{
+      name: service.name,
+      hours: service.laborHours || 1
+    }],
     parts: service.parts || []
   };
   

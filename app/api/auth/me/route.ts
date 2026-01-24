@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,18 +16,6 @@ export async function GET() {
   const db = await getDb();
   const shop = await db.collection("shops").findOne({ shopId: sess.shopId });
 
-  let hasEnterpriseBilling = false;
-  if (shop?.enterpriseId) {
-    try {
-      const enterprise = await db.collection("enterprise_accounts").findOne({
-        _id: new ObjectId(shop.enterpriseId.toString())
-      });
-      hasEnterpriseBilling = enterprise?.billing?.enabled === true;
-    } catch (e) {
-      // If enterpriseId is invalid, just ignore
-    }
-  }
-
   return NextResponse.json({
     ok: true,
     authenticated: true,
@@ -40,6 +27,5 @@ export async function GET() {
     locationIdentifier: shop?.locationIdentifier || null,
     isPlatformAdmin: sess.isPlatformAdmin || false,
     enterpriseId: shop?.enterpriseId || null,
-    hasEnterpriseBilling,
   });
 }

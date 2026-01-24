@@ -101,31 +101,21 @@ export async function POST(req: NextRequest) {
           
           // If they skipped trial and got bonus VINs, ensure their VIN limit is set correctly
           if (skippedTrial) {
-            // Get the billing settings to calculate total VINs based on tier
+            // Get the billing settings to calculate total VINs
             const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
-            // Use tier-specific included VINs, fallback to default
-            let baseVins = billingSettings?.defaultVinLimit || 300;
-            if (plan === "starter" && billingSettings?.starterIncludedVins) {
-              baseVins = billingSettings.starterIncludedVins;
-            } else if (plan === "plus" && billingSettings?.plusIncludedVins) {
-              baseVins = billingSettings.plusIncludedVins;
-            } else if (plan === "elite" && billingSettings?.eliteIncludedVins) {
-              baseVins = billingSettings.eliteIncludedVins;
-            }
+            const baseVins = billingSettings?.mosProIncludedVins || 300;
             const bonus = billingSettings?.skipTrialBonusVins || 50;
             updateData["billing.vinLimit"] = baseVins + bonus;
             updateData["billing.skippedTrialBonus"] = bonus;
-            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus} (tier: ${plan})`);
+            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus}`);
           }
           
           // Auto-enable all features for paid shops
           updateData["enabledFeatures.maintenance"] = true;
           updateData["enabledFeatures.job_lookup"] = true;
-          updateData["enabledFeatures.common_failures"] = true;
           updateData["enabledFeatures.oil_sticker"] = true;
-          updateData["enabledFeatures.keytags"] = true;
-          updateData["enabledFeatures.auto_booking"] = true;
           updateData["enabledFeatures.part_xref"] = true;
+          updateData["enabledFeatures.dvi_tracking"] = true;
           console.log(`[Stripe] Shop ${shopId} - enabling all features for paid plan`);
           
           await db.collection("shops").updateOne(

@@ -4,34 +4,6 @@ import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/tekmetric";
 import { syncSingleShop } from "@/lib/tekmetric-sync";
 
-async function triggerJobHistoryBackfill(shopId: number) {
-  try {
-    const db = await getDb();
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          shopId, 
-          queuedAt: new Date(),
-          completed: false,
-          logicVersion: 2
-        },
-        $setOnInsert: { startedAt: null }
-      },
-      { upsert: true }
-    );
-    
-    await db.collection("shops").updateOne(
-      { shopId: { $in: [shopId, String(shopId)] } },
-      { $set: { tekmetricBackfillComplete: false } }
-    );
-    
-    console.log(`[Tekmetric Settings] Queued job history backfill for shop ${shopId}`);
-  } catch (err: any) {
-    console.error(`[Tekmetric Settings] Failed to queue backfill for shop ${shopId}:`, err.message);
-  }
-}
-
 async function getUserShopId(): Promise<string | null> {
   const store = await cookies();
   const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
@@ -144,9 +116,6 @@ export async function POST(request: NextRequest) {
       syncResult.error = syncErr.message;
     }
 
-    // Queue the 5-year job history backfill (runs via cron)
-    triggerJobHistoryBackfill(Number(userShopId)).catch(() => {});
-
     return NextResponse.json({
       success: true,
       shopId: tekmetricShopId,
@@ -155,8 +124,7 @@ export async function POST(request: NextRequest) {
         completed: syncResult.success,
         vehiclesSynced: syncResult.synced,
         error: syncResult.error
-      },
-      jobHistoryBackfill: "queued"
+      }
     });
   } catch (error: any) {
     console.error("Error saving Tekmetric settings:", error);

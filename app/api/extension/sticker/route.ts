@@ -5,7 +5,6 @@ import nodeHtmlToImage from "node-html-to-image";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
-import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +51,7 @@ const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
 };
 
 const SIZE_INCHES: Record<string, { width: string; height: string }> = {
-  "1.5x2.25": { width: "1.48in", height: "2.22in" },
+  "1.5x2.25": { width: "1.47in", height: "2.22in" },
   "2x2": { width: "1.97in", height: "1.97in" },
   "2x2.5": { width: "1.97in", height: "2.46in" },
   "2x3": { width: "1.97in", height: "2.96in" },
@@ -186,37 +185,6 @@ interface StickerConfig {
     euro?: { mileage: number; months: number };
     diesel?: { mileage: number; months: number };
   };
-  designerLayout?: DesignerLayout;
-}
-
-interface DesignerElement {
-  id: string;
-  type: string;
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  fontWeight: 'normal' | 'bold';
-  fontStyle: 'normal' | 'italic';
-  textAlign: 'left' | 'center' | 'right';
-  color: string;
-  backgroundColor?: string;
-  visible: boolean;
-  showLabel?: boolean;
-  imageFit?: 'contain' | 'cover';
-  content?: string;
-}
-
-interface DesignerLayout {
-  elements: DesignerElement[];
-  canvasWidth: number;
-  canvasHeight: number;
-  gridSize: number;
-  showGrid: boolean;
-  backgroundColor: string;
-  version?: number;
 }
 
 function generateStickerHtml(
@@ -364,128 +332,6 @@ function generateStickerHtml(
 </html>`;
 }
 
-function generateStickerHtmlFromLayout(
-  layout: DesignerLayout,
-  config: StickerConfig,
-  nextServiceMileage: number,
-  nextServiceDate: string,
-  useKilometers: boolean,
-  logoDataUrl: string | null,
-  qrDataUrl: string | null,
-  dimensions: { width: number; height: number }
-): string {
-  const scaleX = dimensions.width / layout.canvasWidth;
-  const scaleY = dimensions.height / layout.canvasHeight;
-  
-  const distanceUnit = useKilometers ? "km" : "mi";
-  const roundMileage = config.roundMileage !== false;
-  
-  const formattedDate = nextServiceDate
-    ? new Date(nextServiceDate).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "";
-  
-  let mileageValue = nextServiceMileage;
-  if (mileageValue && roundMileage) {
-    mileageValue = Math.round(mileageValue / 100) * 100;
-  }
-  const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
-  
-  const getElementContent = (element: DesignerElement): string => {
-    switch (element.type) {
-      case 'logo':
-        if (logoDataUrl) {
-          return `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:${element.imageFit || 'contain'};" />`;
-        }
-        return '';
-      case 'qrCode':
-        if (qrDataUrl) {
-          return `<img src="${qrDataUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
-        }
-        return '';
-      case 'phone':
-        return config.phone || '';
-      case 'tagline':
-        return config.tagline || '';
-      case 'taglineLine2':
-        return config.taglineLine2 || '';
-      case 'serviceLabel':
-        return element.content || config.serviceLabel || 'Next Oil Service';
-      case 'serviceDate':
-        return formattedDate;
-      case 'serviceMileage':
-        return formattedMileage ? `${formattedMileage} ${distanceUnit}` : '';
-      default:
-        return element.content || '';
-    }
-  };
-  
-  const visibleElements = layout.elements.filter(el => el.visible);
-  
-  const elementsHtml = visibleElements.map(element => {
-    const x = Math.round(element.x * scaleX);
-    const y = Math.round(element.y * scaleY);
-    const width = Math.round(element.width * scaleX);
-    const height = Math.round(element.height * scaleY);
-    const fontSize = Math.round(element.fontSize * Math.min(scaleX, scaleY));
-    
-    const content = getElementContent(element);
-    if (!content) return '';
-    
-    const isImage = element.type === 'logo' || element.type === 'qrCode';
-    
-    return `
-      <div style="
-        position: absolute;
-        left: ${x}px;
-        top: ${y}px;
-        width: ${width}px;
-        height: ${height}px;
-        ${!isImage ? `
-          font-size: ${fontSize}px;
-          font-weight: ${element.fontWeight};
-          font-style: ${element.fontStyle};
-          text-align: ${element.textAlign};
-          color: ${element.color};
-          display: flex;
-          align-items: center;
-          justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
-          overflow: hidden;
-          white-space: nowrap;
-          line-height: 1.2;
-        ` : ''}
-        ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
-      ">
-        ${content}
-      </div>
-    `;
-  }).join('');
-  
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: ${dimensions.width}px;
-      height: ${dimensions.height}px;
-      font-family: Arial, Helvetica, sans-serif;
-      background: ${layout.backgroundColor};
-      position: relative;
-    }
-  </style>
-</head>
-<body>
-  ${elementsHtml}
-</body>
-</html>
-  `;
-}
-
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
@@ -615,17 +461,6 @@ export async function POST(request: NextRequest) {
       smsShopId,
       provider = "tekmetric",
       tagline,
-      // Customer/vehicle data for auto booking
-      customerId,
-      customerName,
-      customerPhone,
-      customerEmail,
-      vehicleId,
-      vin,
-      vehicleYear,
-      vehicleMake,
-      vehicleModel,
-      roNumber,
     } = body;
 
     if (!currentMileage || currentMileage <= 0) {
@@ -696,30 +531,15 @@ export async function POST(request: NextRequest) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
     }
 
-    let html: string;
-    
-    if (stickerConfig.designerLayout && stickerConfig.designerLayout.elements) {
-      html = generateStickerHtmlFromLayout(
-        stickerConfig.designerLayout,
-        configWithLogo,
-        nextServiceMileage,
-        nextServiceDate,
-        useKilometers,
-        logoDataUrl,
-        qrDataUrl,
-        dimensions
-      );
-    } else {
-      html = generateStickerHtml(
-        configWithLogo,
-        nextServiceMileage,
-        nextServiceDate,
-        useHours,
-        useKilometers,
-        qrDataUrl,
-        dimensions
-      );
-    }
+    const html = generateStickerHtml(
+      configWithLogo,
+      nextServiceMileage,
+      nextServiceDate,
+      useHours,
+      useKilometers,
+      qrDataUrl,
+      dimensions
+    );
 
     const image = await nodeHtmlToImage({
       html,
@@ -740,30 +560,6 @@ export async function POST(request: NextRequest) {
       unit,
     });
 
-    // Trigger auto booking if customer/vehicle data provided
-    let bookingResult: { queued: boolean; bookingId?: string; status?: string; error?: string } | null = null;
-    if (mosShopId && (customerName || customerId)) {
-      const bookingData: StickerBookingData = {
-        customerId,
-        customerName,
-        customerPhone,
-        customerEmail,
-        vehicleId,
-        vin,
-        vehicleYear,
-        vehicleMake,
-        vehicleModel,
-        roNumber,
-      };
-      bookingResult = await triggerAutoBookingFromSticker(
-        mosShopId,
-        nextServiceDate,
-        nextServiceMileage,
-        bookingData
-      );
-      console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
-    }
-
     const imageBuffer = image as Buffer;
     const base64Image = imageBuffer.toString("base64");
     const dataUrl = `data:image/png;base64,${base64Image}`;
@@ -781,7 +577,6 @@ export async function POST(request: NextRequest) {
         nextServiceDate,
         unit,
       },
-      booking: bookingResult,
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Sticker] Generate error:", error);

@@ -18,8 +18,8 @@ export async function GET(
   }
 
   try {
-    const shopId = params.shopId === "null" ? null : parseInt(params.shopId);
-    if (shopId !== null && isNaN(shopId)) {
+    const shopId = parseInt(params.shopId);
+    if (isNaN(shopId)) {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }
 

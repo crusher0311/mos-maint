@@ -27,13 +27,14 @@ export interface RenderService {
   dashboardUrl: string;
   repo?: string;
   branch?: string;
+  ownerId?: string;
 }
 
 export interface RenderEnvironment {
   name: string;
   apiKey: string;
   serviceIds: string[];
-  ownerId: string;
+  ownerId?: string;
 }
 
 const RENDER_API_BASE = 'https://api.render.com/v1';
@@ -41,7 +42,7 @@ const RENDER_API_BASE = 'https://api.render.com/v1';
 async function makeRenderRequest<T>(
   endpoint: string,
   apiKey: string,
-  params?: Record<string, string | string[]>,
+  params?: Record<string, string>,
   environment: string = 'unknown'
 ): Promise<T> {
   const startTime = Date.now();
@@ -49,13 +50,7 @@ async function makeRenderRequest<T>(
   
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value) {
-        if (Array.isArray(value)) {
-          value.forEach(v => url.searchParams.append(key, v));
-        } else {
-          url.searchParams.set(key, value);
-        }
-      }
+      if (value) url.searchParams.set(key, value);
     });
   }
 
@@ -109,7 +104,7 @@ export async function fetchRenderLogs(
   apiKey: string,
   options: {
     serviceIds?: string[];
-    ownerId: string;
+    ownerId?: string;
     startTime: string;
     endTime: string;
     level?: string;
@@ -118,44 +113,95 @@ export async function fetchRenderLogs(
     environment?: string;
   }
 ): Promise<RenderLogsResponse> {
-  const params: Record<string, string | string[]> = {
-    ownerId: options.ownerId,
-    startTime: options.startTime,
-    endTime: options.endTime,
-  };
-
+  const url = new URL(`${RENDER_API_BASE}/logs`);
+  
+  url.searchParams.set('startTime', options.startTime);
+  url.searchParams.set('endTime', options.endTime);
+  url.searchParams.set('direction', 'backward');
+  
+  if (options.ownerId) {
+    url.searchParams.set('ownerId', options.ownerId);
+  }
   if (options.serviceIds?.length) {
-    params.resource = options.serviceIds;
+    options.serviceIds.forEach(id => url.searchParams.append('resource', id));
   }
   if (options.level) {
-    params.level = [options.level];
+    url.searchParams.append('level', options.level);
   }
   if (options.text) {
-    params.text = [options.text];
+    url.searchParams.append('text', options.text);
   }
   if (options.limit) {
-    params.limit = options.limit.toString();
+    url.searchParams.set('limit', options.limit.toString());
   }
 
-  const response = await makeRenderRequest<{
-    logs: Array<{
-      id: string;
-      timestamp: string;
-      level: string;
-      message: string;
-      instanceId?: string;
-    }>;
-    hasMore?: boolean;
-    nextStartTime?: string;
-    nextEndTime?: string;
-  }>('/logs', apiKey, params, options.environment);
+  const startTime = Date.now();
+  
+  try {
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
 
-  return {
-    logs: response.logs || [],
-    hasMore: response.hasMore || false,
-    nextStartTime: response.nextStartTime,
-    nextEndTime: response.nextEndTime,
-  };
+    const latencyMs = Date.now() - startTime;
+
+    await trackApiRequest(
+      'render',
+      '/logs',
+      'GET',
+      response.status,
+      latencyMs,
+      0,
+      { sourceWorker: options.environment }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Render API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    const logs: RenderLogEntry[] = (data.logs || []).map((log: any) => {
+      const labels = log.labels || [];
+      const getLabel = (name: string) => labels.find((l: any) => l.name === name)?.value;
+      
+      return {
+        id: log.id,
+        timestamp: log.timestamp,
+        level: getLabel('level') || 'info',
+        message: log.message,
+        instanceId: getLabel('instance'),
+        serviceId: getLabel('resource'),
+      };
+    });
+
+    return {
+      logs,
+      hasMore: data.hasMore || false,
+      nextStartTime: data.nextStartTime,
+      nextEndTime: data.nextEndTime,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    
+    await trackApiRequest(
+      'render',
+      '/logs',
+      'GET',
+      500,
+      latencyMs,
+      0,
+      { 
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        sourceWorker: options.environment 
+      }
+    );
+
+    throw error;
+  }
 }
 
 export async function fetchRenderServices(
@@ -173,6 +219,7 @@ export async function fetchRenderServices(
       dashboardUrl: string;
       repo?: string;
       branch?: string;
+      ownerId?: string;
     };
     cursor: string;
   }>>('/services?limit=100', apiKey, undefined, environment);
@@ -187,6 +234,7 @@ export async function fetchRenderServices(
     dashboardUrl: item.service.dashboardUrl,
     repo: item.service.repo,
     branch: item.service.branch,
+    ownerId: item.service.ownerId,
   }));
 }
 
@@ -225,7 +273,7 @@ export async function fetchRenderDeploys(
 export function getRenderEnvironments(): RenderEnvironment[] {
   const environments: RenderEnvironment[] = [];
 
-  if (process.env.RENDER_API_KEY_PROD && process.env.RENDER_SERVICE_IDS_PROD && process.env.RENDER_OWNER_ID_PROD) {
+  if (process.env.RENDER_API_KEY_PROD && process.env.RENDER_SERVICE_IDS_PROD) {
     environments.push({
       name: 'Production',
       apiKey: process.env.RENDER_API_KEY_PROD,
@@ -234,7 +282,7 @@ export function getRenderEnvironments(): RenderEnvironment[] {
     });
   }
 
-  if (process.env.RENDER_API_KEY_QA && process.env.RENDER_SERVICE_IDS_QA && process.env.RENDER_OWNER_ID_QA) {
+  if (process.env.RENDER_API_KEY_QA && process.env.RENDER_SERVICE_IDS_QA) {
     environments.push({
       name: 'QA',
       apiKey: process.env.RENDER_API_KEY_QA,
@@ -243,7 +291,7 @@ export function getRenderEnvironments(): RenderEnvironment[] {
     });
   }
 
-  if (process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_IDS && process.env.RENDER_OWNER_ID) {
+  if (process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_IDS) {
     environments.push({
       name: 'Default',
       apiKey: process.env.RENDER_API_KEY,

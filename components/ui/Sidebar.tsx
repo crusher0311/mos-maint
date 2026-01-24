@@ -28,7 +28,6 @@ import {
   Printer,
   CalendarCheck
 } from "lucide-react";
-import { NotificationBell } from "./NotificationBell";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
 interface NavChild {
@@ -65,7 +64,6 @@ interface SidebarProps {
   isPlatformAdmin?: boolean;
   currentShopId?: number;
   enterpriseId?: string | null;
-  hasEnterpriseBilling?: boolean;
   enabledFeatures?: string[];
   onClose?: () => void;
   onQuickStickerClick?: () => void;
@@ -78,17 +76,14 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   }
   if (pathname?.startsWith("/dashboard/settings/branding") || 
       pathname?.startsWith("/dashboard/settings/stickers") ||
-      pathname?.startsWith("/dashboard/settings/keytags") ||
-      pathname?.startsWith("/dashboard/settings/preferences")) {
+      pathname?.startsWith("/dashboard/settings/preferences") ||
+      pathname?.startsWith("/dashboard/settings/job-history")) {
     sections.add("Preferences");
-  }
-  if (pathname?.startsWith("/dashboard/enterprise")) {
-    sections.add("Enterprise");
   }
   return sections;
 }
 
-export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, hasEnterpriseBilling = false, enabledFeatures = ["maintenance"], onClose, onQuickStickerClick }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose, onQuickStickerClick }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => getInitialExpandedSections(pathname));
@@ -98,9 +93,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const [switching, setSwitching] = useState(false);
   const [shopSearch, setShopSearch] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
-  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
-  const [showBookingBadge, setShowBookingBadge] = useState(false);
-  const [openSupportTickets, setOpenSupportTickets] = useState(0);
+  // Auto-booking hidden until feature is ready for production
+  // const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
@@ -124,45 +118,31 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       .catch(() => {});
   }, []);
 
-  const refreshPendingCount = () => {
-    if (enabledFeatures.includes("auto_booking")) {
-      fetch("/api/settings/auto-booking/pending-count")
-        .then((res) => res.json())
-        .then((data) => {
-          setPendingBookingsCount(data.count || 0);
-          setShowBookingBadge(data.showBadge || false);
-        })
-        .catch(() => {});
-    }
-  };
-
-  useEffect(() => {
-    refreshPendingCount();
-  }, [enabledFeatures]);
-
-  useEffect(() => {
-    const fetchSupportTicketCount = async () => {
-      try {
-        const res = await fetch("/api/support/tickets/count");
-        const data = await res.json();
-        if (data.ok) {
-          setOpenSupportTickets(data.openCount);
-        }
-      } catch (error) {
-        console.error("Error fetching support ticket count:", error);
-      }
-    };
-
-    fetchSupportTicketCount();
-    const interval = setInterval(fetchSupportTicketCount, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleRefresh = () => refreshPendingCount();
-    window.addEventListener("refreshBookingCount", handleRefresh);
-    return () => window.removeEventListener("refreshBookingCount", handleRefresh);
-  }, [enabledFeatures]);
+  // Auto-booking hidden until feature is ready for production
+  // useEffect(() => {
+  //   if (!enabledFeatures.includes("oil_sticker")) return;
+  //   
+  //   const fetchPendingCount = () => {
+  //     fetch("/api/settings/auto-booking/queue?status=pending&countOnly=true")
+  //       .then((res) => {
+  //         if (!res.ok) {
+  //           setPendingBookingsCount(0);
+  //           return null;
+  //         }
+  //         return res.json();
+  //       })
+  //       .then((data) => {
+  //         if (data && typeof data.pendingCount === "number") {
+  //           setPendingBookingsCount(data.pendingCount);
+  //         }
+  //       })
+  //       .catch(() => setPendingBookingsCount(0));
+  //   };
+  //
+  //   fetchPendingCount();
+  //   const interval = setInterval(fetchPendingCount, 60000);
+  //   return () => clearInterval(interval);
+  // }, [enabledFeatures]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -194,13 +174,9 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       }
       if ((pathname.startsWith("/dashboard/settings/branding") || 
            pathname.startsWith("/dashboard/settings/stickers") ||
-           pathname.startsWith("/dashboard/settings/keytags") ||
-           pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
+           pathname.startsWith("/dashboard/settings/preferences") ||
+           pathname.startsWith("/dashboard/settings/job-history")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
-        changed = true;
-      }
-      if (pathname.startsWith("/dashboard/enterprise") && !newExpanded.has("Enterprise")) {
-        newExpanded.add("Enterprise");
         changed = true;
       }
       
@@ -252,12 +228,13 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />
     },
-    {
-      name: "Booking Review",
-      href: "/dashboard/settings/auto-booking/queue",
-      icon: <CalendarCheck className="w-5 h-5" />,
-      featureId: "auto_booking"
-    },
+    // Auto-booking hidden until feature is ready for production
+    // {
+    //   name: "Booking Queue",
+    //   href: "/dashboard/settings/auto-booking/queue",
+    //   icon: <CalendarCheck className="w-5 h-5" />,
+    //   featureId: "oil_sticker"
+    // },
     {
       name: "Quick Sticker",
       href: "#quick-sticker",
@@ -288,20 +265,22 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
             { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
-            { name: "Keytags", href: "/dashboard/settings/keytags", featureId: "keytags" }
+            { name: "Job History", href: "/dashboard/settings/job-history" }
           ]
         },
-        ...(hasEnterpriseBilling ? [] : [{ name: "Billing", href: "/dashboard/settings/billing" }]),
+        // Billing page hidden until we have enough data to verify with live users
+        // { name: "Billing", href: "/dashboard/settings/billing" },
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
-        { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },
+        // Auto-booking hidden until feature is ready for production
+        // { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "oil_sticker" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
-    },
-      ];
+    }
+  ];
 
   const filteredNavItems = navItems.filter(item => {
     if (!item.featureId) return true;
@@ -346,14 +325,13 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         </button>
       )}
       <div className="p-4 border-b border-white/20 relative" ref={dropdownRef}>
-        <div className="flex items-center justify-between gap-2">
-          <button 
-            onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
-            className={`flex-1 flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
-              hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
-            }`}
-          >
-            <div className="flex items-center gap-3 min-w-0">
+        <button 
+          onClick={() => hasMultipleShops && setShopDropdownOpen(!shopDropdownOpen)}
+          className={`w-full flex items-center justify-between text-white rounded-lg p-2 transition-colors ${
+            hasMultipleShops ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
+          }`}
+        >
+          <div className="flex items-center gap-3 min-w-0">
             {shopLogo && (
               <img 
                 src={shopLogo} 
@@ -371,9 +349,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           {hasMultipleShops && (
             <ChevronDown className={`w-4 h-4 text-mos-silver transition-transform flex-shrink-0 ${shopDropdownOpen ? "rotate-180" : ""}`} />
           )}
-          </button>
-          <NotificationBell isPlatformAdmin={false} />
-        </div>
+        </button>
         
         {shopDropdownOpen && hasMultipleShops && (
           <div className="absolute left-4 right-4 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
@@ -428,7 +404,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         )}
       </div>
 
-      <div className="p-4">
+      <div className="p-4 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/70" />
           <input
@@ -563,21 +539,20 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
               ) : (
                 <Link
                   href={item.href}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(item.href)
                       ? "bg-white/20 text-white"
                       : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    {item.icon}
-                    <span>{item.name}</span>
-                  </div>
-                  {item.name === "Booking Review" && showBookingBadge && pendingBookingsCount > 0 && (
-                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-red-500 text-white rounded-full">
-                      {pendingBookingsCount > 99 ? "99+" : pendingBookingsCount}
+                  {item.icon}
+                  <span className="flex-1">{item.name}</span>
+                  {/* Auto-booking hidden until feature is ready for production */}
+                  {/* {item.name === "Booking Queue" && pendingBookingsCount > 0 && (
+                    <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      {pendingBookingsCount}
                     </span>
-                  )}
+                  )} */}
                 </Link>
               )}
             </li>
@@ -585,26 +560,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         </ul>
       </nav>
 
-      <div className="px-3 pb-2 space-y-1">
-        <Link
-          href="/dashboard/support"
-          className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-            isActive("/dashboard/support")
-              ? "bg-white/20 text-white"
-              : "text-white/80 hover:bg-white/10 hover:text-white"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <img src="/icons/support-agent.png" alt="" className="w-5 h-5 invert" />
-            <span>Support</span>
-          </div>
-          {openSupportTickets > 0 && (
-            <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-blue-500 text-white rounded-full">
-              {openSupportTickets > 99 ? "99+" : openSupportTickets}
-            </span>
-          )}
-        </Link>
-        {isPlatformAdmin && (
+      {isPlatformAdmin && (
+        <div className="px-3 pb-2">
           <Link
             href="/platform-admin"
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition-colors"
@@ -612,59 +569,22 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             <Shield className="w-5 h-5" />
             <span>MOS Admin Panel</span>
           </Link>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="p-4 border-t border-white/20">
         {enterpriseId && (userRole === "owner" || userRole === "admin") && (
-          <div className="mb-3">
-            <button
-              onClick={() => toggleSection("Enterprise")}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname?.startsWith("/dashboard/enterprise")
-                  ? "bg-white/20 text-white"
-                  : "text-white/80 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Building2 className="w-5 h-5" />
-                <span>Enterprise</span>
-              </div>
-              {expandedSections.has("Enterprise") ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </button>
-            {expandedSections.has("Enterprise") && (
-              <ul className="mt-1 ml-4 space-y-1 border-l border-white/20 pl-4">
-                <li>
-                  <Link
-                    href="/dashboard/enterprise"
-                    className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                      pathname === "/dashboard/enterprise"
-                        ? "bg-white/20 text-white font-medium"
-                        : "text-white/70 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    Overview
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/dashboard/enterprise/billing"
-                    className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                      pathname === "/dashboard/enterprise/billing"
-                        ? "bg-white/20 text-white font-medium"
-                        : "text-white/70 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    Billing
-                  </Link>
-                </li>
-              </ul>
-            )}
-          </div>
+          <Link
+            href="/dashboard/enterprise"
+            className={`flex items-center gap-3 px-3 py-2 mb-3 rounded-lg text-sm font-medium transition-colors ${
+              pathname?.startsWith("/dashboard/enterprise")
+                ? "bg-white/20 text-white"
+                : "text-white/80 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            <Building2 className="w-5 h-5" />
+            <span>Enterprise</span>
+          </Link>
         )}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-medium">

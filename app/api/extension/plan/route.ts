@@ -589,52 +589,8 @@ export async function GET(request: NextRequest) {
       recommended: [] as any[]
     };
 
-    // Look up enriched canned jobs to include full labor/parts details
-    const cannedJobs = await db.collection("canned_jobs")
-      .find({ shopId: mosShopId, enriched: true })
-      .toArray();
-    
-    // Build a map for fuzzy matching service names to canned jobs
-    const cannedJobMap = new Map<string, any>();
-    for (const cj of cannedJobs) {
-      const name = (cj.title || cj.name || '').toLowerCase().trim();
-      if (name) {
-        cannedJobMap.set(name, cj);
-      }
-    }
-    
-    // Helper to find matching canned job by service name
-    function findMatchingCannedJob(serviceName: string): any | null {
-      const name = (serviceName || '').toLowerCase().trim();
-      if (!name) return null;
-      
-      // Exact match first
-      if (cannedJobMap.has(name)) {
-        return cannedJobMap.get(name);
-      }
-      
-      // Fuzzy match: check if service name is contained in or contains canned job name
-      for (const [cannedName, cj] of cannedJobMap.entries()) {
-        if (name.includes(cannedName) || cannedName.includes(name)) {
-          return cj;
-        }
-        // Also check for common word overlap
-        const serviceWords = name.split(/\s+/).filter(w => w.length > 3);
-        const cannedWords = cannedName.split(/\s+/).filter(w => w.length > 3);
-        const overlap = serviceWords.filter(w => cannedWords.includes(w));
-        if (overlap.length >= 2 || (overlap.length === 1 && serviceWords.length <= 2)) {
-          return cj;
-        }
-      }
-      
-      return null;
-    }
-
     if (analysisData?.recommendations) {
       for (const rec of analysisData.recommendations) {
-        // Try to find matching canned job for full labor/parts details
-        const matchingCannedJob = findMatchingCannedJob(rec.service || rec.name);
-        
         const item = {
           name: rec.service || rec.name,
           category: rec.category || null,
@@ -651,12 +607,8 @@ export async function GET(request: NextRequest) {
           // New nested format for extension UI
           last: rec.last || null, // { source: 'shop'|'external'|'unknown', miles, date }
           priority: rec.priority,
-          // Include full job details from matching canned job if available
-          laborItems: matchingCannedJob?.laborLines || [],
-          parts: matchingCannedJob?.partLines || rec.parts || [],
-          laborHours: matchingCannedJob?.laborLines?.reduce((sum: number, l: any) => sum + (l.hours || 0), 0) || rec.laborHours || 1,
-          amount: matchingCannedJob?.totalAmount || 0,
-          cannedJobId: matchingCannedJob?._id?.toString() || null,
+          laborHours: rec.laborHours || 1,
+          parts: rec.parts || [],
           reason: rec.reason
         };
 

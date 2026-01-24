@@ -10,7 +10,7 @@ import {
   resolveCarfaxConfig, 
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
-import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
+import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
@@ -24,7 +24,6 @@ import {
 } from "@/lib/integrations/autovitals";
 import { AddToROButton } from "@/components/ui/AddToROButton";
 import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
-import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { getCachedPlan, setCachedPlan } from "@/lib/plan-cache";
@@ -318,43 +317,25 @@ const SERVICE_KEYS: Record<string, string[]> = {
   tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels"],
   // Cabin air must come before engine air to avoid false matches
   cabin_air: ["cabin air filter", "cabin filter", "pollen filter", "hvac filter", "interior air filter"],
-  engine_air: [
-    "engine air filter", "air cleaner element", "air filter element",
-    "remove & replace air filter", "air filter replace", "replace air filter"
-  ],
+  engine_air: ["engine air filter", "air cleaner element", "air filter element"],
   coolant: [
     "engine coolant", "coolant flush", "replace coolant", "cooling system", 
-    "antifreeze", "radiator flush", "drain and fill coolant", "coolant service",
-    "bg coolant", "cooling system service"
+    "antifreeze", "radiator flush", "drain and fill coolant"
   ],
-  trans_auto: [
-    "automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid",
-    "transmission service", "transmission flush", "bg automatic transmission",
-    "transmission fluid service"
-  ],
+  trans_auto: ["automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid"],
   trans_manual: ["manual transmission fluid", "manual trans fluid", "mtf fluid"],
   transfer_case: ["transfer case fluid", "transfer case flush", "transfer case oil"],
   differential: [
     "differential fluid", "differential flush", "rear differential", 
-    "front differential", "rear axle fluid", "front axle fluid",
-    "bg differential", "diff service", "differential service", "gear oil"
+    "front differential", "rear axle fluid", "front axle fluid"
   ],
   serpentine_belt: ["serpentine belt", "drive belt", "accessory belt", "v-belt", "fan belt"],
-  fuel_system: [
-    "fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction",
-    "bg fuel", "bg platinum fuel", "induction cleaning", "throttle body cleaning"
-  ],
+  fuel_system: ["fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction"],
   fuel_filter: ["fuel filter"],
   brake_pads: [
     "brake pads", "brake linings", "brake rotor", "brake pads replaced", 
     "brake lining", "disc brake", "front brakes", "rear brakes", "brake shoes"
   ],
-  brake_fluid: [
-    "brake fluid", "dot4", "dot 4", "dot3", "dot 3", "brake flush", 
-    "brake fluid service", "brake fluid change", "brake fluid flush"
-  ],
-  spark_plugs: ["spark plug", "spark plugs", "ignition tune", "tune-up", "tune up"],
-  alignment: ["wheel alignment", "alignment", "all wheel alignment", "front alignment", "rear alignment"],
   emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
   power_steering: ["power steering fluid", "power steering flush", "power steering service"],
   battery: ["battery replaced", "battery replacement", "battery/charging", "replace battery", "new battery"],
@@ -403,11 +384,6 @@ type DeclinedServiceEntry = {
   declinedAt: string;
 };
 
-type MatchedDeferred = {
-  id: string;
-  title: string;
-};
-
 type TriagedItem = {
   key: string;
   serviceKey: string;
@@ -426,8 +402,6 @@ type TriagedItem = {
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
-  protractorDeferredId?: string;
-  matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
 };
 
 type ShopIntervalOverride = {
@@ -577,37 +551,9 @@ function triage({
   const triaged: TriagedItem[] = [];
   const usedDviKeys = new Set<string>();
   const usedServiceKeys = new Set<string>(); // Dedupe items with same serviceKey
-  
-  // Pre-compute deferred work info to match with OEM items
-  // Maps serviceKey → first matching deferred item (for attaching "+ deferred" button to OEM items)
-  const deferredByServiceKey = new Map<string, MatchedDeferred>();
-  const seenDeferredTitles = new Set<string>();
-  const deferredServiceKeysUsedByOem = new Set<string>(); // Track which deferred items matched OEM
-  for (const dw of protractorDeferredWork || []) {
-    const title = dw.Title 
-      || dw.ServicePackageHeader?.Title 
-      || dw.Code 
-      || dw.Description 
-      || dw.ServicePackageHeader?.Description
-      || "Deferred Service";
-    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (seenDeferredTitles.has(normalizedTitle)) continue;
-    seenDeferredTitles.add(normalizedTitle);
-    
-    const serviceKey = toKeyFromName(title);
-    if (serviceKey && !deferredByServiceKey.has(serviceKey)) {
-      deferredByServiceKey.set(serviceKey, { id: dw.ID, title });
-    }
-  }
 
   for (const o of oemItems) {
     const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
-    
-    // Check if there's matching deferred work for this OEM item
-    const matchedDeferred = deferredByServiceKey.get(serviceKey);
-    if (matchedDeferred) {
-      deferredServiceKeysUsedByOem.add(serviceKey); // Mark as used so we hide it from deferred section
-    }
     
     // Skip duplicate service keys - only keep first occurrence
     // This prevents "Change engine oil" and "Replace oil filter" from both showing
@@ -697,7 +643,6 @@ function triage({
       dviSource: dviInfo?.dviSource,
       declined: declinedInfo,
       usingShopInterval,
-      matchedDeferred, // Attach matching deferred work for "+ deferred" button
     });
   }
 
@@ -724,8 +669,8 @@ function triage({
 
   // Add Protractor deferred work (shop recommendations)
   // These are services that were recommended but not performed - they're already overdue
-  // seenDeferredTitles was already built above for OEM matching - reuse it here
   for (const dw of protractorDeferredWork || []) {
+    // Title can be at root level or nested in ServicePackageHeader
     const title = dw.Title 
       || dw.ServicePackageHeader?.Title 
       || dw.Code 
@@ -733,21 +678,7 @@ function triage({
       || dw.ServicePackageHeader?.Description
       || "Deferred Service";
     
-    // Normalize title for deduplication (already computed above, check if seen)
-    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (!seenDeferredTitles.has(normalizedTitle)) {
-      continue; // Only process items that were seen in pre-computation (handles dedup)
-    }
-    // Mark as processed by removing from set (first occurrence wins)
-    seenDeferredTitles.delete(normalizedTitle);
-    
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
-    
-    // Skip deferred items that matched an OEM item - they'll show the "+ deferred" button on the OEM row
-    if (deferredServiceKeysUsedByOem.has(protractorServiceKey)) {
-      continue;
-    }
-    
     triaged.push({
       key: `protractor_${dw.ID}`,
       serviceKey: protractorServiceKey,
@@ -763,7 +694,6 @@ function triage({
       bump: "red", // Deferred = already recommended = already overdue
       source: "protractor",
       reason: dw.Reason || undefined,
-      protractorDeferredId: dw.ID || dw.ServiceItemID,
     });
   }
 
@@ -893,10 +823,23 @@ async function PlanContent({ params }: PageProps) {
   // All available canned jobs for fallback when no mapped jobs exist
   const allCannedJobsList = Object.values(cannedJobsById);
 
-  const vehicle = await db.collection("vehicles").findOne(
+  let vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
     { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1 } }
   );
+
+  // Enrich vehicle with DataOne data if year/make/model is missing
+  if (!vehicle?.year || !vehicle?.make || !vehicle?.model) {
+    const enhanced = await getEnhancedVehicleData(vin);
+    if (enhanced.ok && enhanced.vehicle) {
+      vehicle = {
+        ...vehicle,
+        year: vehicle?.year || enhanced.vehicle.year,
+        make: vehicle?.make || enhanced.vehicle.make,
+        model: vehicle?.model || enhanced.vehicle.model,
+      } as typeof vehicle;
+    }
+  }
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
   // This matches the detail page logic exactly
@@ -1305,15 +1248,12 @@ async function PlanContent({ params }: PageProps) {
   console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
   console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
 
-  // Separate overdue items into non-deferred and deferred
-  const overdueNonDeferred = buckets.overdue.filter(t => t.source !== "protractor");
-  const overdueDeferred = buckets.overdue.filter(t => t.source === "protractor");
-  
+  const deferredCount = protractorDeferredWork.length;
   const counts = {
-    overdue: overdueNonDeferred.length,
-    deferred: overdueDeferred.length,
+    overdue: buckets.overdue.length,
     soon: buckets.dueSoon.length,
     upcoming: buckets.upcoming.length,
+    deferred: deferredCount,
   };
 
   return (
@@ -1350,14 +1290,8 @@ async function PlanContent({ params }: PageProps) {
               <PrintButton />
               <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
                 <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
-                  Overdue {counts.overdue}
+                  Overdue {counts.overdue}{counts.deferred > 0 && <span className="ml-1 text-red-200">({counts.deferred} deferred)</span>}
                 </a>
-                {counts.deferred > 0 && (
-                  <a href="#deferred" className="inline-flex items-center gap-1 rounded-full px-3 py-1 bg-blue-600 text-white">
-                    <img src="/protractor-icon.png" alt="" className="w-3.5 h-3.5 rounded-full" />
-                    Deferred {counts.deferred}
-                  </a>
-                )}
                 <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
                   Due Soon {counts.soon}
                 </a>
@@ -1395,16 +1329,16 @@ async function PlanContent({ params }: PageProps) {
 
       {/* Buckets (single column for easy scanning) */}
       <div className="mx-auto max-w-5xl px-4 sm:px-6 space-y-8">
-        {/* Overdue (non-deferred) */}
+        {/* Overdue */}
         <section id="overdue" className="space-y-3">
           <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" /> Overdue ({counts.overdue})
           </h2>
-          {overdueNonDeferred.length === 0 ? (
+          {buckets.overdue.length === 0 ? (
             <div className="text-sm text-neutral-500">Nothing overdue 🎉</div>
           ) : (
             <ul className="space-y-3">
-              {overdueNonDeferred.map((t) => (
+              {buckets.overdue.map((t) => (
                 <li key={t.key} className="rounded-xl border p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -1459,8 +1393,6 @@ async function PlanContent({ params }: PageProps) {
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
-                          protractorDeferredId={t.protractorDeferredId}
-                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}
@@ -1571,70 +1503,6 @@ async function PlanContent({ params }: PageProps) {
           )}
         </section>
 
-        {/* Deferred (from Protractor) */}
-        {overdueDeferred.length > 0 && (
-          <section id="deferred" className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-blue-700 flex items-center gap-2">
-                <img src={shopLogo || "/protractor-icon.png"} alt="" className="w-5 h-5 rounded-full object-cover" />
-                Deferred ({counts.deferred})
-              </h2>
-              {latestWorkOrderId && activeIntegration === "protractor" && (
-                <AddAllDeferredButton 
-                  items={overdueDeferred}
-                  workOrderGuid={latestWorkOrderId}
-                  vin={vin}
-                />
-              )}
-            </div>
-            <ul className="space-y-3">
-              {overdueDeferred.map((t) => (
-                <li key={t.key} className="rounded-xl border border-blue-200 bg-blue-50/30 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-medium">{t.title}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
-                        {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 border border-blue-300 px-2 py-0.5">
-                          <img src={shopLogo || "/protractor-icon.png"} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
-                          <span className="text-blue-700">Deferred</span>
-                        </span>
-                      </div>
-                    </div>
-                    {(() => {
-                      const opts = getCannedJobOptionsForService(t.serviceKey);
-                      return (
-                        <AddToROWithHistory
-                          vin={vin}
-                          serviceTitle={t.title}
-                          serviceKey={t.serviceKey}
-                          vehicleYear={vehicleYear}
-                          vehicleMake={vehicleMake}
-                          vehicleModel={vehicleModel}
-                          vehicleEngine={vehicleEngine}
-                          workOrderGuid={latestWorkOrderId ?? undefined}
-                          workOrderId={latestRoNumber ?? undefined}
-                          repairOrderId={latestRepairOrderId ?? undefined}
-                          cannedJobOptions={opts}
-                          allCannedJobs={allCannedJobsList}
-                          integration={activeIntegration ?? "protractor"}
-                          protractorDeferredId={t.protractorDeferredId}
-                          matchedDeferred={t.matchedDeferred}
-                        />
-                      );
-                    })()}
-                  </div>
-                  {t.reason && (
-                    <div className="text-xs text-blue-700 mt-2 bg-blue-50 rounded px-2 py-1">
-                      {t.reason}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
         {/* Due Soon */}
         <section id="soon" className="space-y-3">
           <h2 className="text-lg font-semibold text-amber-700 flex items-center gap-2">
@@ -1695,8 +1563,6 @@ async function PlanContent({ params }: PageProps) {
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
-                          protractorDeferredId={t.protractorDeferredId}
-                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}
@@ -1826,8 +1692,6 @@ async function PlanContent({ params }: PageProps) {
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
-                          protractorDeferredId={t.protractorDeferredId}
-                          matchedDeferred={t.matchedDeferred}
                         />
                       );
                     })()}

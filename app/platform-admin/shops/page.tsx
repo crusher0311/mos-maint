@@ -14,11 +14,9 @@ interface ShopBilling {
 interface ShopFeatures {
   maintenance?: boolean;
   job_lookup?: boolean;
-  common_failures?: boolean;
   oil_sticker?: boolean;
-  keytags?: boolean;
-  auto_booking?: boolean;
   part_xref?: boolean;
+  dvi_tracking?: boolean;
 }
 
 interface IntegrationDetails {
@@ -59,7 +57,7 @@ interface Shop {
   billing: ShopBilling;
   isLocked?: boolean;
   integrationDetails?: IntegrationDetails;
-  enabledFeatures?: ShopFeatures | string[];
+  enabledFeatures?: ShopFeatures;
   backfill?: BackfillStatus | null;
   stickerCount?: number;
   stickerCountThisMonth?: number;
@@ -177,19 +175,7 @@ export default function PlatformShopsPage() {
 
   const openFeatureModal = (shop: Shop) => {
     setSelectedShop(shop);
-    
-    // Convert enabledFeatures to object format if it's an array
-    let features: ShopFeatures = {};
-    if (Array.isArray(shop.enabledFeatures)) {
-      // Convert array format to object format
-      shop.enabledFeatures.forEach((f: string) => {
-        features[f as keyof ShopFeatures] = true;
-      });
-    } else if (shop.enabledFeatures && typeof shop.enabledFeatures === 'object') {
-      features = shop.enabledFeatures;
-    }
-    
-    setFeatureEdits(features);
+    setFeatureEdits(shop.enabledFeatures || {});
     setBillingEdits({ 
       plan: shop.billing.plan || "trial", 
       status: shop.billing.status || "trial" 
@@ -957,11 +943,9 @@ export default function PlatformShopsPage() {
                           setFeatureEdits({
                             maintenance: true,
                             job_lookup: true,
-                            common_failures: true,
                             oil_sticker: true,
-                            keytags: true,
-                            auto_booking: true,
                             part_xref: true,
+                            dvi_tracking: true,
                           });
                         }
                       }}
@@ -1006,13 +990,11 @@ export default function PlatformShopsPage() {
                 <p className="text-xs text-gray-500 mb-3">Override plan defaults. Leave unchecked to use plan defaults.</p>
                 <div className="space-y-2">
                   {[
-                    { key: "maintenance", label: "Maintenance Tracking", desc: "Track vehicle maintenance schedules and DVI insights" },
-                    { key: "job_lookup", label: "Job Lookup", desc: "Search historical jobs with smart autocomplete" },
-                    { key: "common_failures", label: "Common Failures Advisor", desc: "Predict common repairs by vehicle/mileage" },
+                    { key: "maintenance", label: "Maintenance Tracking", desc: "Track vehicle maintenance schedules" },
+                    { key: "job_lookup", label: "Job Lookup", desc: "Search historical jobs across shop/enterprise" },
                     { key: "oil_sticker", label: "Oil Sticker", desc: "Generate oil change reminder stickers" },
-                    { key: "keytags", label: "Keytags", desc: "Print customer/vehicle info on Dymo labels" },
-                    { key: "auto_booking", label: "Auto Booking", desc: "Automated appointment booking for oil changes" },
                     { key: "part_xref", label: "Part Cross-Reference", desc: "Cross-reference parts across manufacturers" },
+                    { key: "dvi_tracking", label: "DVI Tracking", desc: "Track digital vehicle inspections" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input

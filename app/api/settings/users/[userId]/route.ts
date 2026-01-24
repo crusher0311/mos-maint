@@ -82,6 +82,7 @@ export async function GET(
         })),
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
+        preferences: user.preferences || {},
       },
     });
   } catch (err: any) {
@@ -153,6 +154,24 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid role" }, { status: 400 });
       }
       updateFields.role = body.role;
+    }
+
+    if (body.jobHistoryPreferences !== undefined) {
+      const jh = body.jobHistoryPreferences;
+      
+      if (typeof jh.enabled !== "boolean") {
+        return NextResponse.json({ error: "jobHistoryPreferences.enabled must be a boolean" }, { status: 400 });
+      }
+      
+      if (!Array.isArray(jh.priorityShopIds)) {
+        return NextResponse.json({ error: "jobHistoryPreferences.priorityShopIds must be an array" }, { status: 400 });
+      }
+      
+      updateFields["preferences.jobHistory"] = {
+        enabled: jh.enabled,
+        priorityShopIds: jh.priorityShopIds.map((id: any) => Number(id)),
+        excludeOthers: Boolean(jh.excludeOthers),
+      };
     }
 
     if (body.shopIds !== undefined) {

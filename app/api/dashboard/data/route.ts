@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 
 export async function GET(request: NextRequest) {
   try {
@@ -502,8 +501,6 @@ export async function GET(request: NextRequest) {
               else: { $ifNull: ["$status", "Open"] }
             }
           },
-          label: { $ifNull: ["$label", null] },
-          labelColor: { $ifNull: ["$labelColor", null] },
           af: {
             status: { $ifNull: ["$status", "Open"] },
             createdAt: "$fetchedAt",
@@ -519,6 +516,46 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray();
 
+    // Fetch manually added vehicles (source: "manual") - only active ones
+    const manualVehicles = await db.collection("vehicles").find({
+      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+      source: "manual",
+      "status.active": { $ne: false }
+    }).toArray();
+
+    const manualRows = manualVehicles.map((v: any) => ({
+      updatedAt: v.updatedAt || v.createdAt || new Date(),
+      displayName: v.customer 
+        ? [v.customer.firstName, v.customer.lastName].filter(Boolean).join(' ') || 'No Customer'
+        : 'No Customer',
+      displayVehicle: [v.year, v.make, v.model].filter(Boolean).join(' ') || 'Unknown Vehicle',
+      displayVin: v.vin,
+      displayMiles: v.mileage || v.lastMileage || 0,
+      displayRo: v.roNumber || null,
+      workOrderGuid: null,
+      dviDone: false,
+      source: "manual",
+      displayStatus: "Manual Entry",
+      af: {
+        status: "Manual Entry",
+        createdAt: v.createdAt,
+        miles: v.mileage || v.lastMileage || 0
+      },
+      vehicle: {
+        year: v.year,
+        make: v.make,
+        model: v.model,
+        engine: null
+      }
+    }));
+
+    // Fetch VINs that have been manually closed (for filtering integration vehicles)
+    const closedVehicles = await db.collection("vehicles").find({
+      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
+      "status.active": false
+    }).project({ vin: 1 }).toArray();
+    const closedVins = new Set(closedVehicles.map(v => v.vin?.toUpperCase()));
+
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
@@ -526,11 +563,17 @@ export async function GET(request: NextRequest) {
     // When Protractor is primary, use Protractor rows (which have workflowStage as status)
     // When only AutoFlow is configured, use AutoFlow rows directly
     // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
+    // Always include manual vehicles regardless of integration status
     const rowSources = isProtractorPrimary 
-      ? [...protractorRows, ...tekmetricRows]
-      : [...autoflowRows, ...protractorRows, ...tekmetricRows];
+      ? [...protractorRows, ...tekmetricRows, ...manualRows]
+      : [...autoflowRows, ...protractorRows, ...tekmetricRows, ...manualRows];
     
     for (const row of rowSources) {
+      // Skip if this VIN has been manually closed (except for manual source which is already filtered)
+      if (row.source !== "manual" && closedVins.has(row.displayVin?.toUpperCase())) {
+        continue;
+      }
+      
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
       if (!seenWorkOrders.has(woKey)) {
         seenWorkOrders.add(woKey);
@@ -540,9 +583,11 @@ export async function GET(request: NextRequest) {
 
     // Filter to only show vehicles with mileage data (if preference is enabled)
     // This ensures advisors know to enter mileage before the vehicle appears
+    // Manual entries are always shown regardless of mileage preference
     const showOnlyWithMileage = shopPrefs?.preferences?.showOnlyWithMileage !== false; // default true
     if (showOnlyWithMileage) {
       allRows = allRows.filter((row: any) => {
+        if (row.source === "manual") return true; // Always show manual entries
         const miles = row.displayMiles ?? row.af?.miles;
         return miles != null && miles > 0;
       });
@@ -586,12 +631,6 @@ export async function GET(request: NextRequest) {
     }
     
     const distanceUnit = shop?.preferences?.distanceUnit || "miles";
-    
-    // Get enabled features for this shop from featureResolver
-    const shopIdNum = typeof user.shopId === 'string' ? parseInt(user.shopId, 10) : user.shopId;
-    const entitlements = await getFeatureEntitlements(shopIdNum);
-    const enabledFeatures: FeatureKey[] = (Object.keys(entitlements.effectiveFeatures) as FeatureKey[])
-      .filter(key => entitlements.effectiveFeatures[key]);
 
     // Add cache-control headers to prevent browser caching
     const response = NextResponse.json({
@@ -610,8 +649,7 @@ export async function GET(request: NextRequest) {
         shopId: user.shopId
       },
       smsType,
-      distanceUnit,
-      enabledFeatures
+      distanceUnit
     });
     
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');

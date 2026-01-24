@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building } from "lucide-react";
+import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building, History, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 interface ShopUser {
@@ -26,6 +26,7 @@ interface Shop {
   shopId: string;
   name: string;
   location?: string;
+  locationIdentifier?: string | null;
 }
 
 interface UserModalData {
@@ -35,6 +36,13 @@ interface UserModalData {
   shopId: string;
   shopIds: string[];
   shopNames: { shopId: string; name: string }[];
+  preferences?: {
+    jobHistory?: {
+      enabled: boolean;
+      priorityShopIds: number[];
+      excludeOthers: boolean;
+    };
+  };
 }
 
 export default function UsersSettingsPage() {
@@ -47,6 +55,7 @@ export default function UsersSettingsPage() {
   const [allShops, setAllShops] = useState<Shop[]>([]);
   const [saving, setSaving] = useState(false);
   const [selectedShopIds, setSelectedShopIds] = useState<string[]>([]);
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -158,6 +167,29 @@ export default function UsersSettingsPage() {
       }
     } catch (err) {
       console.error("Failed to cancel invite:", err);
+    }
+  }
+
+  async function handleResendInvite(inviteId: string) {
+    setResendingInvite(inviteId);
+    try {
+      const res = await fetch(`/api/settings/invites/${inviteId}/resend`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchUsers();
+        alert(data.emailSent 
+          ? `Invitation resent to ${data.email}` 
+          : `New invite link created, but email failed to send`);
+      } else {
+        alert(data.error || "Failed to resend invite");
+      }
+    } catch (err) {
+      console.error("Failed to resend invite:", err);
+      alert("Failed to resend invite");
+    } finally {
+      setResendingInvite(null);
     }
   }
 
@@ -288,18 +320,32 @@ export default function UsersSettingsPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${roleColors[invite.role] || roleColors.viewer}`}>
                       {invite.role}
                     </span>
                     {canManageUsers && (
-                      <button
-                        onClick={() => handleCancelInvite(invite._id)}
-                        className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Cancel invite"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleResendInvite(invite._id)}
+                          disabled={resendingInvite === invite._id}
+                          className="p-2 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                          title="Resend invite"
+                        >
+                          {resendingInvite === invite._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleCancelInvite(invite._id)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Cancel invite"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -346,6 +392,11 @@ export default function UsersSettingsPage() {
                     <span className="font-medium">
                       {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.name || `Shop ${selectedUser.shopId}`}
                     </span>
+                    {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.locationIdentifier && (
+                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                        {allShops.find(s => String(s.shopId) === String(selectedUser.shopId))?.locationIdentifier}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Primary location cannot be changed</p>
                 </div>
@@ -372,10 +423,12 @@ export default function UsersSettingsPage() {
                           onChange={() => toggleShopSelection(String(shop.shopId))}
                           className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                         />
-                        <div>
+                        <div className="flex items-center gap-2 flex-wrap">
                           <div className="font-medium text-gray-900">{shop.name}</div>
-                          {shop.location && (
-                            <div className="text-xs text-gray-500">{shop.location}</div>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                              {shop.locationIdentifier}
+                            </span>
                           )}
                         </div>
                       </label>
@@ -387,6 +440,28 @@ export default function UsersSettingsPage() {
                   )}
                 </div>
               </div>
+
+              {allShops.length > 1 && (
+                <div className="pt-2 border-t border-gray-200">
+                  <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
+                    <History className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900">Job History Priority</p>
+                      <p className="text-xs text-blue-700 mt-1">
+                        Users can set their preferred location order for job history search results in{" "}
+                        <Link href="/dashboard/settings/job-history" className="underline font-medium">
+                          Settings &gt; Preferences &gt; Job History
+                        </Link>
+                      </p>
+                      {selectedUser.preferences?.jobHistory?.enabled && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          This user has custom location priority enabled
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">

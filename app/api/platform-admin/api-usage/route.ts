@@ -18,20 +18,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get('provider') as ApiProvider | null;
 
-    const providersToFetch = provider 
-      ? [provider] 
-      : Object.keys(API_PROVIDER_CONFIGS) as ApiProvider[];
-    
-    // Fetch stats and hourly data in parallel for all providers
-    const [stats, ...hourlyResults] = await Promise.all([
-      getApiUsageStats(provider || undefined),
-      ...providersToFetch.map(p => getHourlyUsage(p, 24))
-    ]);
+    const stats = await getApiUsageStats(provider || undefined);
     
     const hourlyData: Record<string, any[]> = {};
-    providersToFetch.forEach((p, i) => {
-      hourlyData[p] = hourlyResults[i];
-    });
+    for (const providerKey of Object.keys(API_PROVIDER_CONFIGS) as ApiProvider[]) {
+      if (!provider || provider === providerKey) {
+        hourlyData[providerKey] = await getHourlyUsage(providerKey, 24);
+      }
+    }
 
     const hasWarnings = stats.some(s => s.warningLevel !== 'ok');
     const hasCritical = stats.some(s => s.warningLevel === 'critical' || s.warningLevel === 'stopped');

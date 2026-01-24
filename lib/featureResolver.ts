@@ -1,19 +1,17 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
+export type FeatureKey = "maintenance" | "job_lookup" | "oil_sticker" | "part_xref" | "dvi_tracking";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "canceled" | "enterprise" | "demo";
 
-export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "demo";
+export type BillingPlan = "trial" | "starter" | "professional" | "enterprise" | "demo";
 
 export interface FeatureSettings {
   maintenance: boolean;
   job_lookup: boolean;
-  common_failures: boolean;
   oil_sticker: boolean;
-  keytags: boolean;
-  auto_booking: boolean;
   part_xref: boolean;
+  dvi_tracking: boolean;
 }
 
 export interface ShopBilling {
@@ -35,133 +33,48 @@ export interface FeatureEntitlements {
 const DEFAULT_FEATURES: FeatureSettings = {
   maintenance: true,
   job_lookup: false,
-  common_failures: false,
   oil_sticker: false,
-  keytags: false,
-  auto_booking: false,
   part_xref: false,
+  dvi_tracking: false,
 };
 
-const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
-  "maintenance": "maintenance",
-  "maintenance-recommendations": "maintenance",
-  "job-lookup": "job_lookup",
-  "job_lookup": "job_lookup",
-  "common-failures": "common_failures",
-  "common_failures": "common_failures",
-  "oil-sticker": "oil_sticker",
-  "oil_sticker": "oil_sticker",
-  "keytags": "keytags",
-  "auto-booking": "auto_booking",
-  "auto_booking": "auto_booking",
-  "part-xref": "part_xref",
-  "part_xref": "part_xref",
-};
-
-const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
+const PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
   trial: {
     maintenance: true,
     job_lookup: false,
-    common_failures: false,
     oil_sticker: false,
-    keytags: false,
-    auto_booking: false,
     part_xref: false,
+    dvi_tracking: false,
   },
   starter: {
     maintenance: true,
     job_lookup: false,
-    common_failures: false,
     oil_sticker: true,
-    keytags: false,
-    auto_booking: false,
     part_xref: false,
-  },
-  plus: {
-    maintenance: true,
-    job_lookup: true,
-    common_failures: true,
-    oil_sticker: true,
-    keytags: false,
-    auto_booking: false,
-    part_xref: false,
-  },
-  elite: {
-    maintenance: true,
-    job_lookup: true,
-    common_failures: true,
-    oil_sticker: true,
-    keytags: true,
-    auto_booking: true,
-    part_xref: true,
+    dvi_tracking: false,
   },
   professional: {
     maintenance: true,
     job_lookup: true,
-    common_failures: true,
     oil_sticker: true,
-    keytags: true,
-    auto_booking: true,
     part_xref: true,
+    dvi_tracking: true,
   },
   enterprise: {
     maintenance: true,
     job_lookup: true,
-    common_failures: true,
     oil_sticker: true,
-    keytags: true,
-    auto_booking: true,
     part_xref: true,
+    dvi_tracking: true,
   },
   demo: {
     maintenance: true,
     job_lookup: true,
-    common_failures: true,
     oil_sticker: true,
-    keytags: true,
-    auto_booking: true,
     part_xref: true,
+    dvi_tracking: true,
   },
 };
-
-async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSettings> {
-  try {
-    const db = await getDb();
-    const platformFeatures = await db.collection("platform_features")
-      .find({ status: "active" })
-      .toArray();
-
-    if (!platformFeatures || platformFeatures.length === 0) {
-      return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
-    }
-
-    const tierSlug = plan === "professional" ? "elite" : plan;
-
-    const features: FeatureSettings = {
-      maintenance: false,
-      job_lookup: false,
-      common_failures: false,
-      oil_sticker: false,
-      keytags: false,
-      auto_booking: false,
-      part_xref: false,
-    };
-
-    for (const pf of platformFeatures) {
-      const includedInTiers = pf.includedInTiers || [];
-      const featureKey = FEATURE_SLUG_TO_KEY[pf.slug];
-      
-      if (featureKey && includedInTiers.includes(tierSlug)) {
-        features[featureKey] = true;
-      }
-    }
-
-    return features;
-  } catch (error) {
-    console.error("Error fetching plan features from database:", error);
-    return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
-  }
-}
 
 export async function getFeatureEntitlements(shopId: number): Promise<FeatureEntitlements> {
   const db = await getDb();
@@ -186,18 +99,16 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   const status: BillingStatus = shop.billing?.status || "trial";
   const vinLimit = shop.trialVinLimit ?? shop.billing?.vinLimit ?? 10;
   
-  const planFeatures = await getPlanFeaturesFromDatabase(plan);
+  const planFeatures = PLAN_FEATURES[plan] || PLAN_FEATURES.trial;
   
   const shopFeatures: Partial<FeatureSettings> = shop.enabledFeatures || {};
   
   const effectiveFeatures: FeatureSettings = {
     maintenance: shopFeatures.maintenance ?? enterpriseFeatures.maintenance ?? planFeatures.maintenance,
     job_lookup: shopFeatures.job_lookup ?? enterpriseFeatures.job_lookup ?? planFeatures.job_lookup,
-    common_failures: shopFeatures.common_failures ?? enterpriseFeatures.common_failures ?? planFeatures.common_failures,
     oil_sticker: shopFeatures.oil_sticker ?? enterpriseFeatures.oil_sticker ?? planFeatures.oil_sticker,
-    keytags: shopFeatures.keytags ?? enterpriseFeatures.keytags ?? planFeatures.keytags,
-    auto_booking: shopFeatures.auto_booking ?? enterpriseFeatures.auto_booking ?? planFeatures.auto_booking,
     part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
+    dvi_tracking: shopFeatures.dvi_tracking ?? enterpriseFeatures.dvi_tracking ?? planFeatures.dvi_tracking,
   };
   
   const billing: ShopBilling = {
@@ -300,32 +211,21 @@ export async function updateEnterpriseFeatures(
   );
 }
 
-export async function getAvailablePlans(): Promise<{ id: BillingPlan; name: string; features: FeatureSettings }[]> {
-  const [trialFeatures, starterFeatures, plusFeatures, eliteFeatures, enterpriseFeatures] = await Promise.all([
-    getPlanFeaturesFromDatabase("trial"),
-    getPlanFeaturesFromDatabase("starter"),
-    getPlanFeaturesFromDatabase("plus"),
-    getPlanFeaturesFromDatabase("elite"),
-    getPlanFeaturesFromDatabase("enterprise"),
-  ]);
-  
+export function getAvailablePlans(): { id: BillingPlan; name: string; features: FeatureSettings }[] {
   return [
-    { id: "trial", name: "Trial", features: trialFeatures },
-    { id: "starter", name: "Starter", features: starterFeatures },
-    { id: "plus", name: "Plus", features: plusFeatures },
-    { id: "elite", name: "Elite", features: eliteFeatures },
-    { id: "enterprise", name: "Enterprise", features: enterpriseFeatures },
+    { id: "trial", name: "Trial", features: PLAN_FEATURES.trial },
+    { id: "starter", name: "Starter", features: PLAN_FEATURES.starter },
+    { id: "professional", name: "Professional", features: PLAN_FEATURES.professional },
+    { id: "enterprise", name: "Enterprise", features: PLAN_FEATURES.enterprise },
   ];
 }
 
 export function getFeatureList(): { key: FeatureKey; name: string; description: string }[] {
   return [
-    { key: "maintenance", name: "Maintenance Tracking", description: "Track vehicle maintenance schedules, DVI insights, and recommendations" },
-    { key: "job_lookup", name: "Job Lookup", description: "Search historical jobs with smart autocomplete across your shop and enterprise" },
-    { key: "common_failures", name: "Common Failures Advisor", description: "Predict common repairs by vehicle, powertrain, and mileage" },
+    { key: "maintenance", name: "Maintenance Tracking", description: "Track vehicle maintenance schedules and recommendations" },
+    { key: "job_lookup", name: "Job Lookup", description: "Search historical jobs across your shop and enterprise" },
     { key: "oil_sticker", name: "Oil Sticker", description: "Generate oil change reminder stickers" },
-    { key: "keytags", name: "Keytags", description: "Print customer/vehicle info on Dymo labels for key identification" },
-    { key: "auto_booking", name: "Auto Booking", description: "Automated appointment booking for oil change reminders" },
     { key: "part_xref", name: "Part Cross-Reference", description: "Cross-reference parts across manufacturers" },
+    { key: "dvi_tracking", name: "DVI Tracking", description: "Track digital vehicle inspections" },
   ];
 }

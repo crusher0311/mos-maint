@@ -104,32 +104,23 @@ export default function CannedJobsSettingsPage() {
 
   async function checkIntegrationStatus() {
     try {
-      // Check the shop's saved SMS provider from the integrations settings
-      const integrationsRes = await fetch("/api/settings/integrations", { credentials: "include" });
-      const integrationsData = integrationsRes.ok ? await integrationsRes.json() : {};
+      const [protractorRes, tekmetricRes] = await Promise.all([
+        fetch("/api/settings/protractor", { credentials: "include" }),
+        fetch("/api/settings/tekmetric", { credentials: "include" })
+      ]);
       
-      const { smsProvider, protractor, tekmetric } = integrationsData;
+      const protractorData = protractorRes.ok ? await protractorRes.json() : { configured: false };
+      const tekmetricData = tekmetricRes.ok ? await tekmetricRes.json() : { configured: false };
       
-      // Use saved smsProvider preference if available and configured
-      if (smsProvider === "tekmetric" && tekmetric?.configured) {
-        setActiveIntegration("tekmetric");
-        setIntegrationName("Tekmetric");
-        await Promise.all([fetchCannedJobs("tekmetric"), fetchMappings()]);
-      } else if (smsProvider === "protractor" && protractor?.configured) {
+      if (protractorData.configured) {
         setActiveIntegration("protractor");
         setIntegrationName("Protractor");
         await Promise.all([fetchCannedJobs("protractor"), fetchMappings()]);
-      } else if (tekmetric?.configured) {
-        // Fallback if no preference saved but integration is configured
+      } else if (tekmetricData.configured) {
         setActiveIntegration("tekmetric");
         setIntegrationName("Tekmetric");
         await Promise.all([fetchCannedJobs("tekmetric"), fetchMappings()]);
-      } else if (protractor?.configured) {
-        setActiveIntegration("protractor");
-        setIntegrationName("Protractor");
-        await Promise.all([fetchCannedJobs("protractor"), fetchMappings()]);
       }
-      // If smsProvider is "standalone" or nothing configured, activeIntegration remains null
     } catch (err) {
       console.error("Failed to check integration status:", err);
     } finally {

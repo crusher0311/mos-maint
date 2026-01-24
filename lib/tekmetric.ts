@@ -3,6 +3,8 @@ import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-a
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
+const TEKMETRIC_TIMEOUT_MS = 30000; // 30 second timeout
+
 async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
   // Acquire distributed rate limit slot (blocks if limit exceeded)
   const rateLimitResult = await acquireDistributedRateLimitSlot('tekmetric');
@@ -14,11 +16,16 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
   const method = options.method || 'GET';
   const startTime = Date.now();
   
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TEKMETRIC_TIMEOUT_MS);
+  
   let statusCode = 0;
   try {
     const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
       ...options,
       cache: 'no-store',
+      signal: controller.signal,
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -26,6 +33,7 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
       },
     });
 
+    clearTimeout(timeoutId);
     statusCode = response.status;
     const latencyMs = Date.now() - startTime;
     
@@ -46,8 +54,14 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
 
     return response.json();
   } catch (err: any) {
+    clearTimeout(timeoutId);
     const latencyMs = Date.now() - startTime;
     trackApiRequest('tekmetric', endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
+    
+    // Provide clearer error message for timeouts
+    if (err.name === 'AbortError') {
+      throw new Error(`Tekmetric API timeout after ${TEKMETRIC_TIMEOUT_MS/1000}s: ${endpoint}`);
+    }
     throw err;
   }
 }
@@ -418,141 +432,4 @@ export async function validateShopAccess(shopId: number): Promise<{ valid: boole
     }
     return { valid: false, error: error.message || 'Failed to validate shop access' };
   }
-}
-
-// ============= Appointment Functions =============
-
-export interface TekmetricAppointment {
-  id: number;
-  shopId: number;
-  customerId: number;
-  vehicleId: number;
-  startTime: string;
-  endTime: string;
-  title?: string;
-  note?: string;
-  color?: string;
-  appointmentType?: string;
-  createdDate?: string;
-  updatedDate?: string;
-}
-
-export interface CreateAppointmentParams {
-  shopId: number;
-  customerId: number;
-  vehicleId: number;
-  startTime: string; // ISO 8601 format
-  endTime: string; // ISO 8601 format
-  title?: string;
-  description?: string;
-  color?: string;
-  dropoffTime?: string; // ISO 8601 format
-  pickupTime?: string; // ISO 8601 format
-  rideOption?: "LOANER" | "RIDE" | "NONE";
-  status?: "NONE" | "ARRIVED" | "NO_SHOW" | "CANCELLED";
-  appointmentOption?: "STAY" | "DROP" | "TOW"; // STAY = Stay With Vehicle, DROP = Drop-off, TOW = Towed-in
-  appointmentOptionId?: number; // 1=STAY, 2=DROP, 3=TOW - alternative ID-based field
-}
-
-export async function createAppointment(params: CreateAppointmentParams): Promise<TekmetricAppointment> {
-  const { shopId, customerId, vehicleId, startTime, endTime, title, description, color, dropoffTime, pickupTime, rideOption, status, appointmentOption, appointmentOptionId } = params;
-  
-  const body: Record<string, any> = {
-    shopId,
-    customerId,
-    vehicleId,
-    startTime,
-    endTime,
-  };
-  
-  if (title) body.title = title;
-  if (description) body.description = description;
-  if (color) body.color = color;
-  if (dropoffTime) body.dropoffTime = dropoffTime;
-  if (pickupTime) body.pickupTime = pickupTime;
-  if (rideOption) body.rideOption = rideOption;
-  if (status) body.status = status;
-  // Try including appointmentOptionId in the create request
-  if (appointmentOptionId) body.appointmentOptionId = appointmentOptionId;
-  const savedAppointmentOptionId = appointmentOptionId;
-  
-  console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
-  console.log(`[Tekmetric] Appointment body:`, JSON.stringify(body, null, 2));
-  
-  const result = await tekmetricRequest('/appointments', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }, shopId);
-  
-  const appointmentId = result.data || result.id;
-  console.log(`[Tekmetric] Appointment created with ID: ${appointmentId}`);
-  
-  // If appointmentOption was requested, update the appointment via PATCH
-  if (savedAppointmentOptionId && appointmentId) {
-    const optionMap: Record<number, { id: number; code: string; name: string }> = {
-      1: { id: 1, code: "STAY", name: "Stay With Vehicle" },
-      2: { id: 2, code: "DROP", name: "Drop-off Vehicle" },
-      3: { id: 3, code: "TOW", name: "Towed-in Vehicle" },
-    };
-    const appointmentOptionObj = optionMap[savedAppointmentOptionId] || optionMap[1];
-    
-    console.log(`[Tekmetric] Updating appointment ${appointmentId} with appointmentOption:`, appointmentOptionObj);
-    
-    try {
-      // Try sending just the appointmentOptionId instead of the full object
-      const patchBody = { appointmentOptionId: savedAppointmentOptionId };
-      console.log(`[Tekmetric] PATCH body:`, JSON.stringify(patchBody));
-      const patchResult = await tekmetricRequest(`/appointments/${appointmentId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patchBody),
-      }, shopId);
-      console.log(`[Tekmetric] PATCH response:`, JSON.stringify(patchResult, null, 2));
-    } catch (patchError: any) {
-      console.error(`[Tekmetric] Failed to update appointment option:`, patchError?.message || patchError);
-    }
-  }
-  
-  return { ...result, id: appointmentId };
-}
-
-export async function getAppointment(appointmentId: number): Promise<TekmetricAppointment> {
-  return tekmetricRequest(`/appointments/${appointmentId}`);
-}
-
-export async function updateAppointment(
-  appointmentId: number,
-  updates: Partial<Omit<CreateAppointmentParams, 'shopId'>>
-): Promise<TekmetricAppointment> {
-  return tekmetricRequest(`/appointments/${appointmentId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(updates),
-  });
-}
-
-export async function deleteAppointment(appointmentId: number): Promise<void> {
-  await tekmetricRequest(`/appointments/${appointmentId}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function getAppointments(
-  shopId: number,
-  params: {
-    startTime?: string;
-    endTime?: string;
-    customerId?: number;
-    vehicleId?: number;
-    page?: number;
-    size?: number;
-  } = {}
-): Promise<PaginatedResponse<TekmetricAppointment>> {
-  const queryParams = new URLSearchParams({ shop: shopId.toString() });
-  if (params.startTime) queryParams.set('startTime', params.startTime);
-  if (params.endTime) queryParams.set('endTime', params.endTime);
-  if (params.customerId) queryParams.set('customerId', params.customerId.toString());
-  if (params.vehicleId) queryParams.set('vehicleId', params.vehicleId.toString());
-  if (params.page !== undefined) queryParams.set('page', params.page.toString());
-  if (params.size !== undefined) queryParams.set('size', params.size.toString());
-  
-  return tekmetricRequest(`/appointments?${queryParams}`, {}, shopId);
 }

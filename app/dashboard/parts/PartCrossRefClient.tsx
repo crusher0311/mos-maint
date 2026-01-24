@@ -3,10 +3,6 @@
 import { useState, useCallback } from "react";
 import { Search, RefreshCw, Package, Car, Hash, AlertCircle, Database } from "lucide-react";
 
-interface PartCrossRefClientProps {
-  smsDisplayName: string;
-}
-
 type PartResult = {
   partNumber: string;
   normalizedPartNumber: string;
@@ -31,7 +27,7 @@ type PartCategory = {
 
 type SearchMode = "part" | "vehicle";
 
-export default function PartCrossRefClient({ smsDisplayName }: PartCrossRefClientProps) {
+export default function PartCrossRefClient() {
   const [searchMode, setSearchMode] = useState<SearchMode>("part");
   const [query, setQuery] = useState("");
   const [year, setYear] = useState("");
@@ -134,7 +130,7 @@ export default function PartCrossRefClient({ smsDisplayName }: PartCrossRefClien
         <div>
           <p className="font-medium text-blue-900">Parts Database</p>
           <p className="text-sm text-blue-700">
-            Build or refresh your parts database from 5 years of {smsDisplayName} invoice history.
+            Build or refresh your parts database from 5 years of Protractor invoice history.
           </p>
         </div>
         <button
@@ -288,7 +284,7 @@ export default function PartCrossRefClient({ smsDisplayName }: PartCrossRefClien
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
           <p className="text-gray-600 font-medium">No parts found</p>
           <p className="text-sm text-gray-500 mt-1 mb-4">
-            Build the parts database from your {smsDisplayName} invoice history (5 years).
+            Build the parts database from your Protractor invoice history (5 years).
           </p>
           <button
             onClick={async () => {

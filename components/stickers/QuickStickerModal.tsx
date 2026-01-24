@@ -149,108 +149,79 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        // Define exact physical dimensions for each sticker size
-        const sizeDimensions: Record<string, { width: string; height: string }> = {
-          "1.5x2.25": { width: "1.5in", height: "2.25in" },
-          "2x2": { width: "2in", height: "2in" },
-          "2x2.5": { width: "2in", height: "2.5in" },
-          "2x3": { width: "2in", height: "3in" },
-          "2x3.5": { width: "2in", height: "3.5in" },
+        const sizeWidthInches: Record<string, string> = {
+          "2x2": "1.97in",
+          "2x2.5": "1.97in",
+          "2x3": "1.97in",
+          "2x3.5": "1.97in",
         };
-        const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
+        const sizeHeightInches: Record<string, string> = {
+          "2x2": "1.97in",
+          "2x2.5": "2.46in",
+          "2x3": "2.96in",
+          "2x3.5": "3.45in",
+        };
+        const imgWidth = sizeWidthInches[stickerSize] || "1.97in";
+        const imgHeight = sizeHeightInches[stickerSize] || "2.46in";
         
-        // Print from NEW WINDOW with !important everywhere to prevent overrides
-        const xOffset = "0in";
-        const yOffset = "0in"; // Start at 0, adjust if needed
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "none";
+        document.body.appendChild(iframe);
         
-        const printWindow = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
-        if (!printWindow) {
-          alert("Please allow popups to print stickers");
-          return;
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Print Sticker</title>
+              <style>
+                @page { margin: 0; size: auto; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { 
+                  width: 100%;
+                  height: 100%;
+                }
+                img { 
+                  width: ${imgWidth};
+                  height: ${imgHeight};
+                  display: block;
+                }
+              </style>
+            </head>
+            <body>
+              <img id="sticker" src="${dataUrl}" />
+            </body>
+            </html>
+          `);
+          iframeDoc.close();
+          
+          const img = iframeDoc.getElementById("sticker") as HTMLImageElement;
+          if (img) {
+            img.onload = () => {
+              setTimeout(() => {
+                iframe.contentWindow?.print();
+                setTimeout(() => {
+                  document.body.removeChild(iframe);
+                }, 1000);
+              }, 100);
+            };
+            if (img.complete) {
+              setTimeout(() => {
+                iframe.contentWindow?.print();
+                setTimeout(() => {
+                  document.body.removeChild(iframe);
+                }, 1000);
+              }, 100);
+            }
+          }
         }
-        
-        printWindow.document.open();
-        printWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Print Sticker</title>
-  <style>
-    @page { 
-      size: ${dims.width} ${dims.height}; 
-      margin: 0 !important; 
-    }
-
-    * {
-      margin: 0 !important;
-      padding: 0 !important;
-      box-sizing: border-box !important;
-    }
-
-    html {
-      width: 100vw !important;
-      height: 100vh !important;
-    }
-
-    body {
-      width: 100vw !important;
-      height: 100vh !important;
-      overflow: hidden !important;
-      background: white !important;
-      position: relative !important;
-    }
-
-    img#printImg {
-      position: absolute !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      display: block !important;
-      object-fit: fill !important;
-    }
-
-    @media print {
-      @page { 
-        size: ${dims.width} ${dims.height}; 
-        margin: 0 !important; 
-      }
-      html, body {
-        width: 100% !important;
-        height: 100% !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      img#printImg {
-        width: 100% !important;
-        height: 100% !important;
-      }
-    }
-  </style>
-</head>
-<body>
-  <img id="printImg" src="${dataUrl}" />
-  <script>
-    const img = document.getElementById('printImg');
-    img.onload = () => {
-      setTimeout(() => {
-        window.focus();
-        window.print();
-      }, 100);
-    };
-    img.onerror = () => {
-      document.body.innerHTML = '<p>Failed to load image for printing.</p>';
-    };
-    if (img.complete) {
-      setTimeout(() => {
-        window.focus();
-        window.print();
-      }, 100);
-    }
-  </script>
-</body>
-</html>`);
-        printWindow.document.close();
       };
       reader.readAsDataURL(blob);
 

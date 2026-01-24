@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/ui/Sidebar";
 import QuickStickerModal from "@/components/stickers/QuickStickerModal";
-import SupportChatWidget from "@/components/ui/SupportChatWidget";
 import { Menu, X } from "lucide-react";
 
 interface UserInfo {
@@ -17,7 +16,6 @@ interface UserInfo {
   authenticated: boolean;
   isPlatformAdmin?: boolean;
   enterpriseId?: string | null;
-  hasEnterpriseBilling?: boolean;
   enabledFeatures?: string[];
 }
 
@@ -85,7 +83,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           isPlatformAdmin={userInfo?.isPlatformAdmin}
           currentShopId={userInfo?.shopId}
           enterpriseId={userInfo?.enterpriseId}
-          hasEnterpriseBilling={userInfo?.hasEnterpriseBilling}
           enabledFeatures={userInfo?.enabledFeatures}
           onQuickStickerClick={() => setQuickStickerOpen(true)}
         />
@@ -115,7 +112,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           isPlatformAdmin={userInfo?.isPlatformAdmin}
           currentShopId={userInfo?.shopId}
           enterpriseId={userInfo?.enterpriseId}
-          hasEnterpriseBilling={userInfo?.hasEnterpriseBilling}
           enabledFeatures={userInfo?.enabledFeatures}
           onQuickStickerClick={() => {
             setQuickStickerOpen(true);
@@ -161,8 +157,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         isOpen={quickStickerOpen} 
         onClose={() => setQuickStickerOpen(false)} 
       />
-
-      <SupportChatWidget />
     </div>
   );
 }

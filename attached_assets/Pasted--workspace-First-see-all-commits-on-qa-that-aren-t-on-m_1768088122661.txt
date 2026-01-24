@@ -1,0 +1,47 @@
+~/workspace$ # First, see all commits on qa that aren't on main
+git log origin/main..qa --oneline
+
+# Identify the commit hashes for ONLY the Protractor callback/rate limiter changes
+# Then cherry-pick them to main:
+
+git checkout main
+git cherry-pick <commit-hash-1> <commit-hash-2> ...
+git push origin main
+25c30b5 (HEAD -> qa, gitsafe-backup/main) Update system to process notifications about service package and line item changes
+fb07fe9 Add security measures and data validation to the callback endpoint
+03f831c Add security measures to the callback endpoint for processing external updates
+636f932 Add callback endpoint for Protractor to receive work order updates
+a28a7a7 Improve rate limiting with exponential backoff and debugging
+f7eb74a Improve vehicle order processing with batched requests and rate limiting
+632ac87 (origin/qa) Saved progress at the end of the loop
+435fdbd Improve rate limiting and add circuit breaker to Protractor integration
+2f44f35 Saved progress at the end of the loop
+fbe214c Improve auto booking functionality and fix feature availability checks
+3148718 Correct plan display for trial users on billing page
+c11f42e Add callback URL for real-time Protractor integration updates
+0822a3e Update description for the professional billing plan
+dc5e86e Update the billing page layout and pricing plans to match the new design
+b5fd078 Make billing information visible in shop user interface
+4265029 Saved progress at the end of the loop
+05df99c Add billing display and review features for platform administrators
+a2283ed Update user list to display shop location and fix shop name lookup
+eeb2760 Add location identifiers and allow changing user primary location
+bd6528e Saved progress at the end of the loop
+3a8909a Enhance user location management for platform and enterprise administrators
+b3eb161 Improve page speed by optimizing data fetching and adding database indexes
+6c93dbb Improve platform admin page loading speed and responsiveness
+52e9d4d Add option to disable Tekmetric sync jobs for specific deployments
+92b2864 Add deployment instructions to project documentation
+Switched to branch 'main'
+Your branch is ahead of 'origin/main' by 1 commit.
+  (use "git push" to publish your local commits)
+bash: syntax error near unexpected token `<'
+Enumerating objects: 6, done.
+Counting objects: 100% (6/6), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (4/4), done.
+Writing objects: 100% (4/4), 1.51 KiB | 1.51 MiB/s, done.
+Total 4 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
+To https://github.com/crusher0311/mos-maint.git
+   ce67363..f6d82f

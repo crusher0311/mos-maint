@@ -4,6 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { Plus, Loader2, Check, AlertCircle, ChevronDown, ChevronUp, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
 import { AddToROButton } from "./AddToROButton";
 
+type MatchFactor = {
+  label: string;
+  matched: boolean | null;
+  detail?: string;
+};
+
 type HistoricalJob = {
   _id: string;
   job: {
@@ -31,6 +37,7 @@ type HistoricalJob = {
   matchScore?: number;
   matchBand?: "exact" | "likely" | "possible" | "poor";
   matchBandLabel?: string;
+  matchFactors?: MatchFactor[];
 };
 
 type CannedJobOption = {
@@ -108,11 +115,6 @@ function normalizeServiceTitle(title: string): string {
 
 type IntegrationType = "protractor" | "tekmetric";
 
-type MatchedDeferred = {
-  id: string;
-  title: string;
-};
-
 type Props = {
   vin: string;
   serviceTitle: string;
@@ -127,8 +129,6 @@ type Props = {
   cannedJobOptions?: CannedJobOption[];
   allCannedJobs?: CannedJobOption[]; // Fallback when no mapped options
   integration?: IntegrationType;
-  protractorDeferredId?: string;
-  matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
 };
 
 export function AddToROWithHistory({
@@ -145,8 +145,6 @@ export function AddToROWithHistory({
   cannedJobOptions = [],
   allCannedJobs = [],
   integration = "protractor",
-  protractorDeferredId,
-  matchedDeferred,
 }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -156,8 +154,6 @@ export function AddToROWithHistory({
   const [customQuery, setCustomQuery] = useState("");
   const [lastSearchQuery, setLastSearchQuery] = useState("");
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [deferredStatus, setDeferredStatus] = useState<"idle" | "adding" | "success" | "error">("idle");
-  const [deferredError, setDeferredError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -289,41 +285,7 @@ export function AddToROWithHistory({
     }
   }
 
-  async function handleAddDeferred(deferredId?: string) {
-    const idToUse = deferredId || protractorDeferredId || matchedDeferred?.id;
-    if (!idToUse || !workOrderGuid) return;
-    
-    setDeferredStatus("adding");
-    setDeferredError(null);
-    
-    try {
-      const res = await fetch("/api/jobs/add-deferred", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workOrderGuid,
-          deferredId: idToUse,
-          vin,
-          serviceTitle: matchedDeferred?.title || serviceTitle,
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        setDeferredStatus("error");
-        setDeferredError(data.error || "Failed to add deferred work");
-        return;
-      }
-      
-      setDeferredStatus("success");
-    } catch (err) {
-      setDeferredStatus("error");
-      setDeferredError("Network error");
-    }
-  }
-
-  if (status === "success" || deferredStatus === "success") {
+  if (status === "success") {
     return (
       <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
         <Check className="w-3 h-3" />
@@ -334,32 +296,6 @@ export function AddToROWithHistory({
 
   return (
     <div className="flex items-center gap-2">
-      {/* Add Deferred button - for Protractor deferred work items or OEM items with matched deferred */}
-      {(protractorDeferredId || matchedDeferred) && workOrderGuid && integration === "protractor" && (
-        <button
-          onClick={() => handleAddDeferred()}
-          disabled={deferredStatus === "adding"}
-          className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-blue-100 border border-blue-300 text-blue-700 text-xs font-medium hover:bg-blue-200 transition-colors disabled:opacity-50"
-          title={matchedDeferred ? `Add matching shop recommendation: ${matchedDeferred.title}` : "Add this previously deferred service directly to the work order"}
-        >
-          {deferredStatus === "adding" ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <>
-              <span className="relative">
-                <img src="/protractor-icon.png" alt="" className="w-4 h-4 rounded-full" />
-                <Plus className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 text-blue-700 bg-blue-100 rounded-full" />
-              </span>
-              <span className="ml-1">{matchedDeferred ? "+" : ""}Deferred</span>
-            </>
-          )}
-        </button>
-      )}
-
-      {deferredStatus === "error" && deferredError && (
-        <span className="text-xs text-red-600">{deferredError}</span>
-      )}
-
       {/* Add History button */}
       <div className="relative" ref={dropdownRef}>
         <button
@@ -440,7 +376,7 @@ export function AddToROWithHistory({
                       <div className="px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <span
                                 className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${getBandColor(
                                   job.matchBand
@@ -452,6 +388,26 @@ export function AddToROWithHistory({
                                 <span className="text-[10px] text-gray-400">
                                   {job.matchScore}%
                                 </span>
+                              )}
+                              {job.matchFactors && job.matchFactors.length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {job.matchFactors.map((factor, idx) => (
+                                    <span
+                                      key={idx}
+                                      className={`text-[9px] px-1 py-0.5 rounded ${
+                                        factor.matched === true
+                                          ? "bg-green-50 text-green-600"
+                                          : factor.matched === false
+                                          ? "bg-red-50 text-red-600"
+                                          : "bg-gray-50 text-gray-500"
+                                      }`}
+                                      title={factor.detail || undefined}
+                                    >
+                                      {factor.matched === true ? "✓" : factor.matched === false ? "✗" : "?"} {factor.label}
+                                      {factor.detail && factor.matched === false && ` (${factor.detail})`}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
                             </div>
                             <p className="text-sm font-medium text-gray-900">

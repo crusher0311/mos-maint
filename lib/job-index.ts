@@ -24,7 +24,6 @@ export type JobIndexEntry = {
   workOrderNumber?: number;
   servicePackageId: string;
   performedAt: Date;
-  isDeferred?: boolean; // True if this was deferred/declined work (not completed)
   
   vehicle: {
     vin?: string;
@@ -143,18 +142,7 @@ export function extractJobIndexFromWorkOrder(
                           workOrder.ServicePackages || 
                           [];
   
-  // Also capture DeferredServicePackages - these are declined/recommended services with pricing
-  const deferredPackages = workOrder.DeferredServicePackages?.ItemCollection || 
-                           workOrder.DeferredServicePackages || 
-                           [];
-  
-  // Combine both completed and deferred packages for indexing
-  const allPackages = [
-    ...(Array.isArray(servicePackages) ? servicePackages.map(p => ({ ...p, _isDeferred: false })) : []),
-    ...(Array.isArray(deferredPackages) ? deferredPackages.map(p => ({ ...p, _isDeferred: true })) : []),
-  ];
-  
-  if (allPackages.length === 0) {
+  if (!Array.isArray(servicePackages) || servicePackages.length === 0) {
     return entries;
   }
   
@@ -163,10 +151,9 @@ export function extractJobIndexFromWorkOrder(
                       workOrder.completedAt ||
                       new Date();
   
-  for (const pkg of allPackages) {
+  for (const pkg of servicePackages) {
     const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.title || "";
     const description = pkg.ServicePackageHeader?.Description || pkg.Description || pkg.description || "";
-    const isDeferred = pkg._isDeferred === true;
     
     if (!title) continue;
     
@@ -236,7 +223,6 @@ export function extractJobIndexFromWorkOrder(
       workOrderNumber: workOrder.WorkOrderNumber || workOrder.workOrderNumber,
       servicePackageId: pkg.ID || pkg.id,
       performedAt: new Date(performedAt),
-      isDeferred, // Track if this was deferred/declined work
       
       vehicle: {
         vin: vehicle.VIN || vehicle.vin,

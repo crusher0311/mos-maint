@@ -1,0 +1,300 @@
+2026-01-14T02:55:42.813329569Z       "fromCache": {
+2026-01-14T02:55:42.813331569Z         "vehicles": 0,
+2026-01-14T02:55:42.813333559Z         "customers": 0
+2026-01-14T02:55:42.813335569Z       },
+2026-01-14T02:55:42.813337619Z       "pagesQueued": 0,
+2026-01-14T02:55:42.813339639Z       "terminalSwept": false
+2026-01-14T02:55:42.813341729Z     },
+2026-01-14T02:55:42.813343759Z     {
+2026-01-14T02:55:42.813345769Z       "shopId": 57,
+2026-01-14T02:55:42.813347809Z       "tekmetricShopId": 11803,
+2026-01-14T02:55:42.813349889Z       "synced": 0,
+2026-01-14T02:55:42.813351859Z       "removed": 0,
+2026-01-14T02:55:42.813353859Z       "fromCache": {
+2026-01-14T02:55:42.813355929Z         "vehicles": 0,
+2026-01-14T02:55:42.813357959Z         "customers": 0
+2026-01-14T02:55:42.813359949Z       },
+2026-01-14T02:55:42.813361959Z       "pagesQueued": 0,
+2026-01-14T02:55:42.813364179Z       "terminalSwept": false
+2026-01-14T02:55:42.81336625Z     }
+2026-01-14T02:55:42.813368299Z   ]
+2026-01-14T02:55:42.81337033Z }
+2026-01-14T02:55:42.957513379Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:55:42.957531709Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/bd25ef1b-f8a7-4bfc-8226-932d588ad5c8
+2026-01-14T02:55:42.957534579Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:55:42.957537819Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-14T02:55:43.1567267Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:55:43.157270955Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/462e198a-003f-4c86-ab8a-733dc13418f1
+2026-01-14T02:55:43.157288225Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:55:43.157291775Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-14T02:55:43.357436102Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:55:43.357463062Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/912ecb0f-acae-4a8d-8d1b-b5bb6296b70b
+2026-01-14T02:55:43.357479123Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:55:43.357482193Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-14T02:55:43.558177614Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:55:43.558204425Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6207f637-ddf9-472d-b368-2bc9b14d08f5
+2026-01-14T02:55:43.558207315Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:55:43.558210595Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-14T02:55:43.758002342Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:55:43.758019973Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1f7cd308-32ce-484d-b537-90ea28e6bc44
+2026-01-14T02:55:43.758023383Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:55:43.758026273Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-14T02:55:43.957913582Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:55:43.957945353Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/85f563f0-6c84-4cd1-b47c-d06258e0ee1b
+2026-01-14T02:55:43.957949263Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:55:43.957953513Z [Protractor Debug] ConnId hash: f1f04d4d, Auth hash: bb9b970c
+2026-01-14T02:55:45.234535889Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-01-14T02:55:45.2345661Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-01-14T02:55:45.23456908Z 
+2026-01-14T02:55:45.23457234Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-01-14T02:55:45.23457444Z 
+2026-01-14T02:59:01.956309288Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-14T02:59:01.956312179Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-14T02:59:01.956327219Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-14T02:59:01.956330869Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-14T02:59:01.956333429Z background-color:#555555;}
+2026-01-14T02:59:01.956336119Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-14T02:59:01.956338719Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-14T02:59:01.956341509Z -->
+2026-01-14T02:59:01.956344189Z </style>
+2026-01-14T02:59:01.95634686Z </head>
+2026-01-14T02:59:01.95634944Z <body>
+2026-01-14T02:59:01.9563521Z <div id="header"><h1>Server Error</h1></div>
+2026-01-14T02:59:01.95635509Z <div id="content">
+2026-01-14T02:59:01.95635757Z  <div class="content-container"><fieldset>
+2026-01-14T02:59:01.95636013Z   <h2>404 - File or directory not found.</h2>
+2026-01-14T02:59:01.9563627Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T02:59:01.95636527Z  </fieldset></div>
+2026-01-14T02:59:01.95636782Z </div>
+2026-01-14T02:59:01.9563702Z </body>
+2026-01-14T02:59:01.95637267Z </html>
+2026-01-14T02:59:01.956375Z 
+2026-01-14T02:59:01.95637751Z [Protractor] Trying GET /ServicePackageTemplate/394d6dfe-e9c4-4981-a22c-5532a51e1de3...
+2026-01-14T02:59:02.094263491Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:02.094298502Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/10524ab9-21d4-4a7e-9ae8-95468586fcd4
+2026-01-14T02:59:02.094303822Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:02.094309002Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-14T02:59:02.293694005Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:02.293719245Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/fb13a129-8c7c-4e21-9caa-62b4034611cd
+2026-01-14T02:59:02.293725495Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:02.293731635Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-14T02:59:02.494030342Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:02.494051273Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/1d28e589-8384-4131-8532-e9437bd550fd
+2026-01-14T02:59:02.494056123Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:02.494074553Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:02.5639803Z [Protractor] GET /ServicePackageTemplate/Read/1d28e589-8384-4131-8532-e9437bd550fd: ok=false
+2026-01-14T02:59:02.56399451Z [Protractor] GET /ServicePackageTemplate/Read/1d28e589-8384-4131-8532-e9437bd550fd error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-14T02:59:02.56399776Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-14T02:59:02.56400009Z <head>
+2026-01-14T02:59:02.5640032Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-14T02:59:02.56400605Z <title>404 - File or directory not found.</title>
+2026-01-14T02:59:02.56400896Z <style type="text/css">
+2026-01-14T02:59:02.56401134Z <!--
+2026-01-14T02:59:02.56401436Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-14T02:59:02.5640168Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-14T02:59:02.564019101Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-14T02:59:02.564021301Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-14T02:59:02.564023581Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-14T02:59:02.564026451Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-14T02:59:02.564029521Z background-color:#555555;}
+2026-01-14T02:59:02.564031831Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-14T02:59:02.564034151Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-14T02:59:02.564036381Z -->
+2026-01-14T02:59:02.564038651Z </style>
+2026-01-14T02:59:02.564040941Z </head>
+2026-01-14T02:59:02.564043641Z <body>
+2026-01-14T02:59:02.564045971Z <div id="header"><h1>Server Error</h1></div>
+2026-01-14T02:59:02.564051171Z <div id="content">
+2026-01-14T02:59:02.564053511Z  <div class="content-container"><fieldset>
+2026-01-14T02:59:02.564055842Z   <h2>404 - File or directory not found.</h2>
+2026-01-14T02:59:02.564058191Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T02:59:02.564060411Z  </fieldset></div>
+2026-01-14T02:59:02.564062732Z </div>
+2026-01-14T02:59:02.564065052Z </body>
+2026-01-14T02:59:02.564067262Z </html>
+2026-01-14T02:59:02.564069302Z 
+2026-01-14T02:59:02.564071672Z [Protractor] Trying GET /ServicePackageTemplate/1d28e589-8384-4131-8532-e9437bd550fd...
+2026-01-14T02:59:02.693957539Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:02.693978689Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e12944e6-223f-45da-b97d-b55fbac5711a
+2026-01-14T02:59:02.69398167Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:02.69398501Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-14T02:59:02.89517385Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:02.895200321Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc
+2026-01-14T02:59:02.895204311Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:02.895207481Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:02.963903255Z [Protractor] GET /ServicePackageTemplate/Read/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc: ok=false
+2026-01-14T02:59:02.963927665Z [Protractor] GET /ServicePackageTemplate/Read/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-14T02:59:02.963983507Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-14T02:59:02.963987957Z <head>
+2026-01-14T02:59:02.963991287Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-14T02:59:02.963994857Z <title>404 - File or directory not found.</title>
+2026-01-14T02:59:02.963998227Z <style type="text/css">
+2026-01-14T02:59:02.964000667Z <!--
+2026-01-14T02:59:02.964003887Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-14T02:59:02.964006927Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-14T02:59:02.964009578Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-14T02:59:02.964012507Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-14T02:59:02.964015428Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-14T02:59:02.964018688Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-14T02:59:02.964022028Z background-color:#555555;}
+2026-01-14T02:59:02.964024808Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-14T02:59:02.964028088Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-14T02:59:02.964031088Z -->
+2026-01-14T02:59:02.964033918Z </style>
+2026-01-14T02:59:02.964036548Z </head>
+2026-01-14T02:59:02.964039258Z <body>
+2026-01-14T02:59:02.964042028Z <div id="header"><h1>Server Error</h1></div>
+2026-01-14T02:59:02.964044918Z <div id="content">
+2026-01-14T02:59:02.964047659Z  <div class="content-container"><fieldset>
+2026-01-14T02:59:02.964050728Z   <h2>404 - File or directory not found.</h2>
+2026-01-14T02:59:02.964053569Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T02:59:02.964056339Z  </fieldset></div>
+2026-01-14T02:59:02.964059219Z </div>
+2026-01-14T02:59:02.964062079Z </body>
+2026-01-14T02:59:02.964064469Z </html>
+2026-01-14T02:59:02.964066699Z 
+2026-01-14T02:59:02.964069289Z [Protractor] Trying GET /ServicePackageTemplate/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc...
+2026-01-14T02:59:03.093940586Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:03.093965607Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/8ad68a80-14ab-4924-be15-6587b6df8ac9
+2026-01-14T02:59:03.093970496Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:03.093973927Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:03.151935184Z [Protractor] GET /ServicePackageTemplate/Read/8ad68a80-14ab-4924-be15-6587b6df8ac9: ok=false
+2026-01-14T02:59:03.151961725Z [Protractor] GET /ServicePackageTemplate/Read/8ad68a80-14ab-4924-be15-6587b6df8ac9 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-14T02:59:03.151965315Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-14T02:59:03.151967595Z <head>
+2026-01-14T02:59:03.151970655Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-14T02:59:03.151973225Z <title>404 - File or directory not found.</title>
+2026-01-14T02:59:03.151976495Z <style type="text/css">
+2026-01-14T02:59:03.151978625Z <!--
+2026-01-14T02:59:03.151981325Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-14T02:59:03.151983635Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-14T02:59:03.151985785Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-14T02:59:03.152004326Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-14T02:59:03.152007076Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-14T02:59:03.152009826Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-14T02:59:03.152012656Z background-color:#555555;}
+2026-01-14T02:59:03.152014846Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-14T02:59:03.152017346Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-14T02:59:03.152019436Z -->
+2026-01-14T02:59:03.152021656Z </style>
+2026-01-14T02:59:03.152023816Z </head>
+2026-01-14T02:59:03.152025896Z <body>
+2026-01-14T02:59:03.152028006Z <div id="header"><h1>Server Error</h1></div>
+2026-01-14T02:59:03.152030066Z <div id="content">
+2026-01-14T02:59:03.152032177Z  <div class="content-container"><fieldset>
+2026-01-14T02:59:03.152034217Z   <h2>404 - File or directory not found.</h2>
+2026-01-14T02:59:03.152036357Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T02:59:03.152038477Z  </fieldset></div>
+2026-01-14T02:59:03.152040527Z </div>
+2026-01-14T02:59:03.152042527Z </body>
+2026-01-14T02:59:03.152044517Z </html>
+2026-01-14T02:59:03.152046427Z 
+2026-01-14T02:59:03.152048547Z [Protractor] Trying GET /ServicePackageTemplate/8ad68a80-14ab-4924-be15-6587b6df8ac9...
+2026-01-14T02:59:03.293938365Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:03.293962005Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/a9fef3e8-d3a8-4639-8737-a42bf48b0509
+2026-01-14T02:59:03.293966335Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:03.293969895Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:03.354815479Z [Protractor] GET /ServicePackageTemplate/Read/a9fef3e8-d3a8-4639-8737-a42bf48b0509: ok=false
+2026-01-14T02:59:03.3548405Z [Protractor] GET /ServicePackageTemplate/Read/a9fef3e8-d3a8-4639-8737-a42bf48b0509 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-14T02:59:03.35484442Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-14T02:59:03.35484689Z <head>
+2026-01-14T02:59:03.35484975Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-14T02:59:03.35485246Z <title>404 - File or directory not found.</title>
+2026-01-14T02:59:03.354855331Z <style type="text/css">
+2026-01-14T02:59:03.354857831Z <!--
+2026-01-14T02:59:03.354861211Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-14T02:59:03.354863851Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-14T02:59:03.354866481Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-14T02:59:03.354868871Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-14T02:59:03.354871241Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-14T02:59:03.354874721Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-14T02:59:03.354878161Z background-color:#555555;}
+2026-01-14T02:59:03.354881631Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-14T02:59:03.354884161Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-14T02:59:03.354886521Z -->
+2026-01-14T02:59:03.354888921Z </style>
+2026-01-14T02:59:03.354891472Z </head>
+2026-01-14T02:59:03.354893841Z <body>
+2026-01-14T02:59:03.354911732Z <div id="header"><h1>Server Error</h1></div>
+2026-01-14T02:59:03.354914362Z <div id="content">
+2026-01-14T02:59:03.354916972Z  <div class="content-container"><fieldset>
+2026-01-14T02:59:03.354919242Z   <h2>404 - File or directory not found.</h2>
+2026-01-14T02:59:03.354921852Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T02:59:03.354924432Z  </fieldset></div>
+2026-01-14T02:59:03.354926893Z </div>
+2026-01-14T02:59:03.354929482Z </body>
+2026-01-14T02:59:03.354932002Z </html>
+2026-01-14T02:59:03.354934213Z 
+2026-01-14T02:59:03.354937393Z [Protractor] Trying GET /ServicePackageTemplate/a9fef3e8-d3a8-4639-8737-a42bf48b0509...
+2026-01-14T02:59:03.494259562Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:03.494277282Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/4520df60-6317-436d-9fe1-f0a0be1cac74
+2026-01-14T02:59:03.494280522Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:03.494282982Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:03.567878217Z [Protractor] GET /ServicePackageTemplate/4520df60-6317-436d-9fe1-f0a0be1cac74: ok=true
+2026-01-14T02:59:03.567920988Z [Protractor] Got template detail with 1 lines
+2026-01-14T02:59:03.567924988Z [Protractor Sync] Template : 1 lines
+2026-01-14T02:59:03.632741948Z [Protractor] Trying GET /ServicePackageTemplate/Read/b933a3fc-ed58-40ef-bc30-7803e43b6c69...
+2026-01-14T02:59:03.694046725Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:03.694070095Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/394d6dfe-e9c4-4981-a22c-5532a51e1de3
+2026-01-14T02:59:03.694073255Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:03.694075766Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:03.755239108Z [Protractor] GET /ServicePackageTemplate/394d6dfe-e9c4-4981-a22c-5532a51e1de3: ok=true
+2026-01-14T02:59:03.755256729Z [Protractor] Got template detail with 1 lines
+2026-01-14T02:59:03.755263729Z [Protractor Sync] Template AS1: 1 lines
+2026-01-14T02:59:03.819630037Z [Protractor] Trying GET /ServicePackageTemplate/Read/e7ced9f9-9e38-4840-8aca-8409a8ed3846...
+2026-01-14T02:59:03.894116515Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:03.894162367Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0cdfbab0-c54b-4a62-89d4-6df12a0b4a5d
+2026-01-14T02:59:03.894165807Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:03.894168867Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-14T02:59:04.093661562Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:04.093687713Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/acd98313-de6a-445a-a0a9-7d86ad561be5
+2026-01-14T02:59:04.093692183Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:04.093696473Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-14T02:59:04.293600029Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:04.293616579Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/1d28e589-8384-4131-8532-e9437bd550fd
+2026-01-14T02:59:04.29362065Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:04.29362355Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:04.353851177Z [Protractor] GET /ServicePackageTemplate/1d28e589-8384-4131-8532-e9437bd550fd: ok=true
+2026-01-14T02:59:04.353883238Z [Protractor] Got template detail with 1 lines
+2026-01-14T02:59:04.353885868Z [Protractor Sync] Template O11: 1 lines
+2026-01-14T02:59:04.418625506Z [Protractor] Trying GET /ServicePackageTemplate/Read/ba693a79-2d55-42d8-a316-b39358564dd6...
+2026-01-14T02:59:04.494512712Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:04.494536583Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/edeb79b2-64fb-4994-9c48-4486dd8c9b44
+2026-01-14T02:59:04.494539153Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:04.494541763Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-14T02:59:04.695383574Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:04.695402335Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc
+2026-01-14T02:59:04.695406175Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:04.695414675Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:04.768426154Z [Protractor] GET /ServicePackageTemplate/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc: ok=true
+2026-01-14T02:59:04.768450824Z [Protractor] Got template detail with 2 lines
+2026-01-14T02:59:04.768453934Z [Protractor Sync] Template T6: 2 lines
+2026-01-14T02:59:04.832850723Z [Protractor] Trying GET /ServicePackageTemplate/Read/c9011af8-7a2d-45d6-83ef-c57c5b947339...
+2026-01-14T02:59:04.894631233Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:04.894656963Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/8ad68a80-14ab-4924-be15-6587b6df8ac9
+2026-01-14T02:59:04.894659953Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:04.894662954Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:04.956007221Z [Protractor] GET /ServicePackageTemplate/8ad68a80-14ab-4924-be15-6587b6df8ac9: ok=true
+2026-01-14T02:59:04.956030501Z [Protractor] Got template detail with 2 lines
+2026-01-14T02:59:04.956034902Z [Protractor Sync] Template T7: 2 lines
+2026-01-14T02:59:05.020636466Z [Protractor] Trying GET /ServicePackageTemplate/Read/b088368e-b782-4f2b-80a7-0a62221f47d7...
+2026-01-14T02:59:05.094747984Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:05.094768095Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/a9fef3e8-d3a8-4639-8737-a42bf48b0509
+2026-01-14T02:59:05.094777275Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:05.094780095Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T02:59:05.183071192Z [Protractor] GET /ServicePackageTemplate/a9fef3e8-d3a8-4639-8737-a42bf48b0509: ok=true
+2026-01-14T02:59:05.183096943Z [Protractor] Got template detail with 2 lines
+2026-01-14T02:59:05.183100193Z [Protractor Sync] Template T8: 2 lines
+2026-01-14T02:59:05.247570414Z [Protractor] Trying GET /ServicePackageTemplate/Read/35e91ec0-b35b-4031-88a6-eefa18991984...
+2026-01-14T02:59:05.295608716Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:05.295633907Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9d4dede8-6b96-4cdc-9bfc-4b880de21fc2
+2026-01-14T02:59:05.295637207Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:05.295640877Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T02:59:05.494984738Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:05.495005579Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/164a7760-4a23-4b85-bf2f-59c5787b7679
+2026-01-14T02:59:05.495025349Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:05.495029789Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T02:59:05.695389518Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T02:59:05.695422818Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c224bab0-aa0f-4352-bc9c-43d97b48597f
+2026-01-14T02:59:05.695427319Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T02:59:05.695431389Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a

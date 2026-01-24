@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Plus } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
+import AddVehicleModal from "@/components/AddVehicleModal";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
 
@@ -19,15 +20,12 @@ type PaginationInfo = {
   hasPrevPage: boolean;
 };
 
-type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
-
 type DashboardData = {
   rows: any[];
   pagination?: PaginationInfo;
   user: any;
   smsType?: string;
   distanceUnit?: "miles" | "kilometers";
-  enabledFeatures?: FeatureId[];
 };
 
 const PAGE_SIZE = 100;
@@ -112,7 +110,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
-  const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
+  const [closingVehicle, setClosingVehicle] = useState<string | null>(null);
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -120,22 +118,34 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     y: number;
     intervals: Record<string, { mileage: number; months: number }>;
     useKilometers: boolean;
-    customerName?: string;
-    vehicleYear?: number;
-    vehicleMake?: string;
-    vehicleModel?: string;
   } | null>(null);
   const [customStickerModal, setCustomStickerModal] = useState<{
     vin: string;
     mileage: number;
-    customerName?: string;
-    vehicleYear?: number;
-    vehicleMake?: string;
-    vehicleModel?: string;
   } | null>(null);
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
+  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
+  const [shopPreferences, setShopPreferences] = useState<{
+    allowManualClose?: boolean;
+    allowManualVehicleEntry?: boolean;
+  }>({});
+
+  useEffect(() => {
+    async function fetchPreferences() {
+      try {
+        const res = await fetch('/api/shop/features');
+        if (res.ok) {
+          const data = await res.json();
+          setShopPreferences(data.preferences || {});
+        }
+      } catch (e) {
+        console.error('Failed to fetch shop preferences', e);
+      }
+    }
+    fetchPreferences();
+  }, []);
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -147,15 +157,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     return () => document.removeEventListener("mousedown", handleClickOutsideContext);
   }, []);
 
-  const handleStickerRightClick = async (
-    e: React.MouseEvent, 
-    vin: string, 
-    currentMileage: number | null,
-    customerName?: string,
-    vehicleYear?: number,
-    vehicleMake?: string,
-    vehicleModel?: string
-  ) => {
+  const handleStickerRightClick = async (e: React.MouseEvent, vin: string, currentMileage: number | null) => {
     e.preventDefault();
     if (!currentMileage) {
       alert("Mileage is required to print a sticker");
@@ -181,10 +183,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           y: e.clientY,
           intervals: config.intervals || defaultIntervals,
           useKilometers: config.useKilometers || false,
-          customerName,
-          vehicleYear,
-          vehicleMake,
-          vehicleModel,
         });
       }
     } catch (err) {
@@ -202,17 +200,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     const nextServiceDate = nextDate.toISOString().split('T')[0];
     const nextServiceMileage = stickerContextMenu.mileage + interval.mileage;
     
-    const { customerName, vehicleYear, vehicleMake, vehicleModel } = stickerContextMenu;
     setStickerContextMenu(null);
     handleQuickPrintStickerWithValues(
       stickerContextMenu.vin,
       stickerContextMenu.mileage,
       nextServiceMileage,
-      nextServiceDate,
-      customerName,
-      vehicleYear,
-      vehicleMake,
-      vehicleModel
+      nextServiceDate
     );
   };
 
@@ -225,10 +218,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     setCustomStickerModal({
       vin: stickerContextMenu.vin,
       mileage: stickerContextMenu.mileage,
-      customerName: stickerContextMenu.customerName,
-      vehicleYear: stickerContextMenu.vehicleYear,
-      vehicleMake: stickerContextMenu.vehicleMake,
-      vehicleModel: stickerContextMenu.vehicleModel,
     });
     setStickerContextMenu(null);
   };
@@ -239,11 +228,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       customStickerModal.vin,
       customStickerModal.mileage,
       parseInt(customMileage) || customStickerModal.mileage + 5000,
-      customDate,
-      customStickerModal.customerName,
-      customStickerModal.vehicleYear,
-      customStickerModal.vehicleMake,
-      customStickerModal.vehicleModel
+      customDate
     );
     setCustomStickerModal(null);
   };
@@ -252,11 +237,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     vin: string,
     currentMileage: number,
     nextServiceMileage: number,
-    nextServiceDate: string,
-    customerName?: string,
-    vehicleYear?: number,
-    vehicleMake?: string,
-    vehicleModel?: string
+    nextServiceDate: string
   ) => {
     setPrintingSticker(vin);
     try {
@@ -285,10 +266,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           nextServiceDate,
           size: stickerSize,
           includeQR,
-          customerName,
-          vehicleYear,
-          vehicleMake,
-          vehicleModel,
         }),
       });
       
@@ -303,6 +280,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         const sizeMap: Record<string, { width: string; height: string }> = {
+          '1.5x2.25': { width: '1.5in', height: '2.25in' },
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
           '2x3': { width: '2in', height: '3in' },
@@ -332,25 +310,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <head>
               <title>Print Sticker</title>
               <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0 !important; }
-                @media print {
-                  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                }
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  overflow: hidden;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                }
-                img { 
-                  display: block; 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  object-fit: contain;
-                }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
               </style>
             </head>
             <body><img src="${dataUrl}" /></body>
@@ -361,7 +324,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           setTimeout(() => {
             iframe.contentWindow?.focus();
             iframe.contentWindow?.print();
-            window.dispatchEvent(new CustomEvent("refreshBookingCount"));
           }, 250);
         }
       };
@@ -375,91 +337,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   };
 
-  const handlePrintKeytag = async (
-    customerName: string,
-    vehicle: string,
-    vin: string,
-    roNumber: string,
-    mileage: number | null
-  ) => {
-    setPrintingKeytag(vin);
-    try {
-      const res = await fetch('/api/keytag/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerName: customerName || 'Customer',
-          vehicleInfo: vehicle || 'Vehicle',
-          vin: vin || '',
-          roNumber: roNumber || '',
-          mileage: mileage ?? 0,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to generate keytag');
-      }
-
-      const blob = await res.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        const printFrame = document.createElement('iframe');
-        printFrame.style.position = 'fixed';
-        printFrame.style.top = '-9999px';
-        printFrame.style.left = '-9999px';
-        document.body.appendChild(printFrame);
-
-        const iframeDoc = printFrame.contentWindow?.document;
-        if (iframeDoc) {
-          iframeDoc.open();
-          iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Print Keytag</title>
-              <style>
-                @page { size: 3.5in 1.125in; margin: 0; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
-                img { display: block; width: 100%; height: 100%; }
-              </style>
-            </head>
-            <body>
-              <img src="${dataUrl}" />
-            </body>
-            </html>
-          `);
-          iframeDoc.close();
-
-          printFrame.onload = () => {
-            setTimeout(() => {
-              printFrame.contentWindow?.print();
-              setTimeout(() => {
-                document.body.removeChild(printFrame);
-              }, 1000);
-            }, 100);
-          };
-        }
-      };
-      reader.readAsDataURL(blob);
-    } catch (error) {
-      console.error('Failed to print keytag:', error);
-      alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
-    } finally {
-      setPrintingKeytag(null);
-    }
-  };
-
-  const handleQuickPrintSticker = async (
-    vin: string, 
-    currentMileage: number | null,
-    customerName?: string,
-    vehicleYear?: number,
-    vehicleMake?: string,
-    vehicleModel?: string
-  ) => {
+  const handleQuickPrintSticker = async (vin: string, currentMileage: number | null) => {
     if (!currentMileage) {
       alert("Mileage is required to print a sticker");
       return;
@@ -496,14 +374,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             usePredictiveDate = true;
           }
           
-          // Use shop's configured default oil type (or fall back to synthetic)
-          const defaultOilType = config?.defaultOilType || 'synthetic';
-          if (intervals?.[defaultOilType]) {
-            intervalMileage = intervals[defaultOilType].mileage || 5000;
-            intervalMonths = intervals[defaultOilType].months || 6;
-          } else if (intervals?.synthetic) {
+          // Use synthetic oil as default interval (most common)
+          if (intervals?.synthetic) {
             intervalMileage = intervals.synthetic.mileage || 5000;
-            intervalMonths = intervals.synthetic.months || 6;
+            intervalMonths = intervals.synthetic.months || 3;
           } else if (intervals?.conventional) {
             intervalMileage = intervals.conventional.mileage || 3000;
             intervalMonths = intervals.conventional.months || 3;
@@ -565,10 +439,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           nextServiceDate,
           size: stickerSize,
           includeQR,
-          customerName,
-          vehicleYear,
-          vehicleMake,
-          vehicleModel,
         }),
       });
       
@@ -585,6 +455,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         const dataUrl = reader.result as string;
         
         const sizeMap: Record<string, { width: string; height: string }> = {
+          '1.5x2.25': { width: '1.5in', height: '2.25in' },
           '2x2': { width: '2in', height: '2in' },
           '2x2.5': { width: '2in', height: '2.5in' },
           '2x3': { width: '2in', height: '3in' },
@@ -614,25 +485,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <head>
               <title>Print Sticker</title>
               <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0 !important; }
-                @media print {
-                  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                }
+                @page { size: ${dims.width} ${dims.height}; margin: 0; }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  overflow: hidden;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                }
-                img { 
-                  display: block; 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  object-fit: contain;
-                }
+                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
+                img { display: block; width: 100%; height: 100%; }
               </style>
             </head>
             <body><img src="${dataUrl}" /></body>
@@ -643,7 +499,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           setTimeout(() => {
             iframe.contentWindow?.focus();
             iframe.contentWindow?.print();
-            window.dispatchEvent(new CustomEvent("refreshBookingCount"));
           }, 250);
         }
       };
@@ -654,6 +509,32 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
     } finally {
       setPrintingSticker(null);
+    }
+  };
+
+  const handleCloseVehicle = async (vinOrId: string) => {
+    if (!confirm("Close this vehicle? It will be moved to the archived view.")) {
+      return;
+    }
+    
+    setClosingVehicle(vinOrId);
+    try {
+      const res = await fetch(`/api/vehicles/${encodeURIComponent(vinOrId)}/close`, {
+        method: "POST"
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to close vehicle");
+      }
+      
+      // Refresh dashboard data
+      await refreshData();
+    } catch (error) {
+      console.error("Failed to close vehicle:", error);
+      alert(error instanceof Error ? error.message : "Failed to close vehicle");
+    } finally {
+      setClosingVehicle(null);
     }
   };
 
@@ -759,31 +640,43 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   }, []);
 
+  // Smart background refresh - updates data without interrupting user actions
   useEffect(() => {
-    let lastUpdate = Date.now();
+    const REFRESH_INTERVAL_MS = 30000; // 30 seconds
     
-    const checkForUpdates = async () => {
-      try {
-        const response = await fetch('/api/dashboard/updates');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.lastUpdate > lastUpdate) {
-            lastUpdate = data.lastUpdate;
-            loadData(currentPage, searchQuery, showArchived);
-          }
+    const backgroundRefresh = async () => {
+      // Skip if any modal is open or user is actively interacting
+      const isUserInteracting = 
+        jobLookupVehicle !== null ||
+        commonFailuresVehicle !== null ||
+        stickerContextMenu !== null ||
+        customStickerModal !== null ||
+        showAddVehicleModal ||
+        printingSticker !== null ||
+        closingVehicle !== null ||
+        document.activeElement?.tagName === 'INPUT';
+      
+      if (isUserInteracting || isRefreshing) {
+        return; // Skip this refresh cycle
+      }
+      
+      // Silently fetch new data
+      const newData = await fetchDashboardData(currentPage, searchQuery, showArchived);
+      if (newData && newData.rows) {
+        // Only update if data actually changed (compare row count or VINs)
+        const currentVins = data.rows.map((r: any) => r.displayVin || r.vin).join(',');
+        const newVins = newData.rows.map((r: any) => r.displayVin || r.vin).join(',');
+        
+        if (currentVins !== newVins || data.rows.length !== newData.rows.length) {
+          setData(newData);
+          setLastUpdated(new Date());
         }
-      } catch (e) {
-        // Ignore errors
       }
     };
     
-    const interval = setInterval(checkForUpdates, 1000);
-    return () => clearInterval(interval);
-  }, [currentPage, searchQuery, showArchived]);
-
-  // NOTE: check-closed-orders polling disabled - Protractor webhooks now handle
-  // work order status updates in real-time via /api/webhooks/protractor/[token]
-  // This eliminates the need for polling and prevents API rate limiting issues.
+    const intervalId = setInterval(backgroundRefresh, REFRESH_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [currentPage, searchQuery, showArchived, jobLookupVehicle, commonFailuresVehicle, stickerContextMenu, customStickerModal, showAddVehicleModal, printingSticker, closingVehicle, isRefreshing, data.rows]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -835,6 +728,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <span className="text-xs sm:text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              onClick={() => setShowAddVehicleModal(true)}
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Add Vehicle</span>
+              <span className="sm:hidden">Add</span>
+            </button>
             <button
               onClick={handleToggleArchived}
               className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
@@ -1068,51 +969,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           >
                             <Wrench className="w-4 h-4" />
                           </button>
-                          {data.enabledFeatures?.includes('common_failures') ? (
-                            <button
-                              onClick={() => {
-                                let year = r.vehicle?.year;
-                                let make = r.vehicle?.make;
-                                let model = r.vehicle?.model;
-                                
-                                if (!year && !make && !model && r.displayVehicle) {
-                                  const vehicleStr = r.displayVehicle || "";
-                                  const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                  year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                  const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                  const parts = afterYear.split(" ").filter(Boolean);
-                                  make = parts[0] || undefined;
-                                  model = parts.slice(1).join(" ") || undefined;
-                                }
-                                
-                                setCommonFailuresVehicle({
-                                  vin,
-                                  year,
-                                  make,
-                                  model,
-                                  engine: r.vehicle?.engine || r.engine || undefined,
-                                  mileage: r.displayMiles,
-                                  displayName: r.displayName,
-                                });
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Common Failures"
-                            >
-                              <AlertTriangle className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <span
-                              className="p-1.5 text-gray-300 cursor-not-allowed"
-                              title="Common Failures not enabled for this shop"
-                            >
-                              <AlertTriangle className="w-4 h-4" />
-                            </span>
-                          )}
                           <button
                             onClick={() => {
                               let year = r.vehicle?.year;
                               let make = r.vehicle?.make;
                               let model = r.vehicle?.model;
+                              
                               if (!year && !make && !model && r.displayVehicle) {
                                 const vehicleStr = r.displayVehicle || "";
                                 const yearMatch = vehicleStr.match(/^(\d{4})/);
@@ -1122,23 +984,25 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                                 make = parts[0] || undefined;
                                 model = parts.slice(1).join(" ") || undefined;
                               }
-                              handleQuickPrintSticker(vin, r.displayMiles, r.displayName, year, make, model);
+                              
+                              setCommonFailuresVehicle({
+                                vin,
+                                year,
+                                make,
+                                model,
+                                engine: r.vehicle?.engine || r.engine || undefined,
+                                mileage: r.displayMiles,
+                                displayName: r.displayName,
+                              });
                             }}
-                            onContextMenu={(e) => {
-                              let year = r.vehicle?.year;
-                              let make = r.vehicle?.make;
-                              let model = r.vehicle?.model;
-                              if (!year && !make && !model && r.displayVehicle) {
-                                const vehicleStr = r.displayVehicle || "";
-                                const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                const parts = afterYear.split(" ").filter(Boolean);
-                                make = parts[0] || undefined;
-                                model = parts.slice(1).join(" ") || undefined;
-                              }
-                              handleStickerRightClick(e, vin, r.displayMiles, r.displayName, year, make, model);
-                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Common Failures"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleQuickPrintSticker(vin, r.displayMiles)}
+                            onContextMenu={(e) => handleStickerRightClick(e, vin, r.displayMiles)}
                             disabled={printingSticker === vin || !r.displayMiles}
                             className={`p-1.5 rounded transition-colors ${
                               !r.displayMiles 
@@ -1153,32 +1017,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <Printer className="w-4 h-4" />
                             )}
                           </button>
-                          {data.enabledFeatures?.includes('keytags') ? (
+                          {(r.source === "manual" || shopPreferences.allowManualClose) && (
                             <button
-                              onClick={() => handlePrintKeytag(
-                                r.displayName || '',
-                                r.displayVehicle || '',
-                                vin,
-                                r.displayRo || '',
-                                r.displayMiles
-                              )}
-                              disabled={printingKeytag === vin}
-                              className="p-1.5 rounded transition-colors text-gray-400 hover:text-amber-600 hover:bg-amber-50"
-                              title="Print Keytag"
+                              onClick={() => handleCloseVehicle(vin)}
+                              disabled={closingVehicle === vin}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Close/Archive Vehicle"
                             >
-                              {printingKeytag === vin ? (
+                              {closingVehicle === vin ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                                <Key className="w-4 h-4" />
+                                <X className="w-4 h-4" />
                               )}
                             </button>
-                          ) : (
-                            <span
-                              className="p-1.5 text-gray-300 cursor-not-allowed"
-                              title="Keytags not enabled for this shop"
-                            >
-                              <Key className="w-4 h-4" />
-                            </span>
                           )}
                         </div>
                       </td>
@@ -1264,8 +1115,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
           <p>Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : "—"}</p>
           <p className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            Auto-refreshes every 30 seconds
+            Use Refresh button for latest data
           </p>
         </div>
       </div>
@@ -1450,6 +1300,16 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             </div>
           </div>
         </div>
+      )}
+
+      {showAddVehicleModal && (
+        <AddVehicleModal
+          onClose={() => setShowAddVehicleModal(false)}
+          onSuccess={() => {
+            setShowAddVehicleModal(false);
+            refreshData();
+          }}
+        />
       )}
     </div>
   );

@@ -1,39 +1,37 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { 
+  getUpcomingHolidays, 
+  getHolidayDefinitionsWithStatus,
+  DEFAULT_HOLIDAY_DEFINITIONS,
+  PRESET_CUSTOM_HOLIDAYS,
+  getPresetHolidayOptions,
+  type CustomRecurringHoliday,
+  type HolidayRule,
+} from "@/lib/auto-booking/holidays";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const US_HOLIDAYS_2025 = [
-  { date: "2025-01-01", name: "New Year's Day" },
-  { date: "2025-01-20", name: "Martin Luther King Jr. Day" },
-  { date: "2025-02-17", name: "Presidents' Day" },
-  { date: "2025-05-26", name: "Memorial Day" },
-  { date: "2025-07-04", name: "Independence Day" },
-  { date: "2025-09-01", name: "Labor Day" },
-  { date: "2025-10-13", name: "Columbus Day" },
-  { date: "2025-11-11", name: "Veterans Day" },
-  { date: "2025-11-27", name: "Thanksgiving Day" },
-  { date: "2025-12-25", name: "Christmas Day" },
-];
-
-const US_HOLIDAYS_2026 = [
-  { date: "2026-01-01", name: "New Year's Day" },
-  { date: "2026-01-19", name: "Martin Luther King Jr. Day" },
-  { date: "2026-02-16", name: "Presidents' Day" },
-  { date: "2026-05-25", name: "Memorial Day" },
-  { date: "2026-07-03", name: "Independence Day (Observed)" },
-  { date: "2026-07-04", name: "Independence Day" },
-  { date: "2026-09-07", name: "Labor Day" },
-  { date: "2026-10-12", name: "Columbus Day" },
-  { date: "2026-11-11", name: "Veterans Day" },
-  { date: "2026-11-26", name: "Thanksgiving Day" },
-  { date: "2026-12-25", name: "Christmas Day" },
-];
-
-const DEFAULT_HOLIDAYS = [...US_HOLIDAYS_2025, ...US_HOLIDAYS_2026];
+function isValidHolidayRule(rule: any): rule is HolidayRule {
+  if (!rule || typeof rule !== "object" || !rule.type) return false;
+  
+  switch (rule.type) {
+    case "fixed":
+      return typeof rule.month === "number" && typeof rule.day === "number";
+    case "nth_weekday":
+      return typeof rule.month === "number" && typeof rule.weekday === "number" && typeof rule.n === "number";
+    case "last_weekday":
+      return typeof rule.month === "number" && typeof rule.weekday === "number";
+    case "day_after":
+      return typeof rule.baseHolidayId === "string" && typeof rule.daysAfter === "number";
+    case "day_before":
+      return typeof rule.baseHolidayId === "string" && typeof rule.daysBefore === "number";
+    default:
+      return false;
+  }
+}
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -41,19 +39,27 @@ export interface AutoBookingSettings {
   blockSaturday: boolean;
   blockSunday: boolean;
   blockHolidays: boolean;
-  useDefaultHolidays: boolean;
+  enabledHolidays: Record<string, boolean>;
   customHolidays: Array<{ date: string; name: string }>;
+  customRecurringHolidays: CustomRecurringHoliday[];
   businessHours: {
     start: string;
     end: string;
   };
+  latestBookingTime: string;
   maxBookingsPerDay: number;
-  maxBookingsPerSlot: number;
-  appointmentDuration: 30 | 60;
   confirmationMode: "auto" | "review";
   preferredTimeSlot: "morning" | "afternoon" | "any";
   timezone: string;
+  reminderTime: string;
+  reminderDays: number[];
+  skipReminderHolidays: boolean;
+  queueExpiryDays: number;
 }
+
+const DEFAULT_ENABLED_HOLIDAYS: Record<string, boolean> = Object.fromEntries(
+  DEFAULT_HOLIDAY_DEFINITIONS.map(h => [h.id, true])
+);
 
 const DEFAULT_SETTINGS: AutoBookingSettings = {
   enabled: false,
@@ -61,18 +67,22 @@ const DEFAULT_SETTINGS: AutoBookingSettings = {
   blockSaturday: false,
   blockSunday: true,
   blockHolidays: true,
-  useDefaultHolidays: true,
+  enabledHolidays: DEFAULT_ENABLED_HOLIDAYS,
   customHolidays: [],
+  customRecurringHolidays: [],
   businessHours: {
     start: "08:00",
     end: "17:00",
   },
+  latestBookingTime: "",
   maxBookingsPerDay: 10,
-  maxBookingsPerSlot: 2,
-  appointmentDuration: 60,
   confirmationMode: "review",
   preferredTimeSlot: "morning",
   timezone: "America/New_York",
+  reminderTime: "08:00",
+  reminderDays: [1, 2, 3, 4, 5],
+  skipReminderHolidays: true,
+  queueExpiryDays: 14,
 };
 
 export async function GET(req: NextRequest) {
@@ -85,30 +95,55 @@ export async function GET(req: NextRequest) {
     const shopId = Number(session.shopId);
     const db = await getDb();
     
-    // Check feature entitlements
-    const entitlements = await getFeatureEntitlements(shopId);
-    if (!entitlements.canUseFeature("auto_booking")) {
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { autoBooking: 1, enabledFeatures: 1, plan: 1, billingStatus: 1 } }
+    );
+
+    const rawFeatures = shop?.enabledFeatures;
+    const hasOilSticker = Array.isArray(rawFeatures) 
+      ? rawFeatures.includes("oil_sticker")
+      : (rawFeatures && typeof rawFeatures === "object" && rawFeatures.oil_sticker === true);
+    const isPaid = shop?.billingStatus === "active" || 
+                   shop?.plan === "professional" || 
+                   shop?.plan === "enterprise" || 
+                   shop?.plan === "demo" ||
+                   hasOilSticker;
+    
+    console.log(`[Auto Booking] Shop ${shopId}: plan=${shop?.plan}, billingStatus=${shop?.billingStatus}, enabledFeatures=${JSON.stringify(rawFeatures)}, hasOilSticker=${hasOilSticker}, isPaid=${isPaid}`);
+    
+    if (!isPaid || !hasOilSticker) {
       return NextResponse.json({
         available: false,
-        reason: "Auto Booking feature is not enabled for this shop",
+        reason: !isPaid ? "Requires a paid plan" : "Requires Oil Sticker feature",
         settings: null,
       });
     }
-    
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { autoBooking: 1 } }
-    );
 
-    const settings = shop?.autoBooking || DEFAULT_SETTINGS;
+    const savedSettings = shop?.autoBooking || {};
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...savedSettings,
+      enabledHolidays: {
+        ...DEFAULT_ENABLED_HOLIDAYS,
+        ...(savedSettings.enabledHolidays || {}),
+      },
+      customRecurringHolidays: savedSettings.customRecurringHolidays || [],
+    };
+
+    const holidayDefinitions = getHolidayDefinitionsWithStatus(mergedSettings.enabledHolidays);
+    const upcomingHolidays = getUpcomingHolidays(
+      mergedSettings.enabledHolidays, 
+      mergedSettings.customRecurringHolidays
+    );
+    const presetHolidayOptions = getPresetHolidayOptions();
 
     return NextResponse.json({
       available: true,
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...settings,
-      },
-      defaultHolidays: DEFAULT_HOLIDAYS,
+      settings: mergedSettings,
+      holidayDefinitions,
+      upcomingHolidays,
+      presetHolidayOptions,
     });
   } catch (err: any) {
     console.error("[Auto Booking Settings] Error:", err);
@@ -126,11 +161,24 @@ export async function POST(req: NextRequest) {
     const shopId = Number(session.shopId);
     const db = await getDb();
     
-    // Check feature entitlements
-    const entitlements = await getFeatureEntitlements(shopId);
-    if (!entitlements.canUseFeature("auto_booking")) {
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { enabledFeatures: 1, plan: 1, billingStatus: 1 } }
+    );
+
+    const rawFeatures = shop?.enabledFeatures;
+    const hasOilSticker = Array.isArray(rawFeatures) 
+      ? rawFeatures.includes("oil_sticker")
+      : (rawFeatures && typeof rawFeatures === "object" && rawFeatures.oil_sticker === true);
+    const isPaid = shop?.billingStatus === "active" || 
+                   shop?.plan === "professional" || 
+                   shop?.plan === "enterprise" || 
+                   shop?.plan === "demo" ||
+                   hasOilSticker;
+    
+    if (!isPaid || !hasOilSticker) {
       return NextResponse.json(
-        { error: "Auto Booking feature is not enabled for this shop" },
+        { error: "Auto Booking requires a paid plan with Oil Sticker enabled" },
         { status: 403 }
       );
     }
@@ -145,11 +193,36 @@ export async function POST(req: NextRequest) {
     if (typeof body.blockSaturday === "boolean") settings.blockSaturday = body.blockSaturday;
     if (typeof body.blockSunday === "boolean") settings.blockSunday = body.blockSunday;
     if (typeof body.blockHolidays === "boolean") settings.blockHolidays = body.blockHolidays;
-    if (typeof body.useDefaultHolidays === "boolean") settings.useDefaultHolidays = body.useDefaultHolidays;
+    if (body.enabledHolidays && typeof body.enabledHolidays === "object") {
+      const validHolidayIds = new Set(DEFAULT_HOLIDAY_DEFINITIONS.map(h => h.id));
+      const filtered: Record<string, boolean> = {};
+      for (const [key, value] of Object.entries(body.enabledHolidays)) {
+        if (validHolidayIds.has(key) && typeof value === "boolean") {
+          filtered[key] = value as boolean;
+        }
+      }
+      settings.enabledHolidays = filtered;
+    }
     if (Array.isArray(body.customHolidays)) {
       settings.customHolidays = body.customHolidays.filter(
         (h: any) => h.date && h.name && typeof h.date === "string" && typeof h.name === "string"
       );
+    }
+    if (Array.isArray(body.customRecurringHolidays)) {
+      const validPresetIds = new Set(PRESET_CUSTOM_HOLIDAYS.map(p => p.id));
+      settings.customRecurringHolidays = body.customRecurringHolidays
+        .filter((h: any) => h.id && h.name && h.rule)
+        .map((h: any) => {
+          if (validPresetIds.has(h.id)) {
+            const preset = PRESET_CUSTOM_HOLIDAYS.find(p => p.id === h.id);
+            return { id: h.id, name: h.name || preset?.name, rule: preset?.rule };
+          }
+          if (h.rule && isValidHolidayRule(h.rule)) {
+            return { id: h.id, name: h.name, rule: h.rule };
+          }
+          return null;
+        })
+        .filter(Boolean) as CustomRecurringHoliday[];
     }
     if (body.businessHours?.start && body.businessHours?.end) {
       settings.businessHours = {
@@ -157,14 +230,13 @@ export async function POST(req: NextRequest) {
         end: body.businessHours.end,
       };
     }
+    if (typeof body.latestBookingTime === "string") {
+      if (body.latestBookingTime === "" || /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(body.latestBookingTime)) {
+        settings.latestBookingTime = body.latestBookingTime;
+      }
+    }
     if (typeof body.maxBookingsPerDay === "number" && body.maxBookingsPerDay >= 1 && body.maxBookingsPerDay <= 100) {
       settings.maxBookingsPerDay = body.maxBookingsPerDay;
-    }
-    if (typeof body.maxBookingsPerSlot === "number" && body.maxBookingsPerSlot >= 1 && body.maxBookingsPerSlot <= 20) {
-      settings.maxBookingsPerSlot = body.maxBookingsPerSlot;
-    }
-    if (body.appointmentDuration === 30 || body.appointmentDuration === 60) {
-      settings.appointmentDuration = body.appointmentDuration;
     }
     if (body.confirmationMode === "auto" || body.confirmationMode === "review") {
       settings.confirmationMode = body.confirmationMode;
@@ -175,15 +247,44 @@ export async function POST(req: NextRequest) {
     if (typeof body.timezone === "string") {
       settings.timezone = body.timezone;
     }
+    if (typeof body.reminderTime === "string") {
+      if (/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(body.reminderTime)) {
+        settings.reminderTime = body.reminderTime;
+      }
+    }
+    if (Array.isArray(body.reminderDays)) {
+      settings.reminderDays = body.reminderDays.filter(
+        (d: any) => typeof d === "number" && d >= 0 && d <= 6
+      );
+    }
+    if (typeof body.skipReminderHolidays === "boolean") {
+      settings.skipReminderHolidays = body.skipReminderHolidays;
+    }
+    if (typeof body.queueExpiryDays === "number" && body.queueExpiryDays >= 1 && body.queueExpiryDays <= 90) {
+      settings.queueExpiryDays = body.queueExpiryDays;
+    }
 
-    (settings as any).updatedAt = new Date();
+    const updateFields: Record<string, any> = {
+      "autoBooking.updatedAt": new Date(),
+    };
+    
+    for (const [key, value] of Object.entries(settings)) {
+      if (key === "enabledHolidays" && typeof value === "object") {
+        for (const [holidayId, enabled] of Object.entries(value as Record<string, boolean>)) {
+          updateFields[`autoBooking.enabledHolidays.${holidayId}`] = enabled;
+        }
+      } else if (key === "businessHours" && typeof value === "object") {
+        const bh = value as { start: string; end: string };
+        updateFields["autoBooking.businessHours.start"] = bh.start;
+        updateFields["autoBooking.businessHours.end"] = bh.end;
+      } else {
+        updateFields[`autoBooking.${key}`] = value;
+      }
+    }
+
     await db.collection("shops").updateOne(
       { shopId },
-      {
-        $set: {
-          autoBooking: settings,
-        },
-      }
+      { $set: updateFields }
     );
 
     return NextResponse.json({ ok: true, settings });

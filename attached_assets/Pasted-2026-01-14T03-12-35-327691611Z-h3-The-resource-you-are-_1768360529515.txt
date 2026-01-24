@@ -1,0 +1,300 @@
+2026-01-14T03:12:35.327691611Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T03:12:35.327694291Z  </fieldset></div>
+2026-01-14T03:12:35.327696912Z </div>
+2026-01-14T03:12:35.327699832Z </body>
+2026-01-14T03:12:35.327703021Z </html>
+2026-01-14T03:12:35.327705142Z 
+2026-01-14T03:12:35.327716232Z [Protractor] Trying GET /ServicePackageTemplate/31ea88b7-f04f-4735-a83f-adef7a3ee3ed...
+2026-01-14T03:12:35.458792834Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:12:35.458813324Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/4f1a2861-556d-422f-a45e-50c3ad9970af
+2026-01-14T03:12:35.458817134Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:12:35.458820714Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T03:12:35.516588887Z [Protractor] GET /ServicePackageTemplate/Read/4f1a2861-556d-422f-a45e-50c3ad9970af: ok=false
+2026-01-14T03:12:35.516605788Z [Protractor] GET /ServicePackageTemplate/Read/4f1a2861-556d-422f-a45e-50c3ad9970af error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-14T03:12:35.516608698Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-14T03:12:35.516610908Z <head>
+2026-01-14T03:12:35.516613538Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-14T03:12:35.516616338Z <title>404 - File or directory not found.</title>
+2026-01-14T03:12:35.516618778Z <style type="text/css">
+2026-01-14T03:12:35.516620898Z <!--
+2026-01-14T03:12:35.516623388Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-14T03:12:35.516625679Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-14T03:12:35.516627788Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-14T03:12:35.516629968Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-14T03:12:35.516632069Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-14T03:12:35.516634239Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-14T03:12:35.516636509Z background-color:#555555;}
+2026-01-14T03:12:35.516638599Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-14T03:12:35.516640819Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-14T03:12:35.516642929Z -->
+2026-01-14T03:12:35.516645109Z </style>
+2026-01-14T03:12:35.516647229Z </head>
+2026-01-14T03:12:35.516649429Z <body>
+2026-01-14T03:12:35.516651599Z <div id="header"><h1>Server Error</h1></div>
+2026-01-14T03:12:35.516653749Z <div id="content">
+2026-01-14T03:12:35.516655899Z  <div class="content-container"><fieldset>
+2026-01-14T03:12:35.516658049Z   <h2>404 - File or directory not found.</h2>
+2026-01-14T03:12:35.516660199Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-14T03:12:35.516662369Z  </fieldset></div>
+2026-01-14T03:12:35.5166648Z </div>
+2026-01-14T03:12:35.51666706Z </body>
+2026-01-14T03:12:35.51666924Z </html>
+2026-01-14T03:12:35.51667125Z 
+2026-01-14T03:12:35.51667344Z [Protractor] Trying GET /ServicePackageTemplate/4f1a2861-556d-422f-a45e-50c3ad9970af...
+2026-01-14T03:12:35.658867588Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:12:35.658888779Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/ff217840-b1fb-441b-85f9-6d848101ab32
+2026-01-14T03:12:35.658893429Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:12:35.658897559Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-14T03:12:35.716025425Z [Protractor] GET /ServicePackageTemplate/ff217840-b1fb-441b-85f9-6d848101ab32: ok=true
+2026-01-14T03:12:35.716042516Z [Protractor] Got template detail with 2 lines
+2026-01-14T03:12:35.716045926Z [Protractor Sync] Template 3859: 2 lines
+2026-01-14T03:14:48.980223848Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:49.117911882Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-01-14T03:14:49.117938102Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-01-14T03:14:49.117940712Z 
+2026-01-14T03:14:49.117943963Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-01-14T03:14:49.117945992Z 
+2026-01-14T03:14:49.180546989Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:49.18056593Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9153c3d0-b0de-4270-b3bc-ce9697e9389b
+2026-01-14T03:14:49.18056825Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:49.18057068Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:49.381117045Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:49.381145675Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1af89ec5-5e78-4b47-911e-13e2cee4f7df
+2026-01-14T03:14:49.381149585Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:49.381166926Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:49.580966306Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:49.580992897Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/fbef8e7e-6562-42c6-b24d-c39ac91d9b00
+2026-01-14T03:14:49.580995677Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:49.580998437Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:49.780639805Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:49.780668825Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d4e6c64f-af16-4ed7-b6b3-926c25d42393
+2026-01-14T03:14:49.780671845Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:49.780674885Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:49Z clientIP="52.15.183.38" requestID="1160b3d8-1a46-4ac5" responseTimeMS=5 responseBytes=279 userAgent="Stripe/1.0 (+https://stripe.com/docs/webhooks)"
+2026-01-14T03:14:49.980631719Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:49.98065556Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/263680ac-feeb-4923-ad3e-12738b0cb219
+2026-01-14T03:14:49.98065901Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:49.98066493Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:50.180669545Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:50.180696075Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a454152a-cc8f-48b9-b2d6-f699043ccf8e
+2026-01-14T03:14:50.180700395Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:50.180704935Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:50.381141248Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:50.381164959Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/02a8af48-f9c1-423f-a8e9-a7dfb7e92906
+2026-01-14T03:14:50.381168579Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:50.381172049Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:50.581374977Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:50.581400528Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c23af3b7-5ec6-48ca-827a-75e296980732
+2026-01-14T03:14:50.581405038Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:50.581409268Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:50.781388492Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:50.781412943Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c333d82e-d6d5-4ef3-800d-07f120ef3591
+2026-01-14T03:14:50.781418553Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:50.781423913Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:50.981954348Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:50.981973028Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/36f06339-4c88-4095-91e1-ad9ec2e59840
+2026-01-14T03:14:50.981982198Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:50.981985978Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:51.18182072Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:51.181846761Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/62821ec3-773c-4322-9256-402cce39fbca
+2026-01-14T03:14:51.181851521Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:51.181868511Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:51.381355436Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:51.381383666Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/33f49d40-51cc-4c4c-8518-5f6f9dcab7f7
+2026-01-14T03:14:51.381387006Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:51.381390616Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:51.581137226Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:51.581165127Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6dfa4edb-5582-4c8e-a815-d7d2c2d0fe57
+2026-01-14T03:14:51.581168227Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:51.581171667Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:51.781662771Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:51.781691962Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ea9d95fb-44de-4e00-bf1f-903c23027b0a
+2026-01-14T03:14:51.781695722Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:51.781699672Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:51.981445821Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:51.981472192Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e909c245-3686-40c4-8cf8-7ec00d90f15e
+2026-01-14T03:14:51.981476122Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:51.981480282Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:52.181224462Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:52.181245762Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/2fa9e6bb-7f95-48e3-8530-f8ff7bfc8573
+2026-01-14T03:14:52.181248882Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:52.181252112Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:52.381638304Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:52.381661835Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7c7710e1-7756-48a4-951f-51afca55cc05
+2026-01-14T03:14:52.381664535Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:52.381667515Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:52.582000876Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:52.582028367Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b3f84241-ec97-4ced-89df-23ad16d093ab
+2026-01-14T03:14:52.582032587Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:52.582036976Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:52.781861258Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:52.781888068Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/73bc1286-8bfc-4dd7-a067-e7e7d76bb222
+2026-01-14T03:14:52.781890919Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:52.781893748Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:52.98174092Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:52.981765951Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0e2b8740-9164-424f-8f4e-668cd85fe2e4
+2026-01-14T03:14:52.981768811Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:52.981771881Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:53.181621172Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:53.181648973Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d7ec1b1c-06d2-46f3-806e-259684357c2b
+2026-01-14T03:14:53.181653093Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:53.181657033Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:53.382090436Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:53.382112837Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0d42a61d-0159-4a71-9e53-6b7409a463fb
+2026-01-14T03:14:53.382115297Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:53.382117607Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:53.582017199Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:53.58203881Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/42f0f1ce-11a8-4f5b-8164-94cb91704f86
+2026-01-14T03:14:53.5820428Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:53.58204683Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:53.782014804Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:53.782046435Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/42269e00-945c-4619-8ef0-1ecae6c9ca71
+2026-01-14T03:14:53.782050605Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:53.782054795Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:53.98157087Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:53.981593761Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/220cd6d5-f4a1-407e-b0bd-962148b8804c
+2026-01-14T03:14:53.981596461Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:53.981599261Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:54.181487873Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:54.181511554Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/393a4476-dc6c-4180-a40b-0159bc6fab50
+2026-01-14T03:14:54.181514254Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:54.181516914Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-14T03:14:54.686734171Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:54.686764901Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/55e6e7c0-d7e6-48cd-94df-c59e4dfc7979
+2026-01-14T03:14:54.686768712Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:54.686772241Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:54.887130903Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:54.887158834Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/24eb71e1-bf17-4761-8fc7-6d3fc58c49d7
+2026-01-14T03:14:54.887161914Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:54.887173734Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:55.086285071Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:55.086316342Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/94b1b053-c7d2-425b-a454-430249351389
+2026-01-14T03:14:55.086320912Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:55.086325252Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:55.286778525Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:55.286822306Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9c81cb40-410b-4b50-a196-9e618fbb81de
+2026-01-14T03:14:55.286826857Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:55.286829497Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:55.486956354Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:55.486980034Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7f387b76-8840-43a3-860e-33fcedad6ef9
+2026-01-14T03:14:55.486982774Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:55.486994474Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:55Z clientIP="207.216.67.133" requestID="8cee8707-3a4c-4832" responseTimeMS=900 responseBytes=2864 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+2026-01-14T03:14:57.573988327Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-01-14T03:14:57.574009157Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-01-14T03:14:57.574011858Z 
+2026-01-14T03:14:57.574016118Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-01-14T03:14:57.574018258Z 
+2026-01-14T03:14:57.72307166Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:57.72308808Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a636de45-cc14-4ac1-aed5-3b72e7ea8234
+2026-01-14T03:14:57.723090381Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:57.723093051Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:57.856242077Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-01-14T03:14:57.856258827Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-01-14T03:14:57.856260887Z 
+2026-01-14T03:14:57.856263377Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-01-14T03:14:57.856265067Z 
+2026-01-14T03:14:57.923656106Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:57.923672306Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5cabbae9-686f-4ca0-b045-089f789f7e1a
+2026-01-14T03:14:57.923674527Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:57.923676727Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:58.123375035Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:58.123395126Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5afb6fe1-8ba6-4d25-a6a6-b1104a1169f6
+2026-01-14T03:14:58.123398056Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:58.123401116Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:58.323343629Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:58.32336226Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d9c264b5-b084-4ae0-b962-346b904cf76f
+2026-01-14T03:14:58.32336542Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:58.32336834Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:58.524107899Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:14:58.52414649Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6a46dbf0-b9d7-49b0-940d-f629a47ff302
+2026-01-14T03:14:58.524150079Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:14:58.52416076Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:14:57Z clientIP="3.18.12.63" requestID="a25dacd8-5e36-424d" responseTimeMS=8 responseBytes=279 userAgent="Stripe/1.0 (+https://stripe.com/docs/webhooks)"
+2026-01-14T03:14:57Z clientIP="3.18.12.63" requestID="d7dfa45e-5e6a-44fb" responseTimeMS=81 responseBytes=279 userAgent="Stripe/1.0 (+https://stripe.com/docs/webhooks)"
+2026-01-14T03:15:00.783166678Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:00.783200008Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c224bab0-aa0f-4352-bc9c-43d97b48597f
+2026-01-14T03:15:00.783204688Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:00.783209058Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:00.98354447Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:00.98356557Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7448244b-6048-457b-b181-7010c96d524b
+2026-01-14T03:15:00.98357121Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:00.98357487Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:01.183368381Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:01.183395841Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/96c91760-4723-487c-ab01-6a39c274100f
+2026-01-14T03:15:01.183400371Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:01.183404691Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:01.383524428Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:01.383551079Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9d4dede8-6b96-4cdc-9bfc-4b880de21fc2
+2026-01-14T03:15:01.383555339Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:01.383559429Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:01.583581554Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:01.583597474Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/164a7760-4a23-4b85-bf2f-59c5787b7679
+2026-01-14T03:15:01.583601764Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:01.583606175Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:03.462657019Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-01-14T03:15:03.46268729Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-01-14T03:15:03.4626919Z 
+2026-01-14T03:15:03.46269568Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-01-14T03:15:03.46269843Z 
+2026-01-14T03:15:03Z clientIP="3.18.12.63" requestID="e697df3d-90b5-44e9" responseTimeMS=4 responseBytes=279 userAgent="Stripe/1.0 (+https://stripe.com/docs/webhooks)"
+2026-01-14T03:15:03.830979818Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:03.831001038Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/4fef558b-1023-492f-a5ef-2dae5c04c6ee
+2026-01-14T03:15:03.831005239Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:03.831009509Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:04.031009693Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:04.031028584Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/379a97db-f3e1-4dda-ba17-3a3a500647aa
+2026-01-14T03:15:04.031032844Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:04.031051704Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:04.230854025Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:04.230882925Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e7aa60dd-4f6b-431d-8e83-37c16678dbc8
+2026-01-14T03:15:04.230886345Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:04.230889456Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:04.430687166Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:04.430706516Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/983ad504-9c84-441e-8f3a-7b3136e42256
+2026-01-14T03:15:04.430709237Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:04.430723267Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:04.631904304Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:04.631936935Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/983e9669-6997-46bf-8355-ee27cffde90d
+2026-01-14T03:15:04.631940625Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:04.631943835Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:06.860428144Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:06.860455845Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/2c1242cc-f978-4698-b385-7fdc88ae0739
+2026-01-14T03:15:06.860459395Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:06.860463165Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:07.06049731Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:07.060525481Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d93e393f-0341-4c23-9136-9b969cbc8d95
+2026-01-14T03:15:07.060529641Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:07.060533911Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:07.261005695Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:07.261035915Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/cf40d908-edaf-4a7a-a214-992f7b0abe61
+2026-01-14T03:15:07.261040276Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:07.261044716Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:07.46054335Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:07.460573991Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a551c28f-ac86-451e-a802-08dad5dd5702
+2026-01-14T03:15:07.460580481Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:07.460586711Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:07.660532245Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:07.660559276Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/717a5653-31cc-49e8-8c80-86da96fc1da6
+2026-01-14T03:15:07.660565876Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:07.660572556Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:10.015726165Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:10.015754346Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/4362f9b9-0dec-4045-953f-0e1984ac95c2
+2026-01-14T03:15:10.015758666Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:10.015778796Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:10.216197029Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:10.216224779Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a2766746-9227-4ad0-8e73-8bedbdc0523f
+2026-01-14T03:15:10.216228029Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:10.216231339Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:10.416944167Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:10.416972798Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a7b28b06-f865-4cbb-98c9-d915ecab2b35
+2026-01-14T03:15:10.416975968Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:10.416978808Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:10.616661317Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:10.616689087Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/22f27d7d-c4f6-4641-b9d2-e23e8bfb8aac
+2026-01-14T03:15:10.616693067Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:10.616696777Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
+2026-01-14T03:15:10.816459417Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-14T03:15:10.816484818Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/daa78fb5-7035-4dc3-85c7-56a6cad83998
+2026-01-14T03:15:10.816488358Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-14T03:15:10.816492828Z [Protractor Debug] ConnId hash: 399595ad, Auth hash: 6225c18a
