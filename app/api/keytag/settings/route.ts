@@ -25,6 +25,7 @@ interface KeytagConfig {
     background?: string;
   };
   defaultSize?: "dymo30252";
+  designerLayout?: any;
 }
 
 export async function GET(req: NextRequest) {
