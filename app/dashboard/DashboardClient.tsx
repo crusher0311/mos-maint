@@ -332,10 +332,25 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <head>
               <title>Print Sticker</title>
               <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                @page { size: ${dims.width} ${dims.height}; margin: 0 !important; }
+                @media print {
+                  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
-                img { display: block; width: 100%; height: 100%; }
+                html, body { 
+                  width: ${dims.width}; 
+                  height: ${dims.height}; 
+                  overflow: hidden;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                }
+                img { 
+                  display: block; 
+                  width: ${dims.width}; 
+                  height: ${dims.height}; 
+                  object-fit: contain;
+                }
               </style>
             </head>
             <body><img src="${dataUrl}" /></body>
@@ -595,10 +610,25 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <head>
               <title>Print Sticker</title>
               <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0; }
+                @page { size: ${dims.width} ${dims.height}; margin: 0 !important; }
+                @media print {
+                  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: ${dims.width}; height: ${dims.height}; overflow: hidden; }
-                img { display: block; width: 100%; height: 100%; }
+                html, body { 
+                  width: ${dims.width}; 
+                  height: ${dims.height}; 
+                  overflow: hidden;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                }
+                img { 
+                  display: block; 
+                  width: ${dims.width}; 
+                  height: ${dims.height}; 
+                  object-fit: contain;
+                }
               </style>
             </head>
             <body><img src="${dataUrl}" /></body>
