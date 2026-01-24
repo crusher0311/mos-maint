@@ -607,6 +607,7 @@ function generateStickerHtmlFromLayout(
       font-family: Arial, Helvetica, sans-serif;
       background: ${layout.backgroundColor};
       position: relative;
+      overflow: hidden;
     }
   </style>
 </head>
