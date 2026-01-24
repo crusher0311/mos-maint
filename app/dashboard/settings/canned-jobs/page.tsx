@@ -104,22 +104,37 @@ export default function CannedJobsSettingsPage() {
 
   async function checkIntegrationStatus() {
     try {
-      const [protractorRes, tekmetricRes] = await Promise.all([
-        fetch("/api/settings/protractor", { credentials: "include" }),
-        fetch("/api/settings/tekmetric", { credentials: "include" })
-      ]);
+      // First check the shop's SMS type from branding which has the correct priority
+      const brandingRes = await fetch("/api/settings/branding", { credentials: "include" });
+      const brandingData = brandingRes.ok ? await brandingRes.json() : { smsType: "none" };
       
-      const protractorData = protractorRes.ok ? await protractorRes.json() : { configured: false };
-      const tekmetricData = tekmetricRes.ok ? await tekmetricRes.json() : { configured: false };
-      
-      if (protractorData.configured) {
-        setActiveIntegration("protractor");
-        setIntegrationName("Protractor");
-        await Promise.all([fetchCannedJobs("protractor"), fetchMappings()]);
-      } else if (tekmetricData.configured) {
+      if (brandingData.smsType === "tekmetric") {
         setActiveIntegration("tekmetric");
         setIntegrationName("Tekmetric");
         await Promise.all([fetchCannedJobs("tekmetric"), fetchMappings()]);
+      } else if (brandingData.smsType === "protractor") {
+        setActiveIntegration("protractor");
+        setIntegrationName("Protractor");
+        await Promise.all([fetchCannedJobs("protractor"), fetchMappings()]);
+      } else {
+        // Fallback: check individual integrations (Tekmetric first)
+        const [tekmetricRes, protractorRes] = await Promise.all([
+          fetch("/api/settings/tekmetric", { credentials: "include" }),
+          fetch("/api/settings/protractor", { credentials: "include" })
+        ]);
+        
+        const tekmetricData = tekmetricRes.ok ? await tekmetricRes.json() : { configured: false };
+        const protractorData = protractorRes.ok ? await protractorRes.json() : { configured: false };
+        
+        if (tekmetricData.configured) {
+          setActiveIntegration("tekmetric");
+          setIntegrationName("Tekmetric");
+          await Promise.all([fetchCannedJobs("tekmetric"), fetchMappings()]);
+        } else if (protractorData.configured) {
+          setActiveIntegration("protractor");
+          setIntegrationName("Protractor");
+          await Promise.all([fetchCannedJobs("protractor"), fetchMappings()]);
+        }
       }
     } catch (err) {
       console.error("Failed to check integration status:", err);
