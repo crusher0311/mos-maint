@@ -471,7 +471,9 @@ async function pushAppointmentToSMS(
           title: `[MOS Auto Book] Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
           color: "blue",
-          appointmentOptionId: 2, // 1=STAY, 2=DROP, 3=TOW
+          dropoffTime: startTimeStr,
+          pickupTime: endTimeStr,
+          rideOption: "NONE",
         });
         
         return {
@@ -507,8 +509,8 @@ async function pushAppointmentToSMS(
         contactId: protractorContactId,
         vehicleId: protractorVehicleId,
         scheduledTime: startTimeStr,
-        duration: 60,
-        notes: `Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}. Auto-booked via MOS.`,
+        duration: appointmentDuration,
+        notes: `[Appointment Type] Drop-off Vehicle - Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}. Auto-booked via MOS.`,
       });
       
       if (result.ok && result.appointmentId) {
