@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Wrench, Clock, CheckCircle, ArrowRight, Calendar, Quote, ChevronLeft, ChevronRight, Check, X, Sparkles, ShoppingCart } from "lucide-react";
+import { Clock, CheckCircle, ArrowRight, Calendar, Quote, ChevronLeft, ChevronRight, Check, X, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 
 const screenshots = [
