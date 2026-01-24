@@ -2241,6 +2241,7 @@ export async function addDeferredWorkToWorkOrder(
     || deferredItem.Description 
     || "Deferred Service";
 
+  // Fetch the current work order
   const existingResult = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${workOrderGuid}`,
     config,
@@ -2260,6 +2261,55 @@ export async function addDeferredWorkToWorkOrder(
     ? existingPackagesRaw 
     : (existingPackagesRaw?.ItemCollection || []);
 
+  // Try to fetch the original work order/invoice to get full service package details
+  let originalServicePackageLines: any[] = [];
+  
+  if (deferredItem.OriginalWorkOrderID) {
+    console.log(`[Protractor] Fetching original work order ${deferredItem.OriginalWorkOrderID} for deferred work details...`);
+    
+    const originalWoResult = await protractorFetch<ProtractorWorkOrder>(
+      `/WorkOrder/${deferredItem.OriginalWorkOrderID}`,
+      config,
+      {},
+      0,
+      shopId
+    );
+    
+    if (originalWoResult.ok && originalWoResult.data) {
+      const originalWo = originalWoResult.data;
+      const originalPackagesRaw = originalWo.ServicePackages as any;
+      const originalPackages = Array.isArray(originalPackagesRaw) 
+        ? originalPackagesRaw 
+        : (originalPackagesRaw?.ItemCollection || []);
+      
+      // Find the matching service package by ID or title
+      const matchingPackage = originalPackages.find((pkg: any) => 
+        pkg.ID === deferredItem.ID || 
+        pkg.ServicePackageHeader?.Title === title ||
+        pkg.Title === title ||
+        pkg.Code === deferredItem.Code
+      );
+      
+      if (matchingPackage) {
+        // Extract the service package lines (labor and parts)
+        const linesRaw = matchingPackage.ServicePackageLines;
+        if (Array.isArray(linesRaw)) {
+          originalServicePackageLines = linesRaw;
+        } else if (linesRaw?.ItemCollection) {
+          originalServicePackageLines = linesRaw.ItemCollection;
+        }
+        
+        console.log(`[Protractor] Found original service package with ${originalServicePackageLines.length} lines`);
+      } else {
+        console.log(`[Protractor] Could not find matching service package in original work order`);
+      }
+    } else {
+      console.log(`[Protractor] Failed to fetch original work order: ${originalWoResult.error}`);
+    }
+  }
+
+  // Create new service package for the active work order
+  // Use Chapter: "Service" and Status: "Pending" to add to active work order (NOT deferred section)
   const newServicePackage = {
     ID: "00000000-0000-0000-0000-000000000000",
     Code: deferredItem.Code || title,
@@ -2267,9 +2317,16 @@ export async function addDeferredWorkToWorkOrder(
       Title: title,
       Description: deferredItem.Description || "[Previously Deferred - Added by MOS]",
     },
-    ServicePackageLines: { ItemCollection: [] },
-    Status: "Pending",
-    Chapter: deferredItem.Chapter || "Service",
+    // Include the original labor and parts lines
+    ServicePackageLines: { 
+      ItemCollection: originalServicePackageLines.map(line => ({
+        ...line,
+        ID: "00000000-0000-0000-0000-000000000000", // New line ID for the new package
+        Status: "Pending", // Reset status to pending
+      }))
+    },
+    Status: "Pending", // Pending status for active work
+    Chapter: "Service", // Force Chapter to "Service" to add to active work order, not deferred
   };
 
   const updatedPackages = [...existingPackages, newServicePackage];
@@ -2280,7 +2337,7 @@ export async function addDeferredWorkToWorkOrder(
       : { ItemCollection: updatedPackages }
   };
 
-  console.log(`[Protractor] Adding deferred work "${title}" to work order ${workOrderGuid}...`);
+  console.log(`[Protractor] Adding deferred work "${title}" to work order ${workOrderGuid} with ${originalServicePackageLines.length} lines...`);
 
   const updateResult = await protractorFetch<any>(
     `/WorkOrder/${workOrderGuid}`,
@@ -2294,7 +2351,7 @@ export async function addDeferredWorkToWorkOrder(
   );
 
   if (updateResult.ok) {
-    console.log(`[Protractor] Successfully added deferred work "${title}"`);
+    console.log(`[Protractor] Successfully added deferred work "${title}" with all details`);
     return {
       ok: true,
       servicePackage: {
