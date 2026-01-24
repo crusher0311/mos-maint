@@ -101,13 +101,21 @@ export async function POST(req: NextRequest) {
           
           // If they skipped trial and got bonus VINs, ensure their VIN limit is set correctly
           if (skippedTrial) {
-            // Get the billing settings to calculate total VINs
+            // Get the billing settings to calculate total VINs based on tier
             const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
-            const baseVins = billingSettings?.mosProIncludedVins || 300;
+            // Use tier-specific included VINs, fallback to default
+            let baseVins = billingSettings?.defaultVinLimit || 300;
+            if (plan === "starter" && billingSettings?.starterIncludedVins) {
+              baseVins = billingSettings.starterIncludedVins;
+            } else if (plan === "plus" && billingSettings?.plusIncludedVins) {
+              baseVins = billingSettings.plusIncludedVins;
+            } else if (plan === "elite" && billingSettings?.eliteIncludedVins) {
+              baseVins = billingSettings.eliteIncludedVins;
+            }
             const bonus = billingSettings?.skipTrialBonusVins || 50;
             updateData["billing.vinLimit"] = baseVins + bonus;
             updateData["billing.skippedTrialBonus"] = bonus;
-            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus}`);
+            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus} (tier: ${plan})`);
           }
           
           // Auto-enable all features for paid shops
