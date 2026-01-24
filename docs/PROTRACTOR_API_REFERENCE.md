@@ -208,14 +208,37 @@ https://integration.protractor.com/IntegrationServices/2.0
 
 ## Recommendations
 
-### Add Deferred Price Lookup
-Current approach:
+### Add Deferred Price Lookup (IMPLEMENTED)
+**Previous approach** (slow, rate-limited):
 1. Live call to `/Invoice?serviceItemID=xxx`
 2. Live call to `/Invoice/{id}` for each invoice
 3. Search for matching service package
 
-Better approach:
-1. Query `job_index` collection for `shopId` + `vehicle.vin` + matching `title`
-2. Use cached pricing from backfill
+**New approach** (fast, uses cached data):
+1. Query `job_index` collection for `shopId` + `vehicle.serviceItemId` OR `vehicle.vin`
+2. Match by `job.code` or `job.title`
+3. Use cached pricing from backfill
 
-This is faster, avoids rate limits, and data is already there.
+This is instant, avoids rate limits, and uses data already collected.
+
+---
+
+## Key Learning: DeferredServicePackages
+
+**Invoice Structure**:
+- `ServicePackages` - Completed/approved work
+- `DeferredServicePackages` - Declined/recommended work (also has pricing!)
+
+Both contain `ServicePackageLines` with labor, parts, and pricing. The backfill now indexes BOTH, with an `isDeferred` flag to distinguish them.
+
+**Why This Matters**:
+When a customer declines brake work, the pricing is stored in `DeferredServicePackages`. When they return and want that work done, we can look up the original quoted price from the cache.
+
+---
+
+## Files Modified
+
+| File | Change |
+|------|--------|
+| `lib/job-index.ts` | Added `isDeferred` field, extracts `DeferredServicePackages` |
+| `lib/integrations/protractor.ts` | Added `findCachedJobPricing()`, uses cache instead of live API |
