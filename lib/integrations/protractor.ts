@@ -2278,6 +2278,10 @@ export async function addDeferredWorkToWorkOrder(
   
   // First, try to get ServicePackageLines directly from the deferred item (the API sometimes includes them)
   const deferredItemAny = deferredItem as any;
+  
+  // Log what ServicePackageLines actually contains
+  console.log(`[Protractor] ServicePackageLines on deferred item:`, JSON.stringify(deferredItemAny.ServicePackageLines, null, 2));
+  
   if (deferredItemAny.ServicePackageLines) {
     const linesRaw = deferredItemAny.ServicePackageLines;
     if (Array.isArray(linesRaw)) {
@@ -2291,6 +2295,8 @@ export async function addDeferredWorkToWorkOrder(
       originalServicePackageLines.forEach((line: any, i: number) => {
         console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
       });
+    } else {
+      console.log(`[Protractor] ServicePackageLines exists but is empty (array/ItemCollection length = 0)`);
     }
   }
   
