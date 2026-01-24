@@ -399,6 +399,17 @@ export async function runProtractorBackfill(shopId: number): Promise<{
   let totalJobsIndexed = 0;
   let complete = false;
 
+  await db.collection("backfill_progress").updateOne(
+    { shopId },
+    { 
+      $set: { 
+        lastAttemptedAt: new Date(),
+        inProgress: true,
+      } 
+    },
+    { upsert: true }
+  );
+
   console.log(`[Backfill] Starting inline backfill for shop ${shopId}`);
 
   try {
@@ -424,9 +435,67 @@ export async function runProtractorBackfill(shopId: number): Promise<{
 
     console.log(`[Backfill] Shop ${shopId}: Completed ${chunksProcessed} chunks, ${totalJobsIndexed} jobs indexed, complete: ${complete}`);
     
+    await db.collection("backfill_progress").updateOne(
+      { shopId },
+      { $set: { inProgress: false, lastCompletedRunAt: new Date() } }
+    );
+    
     return { chunksProcessed, totalJobsIndexed, complete };
   } catch (err: any) {
     console.error(`[Backfill] Shop ${shopId}: Error during backfill:`, err.message);
+    
+    await db.collection("backfill_progress").updateOne(
+      { shopId },
+      { 
+        $set: { 
+          inProgress: false, 
+          lastError: err.message,
+          lastErrorAt: new Date(),
+        } 
+      }
+    );
+    
     return { chunksProcessed, totalJobsIndexed, complete: false, error: err.message };
   }
+}
+
+const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+export async function findAndResumeStaleBackfills(): Promise<{
+  resumed: number;
+  shopIds: number[];
+}> {
+  const db = await getDb();
+  const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
+  
+  const staleBackfills = await db.collection("backfill_progress").find({
+    completed: { $ne: true },
+    $or: [
+      { lastAttemptedAt: { $lt: staleThreshold } },
+      { lastAttemptedAt: { $exists: false }, lastRunAt: { $lt: staleThreshold } },
+      { inProgress: true, lastAttemptedAt: { $lt: staleThreshold } },
+    ]
+  }).toArray();
+  
+  const shopIds: number[] = [];
+  
+  for (const progress of staleBackfills) {
+    const shop = await db.collection("shops").findOne({ 
+      shopId: progress.shopId,
+      "protractor.configured": true 
+    });
+    
+    if (!shop) continue;
+    
+    console.log(`[Backfill] Resuming stale backfill for shop ${progress.shopId}`);
+    shopIds.push(progress.shopId);
+    
+    runProtractorBackfill(progress.shopId).then(result => {
+      console.log(`[Backfill] Shop ${progress.shopId} resumed backfill completed:`, result);
+    }).catch(err => {
+      console.error(`[Backfill] Shop ${progress.shopId} resumed backfill failed:`, err.message);
+    });
+  }
+  
+  return { resumed: shopIds.length, shopIds };
 }
