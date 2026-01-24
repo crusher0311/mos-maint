@@ -43,7 +43,7 @@ export function AddAllDeferredButton({ items, workOrderGuid, vin }: Props) {
             workOrderGuid,
             serviceTitle: item.title,
             vin,
-            protractorDeferredId: item.protractorDeferredId,
+            deferredId: item.protractorDeferredId,
           }),
         });
 
