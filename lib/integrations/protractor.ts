@@ -2260,7 +2260,17 @@ export async function createProtractorAppointment(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
   
+  // Generate a new GUID for the work order - crypto.randomUUID() creates a v4 UUID
+  const newWorkOrderId = crypto.randomUUID();
+  
+  // Per Protractor API docs section 1.9.3:
+  // - POST to /WorkOrder/{workOrderID} with a new GUID
+  // - Set WorkOrderNumber to 0 for new work orders
+  // - "If the work order exists by ID then the work order will be updated. 
+  //    Otherwise a new work order will be created."
   const body: Record<string, any> = {
+    ID: newWorkOrderId,
+    WorkOrderNumber: 0,  // Required for new work orders
     Type: "Appointment",
     ContactID: contactId,
     ServiceItemID: vehicleId,
@@ -2271,8 +2281,10 @@ export async function createProtractorAppointment(
   if (notes) body.Notes = notes;
   if (serviceAdvisorId) body.ServiceAdvisorID = serviceAdvisorId;
   
+  console.log(`[Protractor] POST /WorkOrder/${newWorkOrderId} with body:`, JSON.stringify(body));
+  
   const result = await protractorFetch<ProtractorWorkOrder>(
-    `/WorkOrder`,
+    `/WorkOrder/${newWorkOrderId}`,
     config,
     { method: "POST", body: JSON.stringify(body) },
     0,
