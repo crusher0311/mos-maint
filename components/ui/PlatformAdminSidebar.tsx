@@ -22,7 +22,8 @@ import {
   ChevronRight,
   Monitor,
   X,
-  Package
+  Package,
+  Grid3X3
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -127,6 +128,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       name: "Features",
       href: "/platform-admin/features",
       icon: <Package className="w-5 h-5" />
+    },
+    {
+      name: "Plan Features",
+      href: "/platform-admin/plan-features",
+      icon: <Grid3X3 className="w-5 h-5" />
     }
   ];
 
