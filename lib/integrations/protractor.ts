@@ -2264,6 +2264,18 @@ export async function addDeferredWorkToWorkOrder(
   // Try to fetch the original work order/invoice to get full service package details
   let originalServicePackageLines: any[] = [];
   
+  // Log the deferred item details for debugging
+  console.log(`[Protractor] Deferred item details:`, JSON.stringify({
+    ID: deferredItem.ID,
+    ServiceItemID: deferredItem.ServiceItemID,
+    OriginalWorkOrderID: deferredItem.OriginalWorkOrderID,
+    Code: deferredItem.Code,
+    Title: deferredItem.Title,
+    hasEstimatedCost: !!deferredItem.EstimatedCost,
+    estimatedCost: deferredItem.EstimatedCost,
+    allKeys: Object.keys(deferredItem)
+  }, null, 2));
+  
   if (deferredItem.OriginalWorkOrderID) {
     console.log(`[Protractor] Fetching original work order ${deferredItem.OriginalWorkOrderID} for deferred work details...`);
     
@@ -2282,13 +2294,30 @@ export async function addDeferredWorkToWorkOrder(
         ? originalPackagesRaw 
         : (originalPackagesRaw?.ItemCollection || []);
       
-      // Find the matching service package by ID or title
-      const matchingPackage = originalPackages.find((pkg: any) => 
-        pkg.ID === deferredItem.ID || 
-        pkg.ServicePackageHeader?.Title === title ||
-        pkg.Title === title ||
-        pkg.Code === deferredItem.Code
-      );
+      console.log(`[Protractor] Original work order has ${originalPackages.length} service packages`);
+      
+      // Log all package titles for debugging
+      originalPackages.forEach((pkg: any, i: number) => {
+        const pkgTitle = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.Code || 'Unknown';
+        const linesRaw = pkg.ServicePackageLines;
+        const lineCount = Array.isArray(linesRaw) ? linesRaw.length : (linesRaw?.ItemCollection?.length || 0);
+        console.log(`[Protractor]   Package ${i}: "${pkgTitle}" (ID: ${pkg.ID}, Lines: ${lineCount})`);
+      });
+      
+      // Find the matching service package by ID or title (case-insensitive)
+      const titleLower = title.toLowerCase();
+      const codeLower = (deferredItem.Code || '').toLowerCase();
+      const matchingPackage = originalPackages.find((pkg: any) => {
+        const pkgTitle = (pkg.ServicePackageHeader?.Title || pkg.Title || '').toLowerCase();
+        const pkgCode = (pkg.Code || '').toLowerCase();
+        return (
+          pkg.ID === deferredItem.ID || 
+          pkgTitle === titleLower ||
+          pkgCode === codeLower ||
+          pkgTitle.includes(titleLower) ||
+          titleLower.includes(pkgTitle)
+        );
+      });
       
       if (matchingPackage) {
         // Extract the service package lines (labor and parts)
@@ -2299,13 +2328,20 @@ export async function addDeferredWorkToWorkOrder(
           originalServicePackageLines = linesRaw.ItemCollection;
         }
         
-        console.log(`[Protractor] Found original service package with ${originalServicePackageLines.length} lines`);
+        console.log(`[Protractor] Found matching package with ${originalServicePackageLines.length} lines`);
+        
+        // Log line details
+        originalServicePackageLines.forEach((line: any, i: number) => {
+          console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+        });
       } else {
-        console.log(`[Protractor] Could not find matching service package in original work order`);
+        console.log(`[Protractor] Could not find matching service package. Looking for: "${title}" or code: "${deferredItem.Code}"`);
       }
     } else {
       console.log(`[Protractor] Failed to fetch original work order: ${originalWoResult.error}`);
     }
+  } else {
+    console.log(`[Protractor] No OriginalWorkOrderID on deferred item - cannot fetch original details`);
   }
 
   // Create new service package for the active work order
