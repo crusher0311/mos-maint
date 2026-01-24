@@ -601,10 +601,19 @@ function generateStickerHtmlFromLayout(
 <head>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+    html, body {
       width: ${renderWidth}px;
       height: ${renderHeight}px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    body {
       font-family: Arial, Helvetica, sans-serif;
+    }
+    #sticker-canvas {
+      width: ${renderWidth}px;
+      height: ${renderHeight}px;
       background: ${layout.backgroundColor};
       position: relative;
       overflow: hidden;
@@ -612,7 +621,9 @@ function generateStickerHtmlFromLayout(
   </style>
 </head>
 <body>
-  ${elementsHtml}
+  <div id="sticker-canvas">
+    ${elementsHtml}
+  </div>
 </body>
 </html>
   `;
@@ -768,7 +779,7 @@ export async function POST(req: NextRequest) {
       html,
       type: "png",
       transparent: false,
-      selector: "body",
+      selector: "#sticker-canvas",
       puppeteerArgs: {
         executablePath: process.env.CHROMIUM_PATH || undefined,
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
