@@ -644,9 +644,11 @@ export async function fetchInvoicesForVehicle(
   if (options?.startDate) params.set("startDate", options.startDate);
   if (options?.endDate) params.set("endDate", options.endDate);
 
-  const queryStr = params.toString() ? `?${params.toString()}` : "";
+  // Use the correct endpoint: /Invoice?serviceItemID=xxx (per Protractor API docs)
+  params.set("serviceItemID", serviceItemId);
+  const queryStr = `?${params.toString()}`;
   const result = await protractorFetch<{ ItemCollection?: ProtractorInvoice[] }>(
-    `/ServiceItem/${serviceItemId}/Invoice${queryStr}`,
+    `/Invoice${queryStr}`,
     config,
     {},
     0,
