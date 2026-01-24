@@ -2370,11 +2370,14 @@ export async function addDeferredWorkToWorkOrder(
   }
   
   // If still no lines, search the vehicle's invoice history (invoices have full ServicePackages with pricing)
-  if (originalServicePackageLines.length === 0 && deferredItem.ServiceItemID) {
+  // Use vehicle ServiceItemID from deferred item OR from the work order we're adding to
+  const vehicleServiceItemId = deferredItem.ServiceItemID || existingWorkOrder.ServiceItemID;
+  
+  if (originalServicePackageLines.length === 0 && vehicleServiceItemId) {
     console.log(`[Protractor] Searching invoice history for service package matching: "${title}" (code: ${deferredItem.Code})`);
-    console.log(`[Protractor] Vehicle ServiceItemID: ${deferredItem.ServiceItemID}`);
+    console.log(`[Protractor] Vehicle ServiceItemID: ${vehicleServiceItemId} (source: ${deferredItem.ServiceItemID ? 'deferred item' : 'work order'})`);
     
-    const invoiceHistoryResult = await fetchInvoicesForVehicle(shopId, deferredItem.ServiceItemID);
+    const invoiceHistoryResult = await fetchInvoicesForVehicle(shopId, vehicleServiceItemId);
     
     if (invoiceHistoryResult.ok && invoiceHistoryResult.invoices && invoiceHistoryResult.invoices.length > 0) {
       console.log(`[Protractor] Found ${invoiceHistoryResult.invoices.length} invoices for vehicle`);
@@ -2466,10 +2469,10 @@ export async function addDeferredWorkToWorkOrder(
         console.log(`[Protractor] Could not find matching service package in any invoice`);
       }
     } else {
-      console.log(`[Protractor] No invoice history found for vehicle ServiceItemID: ${deferredItem.ServiceItemID} - ${invoiceHistoryResult.error || 'empty result'}`);
+      console.log(`[Protractor] No invoice history found for vehicle ServiceItemID: ${vehicleServiceItemId} - ${invoiceHistoryResult.error || 'empty result'}`);
     }
-  } else if (originalServicePackageLines.length === 0 && !deferredItem.ServiceItemID) {
-    console.log(`[Protractor] Cannot search invoice history - deferred item has no ServiceItemID`);
+  } else if (originalServicePackageLines.length === 0 && !vehicleServiceItemId) {
+    console.log(`[Protractor] Cannot search invoice history - no ServiceItemID available on deferred item or work order`);
   }
   
   // Note: /ServicePackage/DeferredWorks endpoint does NOT exist in Protractor API (returns 404)
