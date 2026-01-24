@@ -287,7 +287,7 @@ function updateTabAccessibility() {
     'plan': 'maintenance',
     'failures': 'common_failures',
     'lookup': 'job_lookup',
-    'canned': 'job_lookup',
+    'canned': null,  // Canned jobs always available (integration-based, not plan-gated)
     'sticker': 'oil_sticker'
   };
   
