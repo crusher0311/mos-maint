@@ -402,6 +402,7 @@ type TriagedItem = {
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
+  protractorDeferredId?: string;
 };
 
 type ShopIntervalOverride = {
@@ -694,6 +695,7 @@ function triage({
       bump: "red", // Deferred = already recommended = already overdue
       source: "protractor",
       reason: dw.Reason || undefined,
+      protractorDeferredId: dw.ID || dw.ServiceItemID,
     });
   }
 
@@ -1380,6 +1382,7 @@ async function PlanContent({ params }: PageProps) {
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
+                          protractorDeferredId={t.protractorDeferredId}
                         />
                       );
                     })()}
@@ -1550,6 +1553,7 @@ async function PlanContent({ params }: PageProps) {
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
+                          protractorDeferredId={t.protractorDeferredId}
                         />
                       );
                     })()}
@@ -1679,6 +1683,7 @@ async function PlanContent({ params }: PageProps) {
                           cannedJobOptions={opts}
                           allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
+                          protractorDeferredId={t.protractorDeferredId}
                         />
                       );
                     })()}
