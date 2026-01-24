@@ -7,6 +7,15 @@ interface Shop {
   shopId: string | number;
   name: string;
   hovercodeQRId?: string;
+  locationIdentifier?: string;
+  integrationDetails?: {
+    protractor?: {
+      locationName?: string;
+      shortName?: string;
+      address?: string;
+      phone?: string;
+    } | null;
+  };
 }
 
 export default function HovercodePage() {
@@ -31,6 +40,8 @@ export default function HovercodePage() {
           shopId: shop.shopId,
           name: shop.name || `Shop ${shop.shopId}`,
           hovercodeQRId: shop.stickerConfig?.hovercodeQRId || "",
+          locationIdentifier: shop.locationIdentifier || null,
+          integrationDetails: shop.integrationDetails || null,
         }));
         setShops(shopsWithQR);
       }
@@ -152,6 +163,9 @@ export default function HovercodePage() {
                   Name
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Location
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   HoverCode QR ID
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -166,6 +180,12 @@ export default function HovercodePage() {
                     {shop.shopId}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{shop.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {shop.integrationDetails?.protractor?.address || 
+                     shop.integrationDetails?.protractor?.shortName || 
+                     shop.locationIdentifier || 
+                     <span className="text-gray-400 italic">-</span>}
+                  </td>
                   <td className="px-4 py-3">
                     {editingShopId === shop.shopId ? (
                       <input
