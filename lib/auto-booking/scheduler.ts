@@ -493,14 +493,20 @@ async function pushAppointmentToSMS(
     try {
       const { createProtractorAppointment } = await import("@/lib/integrations/protractor");
       
-      // We need Protractor contact and vehicle IDs
-      const protractorContactId = booking.customerId;
-      const protractorVehicleId = booking.vehicleId;
+      // Look up Protractor contact and vehicle IDs dynamically
+      const { contactId: protractorContactId, vehicleId: protractorVehicleId } = 
+        await findProtractorContactAndVehicle(
+          booking.shopId, 
+          booking.customerId, 
+          booking.vehicleId,
+          booking.vin
+        );
       
       if (!protractorContactId || !protractorVehicleId) {
+        console.log(`[Auto Booking] Could not find Protractor contact/vehicle IDs for ${booking.vin || booking.vehicleId}`);
         return { 
           success: false, 
-          error: "Missing Protractor contact or vehicle ID" 
+          error: "Could not find Protractor contact or vehicle - vehicle may not exist in Protractor yet" 
         };
       }
       
@@ -636,6 +642,99 @@ export async function findTekmetricCustomerAndVehicle(
   return { customerId, vehicleId };
 }
 
+export async function findProtractorContactAndVehicle(
+  shopId: number,
+  mosContactId?: string,
+  mosVehicleId?: string,
+  vin?: string
+): Promise<{ contactId: string | null; vehicleId: string | null }> {
+  const db = await getDb();
+  
+  console.log(`[Auto Booking] findProtractorContactAndVehicle: shopId=${shopId}, mosContactId=${mosContactId}, mosVehicleId=${mosVehicleId}, vin=${vin}`);
+  
+  let contactId: string | null = null;
+  let vehicleId: string | null = null;
+  
+  // If IDs are already provided and look like Protractor IDs (not MOS ObjectIds), use them
+  if (mosContactId && mosContactId.length < 20) {
+    contactId = mosContactId;
+    console.log(`[Auto Booking] Using contact ID directly: ${contactId}`);
+  }
+  if (mosVehicleId && mosVehicleId.length < 20) {
+    vehicleId = mosVehicleId;
+    console.log(`[Auto Booking] Using vehicle ID directly: ${vehicleId}`);
+  }
+  
+  if (contactId && vehicleId) {
+    return { contactId, vehicleId };
+  }
+  
+  // Look up from cached vehicle by VIN
+  if (vin) {
+    const cachedVehicle = await db.collection("protractor_vehicles").findOne({
+      shopId,
+      vin: vin.toUpperCase(),
+    });
+    
+    if (cachedVehicle) {
+      console.log(`[Auto Booking] Found Protractor vehicle in cache for VIN ${vin}:`, cachedVehicle.protractorId);
+      if (!vehicleId && cachedVehicle.protractorId) {
+        vehicleId = String(cachedVehicle.protractorId);
+      }
+      // Check for owner/contact on cached vehicle
+      if (!contactId && cachedVehicle.data?.Owner?.ID) {
+        contactId = String(cachedVehicle.data.Owner.ID);
+        console.log(`[Auto Booking] Found contact from cached vehicle owner: ${contactId}`);
+      }
+    }
+  }
+  
+  // Try to find from cached work orders if still missing
+  if (!contactId || !vehicleId) {
+    const recentRO = await db.collection("protractor_ro_cache").findOne(
+      { 
+        shopId, 
+        "data.ServiceItem.VIN": vin?.toUpperCase() 
+      },
+      { sort: { "data.DateOut": -1 } }
+    );
+    
+    if (recentRO) {
+      console.log(`[Auto Booking] Found Protractor RO in cache for VIN ${vin}`);
+      if (!vehicleId && recentRO.data?.ServiceItem?.ID) {
+        vehicleId = String(recentRO.data.ServiceItem.ID);
+        console.log(`[Auto Booking] Found vehicle ID from RO: ${vehicleId}`);
+      }
+      if (!contactId && recentRO.data?.Contact?.ID) {
+        contactId = String(recentRO.data.Contact.ID);
+        console.log(`[Auto Booking] Found contact ID from RO: ${contactId}`);
+      }
+    }
+  }
+  
+  // If we still don't have IDs, try to fetch from Protractor API
+  if ((!contactId || !vehicleId) && vin) {
+    try {
+      const { fetchVehicleByVin } = await import("@/lib/integrations/protractor");
+      const result = await fetchVehicleByVin(shopId, vin);
+      
+      if (result.ok && result.vehicle) {
+        console.log(`[Auto Booking] Found Protractor vehicle from API for VIN ${vin}`);
+        if (!vehicleId) {
+          vehicleId = String(result.vehicle.ID);
+        }
+        if (!contactId && result.vehicle.Owner?.ID) {
+          contactId = String(result.vehicle.Owner.ID);
+        }
+      }
+    } catch (err: any) {
+      console.error(`[Auto Booking] Protractor vehicle API lookup failed:`, err.message);
+    }
+  }
+  
+  console.log(`[Auto Booking] Protractor lookup result: contactId=${contactId}, vehicleId=${vehicleId}`);
+  return { contactId, vehicleId };
+}
 
 export async function cancelBooking(bookingId: string): Promise<boolean> {
   const db = await getDb();
