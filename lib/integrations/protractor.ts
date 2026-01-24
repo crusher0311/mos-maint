@@ -2447,8 +2447,10 @@ export async function addDeferredWorkToWorkOrder(
       if (templateLines.length > 0) {
         originalServicePackageLines = templateLines;
         console.log(`[Protractor] Found ${templateLines.length} lines from ServicePackageTemplate`);
+        console.log(`[Protractor] Template raw response keys:`, Object.keys(templateResult.data));
         templateLines.forEach((line: any, i: number) => {
-          console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+          console.log(`[Protractor]   Line ${i} keys:`, Object.keys(line));
+          console.log(`[Protractor]   Line ${i} raw:`, JSON.stringify(line, null, 2));
         });
       } else {
         console.log(`[Protractor] ServicePackageTemplate exists but has no lines`);
