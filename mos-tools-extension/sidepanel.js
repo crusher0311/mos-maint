@@ -929,7 +929,13 @@ async function loadCannedJobs() {
         endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
       });
       
-      jobs = (result.content || result || []).map(job => ({
+      // Handle error responses from Tekmetric API
+      if (result.error || result.success === false) {
+        throw new Error(result.error || 'Failed to load canned jobs from Tekmetric');
+      }
+      
+      const jobsArray = Array.isArray(result.content) ? result.content : (Array.isArray(result) ? result : []);
+      jobs = jobsArray.map(job => ({
         id: job.id,
         name: job.name,
         description: job.description,
@@ -942,6 +948,11 @@ async function loadCannedJobs() {
         action: 'MOS_API_REQUEST',
         endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
       });
+      
+      // Handle error responses from MOS API
+      if (result.error || result.success === false) {
+        throw new Error(result.error || 'Failed to load canned jobs from MOS');
+      }
       
       jobs = result.jobs || [];
     }
