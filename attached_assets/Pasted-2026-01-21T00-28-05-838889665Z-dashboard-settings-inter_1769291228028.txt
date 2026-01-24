@@ -1,0 +1,50 @@
+2026-01-21T00:28:05.838889665Z ├ ƒ /dashboard/settings/intervals                      4.03 kB        91.1 kB
+2026-01-21T00:28:05.838891485Z ├ ○ /dashboard/settings/job-history                    3.62 kB        97.5 kB
+2026-01-21T00:28:05.838893225Z ├ ƒ /dashboard/settings/maintenance                    3.64 kB        90.7 kB
+2026-01-21T00:28:05.838894875Z ├ ○ /dashboard/settings/preferences                    4.25 kB        91.3 kB
+2026-01-21T00:28:05.838896526Z ├ ○ /dashboard/settings/protractor                     4.78 kB        91.8 kB
+2026-01-21T00:28:05.838898186Z ├ ○ /dashboard/settings/stickers                       7.12 kB        94.2 kB
+2026-01-21T00:28:05.838899866Z ├ ○ /dashboard/settings/users                          4.92 kB        98.8 kB
+2026-01-21T00:28:05.838903876Z ├ ○ /dashboard/settings/workflows                      3.65 kB        90.7 kB
+2026-01-21T00:28:05.838905586Z ├ ƒ /dashboard/vehicles/[vin]                          5.76 kB        99.6 kB
+2026-01-21T00:28:05.838907306Z ├ ƒ /dashboard/vehicles/[vin]/plan                     8.77 kB         103 kB
+2026-01-21T00:28:05.838909016Z ├ ƒ /dashboard/vehicles/[vin]/recommend                194 B            94 kB
+2026-01-21T00:28:05.838910696Z ├ ○ /dashboard/workflows                               3.16 kB          97 kB
+2026-01-21T00:28:05.838912397Z ├ ƒ /forgot                                            935 B            88 kB
+2026-01-21T00:28:05.838914057Z ├ ○ /icon.png                                          0 B                0 B
+2026-01-21T00:28:05.838915737Z ├ ○ /landing                                           142 B           101 kB
+2026-01-21T00:28:05.838923168Z ├ ƒ /login                                             2.83 kB        96.7 kB
+2026-01-21T00:28:05.838925048Z ├ ƒ /platform-admin                                    2.49 kB        96.3 kB
+2026-01-21T00:28:05.838926718Z ├ ƒ /platform-admin/api-usage                          11.7 kB        98.7 kB
+2026-01-21T00:28:05.838928418Z ├ ƒ /platform-admin/enterprises                        4.03 kB        91.1 kB
+2026-01-21T00:28:05.838930088Z ├ ƒ /platform-admin/hovercode                          3.64 kB        90.7 kB
+2026-01-21T00:28:05.838931758Z ├ ƒ /platform-admin/render                             4.79 kB        91.9 kB
+2026-01-21T00:28:05.838933468Z ├ ƒ /platform-admin/settings                           4.39 kB        91.5 kB
+2026-01-21T00:28:05.838935118Z ├ ƒ /platform-admin/shops                              8.27 kB        95.3 kB
+2026-01-21T00:28:05.838936818Z ├ ƒ /platform-admin/usage                              3.91 kB          91 kB
+2026-01-21T00:28:05.838941429Z ├ ƒ /platform-admin/users                              6.34 kB        93.4 kB
+2026-01-21T00:28:05.838943129Z ├ ○ /privacy                                           194 B            94 kB
+2026-01-21T00:28:05.838944789Z ├ ƒ /reset                                             1.09 kB        88.1 kB
+2026-01-21T00:28:05.838946459Z ├ ○ /reset-password                                    2.77 kB        89.8 kB
+2026-01-21T00:28:05.838948439Z ├ ƒ /setup                                             5.25 kB        92.3 kB
+2026-01-21T00:28:05.83895011Z ├ ○ /ui-demo                                           160 B          87.2 kB
+2026-01-21T00:28:05.83895185Z ├ ○ /ui-demo/autocomplete                              2.31 kB        89.4 kB
+2026-01-21T00:28:05.83895352Z └ ○ /ui-demo/common-failures                           2.51 kB        89.6 kB
+2026-01-21T00:28:05.83895607Z + First Load JS shared by all                          87.1 kB
+2026-01-21T00:28:05.83895776Z   ├ chunks/7023-91272aad972295c3.js                    31.5 kB
+2026-01-21T00:28:05.83895944Z   ├ chunks/fd9d1056-0f9a0f6dfd30f205.js                53.6 kB
+2026-01-21T00:28:05.83896114Z   └ other shared chunks (total)                        1.89 kB
+2026-01-21T00:28:05.838962721Z 
+2026-01-21T00:28:05.838964551Z Route (pages)                                          Size     First Load JS
+2026-01-21T00:28:05.838966271Z ─ ƒ /api/maintenance/[vin]                             0 B            80.6 kB
+2026-01-21T00:28:05.838967991Z + First Load JS shared by all                          80.6 kB
+2026-01-21T00:28:05.838969711Z   ├ chunks/framework-a63c59c368572696.js               45.2 kB
+2026-01-21T00:28:05.838971431Z   ├ chunks/main-bbb5e6eca31e8871.js                    33.5 kB
+2026-01-21T00:28:05.838973172Z   └ other shared chunks (total)                        1.87 kB
+2026-01-21T00:28:05.838974752Z 
+2026-01-21T00:28:05.838978512Z ○  (Static)   prerendered as static content
+2026-01-21T00:28:05.838980232Z ƒ  (Dynamic)  server-rendered on demand
+2026-01-21T00:28:05.838981842Z 
+2026-01-21T00:28:05.904570286Z bash: line 1: ./render-build.sh: No such file or directory
+2026-01-21T00:28:05.941889909Z ==> Build failed 😞
+2026-01-21T00:28:05.941914961Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
