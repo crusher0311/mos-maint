@@ -331,18 +331,18 @@ export function AddToROWithHistory({
         <button
           onClick={handleAddDeferred}
           disabled={deferredStatus === "adding"}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-blue-100 border border-blue-300 text-blue-700 text-xs font-medium hover:bg-blue-200 transition-colors disabled:opacity-50"
           title="Add this previously deferred service directly to the work order"
         >
           {deferredStatus === "adding" ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Adding...
-            </>
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <>
-              <Plus className="w-3 h-3" />
-              Add Deferred
+              <span className="relative">
+                <img src="/protractor-icon.png" alt="" className="w-4 h-4 rounded-full" />
+                <Plus className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 text-blue-700 bg-blue-100 rounded-full" />
+              </span>
+              <span className="ml-1">Deferred</span>
             </>
           )}
         </button>
