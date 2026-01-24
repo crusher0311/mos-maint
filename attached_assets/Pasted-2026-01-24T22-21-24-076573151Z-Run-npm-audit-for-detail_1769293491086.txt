@@ -1,0 +1,50 @@
+2026-01-24T22:21:24.076573151Z Run `npm audit` for details.
+2026-01-24T22:21:24.307304725Z 
+2026-01-24T22:21:24.307326905Z > mos-maintenance-mvp@1.8.0 build
+2026-01-24T22:21:24.307331556Z > next build
+2026-01-24T22:21:24.307335366Z 
+2026-01-24T22:21:24.926763313Z   ▲ Next.js 14.2.5
+2026-01-24T22:21:24.927006238Z 
+2026-01-24T22:21:24.954619201Z    Creating an optimized production build ...
+2026-01-24T22:21:48.119772351Z Failed to compile.
+2026-01-24T22:21:48.119807451Z 
+2026-01-24T22:21:48.119813492Z ./app/api/external/recommendations/[vin]/route.ts
+2026-01-24T22:21:48.119817462Z Module not found: Can't resolve '@/lib/recommendations'
+2026-01-24T22:21:48.119821172Z 
+2026-01-24T22:21:48.119825232Z https://nextjs.org/docs/messages/module-not-found
+2026-01-24T22:21:48.119828782Z 
+2026-01-24T22:21:48.177021932Z 
+2026-01-24T22:21:48.177101944Z > Build failed because of webpack errors
+2026-01-24T22:21:50.955366336Z 
+2026-01-24T22:21:50.955390066Z up to date, audited 1020 packages in 3s
+2026-01-24T22:21:50.955399566Z 
+2026-01-24T22:21:50.955403506Z 231 packages are looking for funding
+2026-01-24T22:21:50.955447677Z   run `npm fund` for details
+2026-01-24T22:21:51.031512007Z 
+2026-01-24T22:21:51.031582458Z 7 vulnerabilities (1 low, 2 moderate, 3 high, 1 critical)
+2026-01-24T22:21:51.031591318Z 
+2026-01-24T22:21:51.031595249Z To address issues that do not require attention, run:
+2026-01-24T22:21:51.031598929Z   npm audit fix
+2026-01-24T22:21:51.031602319Z 
+2026-01-24T22:21:51.031606499Z To address all issues, run:
+2026-01-24T22:21:51.031610509Z   npm audit fix --force
+2026-01-24T22:21:51.031614089Z 
+2026-01-24T22:21:51.031617559Z Run `npm audit` for details.
+2026-01-24T22:21:51.159676163Z 
+2026-01-24T22:21:51.159700843Z > mos-maintenance-mvp@1.8.0 build
+2026-01-24T22:21:51.159705314Z > next build
+2026-01-24T22:21:51.159708774Z 
+2026-01-24T22:21:52.045110317Z   ▲ Next.js 14.2.5
+2026-01-24T22:21:52.045333632Z 
+2026-01-24T22:21:52.126258649Z    Creating an optimized production build ...
+2026-01-24T22:22:00.34918231Z Failed to compile.
+2026-01-24T22:22:00.34920751Z 
+2026-01-24T22:22:00.349417025Z ./app/api/external/recommendations/[vin]/route.ts
+2026-01-24T22:22:00.349428715Z Module not found: Can't resolve '@/lib/recommendations'
+2026-01-24T22:22:00.349432155Z 
+2026-01-24T22:22:00.349435455Z https://nextjs.org/docs/messages/module-not-found
+2026-01-24T22:22:00.349438205Z 
+2026-01-24T22:22:00.359669153Z 
+2026-01-24T22:22:00.359799945Z > Build failed because of webpack errors
+2026-01-24T22:22:00.441205293Z ==> Build failed 😞
+2026-01-24T22:22:00.441224114Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
