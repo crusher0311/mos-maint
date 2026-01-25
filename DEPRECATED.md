@@ -135,9 +135,44 @@ See `lib/integrations/protractor/` as the reference implementation.
 | Phase | Target Date | Action |
 |-------|-------------|--------|
 | Phase 1 | Complete | Add deprecation notices to legacy files |
-| Phase 2 | TBD | Migrate remaining API routes to use new modules |
-| Phase 3 | TBD | Add runtime deprecation warnings |
+| Phase 2 | In Progress | Migrate remaining API routes to use new modules (~30 routes) |
+| Phase 3 | Complete | Add runtime deprecation warnings (dev mode only) |
 | Phase 4 | TBD | Remove legacy files after full migration |
+
+### Runtime Deprecation Warnings
+
+In development mode, importing deprecated files will log a console warning:
+```
+[DEPRECATED] lib/integrations/protractor.ts is deprecated. 
+Use lib/integrations/protractor/ module instead. See DEPRECATED.md for migration guide.
+```
+
+Files with runtime warnings:
+- `lib/integrations/protractor.ts`
+- `lib/tekmetric.ts`
+- `lib/integrations/autoflow.ts`
+
+### API Routes Pending Migration
+
+The following API routes still use legacy imports and should be migrated over time:
+
+**Protractor (~16 routes):**
+- `app/api/protractor/*` - Protractor-specific endpoints
+- `app/api/cron/protractor-sync/route.ts`
+- `app/api/webhooks/protractor/[token]/route.ts`
+- `app/api/settings/protractor/*`
+- Various vehicle/job endpoints
+
+**Tekmetric (~8 routes):**
+- `app/api/tekmetric/*` - Tekmetric-specific endpoints
+- `app/api/cron/tekmetric-sync/route.ts`
+- `app/api/webhooks/tekmetric/route.ts`
+- `app/api/settings/tekmetric/route.ts`
+
+**AutoFlow (~6 routes):**
+- `app/api/webhooks/autoflow/[token]/route.ts`
+- `app/api/admin/shops/[shopId]/autoflow/test/route.ts`
+- Vehicle analyzer endpoints
 
 ---
 
