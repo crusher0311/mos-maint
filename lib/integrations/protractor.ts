@@ -28,70 +28,26 @@ import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
-import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { acquireRateLimitSlot as acquireSharedRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process
 const protractorConcurrencyLimit = pLimit(3);
 
-// Local rate limiter: 5 requests per second (enforced per-process)
+// Rate limiting now handled by shared abstraction
 const RATE_LIMIT_RPS = 5;
-const RATE_LIMIT_INTERVAL_MS = 1000 / RATE_LIMIT_RPS; // 200ms between requests
-let lastRequestTime = 0;
-const rateLimitQueue: (() => void)[] = [];
-let isProcessingQueue = false;
 
 /**
- * Acquire rate limit slot with both local (5 rps) and distributed (300 rpm) enforcement.
- * The distributed limiter uses MongoDB for cross-worker coordination.
- * Returns false if circuit breaker is open.
+ * Acquire rate limit slot with both local and distributed enforcement.
+ * Delegates to shared rate limiter abstraction.
  */
 async function acquireRateLimitSlot(): Promise<{ acquired: boolean }> {
-  // First: acquire distributed slot (blocks if global limit exceeded)
-  const distributed = await acquireDistributedRateLimitSlot('protractor');
-  if (!distributed.acquired) {
-    if (distributed.circuitOpen) {
-      console.warn(`[Protractor] Circuit breaker open, skipping request`);
-      return { acquired: false };
-    }
-    console.warn(`[Protractor] Rate limit slot not acquired after ${distributed.waitedMs}ms, skipping request`);
-    return { acquired: false };
-  }
-  
-  // Then: local per-process queue (ensures 5 rps within this process)
-  await new Promise<void>((resolve) => {
-    rateLimitQueue.push(resolve);
-    processRateLimitQueue();
-  });
-  
-  return { acquired: true };
+  const result = await acquireSharedRateLimitSlot('protractor', RATE_LIMIT_RPS);
+  return { acquired: result.acquired };
 }
 
-function processRateLimitQueue(): void {
-  if (isProcessingQueue || rateLimitQueue.length === 0) return;
-  isProcessingQueue = true;
-  
-  const processNext = () => {
-    if (rateLimitQueue.length === 0) {
-      isProcessingQueue = false;
-      return;
-    }
-    
-    const now = Date.now();
-    const timeSinceLastRequest = now - lastRequestTime;
-    const waitTime = Math.max(0, RATE_LIMIT_INTERVAL_MS - timeSinceLastRequest);
-    
-    setTimeout(() => {
-      lastRequestTime = Date.now();
-      const resolve = rateLimitQueue.shift();
-      if (resolve) resolve();
-      processNext();
-    }, waitTime);
-  };
-  
-  processNext();
-}
 
 export type ProtractorConfig = {
   connectionId: string;

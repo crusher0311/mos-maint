@@ -23,16 +23,16 @@
 // Runtime warning removed - this file is used as backing implementation for modular re-exports
 // Direct imports should use: import { ... } from '@/lib/integrations/tekmetric';
 
-import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { acquireRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
 import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
 async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
-  // Acquire distributed rate limit slot (blocks if limit exceeded)
-  const rateLimitResult = await acquireDistributedRateLimitSlot('tekmetric');
+  const rateLimitResult = await acquireRateLimitSlot('tekmetric', 10);
   if (!rateLimitResult.acquired) {
-    console.warn(`[Tekmetric] Rate limit slot not acquired after ${rateLimitResult.waitedMs}ms, proceeding anyway`);
+    console.warn(`[Tekmetric] Rate limit slot not acquired, proceeding anyway`);
   }
 
   const token = await getValidToken();

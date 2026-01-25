@@ -114,25 +114,16 @@ export async function getShopFeatures(shopId: number): Promise<ShopFeatures | nu
 }
 
 export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Promise<boolean> {
-  if (isDevEnvironment()) {
-    return true;
-  }
-  const features = await getShopFeatures(shopId);
-  if (!features) {
-    return featureId === "maintenance";
-  }
-  return features.enabledFeatures.includes(featureId);
+  const { getFeatureEntitlements } = await import("@/lib/featureResolver");
+  const entitlements = await getFeatureEntitlements(shopId);
+  return entitlements.canUseFeature(featureId);
 }
 
 export async function getEnabledFeatures(shopId: number): Promise<FeatureId[]> {
-  if (isDevEnvironment()) {
-    return getAllFeatureIds();
-  }
-  const features = await getShopFeatures(shopId);
-  if (!features) {
-    return ["maintenance"];
-  }
-  return features.enabledFeatures;
+  const { getFeatureEntitlements } = await import("@/lib/featureResolver");
+  const entitlements = await getFeatureEntitlements(shopId);
+  return (Object.keys(entitlements.effectiveFeatures) as FeatureId[])
+    .filter(key => entitlements.effectiveFeatures[key as keyof typeof entitlements.effectiveFeatures]);
 }
 
 export async function enableFeature(shopId: number, featureId: FeatureId): Promise<void> {

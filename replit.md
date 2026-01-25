@@ -153,6 +153,9 @@ Legacy integration files have been marked as deprecated but remain functional fo
 - **Shared Sync Framework**: Created `lib/integrations/core/sync/` with SyncProvider interface and SyncRunner for unified pagination, timeboxing, and state management
 - **Unit Test Infrastructure**: Added vitest configuration with 19 passing tests covering repositories, sync runner, and integration adapters
 - **Migrated modular integration files to use repositories**: Protractor client.ts, Tekmetric auth.ts and adapter.ts now use repository pattern instead of direct getDb() calls
+- **SMS Adapter Consistency (Issue #3)**: Created TekmetricAdapter and AutoFlowAdapter implementing ISMSAdapter interface; all three SMS providers now have consistent adapter implementations registered with SMSAdapterRegistry
+- **Feature Flag Consolidation (Issue #5)**: Updated lib/features.ts to delegate isFeatureEnabled() and getEnabledFeatures() to the central featureResolver.ts, eliminating duplicate feature checking logic
+- **Rate Limiting Abstraction (Issue #7)**: Migrated legacy lib/integrations/protractor.ts and lib/tekmetric.ts to use shared acquireRateLimitSlot from lib/integrations/core/rate-limiter.ts
 
 **January 24, 2026:**
 - Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
