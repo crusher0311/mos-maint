@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/ui/Sidebar";
 import QuickStickerModal from "@/components/stickers/QuickStickerModal";
 import SupportChatWidget from "@/components/ui/SupportChatWidget";
+import { GhostModeBanner } from "@/components/ui/GhostModeBanner";
 import { Menu, X } from "lucide-react";
 
 interface UserInfo {
@@ -72,7 +73,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     : "??";
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <>
+      <GhostModeBanner />
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Desktop Sidebar - hidden on mobile */}
       <div className="hidden md:block md:w-64 flex-shrink-0">
         <Sidebar 
@@ -164,5 +167,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       <SupportChatWidget />
     </div>
+    </>
   );
 }

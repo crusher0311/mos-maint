@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import crypto from "crypto";
-import { getSession, sessionCookieOptions } from "@/lib/auth";
+import { getSession, sessionCookieOptions, adminSessionCookieOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { logAdminAction } from "@/lib/audit-log";
 
@@ -74,6 +74,12 @@ export async function POST(req: Request) {
     });
 
     const store = await cookies();
+    const currentAdminToken = store.get("session_token")?.value;
+    
+    if (currentAdminToken) {
+      store.set("admin_session_token", currentAdminToken, adminSessionCookieOptions(60 * 60 * 8));
+    }
+    
     store.set("session_token", newToken, sessionCookieOptions(60 * 60 * 4));
 
     return NextResponse.json({

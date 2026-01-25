@@ -95,3 +95,13 @@ export function sessionCookieOptions(maxAgeSeconds = 60 * 60 * 24 * 30) {
     maxAge: maxAgeSeconds,
   };
 }
+
+export function adminSessionCookieOptions(maxAgeSeconds = 60 * 60 * 8) {
+  return {
+    httpOnly: true as const,
+    secure: true as const,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: maxAgeSeconds,
+  };
+}
