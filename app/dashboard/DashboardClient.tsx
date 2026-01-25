@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
+import { WelcomeModal } from "@/components/ui/WelcomeModal";
 import { ReactNode } from "react";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
@@ -136,6 +137,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  useEffect(() => {
+    const hasSeenWelcome = localStorage.getItem('mos_welcome_seen');
+    if (!hasSeenWelcome) {
+      setShowWelcomeModal(true);
+    }
+  }, []);
+
+  const handleCloseWelcome = () => {
+    localStorage.setItem('mos_welcome_seen', 'true');
+    setShowWelcomeModal(false);
+  };
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -1450,6 +1464,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             </div>
           </div>
         </div>
+      )}
+
+      {showWelcomeModal && (
+        <WelcomeModal 
+          shopName={data?.user?.shopName}
+          onClose={handleCloseWelcome}
+        />
       )}
     </div>
   );
