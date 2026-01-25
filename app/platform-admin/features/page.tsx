@@ -300,7 +300,7 @@ export default function FeaturesManagementPage() {
             <button
               onClick={seedFeatures}
               disabled={saving}
-              className="px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
               Seed Default Features
@@ -308,7 +308,7 @@ export default function FeaturesManagementPage() {
           )}
           <button
             onClick={() => openModal()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Create Feature
@@ -362,7 +362,7 @@ export default function FeaturesManagementPage() {
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   className={`border-b border-gray-100 hover:bg-gray-50 cursor-move ${
-                    draggedIndex === index ? "bg-blue-50" : ""
+                    draggedIndex === index ? "bg-purple-50" : ""
                   }`}
                 >
                   <td className="px-4 py-3">
@@ -382,7 +382,7 @@ export default function FeaturesManagementPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs font-medium rounded ${
                       feature.category === "core" 
-                        ? "bg-blue-100 text-blue-700" 
+                        ? "bg-purple-100 text-purple-700" 
                         : feature.category === "bundled"
                         ? "bg-amber-100 text-amber-700"
                         : "bg-gray-100 text-gray-700"
@@ -411,7 +411,7 @@ export default function FeaturesManagementPage() {
                         <span className="text-xs text-gray-400">None</span>
                       ) : (
                         feature.compatibleSMS.map(sms => (
-                          <span key={sms} className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                          <span key={sms} className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
                             {sms}
                           </span>
                         ))
@@ -422,7 +422,7 @@ export default function FeaturesManagementPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openModal(feature)}
-                        className="text-blue-600 hover:text-blue-500"
+                        className="text-purple-600 hover:text-purple-500"
                       >
                         Edit
                       </button>
@@ -537,7 +537,7 @@ export default function FeaturesManagementPage() {
                       onClick={() => toggleArrayValue("compatibleSMS", sms.value)}
                       className={`px-3 py-1.5 text-sm rounded-lg border ${
                         formData.compatibleSMS.includes(sms.value)
-                          ? "bg-mos-blue text-white border-mos-blue"
+                          ? "bg-mos-purple text-white border-mos-purple"
                           : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                       }`}
                     >
@@ -557,7 +557,7 @@ export default function FeaturesManagementPage() {
                       onClick={() => toggleArrayValue("includedInTiers", tier.value)}
                       className={`px-3 py-1.5 text-sm rounded-lg border ${
                         formData.includedInTiers.includes(tier.value)
-                          ? "bg-blue-600 text-white border-blue-600"
+                          ? "bg-purple-600 text-white border-purple-600"
                           : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                       }`}
                     >
@@ -639,7 +639,7 @@ export default function FeaturesManagementPage() {
                 <button
                   type="submit"
                   disabled={saving || !formData.name || !formData.slug}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   {editingFeature ? "Update Feature" : "Create Feature"}

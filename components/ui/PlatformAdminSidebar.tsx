@@ -153,7 +153,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       <div className="p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-mos-blue rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
               <Shield className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -185,7 +185,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 onClick={handleNavClick}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
-                    ? "bg-mos-blue text-white"
+                    ? "bg-purple-600 text-white"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
@@ -202,7 +202,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               onClick={() => setTicketsExpanded(!ticketsExpanded)}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isTicketsSection
-                  ? "bg-mos-blue/20 text-blue-300"
+                  ? "bg-purple-600/20 text-purple-300"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
               }`}
             >
@@ -232,7 +232,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                       onClick={handleNavClick}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                         isActive(subItem.href)
-                          ? "bg-mos-blue text-white"
+                          ? "bg-purple-600 text-white"
                           : "text-slate-400 hover:bg-slate-800 hover:text-white"
                       }`}
                     >
@@ -258,7 +258,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 onClick={handleNavClick}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
-                    ? "bg-mos-blue text-white"
+                    ? "bg-purple-600 text-white"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
@@ -274,7 +274,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
 
       <div className="p-4 border-t border-slate-700">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-mos-blue flex items-center justify-center text-white text-sm font-medium">
+          <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-medium">
             {userEmail?.charAt(0).toUpperCase() || "A"}
           </div>
           <div className="flex-1 min-w-0">

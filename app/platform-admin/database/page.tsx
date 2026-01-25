@@ -244,7 +244,7 @@ export default function PlatformDatabasePage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Database className="w-8 h-8 text-mos-blue" />
+          <Database className="w-8 h-8 text-mos-purple" />
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Database Explorer</h1>
             <p className="text-slate-500 text-sm">
@@ -281,14 +281,14 @@ export default function PlatformDatabasePage() {
                 placeholder="Search collections..."
                 value={collectionSearch}
                 onChange={(e) => setCollectionSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-purple"
               />
             </div>
           </div>
           <div className="max-h-[600px] overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-mos-blue" />
+                <Loader2 className="w-6 h-6 animate-spin text-mos-purple" />
               </div>
             ) : (
               <ul>
@@ -297,7 +297,7 @@ export default function PlatformDatabasePage() {
                     <button
                       onClick={() => selectCollection(coll.name)}
                       className={`w-full flex items-center justify-between px-4 py-3 text-left text-sm hover:bg-slate-50 transition-colors ${
-                        selectedCollection === coll.name ? "bg-blue-50 text-blue-700 border-r-2 border-mos-blue" : "text-slate-700"
+                        selectedCollection === coll.name ? "bg-purple-50 text-purple-700 border-r-2 border-mos-purple" : "text-slate-700"
                       }`}
                     >
                       <span className="font-medium truncate">{coll.name}</span>
@@ -342,7 +342,7 @@ export default function PlatformDatabasePage() {
                       value={filter}
                       onChange={(e) => setFilter(e.target.value)}
                       placeholder='{"field": "value"}'
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-mos-purple"
                     />
                   </div>
                   <div className="col-span-2">
@@ -351,7 +351,7 @@ export default function PlatformDatabasePage() {
                       type="text"
                       value={sortField}
                       onChange={(e) => setSortField(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-purple"
                     />
                   </div>
                   <div className="col-span-1">
@@ -359,7 +359,7 @@ export default function PlatformDatabasePage() {
                     <select
                       value={sortOrder}
                       onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-                      className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                      className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-purple"
                     >
                       <option value="desc">Desc</option>
                       <option value="asc">Asc</option>
@@ -373,7 +373,7 @@ export default function PlatformDatabasePage() {
                       onChange={(e) => setLimit(Number(e.target.value))}
                       min={1}
                       max={100}
-                      className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                      className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-purple"
                     />
                   </div>
                   <div className="col-span-1">
@@ -383,14 +383,14 @@ export default function PlatformDatabasePage() {
                       value={skip}
                       onChange={(e) => setSkip(Number(e.target.value))}
                       min={0}
-                      className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                      className="w-full px-2 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mos-purple"
                     />
                   </div>
                   <div className="col-span-1 flex items-end">
                     <button
                       onClick={() => queryCollection()}
                       disabled={queryLoading}
-                      className="w-full px-3 py-2 bg-mos-blue hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                      className="w-full px-3 py-2 bg-mos-purple hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
                     >
                       {queryLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -467,7 +467,7 @@ export default function PlatformDatabasePage() {
               <div className="max-h-[500px] overflow-y-auto">
                 {queryLoading ? (
                   <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-mos-blue" />
+                    <Loader2 className="w-8 h-8 animate-spin text-mos-purple" />
                   </div>
                 ) : queryResult?.documents.length ? (
                   <div className="divide-y divide-slate-100">
@@ -494,10 +494,10 @@ export default function PlatformDatabasePage() {
                                     e.stopPropagation();
                                     startEdit(idx);
                                   }}
-                                  className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                  className="p-1 hover:bg-purple-100 rounded transition-colors"
                                   title="Edit document"
                                 >
-                                  <Pencil className="w-4 h-4 text-blue-500" />
+                                  <Pencil className="w-4 h-4 text-purple-500" />
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -535,7 +535,7 @@ export default function PlatformDatabasePage() {
                                   value={editingDoc.content}
                                   onChange={(e) => setEditingDoc({ ...editingDoc, content: e.target.value })}
                                   rows={12}
-                                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                  className="w-full px-3 py-2 border border-purple-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                                 />
                                 <div className="flex justify-end gap-2 mt-2">
                                   <button
@@ -547,7 +547,7 @@ export default function PlatformDatabasePage() {
                                   <button
                                     onClick={handleUpdate}
                                     disabled={writeLoading}
-                                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
                                   >
                                     {writeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     Save Changes

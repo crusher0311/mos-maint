@@ -16,8 +16,8 @@ interface PlatformFeature {
 
 const TIERS = [
   { slug: "starter", name: "Starter", color: "bg-gray-100" },
-  { slug: "plus", name: "Plus", color: "bg-blue-100" },
-  { slug: "elite", name: "Elite", color: "bg-blue-100" },
+  { slug: "plus", name: "Plus", color: "bg-purple-100" },
+  { slug: "elite", name: "Elite", color: "bg-purple-100" },
   { slug: "enterprise", name: "Enterprise", color: "bg-amber-100" },
 ];
 
@@ -102,7 +102,7 @@ export default function PlanFeaturesMatrixPage() {
     return (
       <div className="p-8">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
         </div>
       </div>
     );
@@ -117,7 +117,7 @@ export default function PlanFeaturesMatrixPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <Grid3X3 className="w-6 h-6 text-blue-600" />
+            <Grid3X3 className="w-6 h-6 text-purple-600" />
             <h1 className="text-2xl font-bold text-gray-900">Plan Features Matrix</h1>
           </div>
           <p className="text-gray-600 mt-1">
@@ -127,7 +127,7 @@ export default function PlanFeaturesMatrixPage() {
         <button
           onClick={saveChanges}
           disabled={saving || !hasChanges}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           Save Changes

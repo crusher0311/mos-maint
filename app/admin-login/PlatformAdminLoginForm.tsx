@@ -61,7 +61,7 @@ export default function PlatformAdminLoginForm() {
           <input
             id="email"
             type="email"
-            className="block w-full pl-10 pr-4 py-2.5 border border-gray-600 rounded-lg bg-gray-700 focus:ring-2 focus:ring-mos-blue focus:border-mos-blue text-white placeholder-gray-400 transition-colors"
+            className="block w-full pl-10 pr-4 py-2.5 border border-gray-600 rounded-lg bg-gray-700 focus:ring-2 focus:ring-purple-600 focus:border-purple-600 text-white placeholder-gray-400 transition-colors"
             placeholder="admin@mosmaintenance.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -83,7 +83,7 @@ export default function PlatformAdminLoginForm() {
           <input
             id="password"
             type={showPassword ? "text" : "password"}
-            className="block w-full pl-10 pr-12 py-2.5 border border-gray-600 rounded-lg bg-gray-700 focus:ring-2 focus:ring-mos-blue focus:border-mos-blue text-white placeholder-gray-400 transition-colors"
+            className="block w-full pl-10 pr-12 py-2.5 border border-gray-600 rounded-lg bg-gray-700 focus:ring-2 focus:ring-purple-600 focus:border-purple-600 text-white placeholder-gray-400 transition-colors"
             placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -110,7 +110,7 @@ export default function PlatformAdminLoginForm() {
       <button
         type="submit"
         disabled={busy || !email || !password}
-        className="w-full py-2.5 px-4 bg-mos-blue hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-mos-blue focus:ring-offset-2 focus:ring-offset-gray-800"
+        className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-600 focus:ring-offset-2 focus:ring-offset-gray-800"
       >
         {busy ? (
           <span className="flex items-center justify-center gap-2">

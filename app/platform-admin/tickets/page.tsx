@@ -170,7 +170,7 @@ export default function PlatformTicketsPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "open": return <AlertCircle className="w-4 h-4 text-blue-500" />;
+      case "open": return <AlertCircle className="w-4 h-4 text-purple-500" />;
       case "in_progress": return <Clock className="w-4 h-4 text-yellow-500" />;
       case "resolved": return <CheckCircle className="w-4 h-4 text-green-500" />;
       case "closed": return <XCircle className="w-4 h-4 text-gray-500" />;
@@ -180,7 +180,7 @@ export default function PlatformTicketsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "open": return "bg-blue-100 text-blue-700";
+      case "open": return "bg-purple-100 text-purple-700";
       case "in_progress": return "bg-yellow-100 text-yellow-700";
       case "resolved": return "bg-green-100 text-green-700";
       case "closed": return "bg-gray-100 text-gray-700";
@@ -229,14 +229,14 @@ export default function PlatformTicketsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Ticket className="w-7 h-7 text-mos-blue" />
+            <Ticket className="w-7 h-7 text-mos-purple" />
             Support Tickets
           </h1>
           <p className="text-gray-600">Manage customer support requests</p>
         </div>
         <button
           onClick={() => loadTickets()}
-          className="flex items-center gap-2 px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Refresh
@@ -246,7 +246,7 @@ export default function PlatformTicketsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-1">
-            <AlertCircle className="w-4 h-4 text-blue-500" />
+            <AlertCircle className="w-4 h-4 text-purple-500" />
             <span className="text-sm text-gray-600">Open</span>
           </div>
           <div className="text-2xl font-bold text-gray-900">{stats.open}</div>
@@ -284,13 +284,13 @@ export default function PlatformTicketsPage() {
                 placeholder="Search tickets..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-purple"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-blue"
+              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-purple"
             >
               {STATUSES.map(s => (
                 <option key={s.value} value={s.value}>{s.label}</option>
@@ -299,7 +299,7 @@ export default function PlatformTicketsPage() {
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-blue"
+              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-purple"
             >
               {PRIORITIES.map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
@@ -308,7 +308,7 @@ export default function PlatformTicketsPage() {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-blue"
+              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-purple"
             >
               {CATEGORIES.map(c => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -444,8 +444,8 @@ export default function PlatformTicketsPage() {
 
             <div className="flex-1 overflow-auto p-4 space-y-4">
               {selectedTicket.description && (
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                  <div className="text-xs text-blue-600 font-medium mb-2">Original Description</div>
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-100">
+                  <div className="text-xs text-purple-600 font-medium mb-2">Original Description</div>
                   <p className="text-gray-700 whitespace-pre-wrap">{selectedTicket.description}</p>
                 </div>
               )}
@@ -459,20 +459,20 @@ export default function PlatformTicketsPage() {
                   key={msg.id}
                   className={`p-4 rounded-lg ${
                     msg.from === "admin"
-                      ? "bg-blue-50 ml-8 border border-blue-100"
+                      ? "bg-purple-50 ml-8 border border-purple-100"
                       : "bg-gray-50 mr-8 border border-gray-100"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                        msg.from === "admin" ? "bg-mos-blue text-white" : "bg-gray-600 text-white"
+                        msg.from === "admin" ? "bg-mos-purple text-white" : "bg-gray-600 text-white"
                       }`}>
                         {msg.fromName.charAt(0).toUpperCase()}
                       </div>
                       <span className="font-medium text-sm">
                         {msg.fromName}
-                        {msg.from === "admin" && <span className="ml-1 text-mos-blue">(Support)</span>}
+                        {msg.from === "admin" && <span className="ml-1 text-mos-purple">(Support)</span>}
                       </span>
                     </div>
                     <span className="text-xs text-gray-500">{formatFullDate(msg.createdAt)}</span>
@@ -489,13 +489,13 @@ export default function PlatformTicketsPage() {
                     value={replyMessage}
                     onChange={(e) => setReplyMessage(e.target.value)}
                     placeholder="Type your reply..."
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-mos-blue"
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-mos-purple"
                     rows={2}
                   />
                   <button
                     onClick={sendReply}
                     disabled={sending || !replyMessage.trim()}
-                    className="px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     <Send className="w-4 h-4" />
                     {sending ? "Sending..." : "Send"}
