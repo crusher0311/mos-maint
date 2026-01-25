@@ -1,3 +1,25 @@
+/**
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * 
+ * MIGRATION: Use the modular Protractor integration instead:
+ * 
+ * ```typescript
+ * // Instead of:
+ * import { fetchWorkOrderById, getVehicleByVin } from '@/lib/integrations/protractor';
+ * 
+ * // Use:
+ * import { protractorAdapter } from '@/lib/integrations/protractor';
+ * const result = await protractorAdapter.getWorkOrder(shopId, workOrderId);
+ * 
+ * // Or use the facade for auto-detection:
+ * import { integrationFacade } from '@/lib/integrations';
+ * const adapter = await integrationFacade.getConfiguredAdapter(shopId);
+ * ```
+ * 
+ * See DEPRECATED.md for full migration guide.
+ * New modular code: lib/integrations/protractor/
+ */
+
 // Note: "server-only" import removed to allow standalone script usage
 import crypto from "node:crypto";
 import https from "node:https";

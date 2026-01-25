@@ -1,3 +1,11 @@
+/**
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * 
+ * MIGRATION: Use the modular Protractor integration instead.
+ * See DEPRECATED.md for full migration guide.
+ * New modular code: lib/integrations/protractor/
+ */
+
 import { getDb } from "@/lib/mongo";
 import {
   resolveProtractorConfig,

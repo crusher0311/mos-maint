@@ -1,3 +1,12 @@
+/**
+ * @deprecated This file is deprecated. Consider using lib/api-usage-tracker.ts instead.
+ * 
+ * This Tekmetric-specific usage tracker duplicates functionality in the shared
+ * api-usage-tracker.ts. New code should use the shared tracker.
+ * 
+ * See DEPRECATED.md for full migration guide.
+ */
+
 import { getDb } from "@/lib/mongo";
 
 interface UsageRecord {

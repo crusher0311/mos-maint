@@ -1,3 +1,21 @@
+/**
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * 
+ * MIGRATION: Use the modular AutoFlow integration instead:
+ * 
+ * ```typescript
+ * // Instead of:
+ * import { getAutoFlowDVI } from '@/lib/integrations/autoflow';
+ * 
+ * // Use:
+ * import { autoflowAdapter } from '@/lib/integrations/autoflow';
+ * const result = await autoflowAdapter.getDVI(shopId, vehicleId);
+ * ```
+ * 
+ * See DEPRECATED.md for full migration guide.
+ * New modular code: lib/integrations/autoflow/
+ */
+
 import "server-only";
 import { getDb } from "@/lib/mongo";
 

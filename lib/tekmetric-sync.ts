@@ -1,3 +1,11 @@
+/**
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * 
+ * MIGRATION: Use the modular Tekmetric integration instead.
+ * See DEPRECATED.md for full migration guide.
+ * New modular code: lib/integrations/tekmetric/
+ */
+
 import { getDb } from "@/lib/mongo";
 import { 
   getRepairOrders, 

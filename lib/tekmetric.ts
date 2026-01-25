@@ -1,3 +1,25 @@
+/**
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * 
+ * MIGRATION: Use the modular Tekmetric integration instead:
+ * 
+ * ```typescript
+ * // Instead of:
+ * import { getTekmetricRepairOrders } from '@/lib/tekmetric';
+ * 
+ * // Use:
+ * import { tekmetricAdapter } from '@/lib/integrations/tekmetric';
+ * const result = await tekmetricAdapter.getWorkOrders(shopId, options);
+ * 
+ * // Or use the facade for auto-detection:
+ * import { integrationFacade } from '@/lib/integrations';
+ * const adapter = await integrationFacade.getConfiguredAdapter(shopId);
+ * ```
+ * 
+ * See DEPRECATED.md for full migration guide.
+ * New modular code: lib/integrations/tekmetric/
+ */
+
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
 

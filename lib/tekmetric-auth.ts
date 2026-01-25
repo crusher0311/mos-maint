@@ -1,3 +1,20 @@
+/**
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * 
+ * MIGRATION: Use the modular Tekmetric auth instead:
+ * 
+ * ```typescript
+ * // Instead of:
+ * import { getValidToken, refreshToken } from '@/lib/tekmetric-auth';
+ * 
+ * // Use:
+ * import { getValidToken, refreshToken } from '@/lib/integrations/tekmetric/auth';
+ * ```
+ * 
+ * See DEPRECATED.md for full migration guide.
+ * New modular code: lib/integrations/tekmetric/auth.ts
+ */
+
 import { getDb } from "@/lib/mongo";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com';
