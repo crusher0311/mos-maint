@@ -41,7 +41,9 @@ describe("ShopRepository", () => {
       
       const result = await shopRepository.findByShopId(1);
       
-      expect(mockCollection.findOne).toHaveBeenCalledWith({ shopId: 1 });
+      expect(mockCollection.findOne).toHaveBeenCalledWith({ 
+        $or: [{ shopId: "1" }, { shopId: 1 }] 
+      });
       expect(result).toEqual(mockShop);
     });
 

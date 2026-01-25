@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/mongo";
+import { tekmetricTokenRepository } from "@/lib/data/repositories";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -9,16 +9,6 @@ interface TekmetricToken {
   scope: string;
   expiresAt: Date;
   createdAt: Date;
-}
-
-interface TokenDocument {
-  tokenKey: string;
-  accessToken: string;
-  tokenType: string;
-  scope: string;
-  expiresAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 let cachedToken: TekmetricToken | null = null;
@@ -74,22 +64,13 @@ async function fetchNewToken(): Promise<TekmetricToken> {
 
 async function persistToken(token: TekmetricToken): Promise<void> {
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").updateOne(
-      { tokenKey: "current" },
-      {
-        $set: {
-          tokenKey: "current",
-          accessToken: token.accessToken,
-          tokenType: token.tokenType,
-          scope: token.scope,
-          expiresAt: token.expiresAt,
-          createdAt: token.createdAt,
-          updatedAt: new Date(),
-        }
-      },
-      { upsert: true }
-    );
+    await tekmetricTokenRepository.upsertCurrentToken({
+      accessToken: token.accessToken,
+      tokenType: token.tokenType,
+      scope: token.scope,
+      expiresAt: token.expiresAt,
+      createdAt: token.createdAt,
+    });
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to persist token:', err);
   }
@@ -97,8 +78,7 @@ async function persistToken(token: TekmetricToken): Promise<void> {
 
 async function loadPersistedToken(): Promise<TekmetricToken | null> {
   try {
-    const db = await getDb();
-    const doc = await db.collection("tekmetric_tokens").findOne({ tokenKey: "current" }) as TokenDocument | null;
+    const doc = await tekmetricTokenRepository.getCurrentToken();
     
     if (!doc) return null;
     
@@ -151,8 +131,7 @@ export async function invalidateToken(): Promise<void> {
   cachedToken = null;
   
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").deleteOne({ tokenKey: "current" });
+    await tekmetricTokenRepository.deleteCurrentToken();
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to invalidate token:', err);
   }

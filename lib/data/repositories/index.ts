@@ -20,3 +20,7 @@ export {
   syncStateRepository,
   type SyncStateDocument 
 } from "./sync-state-repository";
+export {
+  tekmetricTokenRepository,
+  type TekmetricTokenDocument
+} from "./tekmetric-token-repository";

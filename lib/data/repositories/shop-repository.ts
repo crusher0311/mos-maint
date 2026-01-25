@@ -6,6 +6,15 @@ export interface ShopDocument {
   shopId: number;
   name: string;
   ownerId?: string;
+  protractorConnectionId?: string;
+  protractorApiKey?: string;
+  protractor?: {
+    connectionId?: string;
+    apiKey?: string;
+  };
+  tekmetric?: {
+    shopId?: number;
+  };
   features?: {
     maintenance?: boolean;
     jobLookup?: boolean;
@@ -60,20 +69,45 @@ export interface ShopDocument {
 class ShopRepositoryImpl extends BaseRepository<ShopDocument> {
   protected collectionName = "shops";
   
-  async findByShopId(shopId: number): Promise<ShopDocument | null> {
-    return this.findOne({ shopId });
+  async findByShopId(shopId: number | string): Promise<ShopDocument | null> {
+    return this.findOne({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    } as any);
   }
   
   async findByOwnerId(ownerId: string): Promise<ShopDocument[]> {
     return this.findMany({ ownerId });
   }
   
-  async getProtractorConfig(shopId: number): Promise<ShopDocument["integrations"] | null> {
+  async getProtractorConfig(shopId: number | string): Promise<{
+    connectionId: string;
+    apiKey: string;
+    configured: boolean;
+  }> {
     const shop = await this.findByShopId(shopId);
-    return shop?.integrations || null;
+    
+    const connectionId = 
+      shop?.protractorConnectionId ??
+      shop?.protractor?.connectionId ??
+      shop?.integrations?.protractor?.connectionId ??
+      process.env.PROTRACTOR_CONNECTION_ID ??
+      "";
+    
+    const apiKey = 
+      shop?.protractorApiKey ??
+      shop?.protractor?.apiKey ??
+      shop?.integrations?.protractor?.apiKey ??
+      process.env.PROTRACTOR_API_KEY ??
+      "";
+    
+    return {
+      connectionId,
+      apiKey,
+      configured: Boolean(connectionId && apiKey),
+    };
   }
   
-  async getTekmetricShopId(shopId: number): Promise<number | null> {
+  async getTekmetricShopId(shopId: number | string): Promise<number | null> {
     const shop = await this.findByShopId(shopId);
     return shop?.integrations?.tekmetric?.shopId || null;
   }
