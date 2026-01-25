@@ -122,6 +122,20 @@ const vehicle = await protractorAdapter.getVehicleByVin(shopId, vin);
 
 See **`TECHNICAL_DEBT_REVIEW.md`** for original analysis and phase plan.
 
+### Deprecated Files
+
+Legacy integration files have been marked as deprecated but remain functional for backward compatibility. See **`DEPRECATED.md`** for the complete list and migration guide.
+
+**When modifying integration code:**
+1. **New features** → Add to the modular structure (`lib/integrations/{provider}/`)
+2. **Bug fixes** → Fix in both legacy AND modular if both are still used
+3. **Refactoring** → Work in modular structure only
+
+**Quick reference for deprecated files:**
+- `lib/integrations/protractor.ts` → Use `lib/integrations/protractor/`
+- `lib/tekmetric.ts` → Use `lib/integrations/tekmetric/`
+- `lib/integrations/autoflow.ts` → Use `lib/integrations/autoflow/`
+
 ## Recent Changes
 
 **January 25, 2026:**
@@ -132,6 +146,9 @@ See **`TECHNICAL_DEBT_REVIEW.md`** for original analysis and phase plan.
 - Modularized AutoFlow DVI integration with self-contained structure
 - Implemented auto-registration pattern for all integration adapters
 - Maintained backward compatibility through re-exports in main index
+- Added deprecation notices to all legacy integration files with migration guidance
+- Created DEPRECATED.md documenting legacy files and their modular replacements
+- Standardized admin panel colors to mos-blue (#3C81C3) brand color
 
 **January 24, 2026:**
 - Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
