@@ -156,6 +156,7 @@ Legacy integration files have been marked as deprecated but remain functional fo
 - **SMS Adapter Consistency (Issue #3)**: Created TekmetricAdapter and AutoFlowAdapter implementing ISMSAdapter interface; all three SMS providers now have consistent adapter implementations registered with SMSAdapterRegistry
 - **Feature Flag Consolidation (Issue #5)**: Updated lib/features.ts to delegate isFeatureEnabled() and getEnabledFeatures() to the central featureResolver.ts, eliminating duplicate feature checking logic
 - **Rate Limiting Abstraction (Issue #7)**: Migrated legacy lib/integrations/protractor.ts and lib/tekmetric.ts to use shared acquireRateLimitSlot from lib/integrations/core/rate-limiter.ts
+- **Debug Logging Cleanup (Issue #12)**: Replaced ~80 console.log statements in protractor.ts and tekmetric.ts with `debugLog()` pattern. Controlled by PROTRACTOR_DEBUG/TEKMETRIC_DEBUG env vars (disabled by default)
 
 **January 24, 2026:**
 - Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
