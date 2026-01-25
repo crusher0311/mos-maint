@@ -339,7 +339,7 @@ export default function ApiUsageDashboard() {
           </label>
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 text-sm"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -536,7 +536,7 @@ export default function ApiUsageDashboard() {
                         <div
                           key={i}
                           className={`flex-1 rounded-t transition-all hover:opacity-80 ${
-                            hasErrors ? 'bg-red-400' : 'bg-purple-400'
+                            hasErrors ? 'bg-red-400' : 'bg-blue-400'
                           }`}
                           style={{ height: `${Math.max(height, 2)}%` }}
                           title={`${hour.hour}\n${hour.requests.toLocaleString()} requests\n${hasErrors ? `${hour.errors} errors (${errorRate}% error rate)` : 'No errors'}`}
@@ -546,7 +546,7 @@ export default function ApiUsageDashboard() {
                   </div>
                   <div className="flex items-center justify-end gap-3 mt-1">
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-sm bg-purple-400"></div>
+                      <div className="w-2 h-2 rounded-sm bg-blue-400"></div>
                       <span className="text-[10px] text-gray-400">OK</span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -643,7 +643,7 @@ export default function ApiUsageDashboard() {
                 <button
                   onClick={() => filterByStatus(null)}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    statusFilter === null ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    statusFilter === null ? 'bg-mos-blue text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
                   All ({drawerData.total})
@@ -654,7 +654,7 @@ export default function ApiUsageDashboard() {
                     onClick={() => filterByStatus(s.statusCode)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       statusFilter === s.statusCode 
-                        ? 'bg-purple-600 text-white' 
+                        ? 'bg-mos-blue text-white' 
                         : `${getHttpStatusColor(s.statusCode)} hover:opacity-80`
                     }`}
                   >

@@ -38,7 +38,7 @@ export function PlatformAdminLayoutClient({
           <Menu className="w-6 h-6" />
         </button>
         <div className="flex items-center gap-2 ml-3">
-          <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-mos-blue rounded-lg flex items-center justify-center">
             <Shield className="w-5 h-5 text-white" />
           </div>
           <span className="text-white font-semibold">MOS Admin</span>

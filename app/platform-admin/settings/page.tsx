@@ -324,8 +324,8 @@ export default function PlatformSettingsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Settings className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Settings className="w-5 h-5 text-mos-blue" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Trial Settings</h2>
@@ -348,12 +348,12 @@ export default function PlatformSettingsPage() {
                 min="1"
                 value={vinLimit}
                 onChange={(e) => setVinLimit(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-blue focus:border-transparent"
               />
               <button
                 onClick={() => saveSection("trial", { vinLimit: Number(vinLimit) })}
                 disabled={savingSection === "trial" || !vinLimit || Number(vinLimit) < 1}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {savingSection === "trial" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save
@@ -379,7 +379,7 @@ export default function PlatformSettingsPage() {
               <button
                 onClick={loadStripeProducts}
                 disabled={loadingProducts}
-                className="text-sm bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                className="text-sm bg-mos-blue text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
               >
                 {loadingProducts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Import from Stripe
@@ -498,53 +498,53 @@ export default function PlatformSettingsPage() {
               </div>
             </div>
 
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-purple-900 flex items-center gap-2">
+                <h3 className="font-semibold text-blue-900 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" />
                   Elite Easy Button - ${billing.elitePrice || 279.95}/month
                 </h3>
-                <span className="text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full">All Features</span>
+                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">All Features</span>
               </div>
-              <p className="text-xs text-purple-700 mb-3">All features included: Maintenance, Job Lookup, Oil Sticker, Keytags, Part Cross-Reference, Auto Booking</p>
+              <p className="text-xs text-blue-700 mb-3">All features included: Maintenance, Job Lookup, Oil Sticker, Keytags, Part Cross-Reference, Auto Booking</p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Product ID</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Product ID</label>
                   <input
                     type="text"
                     value={billing.eliteProductId || ""}
                     onChange={(e) => setBilling({ ...billing, eliteProductId: e.target.value })}
                     placeholder="prod_..."
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ID</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Price ID</label>
                   <input
                     type="text"
                     value={billing.elitePriceId || ""}
                     onChange={(e) => setBilling({ ...billing, elitePriceId: e.target.value })}
                     placeholder="price_..."
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ($)</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Price ($)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={billing.elitePrice || 279.95}
                     onChange={(e) => setBilling({ ...billing, elitePrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Included VINs</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Included VINs</label>
                   <input
                     type="number"
                     value={billing.eliteIncludedVins || 300}
                     onChange={(e) => setBilling({ ...billing, eliteIncludedVins: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
               </div>
@@ -593,39 +593,39 @@ export default function PlatformSettingsPage() {
               </div>
             </div>
 
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <h3 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
                 <Gift className="w-4 h-4" />
                 Onboarding Fee - ${billing.onboardingPrice}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Product ID</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Product ID</label>
                   <input
                     type="text"
                     value={billing.onboardingProductId}
                     onChange={(e) => setBilling({ ...billing, onboardingProductId: e.target.value })}
                     placeholder="prod_..."
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ID</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Price ID</label>
                   <input
                     type="text"
                     value={billing.onboardingPriceId}
                     onChange={(e) => setBilling({ ...billing, onboardingPriceId: e.target.value })}
                     placeholder="price_..."
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ($)</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Price ($)</label>
                   <input
                     type="number"
                     value={billing.onboardingPrice}
                     onChange={(e) => setBilling({ ...billing, onboardingPrice: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
               </div>

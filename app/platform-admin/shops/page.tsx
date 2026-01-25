@@ -318,7 +318,7 @@ export default function PlatformShopsPage() {
             placeholder="Search shops by name, location, or ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-blue focus:border-transparent"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap cursor-pointer">
@@ -326,7 +326,7 @@ export default function PlatformShopsPage() {
             type="checkbox"
             checked={groupByEnterprise}
             onChange={(e) => setGroupByEnterprise(e.target.checked)}
-            className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+            className="w-4 h-4 text-mos-blue rounded border-gray-300 focus:ring-mos-blue"
           />
           Group by Enterprise
         </label>
@@ -370,11 +370,11 @@ export default function PlatformShopsPage() {
                 <tr key={`${shop._id}-row`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-purple-100"}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-blue-100"}`}>
                         {shop.isLocked ? (
                           <Lock className="w-4 h-4 text-red-600" />
                         ) : (
-                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-purple-600"}`} />
+                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-mos-blue"}`} />
                         )}
                       </div>
                       <div>
@@ -387,7 +387,7 @@ export default function PlatformShopsPage() {
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
                           )}
                           {shop.billing.plan === "demo" ? (
-                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Demo</span>
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Demo</span>
                           ) : shop.billing.plan === "enterprise" ? (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
                           ) : shop.billing.plan === "professional" ? (
@@ -416,7 +416,7 @@ export default function PlatformShopsPage() {
                         </div>
                         <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div 
-                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-purple-500"}`}
+                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-mos-blue"}`}
                             style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
                           />
                         </div>
@@ -533,7 +533,7 @@ export default function PlatformShopsPage() {
                         onClick={() => openFeatureModal(shop)}
                         disabled={actionLoading !== null}
                         title="Manage billing & features"
-                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-1.5 text-mos-blue hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
                       >
                         <Settings className="w-4 h-4" />
                       </button>
@@ -571,7 +571,7 @@ export default function PlatformShopsPage() {
                         onClick={() => accessShop(shop.shopId)}
                         disabled={impersonating !== null || shop.isLocked}
                         title={shop.isLocked ? "Shop is locked" : "Access this shop"}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-mos-blue text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {impersonating === shop.shopId ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -654,11 +654,11 @@ export default function PlatformShopsPage() {
                 <tr key={`${shop._id}-row-flat`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-purple-100"}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-blue-100"}`}>
                         {shop.isLocked ? (
                           <Lock className="w-4 h-4 text-red-600" />
                         ) : (
-                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-purple-600"}`} />
+                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-mos-blue"}`} />
                         )}
                       </div>
                       <div>
@@ -671,7 +671,7 @@ export default function PlatformShopsPage() {
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
                           )}
                           {shop.billing.plan === "demo" ? (
-                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">Demo</span>
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Demo</span>
                           ) : shop.billing.plan === "enterprise" ? (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
                           ) : shop.billing.plan === "professional" ? (
@@ -700,7 +700,7 @@ export default function PlatformShopsPage() {
                         </div>
                         <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div 
-                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-purple-500"}`}
+                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-mos-blue"}`}
                             style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
                           />
                         </div>
@@ -808,7 +808,7 @@ export default function PlatformShopsPage() {
                         onClick={() => openFeatureModal(shop)}
                         disabled={actionLoading !== null}
                         title="Manage billing & features"
-                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-1.5 text-mos-blue hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
                       >
                         <Settings className="w-4 h-4" />
                       </button>
@@ -846,7 +846,7 @@ export default function PlatformShopsPage() {
                         onClick={() => accessShop(shop.shopId)}
                         disabled={impersonating !== null || shop.isLocked}
                         title={shop.isLocked ? "Shop is locked" : "Access this shop"}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-mos-blue text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {impersonating === shop.shopId ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -892,7 +892,7 @@ export default function PlatformShopsPage() {
                   min="1"
                   value={vinInput}
                   onChange={(e) => setVinInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-blue focus:border-transparent"
                 />
                 {modalAction === "setLimit" && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -923,7 +923,7 @@ export default function PlatformShopsPage() {
               <button
                 onClick={() => vinAction(selectedShop.shopId, modalAction, modalAction === "resetLimit" ? undefined : Number(vinInput))}
                 disabled={(modalAction !== "resetLimit" && (!vinInput || Number(vinInput) < 1)) || actionLoading !== null}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {actionLoading && (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -965,7 +965,7 @@ export default function PlatformShopsPage() {
                           });
                         }
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-blue text-sm"
                     >
                       <option value="trial">Trial</option>
                       <option value="starter">Starter</option>
@@ -979,7 +979,7 @@ export default function PlatformShopsPage() {
                     <select
                       value={billingEdits.status}
                       onChange={(e) => setBillingEdits({ ...billingEdits, status: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-blue text-sm"
                     >
                       <option value="trial">Trial</option>
                       <option value="active">Active</option>
@@ -996,7 +996,7 @@ export default function PlatformShopsPage() {
                     min="1"
                     value={vinInput}
                     onChange={(e) => setVinInput(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-blue text-sm"
                   />
                 </div>
               </div>
@@ -1019,7 +1019,7 @@ export default function PlatformShopsPage() {
                         type="checkbox"
                         checked={featureEdits[feature.key as keyof ShopFeatures] === true}
                         onChange={(e) => setFeatureEdits({ ...featureEdits, [feature.key]: e.target.checked })}
-                        className="mt-0.5 w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                        className="mt-0.5 w-4 h-4 text-mos-blue border-gray-300 rounded focus:ring-mos-blue"
                       />
                       <div>
                         <div className="font-medium text-gray-900 text-sm">{feature.label}</div>
@@ -1045,7 +1045,7 @@ export default function PlatformShopsPage() {
                   featureEdits
                 )}
                 disabled={actionLoading !== null}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Save Changes

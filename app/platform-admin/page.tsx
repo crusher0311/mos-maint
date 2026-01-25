@@ -63,10 +63,10 @@ export default function PlatformAdminOverview() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Link href="/platform-admin/shops" className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-purple-200 transition-colors">
+        <Link href="/platform-admin/shops" className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-blue-200 transition-colors">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Building2 className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Building2 className="w-5 h-5 text-mos-blue" />
             </div>
             <span className="text-sm text-gray-600">Total Shops</span>
           </div>
@@ -75,7 +75,7 @@ export default function PlatformAdminOverview() {
           </div>
         </Link>
 
-        <Link href="/platform-admin/users" className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-purple-200 transition-colors">
+        <Link href="/platform-admin/users" className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-blue-200 transition-colors">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-blue-100 rounded-lg">
               <Users className="w-5 h-5 text-blue-600" />
@@ -87,7 +87,7 @@ export default function PlatformAdminOverview() {
           </div>
         </Link>
 
-        <Link href="/platform-admin/usage" className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-purple-200 transition-colors">
+        <Link href="/platform-admin/usage" className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:border-blue-200 transition-colors">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-green-100 rounded-lg">
               <DollarSign className="w-5 h-5 text-green-600" />
@@ -115,7 +115,7 @@ export default function PlatformAdminOverview() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Recent Shops</h2>
-          <Link href="/platform-admin/shops" className="text-purple-600 hover:text-purple-700 text-sm">
+          <Link href="/platform-admin/shops" className="text-mos-blue hover:text-blue-700 text-sm">
             View All
           </Link>
         </div>

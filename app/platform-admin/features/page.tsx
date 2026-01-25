@@ -300,7 +300,7 @@ export default function FeaturesManagementPage() {
             <button
               onClick={seedFeatures}
               disabled={saving}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 bg-mos-blue text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
               Seed Default Features
@@ -411,7 +411,7 @@ export default function FeaturesManagementPage() {
                         <span className="text-xs text-gray-400">None</span>
                       ) : (
                         feature.compatibleSMS.map(sms => (
-                          <span key={sms} className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                          <span key={sms} className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
                             {sms}
                           </span>
                         ))
@@ -537,7 +537,7 @@ export default function FeaturesManagementPage() {
                       onClick={() => toggleArrayValue("compatibleSMS", sms.value)}
                       className={`px-3 py-1.5 text-sm rounded-lg border ${
                         formData.compatibleSMS.includes(sms.value)
-                          ? "bg-purple-600 text-white border-purple-600"
+                          ? "bg-mos-blue text-white border-mos-blue"
                           : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                       }`}
                     >
