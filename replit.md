@@ -20,7 +20,7 @@ The design features a modern SaaS-style interface characterized by a dark sideba
 *   **Admin & Monitoring**: Comprehensive audit logging, unified API usage monitoring, Chrome Extension Version API, and a support ticketing system with email and in-app notifications.
 *   **Notification System**: Email notifications are handled via Resend API, complemented by an in-app notification bell with real-time polling.
 *   **AI Support Chatbot**: A floating chat widget utilizes OpenAI for responses, retrieves information from a knowledge base of resolved tickets, and supports chat session persistence and ticket escalation.
-*   **Sticker & Keytag Generation**: QR code generation uses the HoverCode API, sticker images are generated via `node-html-to-image`, and Dymo label printing is used for keytags with a visual designer.
+*   **Sticker & Keytag Generation**: QR code generation uses the HoverCode API, sticker images are generated via Puppeteer browser pool (`lib/browser-pool.ts`) for fast rendering, and Dymo label printing is used for keytags with a visual designer. Browser pool reuses instances (max 3, recycled after 50 uses/5min).
 *   **AI & Recommendations**: The system provides AI-powered maintenance recommendations, AI-scored job searches, smart job autocompletion, and a common failures advisor using shop data and AI.
 *   **Auto Booking**: A feature-gated system enables automated oil change appointment scheduling, including lead time configuration, holiday/business hour management, and a review queue, triggered by sticker printing.
 *   **Chrome Extension**: A side panel extension integrates with Tekmetric, offering maintenance recommendations, common failures, job history search, canned jobs, and oil change sticker printing.
