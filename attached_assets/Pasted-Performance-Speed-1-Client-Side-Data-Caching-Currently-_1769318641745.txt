@@ -1,0 +1,67 @@
+Performance & Speed
+1. Client-Side Data Caching
+Currently, dashboard components fetch data on every mount. Consider adding React Query or SWR for:
+
+Automatic caching and deduplication of requests
+Background refetching
+Stale-while-revalidate patterns
+Reduced API calls when switching between pages
+2. Lazy Loading Components
+Heavy components like the sticker designer, keytag editor, and analytics charts could be lazy-loaded using next/dynamic to reduce initial page load time.
+
+3. Database Index Audit
+You have good indexes defined, but I'd recommend:
+
+Adding compound indexes for common filter combinations (e.g., shopId + customerId + createdAt)
+Index for repair_patterns aggregation fields
+Reviewing slow query logs at /api/admin/query-stats and adding indexes for queries >500ms
+4. API Response Compression
+Enable gzip/brotli compression for API responses, especially for large job history and analytics data.
+
+UI/UX Improvements
+5. Skeleton Loading States
+Replace spinner-only loading with skeleton screens for:
+
+Dashboard cards
+Vehicle detail panels
+Job history lists
+This gives users a better sense of content structure while loading.
+
+6. Optimistic Updates
+For quick actions like adding jobs to repair orders, update the UI immediately and sync in the background. If it fails, roll back with an error toast.
+
+7. Keyboard Shortcuts
+Power users would benefit from shortcuts:
+
+Ctrl/Cmd + K for quick search
+Ctrl/Cmd + P for quick sticker print
+Arrow keys for navigating search results
+8. Better Error Recovery
+Add retry buttons on failed API calls instead of just showing error messages. Let users retry without refreshing the page.
+
+9. Mobile Responsiveness
+The dashboard likely needs touch-friendly improvements for shop owners checking on tablets.
+
+Stability & Reliability
+10. Graceful Degradation
+When external APIs (Tekmetric, Protractor, CARFAX) are unavailable, show cached data with a "last updated" timestamp instead of errors.
+
+11. Request Deduplication
+Prevent duplicate sticker generation if users double-click. Add debouncing and request deduplication.
+
+12. Health Check Endpoint
+Add /api/health that checks:
+
+Database connectivity
+External API availability
+Browser pool status
+13. Improved Circuit Breaker Visibility
+Show admins when circuit breakers are open for specific providers, so they know why certain features aren't working.
+
+Developer Experience
+14. Type Safety
+Add Zod validation schemas for API request/response to catch issues before runtime.
+
+15. Centralized Error Handling
+Create a unified error boundary and error logging system to catch and report issues consistently.
+
