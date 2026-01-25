@@ -372,7 +372,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const imageBuffer = Buffer.isBuffer(image) ? image : Buffer.from(image as ArrayBuffer);
+    const imageBuffer = Buffer.isBuffer(image) ? image : Buffer.from(image as unknown as ArrayBuffer);
 
     return new NextResponse(imageBuffer, {
       headers: {

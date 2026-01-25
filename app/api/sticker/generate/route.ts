@@ -6,6 +6,7 @@ import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types"
 import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,13 @@ const storage = new Storage({
 });
 
 async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
+  const cacheKey = logoObjectPath || logoUrl;
+  if (!cacheKey) return null;
+  
+  // Check cache first
+  const cached = cacheGet<string>('shopConfig', `logo:${cacheKey}`);
+  if (cached) return cached;
+  
   try {
     if (logoObjectPath) {
       const pathParts = logoObjectPath.split("/").filter(Boolean);
@@ -45,7 +53,9 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
           const [buffer] = await file.download();
           const [metadata] = await file.getMetadata();
           const contentType = metadata.contentType || "image/png";
-          return `data:${contentType};base64,${buffer.toString("base64")}`;
+          const result = `data:${contentType};base64,${buffer.toString("base64")}`;
+          cacheSet('shopConfig', `logo:${cacheKey}`, result, 300);
+          return result;
         }
       }
     }
@@ -55,10 +65,13 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
       if (response.ok) {
         const buffer = await response.arrayBuffer();
         const contentType = response.headers.get("content-type") || "image/png";
-        return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
+        const result = `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
+        cacheSet('shopConfig', `logo:${cacheKey}`, result, 300);
+        return result;
       }
     }
     
+    // Don't cache null results
     return null;
   } catch (error) {
     console.error("[Sticker Generate] Logo fetch failed:", error);
@@ -662,7 +675,10 @@ export async function POST(req: NextRequest) {
     const includeQR = body.includeQR !== false;
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { name: 1, stickerConfig: 1, designerLayout: 1 } }
+    );
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -672,72 +688,70 @@ export async function POST(req: NextRequest) {
     const config: StickerConfig = body.previewConfig ? { ...dbConfig, ...body.previewConfig } : dbConfig;
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
-    let logoDataUrl: string | null = null;
-    if (config.logo || config.logoObjectPath) {
-      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath);
-    }
+    // Fetch logo and QR in parallel for faster preview
+    type QrResult = { dataUri: string | null; needsUpdate: boolean; hovercodeId?: string };
+    const [logoDataUrl, qrResult]: [string | null, QrResult] = await Promise.all([
+      // Logo fetch
+      (config.logo || config.logoObjectPath)
+        ? fetchLogoAsBase64(config.logo || "", config.logoObjectPath)
+        : Promise.resolve(null),
+      // QR fetch (only if needed)
+      includeQR
+        ? (async () => {
+            // First, try cached QR (fastest)
+            if (config.cachedQrCodeDataUri) {
+              console.log("[Sticker Generate] Using cached QR code");
+              return { dataUri: config.cachedQrCodeDataUri, needsUpdate: false };
+            }
+            // Try existing HoverCode
+            if (config.hovercodeQRId) {
+              console.log(`[Sticker Generate] Fetching HoverCode QR: ${config.hovercodeQRId}`);
+              const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+              if (existingQR.dataUri) {
+                return { dataUri: existingQR.dataUri, needsUpdate: true, cacheOnly: true };
+              }
+            }
+            // Create new HoverCode
+            const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
+            const qrColor = config.colors?.primary || "#1976d2";
+            const qrBgColor = config.colors?.background || "#ffffff";
+            const shopName = shop.name || `Shop ${shopId}`;
+            const newQR = await createHovercodeQR(redirectUrl, {
+              size: 300,
+              color: qrColor,
+              backgroundColor: qrBgColor,
+              displayName: `${shopName} - Oil Sticker`,
+            });
+            if (newQR?.dataUri) {
+              return { dataUri: newQR.dataUri, needsUpdate: true, hovercodeId: newQR.id };
+            }
+            return { dataUri: null, needsUpdate: false };
+          })()
+        : Promise.resolve({ dataUri: null, needsUpdate: false }),
+    ]);
+
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
 
-    let qrDataUrl: string | null = null;
-    if (includeQR) {
-      const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-      const qrColor = config.colors?.primary || "#1976d2";
-      const qrBgColor = config.colors?.background || "#ffffff";
-      const shopName = shop.name || `Shop ${shopId}`;
-      
-      // First, try to use cached QR code (fastest, most reliable)
-      if (config.cachedQrCodeDataUri) {
-        console.log("[Sticker Generate] Using cached QR code from config");
-        qrDataUrl = config.cachedQrCodeDataUri;
+    let qrDataUrl: string | null = qrResult.dataUri;
+    
+    // Background update for caching (non-blocking)
+    if (qrResult.needsUpdate && qrDataUrl) {
+      const updateFields: Record<string, string> = {
+        "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
+      };
+      if (qrResult.hovercodeId && !config.hovercodeQRId) {
+        updateFields["stickerConfig.hovercodeQRId"] = qrResult.hovercodeId;
       }
-      
-      // If no cached QR, try existing HoverCode
-      if (!qrDataUrl && config.hovercodeQRId) {
-        console.log(`[Sticker Generate] Fetching HoverCode QR: ${config.hovercodeQRId}`);
-        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
-        if (existingQR.dataUri) {
-          qrDataUrl = existingQR.dataUri;
-          // Cache it for next time
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
-          );
-          console.log("[Sticker Generate] Cached HoverCode QR for future use");
-        }
-      }
-      
-      // If still no QR, create a new HoverCode
-      if (!qrDataUrl) {
-        const newQR = await createHovercodeQR(redirectUrl, {
-          size: 300,
-          color: qrColor,
-          backgroundColor: qrBgColor,
-          displayName: `${shopName} - Oil Sticker`,
-        });
-        
-        if (newQR?.dataUri) {
-          qrDataUrl = newQR.dataUri;
-          
-          // Save both the HoverCode ID and cache the QR image
-          const updateFields: Record<string, string> = {
-            "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
-          };
-          if (newQR.id && !config.hovercodeQRId) {
-            updateFields["stickerConfig.hovercodeQRId"] = newQR.id;
-          }
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: updateFields }
-          );
-          console.log(`[Sticker Generate] Created and cached new HoverCode QR: ${newQR.id}`);
-        }
-      }
-      
-      // Require a valid QR code - no fallback
-      if (!qrDataUrl) {
-        console.error("[Sticker Generate] Failed to get QR code from HoverCode");
-        return NextResponse.json({ error: "Failed to generate QR code. Please try refreshing the QR code in settings." }, { status: 500 });
-      }
+      db.collection("shops").updateOne(
+        { shopId },
+        { $set: updateFields }
+      ).catch(err => console.error("[Sticker Generate] Cache update failed:", err));
+    }
+
+    // Require a valid QR code if requested
+    if (includeQR && !qrDataUrl) {
+      console.error("[Sticker Generate] Failed to get QR code from HoverCode");
+      return NextResponse.json({ error: "Failed to generate QR code. Please try refreshing the QR code in settings." }, { status: 500 });
     }
 
     let html: string;
@@ -762,7 +776,7 @@ export async function POST(req: NextRequest) {
     if (designerLayout && designerLayout.elements) {
       // Debug: Log element details
       console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
-      designerLayout.elements.forEach(el => {
+      designerLayout.elements.forEach((el: DesignerElement) => {
         if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
           console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
         }
