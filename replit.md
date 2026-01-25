@@ -10,7 +10,7 @@ I prefer simple language and clear explanations. I want iterative development, w
 The application is built using Next.js 14.2.5 with React 18, Next.js API Routes, MongoDB Atlas, and Tailwind CSS, primarily in TypeScript/JavaScript.
 
 **UI/UX Decisions:**
-The design features a modern SaaS-style interface characterized by a dark sidebar, light content areas, card-based layouts, and blue as the accent color. Key UI elements include a unified integrations page, a tabbed vehicle detail page, visual data source badges for recommendations, and a "My Oil Sticker" dashboard with live QR code previews and customization options. A "Quick Sticker" feature allows rapid sticker printing with configurable units and service intervals, while keytag printing offers a visual designer with drag-and-drop editing and live preview.
+The design features a modern SaaS-style interface characterized by a dark sidebar, light content areas, card-based layouts, and blue as the accent color. Key UI elements include a unified integrations page, a tabbed vehicle detail page, visual data source badges for recommendations, and a "My Oil Sticker" dashboard with live QR code previews and customization options. A "Quick Sticker" feature allows rapid sticker printing with configurable units and service intervals, while keytag printing offers a visual designer with drag-and-drop editing and live preview. In-app guidance includes a Welcome modal for first-time users, Help Center page with searchable guides and FAQs, and reusable Tooltip components for contextual help.
 
 **Technical Implementations:**
 *   **Data Management**: MongoDB Atlas is used for caching API responses, state tracking, and normalized data storage.
