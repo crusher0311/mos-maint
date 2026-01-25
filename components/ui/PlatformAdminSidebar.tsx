@@ -23,7 +23,8 @@ import {
   Monitor,
   X,
   Package,
-  Grid3X3
+  Grid3X3,
+  Megaphone
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -37,14 +38,19 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const pathname = usePathname();
   const [openTicketCount, setOpenTicketCount] = useState(0);
   const [ticketsExpanded, setTicketsExpanded] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   const isTicketsSection = pathname?.startsWith("/platform-admin/tickets");
+  const isSettingsSection = pathname?.startsWith("/platform-admin/settings") || pathname?.startsWith("/platform-admin/announcements");
 
   useEffect(() => {
     if (isTicketsSection) {
       setTicketsExpanded(true);
     }
-  }, [isTicketsSection]);
+    if (isSettingsSection) {
+      setSettingsExpanded(true);
+    }
+  }, [isTicketsSection, isSettingsSection]);
 
   useEffect(() => {
     const fetchTicketCount = async () => {
@@ -120,11 +126,6 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       icon: <Database className="w-5 h-5" />
     },
     {
-      name: "Settings",
-      href: "/platform-admin/settings",
-      icon: <Settings className="w-5 h-5" />
-    },
-    {
       name: "Features",
       href: "/platform-admin/features",
       icon: <Package className="w-5 h-5" />
@@ -134,6 +135,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       href: "/platform-admin/plan-features",
       icon: <Grid3X3 className="w-5 h-5" />
     }
+  ];
+
+  const settingsSubItems = [
+    { name: "General", href: "/platform-admin/settings", icon: Settings },
+    { name: "Announcements", href: "/platform-admin/announcements", icon: Megaphone }
   ];
 
   const ticketSubItems = [
@@ -247,6 +253,51 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                     </Link>
                   </li>
                 ))}
+              </ul>
+            )}
+          </li>
+
+          {/* Settings Submenu */}
+          <li>
+            <button
+              onClick={() => setSettingsExpanded(!settingsExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isSettingsSection
+                  ? "bg-purple-600/20 text-purple-300"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5" />
+                <span>Settings</span>
+              </div>
+              {settingsExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            {settingsExpanded && (
+              <ul className="ml-8 mt-1 space-y-1">
+                {settingsSubItems.map((subItem) => {
+                  const Icon = subItem.icon;
+                  return (
+                    <li key={subItem.name}>
+                      <Link
+                        href={subItem.href}
+                        onClick={handleNavClick}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          isActive(subItem.href)
+                            ? "bg-purple-600 text-white"
+                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{subItem.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </li>
