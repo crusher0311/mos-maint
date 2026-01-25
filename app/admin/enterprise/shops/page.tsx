@@ -259,7 +259,7 @@ function ShopManagementContent() {
                 </div>
                 <div className="flex items-center gap-3">
                   {shop.protractor && (
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                    <span className="px-2 py-1 bg-blue-100 text-mos-blue text-xs rounded-full">
                       Protractor
                     </span>
                   )}

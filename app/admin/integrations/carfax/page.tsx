@@ -139,8 +139,8 @@ export default async function CarfaxAdminPage() {
               <div key={shop._id} className="px-6 py-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                      <span className="text-sm font-medium text-purple-700">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-sm font-medium text-mos-blue">
                         {shop.name.charAt(0).toUpperCase()}
                       </span>
                     </div>

@@ -65,7 +65,7 @@ export default async function AdminDashboard() {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
+                <div className="w-8 h-8 bg-mos-blue rounded-md flex items-center justify-center">
                   <span className="text-white text-sm font-medium">S</span>
                 </div>
               </div>
@@ -131,7 +131,7 @@ export default async function AdminDashboard() {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                <div className="w-8 h-8 bg-mos-blue rounded-md flex items-center justify-center">
                   <span className="text-white text-sm font-medium">V</span>
                 </div>
               </div>
@@ -173,7 +173,7 @@ export default async function AdminDashboard() {
                         ) : null}
                         <div className="relative flex space-x-3">
                           <div>
-                            <span className="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center ring-8 ring-white">
+                            <span className="h-8 w-8 rounded-full bg-mos-blue flex items-center justify-center ring-8 ring-white">
                               <span className="text-white text-xs font-medium">
                                 {event.source?.charAt(0)?.toUpperCase() || 'E'}
                               </span>

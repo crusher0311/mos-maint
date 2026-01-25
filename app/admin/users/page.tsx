@@ -50,7 +50,7 @@ export default async function AdminUsersPage() {
         </div>
         <Link
           href="/admin/users/new"
-          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-mos-blue hover:bg-mos-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-mos-blue"
         >
           Add New User
         </Link>
@@ -96,7 +96,7 @@ export default async function AdminUsersPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center">
+                            <div className="h-10 w-10 rounded-full bg-mos-blue flex items-center justify-center">
                               <span className="text-sm font-medium text-white">
                                 {user.email?.charAt(0)?.toUpperCase() || 'U'}
                               </span>
@@ -141,13 +141,13 @@ export default async function AdminUsersPage() {
                         <div className="flex items-center space-x-2">
                           <Link
                             href={`/admin/users/${user._id}`}
-                            className="text-indigo-600 hover:text-indigo-900"
+                            className="text-mos-blue hover:text-mos-blue-dark"
                           >
                             View
                           </Link>
                           <Link
                             href={`/admin/users/${user._id}/edit`}
-                            className="text-indigo-600 hover:text-indigo-900"
+                            className="text-mos-blue hover:text-mos-blue-dark"
                           >
                             Edit
                           </Link>

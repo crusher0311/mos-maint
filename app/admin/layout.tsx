@@ -34,7 +34,7 @@ export default async function AdminLayout({
               </span>
               <Link
                 href="/dashboard"
-                className="text-sm text-indigo-600 hover:text-indigo-500"
+                className="text-sm text-mos-blue hover:text-mos-blue-dark"
               >
                 Back to Dashboard
               </Link>

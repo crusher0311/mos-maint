@@ -52,7 +52,7 @@ export default async function AdminShopsPage() {
         </div>
         <Link
           href="/admin/shops/new"
-          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-mos-blue hover:bg-mos-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-mos-blue"
         >
           Add New Shop
         </Link>
@@ -71,7 +71,7 @@ export default async function AdminShopsPage() {
                 <div className="px-6 py-4 flex items-center justify-between">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-full bg-mos-blue flex items-center justify-center">
                         <span className="text-sm font-medium text-white">
                           {shop.name?.charAt(0)?.toUpperCase() || 'S'}
                         </span>
@@ -101,13 +101,13 @@ export default async function AdminShopsPage() {
                   <div className="flex items-center space-x-2">
                     <Link
                       href={`/admin/shops/${shop.shopId}`}
-                      className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-mos-blue"
                     >
                       View Details
                     </Link>
                     <Link
                       href={`/admin/shops/${shop.shopId}/edit`}
-                      className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-mos-blue"
                     >
                       Edit
                     </Link>
@@ -171,7 +171,7 @@ export default async function AdminShopsPage() {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                <div className="w-8 h-8 bg-mos-blue rounded-md flex items-center justify-center">
                   <span className="text-white text-sm font-medium">V</span>
                 </div>
               </div>

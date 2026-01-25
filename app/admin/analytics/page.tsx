@@ -140,7 +140,7 @@ export default async function AdminAnalyticsPage() {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
+                <div className="w-8 h-8 bg-mos-blue rounded-md flex items-center justify-center">
                   <span className="text-white text-sm font-medium">S</span>
                 </div>
               </div>
@@ -215,7 +215,7 @@ export default async function AdminAnalyticsPage() {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                <div className="w-8 h-8 bg-mos-blue rounded-md flex items-center justify-center">
                   <span className="text-white text-sm font-medium">V</span>
                 </div>
               </div>
@@ -316,7 +316,7 @@ export default async function AdminAnalyticsPage() {
                   <div className="flex items-center">
                     <div className="w-32 bg-gray-200 rounded-full h-2 mr-3">
                       <div 
-                        className="bg-indigo-500 h-2 rounded-full" 
+                        className="bg-mos-blue h-2 rounded-full" 
                         style={{ 
                           width: `${Math.min(100, (day.count / Math.max(...analytics.dailyActivity.map(d => d.count))) * 100)}%` 
                         }}
