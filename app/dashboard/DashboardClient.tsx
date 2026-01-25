@@ -5,6 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
 import { WelcomeModal } from "@/components/ui/WelcomeModal";
+import { AnnouncementBanner } from "@/components/ui/AnnouncementBanner";
 import { ReactNode } from "react";
 
 const JobLookup = dynamic(() => import("@/components/JobLookup"), {
@@ -912,6 +913,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <AnnouncementBanner />
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
             <div className="flex items-center gap-2 sm:gap-4">
