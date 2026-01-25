@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findAndResumeStaleBackfills } from "@/lib/integrations/protractor-backfill";
+import { findAndResumeStaleBackfills, runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,31 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const shopIdParam = req.nextUrl.searchParams.get("shopId");
+    
+    if (shopIdParam) {
+      const shopId = parseInt(shopIdParam, 10);
+      console.log(`[Protractor Backfill Cron] Force-starting backfill for shop ${shopId}...`);
+      
+      const db = await getDb();
+      await db.collection("backfill_progress").updateOne(
+        { shopId },
+        { $set: { inProgress: false } }
+      );
+      
+      runProtractorBackfill(shopId).then(result => {
+        console.log(`[Protractor Backfill Cron] Shop ${shopId} backfill completed:`, result);
+      }).catch(err => {
+        console.error(`[Protractor Backfill Cron] Shop ${shopId} backfill failed:`, err.message);
+      });
+      
+      return NextResponse.json({
+        ok: true,
+        message: `Backfill started for shop ${shopId}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
     console.log("[Protractor Backfill Cron] Checking for stale backfills...");
     
     const result = await findAndResumeStaleBackfills();
