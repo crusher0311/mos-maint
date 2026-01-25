@@ -34,47 +34,84 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    // Get shops with pagination
-    const [shops, total] = await Promise.all([
-      db.collection("shops")
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
+    // Get shops with pagination and stats in single aggregation
+    const [shopsResult, total] = await Promise.all([
+      db.collection("shops").aggregate([
+        { $match: query },
+        { $sort: { createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: "users",
+            let: { shopId: "$shopId" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$shopId", "$$shopId"] } } },
+              { $count: "count" }
+            ],
+            as: "userStats"
+          }
+        },
+        {
+          $lookup: {
+            from: "customers",
+            let: { shopId: "$shopId" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$shopId", "$$shopId"] } } },
+              { $count: "count" }
+            ],
+            as: "customerStats"
+          }
+        },
+        {
+          $lookup: {
+            from: "vehicles",
+            let: { shopId: "$shopId" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$shopId", "$$shopId"] } } },
+              { $count: "count" }
+            ],
+            as: "vehicleStats"
+          }
+        },
+        {
+          $lookup: {
+            from: "events",
+            let: { shopId: "$shopId" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$shopId", "$$shopId"] } } },
+              { $sort: { receivedAt: -1 } },
+              { $limit: 1 },
+              { $project: { receivedAt: 1 } }
+            ],
+            as: "lastEvent"
+          }
+        },
+        {
+          $addFields: {
+            stats: {
+              users: { $ifNull: [{ $arrayElemAt: ["$userStats.count", 0] }, 0] },
+              customers: { $ifNull: [{ $arrayElemAt: ["$customerStats.count", 0] }, 0] },
+              vehicles: { $ifNull: [{ $arrayElemAt: ["$vehicleStats.count", 0] }, 0] },
+              events: 0,
+              lastActivity: { $arrayElemAt: ["$lastEvent.receivedAt", 0] }
+            }
+          }
+        },
+        {
+          $project: {
+            userStats: 0,
+            customerStats: 0,
+            vehicleStats: 0,
+            lastEvent: 0
+          }
+        }
+      ]).toArray(),
       db.collection("shops").countDocuments(query)
     ]);
 
-    // Get stats for each shop
-    const shopsWithStats = await Promise.all(
-      shops.map(async (shop) => {
-        const [userCount, customerCount, vehicleCount, eventCount, lastActivity] = await Promise.all([
-          db.collection("users").countDocuments({ shopId: shop.shopId }),
-          db.collection("customers").countDocuments({ shopId: shop.shopId }),
-          db.collection("vehicles").countDocuments({ shopId: shop.shopId }),
-          db.collection("events").countDocuments({ shopId: shop.shopId }),
-          db.collection("events")
-            .findOne(
-              { shopId: shop.shopId },
-              { sort: { receivedAt: -1 } }
-            )
-        ]);
-
-        return {
-          ...shop,
-          stats: {
-            users: userCount,
-            customers: customerCount,
-            vehicles: vehicleCount,
-            events: eventCount,
-            lastActivity: lastActivity?.receivedAt || null
-          }
-        };
-      })
-    );
-
     return NextResponse.json({
-      shops: shopsWithStats,
+      shops: shopsResult,
       pagination: {
         page,
         limit,

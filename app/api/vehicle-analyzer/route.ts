@@ -6,6 +6,7 @@ import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/aut
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { withCache } from "@/lib/cache";
 
 // small utils
 function parseCarfaxDate(d?: string | null): Date | null {
@@ -178,21 +179,26 @@ export async function POST(req: NextRequest) {
       .toArray();
     const latestRoNumber = ros[0]?.roNumber ?? null;
 
-    // DVI
-    const autoCfg = await resolveAutoflowConfig(Number(shopId));
-    const dvi =
+    // Fetch DVI, CARFAX, and OEM data in parallel for better performance
+    const [autoCfg, carfaxCfg] = await Promise.all([
+      resolveAutoflowConfig(Number(shopId)),
+      resolveCarfaxConfig(Number(shopId)),
+    ]);
+
+    const [dvi, carfax, oem] = await Promise.all([
       latestRoNumber && autoCfg.configured
-        ? await fetchDviWithCache(Number(shopId), String(latestRoNumber), 10 * 60 * 1000)
-        : { ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." };
-
-    // CARFAX
-    const carfaxCfg = await resolveCarfaxConfig(Number(shopId));
-    const carfax = carfaxCfg.configured
-      ? await fetchCarfaxWithCache(Number(shopId), String(vin).toUpperCase(), 7 * 24 * 60 * 60 * 1000)
-      : { ok: false, error: "CARFAX not configured." as const };
-
-    // OEM
-    const oem = await getLocalOeFromMongo(String(vin));
+        ? fetchDviWithCache(Number(shopId), String(latestRoNumber), 10 * 60 * 1000)
+        : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
+      carfaxCfg.configured
+        ? fetchCarfaxWithCache(Number(shopId), String(vin).toUpperCase(), 7 * 24 * 60 * 60 * 1000)
+        : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
+      withCache(
+        'maintenanceSchedule',
+        `oem:${String(vin).toUpperCase()}`,
+        () => getLocalOeFromMongo(String(vin)),
+        86400
+      ),
+    ]);
 
     // Compact inputs
     const dviSummary = (dvi as any)?.ok
