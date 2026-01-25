@@ -170,6 +170,67 @@ const indexes: IndexDefinition[] = [
     name: 'vin_billing_vin',
     keys: { vin: 1 },
   },
+  {
+    collection: 'job_index',
+    name: 'job_index_shop_customer_date',
+    keys: { shopId: 1, customerId: 1, closedAt: -1 },
+  },
+  {
+    collection: 'job_index',
+    name: 'job_index_shop_performedAt',
+    keys: { shopId: 1, performedAt: -1 },
+  },
+  {
+    collection: 'vehicle_cache',
+    name: 'vehicle_cache_shopId_customerId',
+    keys: { shopId: 1, customerId: 1 },
+  },
+  {
+    collection: 'work_orders',
+    name: 'work_orders_shopId_status',
+    keys: { shopId: 1, status: 1, closedAt: -1 },
+  },
+  {
+    collection: 'work_orders',
+    name: 'work_orders_shopId_customerId',
+    keys: { shopId: 1, customerId: 1 },
+  },
+  {
+    collection: 'shop_repair_patterns',
+    name: 'repair_patterns_shop_ymm',
+    keys: { shopId: 1, year: 1, make: 1, model: 1 },
+  },
+  {
+    collection: 'shop_repair_patterns',
+    name: 'repair_patterns_shop_mileage_job',
+    keys: { shopId: 1, mileageBucket: 1, jobTitleNormalized: 1 },
+  },
+  {
+    collection: 'shop_repair_patterns',
+    name: 'repair_patterns_occurrences',
+    keys: { shopId: 1, occurrences: -1 },
+  },
+  {
+    collection: 'ratelimits',
+    name: 'ratelimits_bucketKey',
+    keys: { bucketKey: 1 },
+  },
+  {
+    collection: 'ratelimits',
+    name: 'ratelimits_ttl',
+    keys: { expiresAt: 1 },
+    options: { expireAfterSeconds: 0 },
+  },
+  {
+    collection: 'sticker_prints',
+    name: 'sticker_prints_shopId_vin',
+    keys: { shopId: 1, vin: 1, printedAt: -1 },
+  },
+  {
+    collection: 'auto_booking_queue',
+    name: 'auto_booking_shopId_status',
+    keys: { shopId: 1, status: 1, scheduledFor: 1 },
+  },
 ];
 
 export async function ensureIndexes(): Promise<{ created: number; existing: number; errors: string[] }> {

@@ -2,11 +2,20 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
-import JobLookup from "@/components/JobLookup";
-import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { WelcomeModal } from "@/components/ui/WelcomeModal";
 import { ReactNode } from "react";
+
+const JobLookup = dynamic(() => import("@/components/JobLookup"), {
+  ssr: false,
+  loading: () => <div className="p-4 text-gray-500">Loading job lookup...</div>
+});
+
+const CommonFailuresPanel = dynamic(() => import("@/components/CommonFailuresPanel"), {
+  ssr: false,
+  loading: () => <div className="p-4 text-gray-500">Loading common failures...</div>
+});
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
