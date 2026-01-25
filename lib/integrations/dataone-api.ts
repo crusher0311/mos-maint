@@ -321,6 +321,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     
     if (cached && cached.expiresAt > now && cached.vehicle) {
       // Cache hit with vehicle info - return cached data
+      console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
       return {
         ok: cached.data.ok,
         vin,
@@ -336,9 +337,11 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     
     // If cache hit but missing vehicle info, mark for re-fetch
     if (cached && cached.expiresAt > now && !cached.vehicle) {
+      console.log(`[DataOne Cache] HIT but missing vehicle info for squish ${squish}, re-fetching...`);
     }
     
     // Cache miss or expired - fetch from API
+    console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from API...`);
     
     // Fetch both maintenance schedule and vehicle decode in parallel
     const [apiResult, decoded] = await Promise.all([
@@ -378,6 +381,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       { upsert: true }
     );
     
+    console.log(`[DataOne Cache] Stored ${apiResult.count} items for squish ${squish}, expires ${expiresAt.toISOString()}`);
     
     return {
       ok: apiResult.ok,
@@ -405,6 +409,7 @@ export async function invalidateMaintenanceCache(vin: string): Promise<boolean> 
     const squish = toSquish(vin);
     const db = await getDb();
     const result = await db.collection("dataone_cache").deleteOne({ squish });
+    console.log(`[DataOne Cache] Invalidated cache for squish ${squish}`);
     return result.deletedCount > 0;
   } catch (error) {
     console.error("[DataOne Cache] Failed to invalidate:", error);

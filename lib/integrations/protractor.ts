@@ -278,6 +278,11 @@ function httpsRequest(
       ? crypto.createHash('md5').update(headers.connectionid).digest('hex').slice(0, 8)
       : 'none';
     
+    console.log(`[Protractor Debug] Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
+    console.log(`[Protractor Debug] ${method} ${url.pathname}`);
+    console.log(`[Protractor Debug] Headers: ${Object.keys(headers).join(', ')}`);
+    console.log(`[Protractor Debug] ConnId hash: ${connIdHash}, Auth hash: ${authHash}`);
+    
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
@@ -477,6 +482,8 @@ export async function fetchActiveWorkOrders(
     const pageItems = result.data?.ItemCollection || [];
     allWorkOrders.push(...pageItems);
     
+    console.log(`[Protractor] Fetched work orders page: skip=${skip}, got ${pageItems.length}, total so far: ${allWorkOrders.length}`);
+
     // If we got fewer items than page size, we've reached the end
     if (pageItems.length < pageSize) {
       hasMore = false;
@@ -486,6 +493,7 @@ export async function fetchActiveWorkOrders(
 
     // Safety limit: max 5000 work orders (50 pages)
     if (skip >= 5000) {
+      console.log(`[Protractor] Reached safety limit of 5000 work orders`);
       hasMore = false;
     }
   }
@@ -562,9 +570,11 @@ export async function fetchActiveInspections(
   );
 
   if (!result.ok) {
+    console.log(`[Protractor] Inspections for WO ${workOrderId}: ${result.error}`);
     return { ok: false, error: result.error };
   }
 
+  console.log(`[Protractor] Inspections for WO ${workOrderId}: ${result.data?.ItemCollection?.length || 0} inspections`);
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
@@ -588,9 +598,11 @@ export async function fetchAllActiveInspections(
   );
 
   if (!result.ok) {
+    console.log(`[Protractor] WorkOrder/Inspections: ${result.error}`);
     return { ok: false, error: result.error };
   }
 
+  console.log(`[Protractor] WorkOrder/Inspections: ${result.data?.ItemCollection?.length || 0} inspections`);
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
@@ -647,7 +659,10 @@ export async function fetchInvoicesForVehicle(
     return { ok: false, error: result.error };
   }
 
+  // Debug: Log the raw response structure
   const rawData = result.data as any;
+  console.log(`[Protractor] Invoice fetch raw response keys:`, Object.keys(rawData || {}));
+  console.log(`[Protractor] Invoice fetch ItemCollection length:`, rawData?.ItemCollection?.length ?? 'undefined');
   
   // Check if data is returned in a different format (array directly, or different property name)
   let invoices: ProtractorInvoice[] = [];
@@ -706,6 +721,7 @@ export async function findCachedJobPricing(
   }
   
   if (orConditions.length === 0) {
+    console.log(`[Protractor Cache] No serviceItemId or VIN provided for job lookup`);
     return { found: false };
   }
   
@@ -714,6 +730,8 @@ export async function findCachedJobPricing(
     shopId,
     $or: orConditions,
   }).sort({ performedAt: -1 }).limit(100).toArray();
+  
+  console.log(`[Protractor Cache] Found ${jobs.length} cached jobs for vehicle (shopId: ${shopId}, serviceItemId: ${options.serviceItemId || 'N/A'}, vin: ${options.vin || 'N/A'})`);
   
   if (jobs.length === 0) {
     return { found: false };
@@ -748,6 +766,8 @@ export async function findCachedJobPricing(
     }
     
     if (matched && job.lines && job.lines.length > 0) {
+      console.log(`[Protractor Cache] Found matching job (${matchType}): "${jobTitle}" with ${job.lines.length} lines from WO#${job.workOrderNumber}`);
+      
       // Convert cached lines to Protractor format
       const protractorLines = job.lines.map((line: any) => ({
         lineType: line.lineType === 'labor' ? 'Labor' : 'Material',
@@ -769,6 +789,7 @@ export async function findCachedJobPricing(
     }
   }
   
+  console.log(`[Protractor Cache] No matching job found for "${options.jobTitle}" (code: ${options.jobCode})`);
   return { found: false };
 }
 
@@ -1147,6 +1168,7 @@ export async function fetchCannedJobs(
   const errors: string[] = [];
 
   // Try GET /ServicePackageTemplate first (this is what works for Protractor)
+  console.log(`[Protractor] Trying GET /ServicePackageTemplate...`);
   const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
     "/ServicePackageTemplate",
     config,
@@ -1156,6 +1178,7 @@ export async function fetchCannedJobs(
   );
 
   if (getResult.ok && getResult.data?.ItemCollection?.length) {
+    console.log(`[Protractor] Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
     return { ok: true, cannedJobs: getResult.data.ItemCollection };
   }
   
@@ -1176,6 +1199,7 @@ export async function fetchCannedJobs(
   ];
   
   for (const { endpoint, body } of postEndpoints) {
+    console.log(`[Protractor] Trying POST ${endpoint}...`);
     const result = await protractorFetch<{ 
       ItemCollection?: ProtractorCannedJob[];
       ServicePackageTemplates?: ProtractorCannedJob[];
@@ -1193,6 +1217,7 @@ export async function fetchCannedJobs(
                   result.data?.ServicePackageTemplateReadResponse?.ItemCollection;
     
     if (result.ok && items?.length) {
+      console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
       return { ok: true, cannedJobs: items };
     }
     
@@ -1290,6 +1315,7 @@ export async function fetchServicePackageTemplates(
   ];
 
   for (const endpoint of getEndpoints) {
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorServicePackageTemplate[] }>(
       endpoint,
       config,
@@ -1298,8 +1324,10 @@ export async function fetchServicePackageTemplates(
       shopId
     );
 
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}`);
     
     if (result.ok && result.data?.ItemCollection?.length) {
+      console.log(`[Protractor] Found ${result.data.ItemCollection.length} templates via GET ${endpoint}`);
       return { ok: true, templates: result.data.ItemCollection };
     }
   }
@@ -1328,6 +1356,7 @@ export async function fetchServicePackageTemplateDetail(
   ];
 
   for (const endpoint of getEndpoints) {
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
       endpoint,
       config,
@@ -1336,10 +1365,12 @@ export async function fetchServicePackageTemplateDetail(
       shopId
     );
 
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}`);
     
     if (result.ok && result.data) {
       const template = (result.data as any).ServicePackageTemplate || result.data;
       const linesCount = template.ServicePackageLines?.ItemCollection?.length || 0;
+      console.log(`[Protractor] Got template detail with ${linesCount} lines`);
       
       if (template.ID) {
         return { ok: true, template };
@@ -1379,11 +1410,13 @@ export async function resolveWorkOrderGuid(
     return { ok: false, error: "Invalid RO number" };
   }
 
+  console.log(`[Protractor] Looking up GUID for RO number: ${roNumber}`);
 
   const activeResult = await fetchActiveWorkOrders(shopId, { readInProgress: true });
   if (activeResult.ok && activeResult.workOrders) {
     const match = activeResult.workOrders.find(wo => wo.WorkOrderNumber === roNumber);
     if (match) {
+      console.log(`[Protractor] Found GUID ${match.ID} for RO ${roNumber}`);
       return { ok: true, workOrderGuid: match.ID, workOrder: match };
     }
   }
@@ -1395,6 +1428,7 @@ export async function resolveWorkOrderGuid(
   });
   
   if (cached?.data?.ID) {
+    console.log(`[Protractor] Found cached GUID ${cached.data.ID} for RO ${roNumber}`);
     const fullWO = await fetchWorkOrderById(shopId, cached.data.ID);
     if (fullWO.ok && fullWO.workOrder) {
       return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
@@ -1431,6 +1465,7 @@ export async function applyCannedJobToWorkOrder(
     };
   }
 
+  console.log(`[Protractor] Adding service package "${cannedJobCode}" to work order ${workOrderIdOrNumber}`);
 
   const resolveResult = await resolveWorkOrderGuid(shopId, workOrderIdOrNumber);
   if (!resolveResult.ok || !resolveResult.workOrderGuid || !resolveResult.workOrder) {
@@ -1440,6 +1475,7 @@ export async function applyCannedJobToWorkOrder(
   const workOrderGuid = resolveResult.workOrderGuid;
   const existingWorkOrder = resolveResult.workOrder;
 
+  console.log(`[Protractor] Work order GUID: ${workOrderGuid}, Type: ${existingWorkOrder.Type}`);
 
   if (existingWorkOrder.Type !== "WorkOrder" && existingWorkOrder.Type !== "Estimate" && existingWorkOrder.Type !== "Appointment") {
     return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
@@ -1453,6 +1489,7 @@ export async function applyCannedJobToWorkOrder(
   const cachedTemplates = cannedJobsCache?.items || [];
   
   if (cachedTemplates.length > 0) {
+    console.log(`[Protractor] Checking ${cachedTemplates.length} cached templates for "${cannedJobCode}"...`);
     const cachedMatch = cachedTemplates.find(
       (t: any) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle || t.ID === templateId
     );
@@ -1460,6 +1497,7 @@ export async function applyCannedJobToWorkOrder(
     if (cachedMatch) {
       template = cachedMatch;
       const linesCount = template?.ServicePackageLines?.ItemCollection?.length || 0;
+      console.log(`[Protractor] Found cached template: ${template?.Code}, ${linesCount} lines`);
     }
   }
   
@@ -1469,24 +1507,30 @@ export async function applyCannedJobToWorkOrder(
       const templateResult = await fetchServicePackageTemplateDetail(shopId, templateId);
       if (templateResult.ok && templateResult.template) {
         template = templateResult.template;
+        console.log(`[Protractor] Found template detail from API with ID: ${template.ID}`);
       }
     }
 
     if (!template || !template.ServicePackageLines?.ItemCollection?.length) {
+      console.log(`[Protractor] Looking up service package templates from API...`);
       const templatesResult = await fetchServicePackageTemplates(shopId);
       
       if (templatesResult.ok && templatesResult.templates?.length) {
+        console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
         const matchedSummary = templatesResult.templates.find(
           (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
         );
         
         if (matchedSummary) {
+          console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
           const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
           if (detailResult.ok && detailResult.template) {
             template = detailResult.template;
+            console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
           } else {
             // Use the summary directly - it has the ID we need
             template = matchedSummary;
+            console.log(`[Protractor] Using template summary directly (ID: ${matchedSummary.ID})`);
           }
         }
       }
@@ -1494,6 +1538,7 @@ export async function applyCannedJobToWorkOrder(
     
     // Template API not available - use direct WorkOrder POST to add service package by code
     if (!template) {
+      console.log(`[Protractor] No template found, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
       
       // Per Protractor docs: POST /WorkOrder/{workOrderID} with service package in request body
       const newServicePackage = {
@@ -1519,6 +1564,8 @@ export async function applyCannedJobToWorkOrder(
         }
       };
       
+      console.log(`[Protractor] POSTing work order update with new service package...`);
+      console.log(`[Protractor] Request payload:`, JSON.stringify({
         ServicePackages: { ItemCollection: [{ Code: cannedJobCode, Title: cannedJobTitle }] }
       }));
       
@@ -1533,6 +1580,8 @@ export async function applyCannedJobToWorkOrder(
         shopId
       );
       
+      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
+      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data || {}).substring(0, 500));
       
       if (updateResult.ok) {
         // Check if the response actually contains our service package
@@ -1543,6 +1592,7 @@ export async function applyCannedJobToWorkOrder(
         );
         
         if (added) {
+          console.log(`[Protractor] SUCCESS: Verified service package "${cannedJobCode}" in response`);
           return {
             ok: true,
             servicePackage: {
@@ -1554,6 +1604,7 @@ export async function applyCannedJobToWorkOrder(
             }
           };
         } else {
+          console.log(`[Protractor] WARNING: API returned OK but service package not found in response`);
           // Still return success since API said OK - Protractor may add it asynchronously
           return {
             ok: true,
@@ -1567,6 +1618,7 @@ export async function applyCannedJobToWorkOrder(
           };
         }
       } else {
+        console.log(`[Protractor] WorkOrder update failed: ${updateResult.error}`);
         return {
           ok: false,
           error: `Failed to add service package via WorkOrder update: ${updateResult.error}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
@@ -1593,8 +1645,10 @@ export async function applyCannedJobToWorkOrder(
   };
   
   if (template && template.ServicePackageLines?.ItemCollection?.length) {
+    console.log(`[Protractor] Using TimeClock API to insert service package lines...`);
     
     const lines = template.ServicePackageLines.ItemCollection;
+    console.log(`[Protractor] Found ${lines.length} lines in template`);
     
     const errors: string[] = [];
     let successCount = 0;
@@ -1609,6 +1663,7 @@ export async function applyCannedJobToWorkOrder(
         ServicePackageLineID: line.ID,
       };
       
+      console.log(`[Protractor] Posting to TimeClock for line ${line.ID} (${lineType})...`);
       
       const timeClockResult = await protractorFetch<any>(
         `/TimeClock/List/WorkOrder/${workOrderGuid}`,
@@ -1623,13 +1678,16 @@ export async function applyCannedJobToWorkOrder(
       
       if (timeClockResult.ok) {
         successCount++;
+        console.log(`[Protractor] TimeClock line ${line.ID} added successfully`);
       } else {
         const errorMsg = `Line ${line.ID} (${lineType}): ${timeClockResult.error || "Unknown error"}`;
         errors.push(errorMsg);
+        console.log(`[Protractor] TimeClock line failed: ${errorMsg}`);
       }
     }
     
     if (successCount === lines.length) {
+      console.log(`[Protractor] SUCCESS: Added all ${lines.length} lines via TimeClock`);
       return { 
         ok: true, 
         servicePackage: {
@@ -1767,6 +1825,7 @@ export async function applyCannedJobToWorkOrder(
   for (let i = 0; i < payloadVariants.length; i++) {
     const payload = payloadVariants[i];
     console.log(`[Protractor] Trying payload format ${i + 1}/${payloadVariants.length}...`);
+    console.log(`[Protractor] Request payload:`, JSON.stringify(payload).substring(0, 500));
     
     const updateResult = await protractorFetch<any>(
       `/WorkOrder/${workOrderGuid}`,
@@ -1779,7 +1838,9 @@ export async function applyCannedJobToWorkOrder(
       shopId
     );
     
+    console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
     if (updateResult.data) {
+      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
     }
     
     if (updateResult.ok) {
@@ -1792,6 +1853,7 @@ export async function applyCannedJobToWorkOrder(
       );
       
       if (added) {
+        console.log(`[Protractor] SUCCESS: Verified service package in response (format ${i + 1})`);
       } else {
         console.log(`[Protractor] API returned OK (format ${i + 1}) - service package likely added`);
       }

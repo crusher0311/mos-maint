@@ -145,6 +145,7 @@ export async function getVehicle(
   vehicleId: number,
   config: AutoVitalsConfig
 ): Promise<{ ok: true; data: AutoVitalsVehicle } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching vehicle ${vehicleId}`);
   
   const result = await autovitalsFetch<any>(
     "/TvpxService.asmx/GetData?sp=Vehicle_Get",
@@ -180,6 +181,7 @@ export async function getAppointment(
   appointmentId: number,
   config: AutoVitalsConfig
 ): Promise<{ ok: true; data: AutoVitalsAppointment } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching appointment ${appointmentId}`);
   
   const result = await autovitalsFetch<any>(
     "/TvpxService.asmx/GetData?sp=Appointment_Get_AdditionalInfo",
@@ -221,6 +223,7 @@ export async function getInspectionResults(
   appointmentId: number,
   config: AutoVitalsConfig
 ): Promise<{ ok: true; data: AutoVitalsInspectionResult } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching inspection results for appointment ${appointmentId}`);
   
   const result = await autovitalsFetch<any>(
     "/TvpxService.asmx/GetData?sp=InspectionResults_Get",
@@ -276,6 +279,7 @@ export async function getRepairOrderJobs(
   appointmentId: number,
   config: AutoVitalsConfig
 ): Promise<{ ok: true; data: AutoVitalsJob[] } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching RO jobs for appointment ${appointmentId}`);
   
   const result = await autovitalsFetch<any>(
     "/TvpxService.asmx/GetData?sp=VehicleRepairOrderJobs_Get",
@@ -319,6 +323,7 @@ export async function getAppointmentUpdates(
   timestamp?: number,
   lastUpdate?: string
 ): Promise<{ ok: true; data: AutoVitalsAppointment[] } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching appointment updates`);
   
   const result = await autovitalsFetch<any>(
     "/TvpxService.asmx/GetData?sp=Appointments_GetUpdates",
@@ -365,6 +370,7 @@ export async function getAppointmentUpdates(
 export async function getTechInfo(
   config: AutoVitalsConfig
 ): Promise<{ ok: true; data: any } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching tech info`);
   
   return autovitalsFetch<any>(
     "/TvpxService.asmx/GetData?sp=TechInfo_Get2",
@@ -381,6 +387,7 @@ export async function getTechInfo(
 export async function getServerSettings(
   config: AutoVitalsConfig
 ): Promise<{ ok: true; data: any } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Fetching server settings`);
   
   return autovitalsFetch<any>(
     "/TvpxService.asmx/GetServerSettingsUpdates",
@@ -496,6 +503,7 @@ export async function getShopAutoVitalsConfig(shopId: string | number): Promise<
 export async function testAutoVitalsConnection(
   config: AutoVitalsConfig
 ): Promise<{ ok: true; shopName?: string } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Testing connection for shop ${config.shopId}`);
   
   const result = await getServerSettings(config);
   
@@ -512,6 +520,7 @@ export async function testAutoVitalsConnection(
 export async function loginWithCodes(
   credentials: AutoVitalsCredentials
 ): Promise<{ ok: true; config: AutoVitalsConfig; shopName?: string } | { ok: false; error: string }> {
+  console.log(`[AutoVitals] Logging in with welcome code`);
   
   const { welcomeCode, personalCode } = credentials;
   
@@ -641,6 +650,7 @@ export async function fetchAutoVitalsInspectionByVin(
     : Infinity;
   
   if (cachedInspection && cacheAge < ttlMs && cachedInspection.items?.length > 0) {
+    console.log(`[AutoVitals] Using cached inspection for VIN ${vin}, age: ${Math.round(cacheAge / 1000 / 60)}m`);
     return {
       ok: true,
       inspection: cachedInspection as AutoVitalsInspectionResult,
