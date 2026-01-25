@@ -1,5 +1,6 @@
 import { Collection, Db, Filter, FindOptions, UpdateFilter, UpdateOptions, Document, OptionalUnlessRequiredId, WithId } from "mongodb";
 import { getDb } from "@/lib/mongo";
+import { withQueryMonitoring } from "@/lib/query-monitor";
 
 export abstract class BaseRepository<T extends Document> {
   protected abstract collectionName: string;
@@ -10,19 +11,25 @@ export abstract class BaseRepository<T extends Document> {
   }
   
   async findOne(filter: Filter<T>): Promise<WithId<T> | null> {
-    const collection = await this.getCollection();
-    return collection.findOne(filter);
+    return withQueryMonitoring(this.collectionName, 'findOne', async () => {
+      const collection = await this.getCollection();
+      return collection.findOne(filter);
+    });
   }
   
   async findMany(filter: Filter<T>, options?: FindOptions<T>): Promise<WithId<T>[]> {
-    const collection = await this.getCollection();
-    return collection.find(filter, options).toArray();
+    return withQueryMonitoring(this.collectionName, 'findMany', async () => {
+      const collection = await this.getCollection();
+      return collection.find(filter, options).toArray();
+    });
   }
   
   async insertOne(doc: OptionalUnlessRequiredId<T>): Promise<string> {
-    const collection = await this.getCollection();
-    const result = await collection.insertOne(doc);
-    return result.insertedId.toString();
+    return withQueryMonitoring(this.collectionName, 'insertOne', async () => {
+      const collection = await this.getCollection();
+      const result = await collection.insertOne(doc);
+      return result.insertedId.toString();
+    });
   }
   
   async updateOne(
@@ -30,9 +37,11 @@ export abstract class BaseRepository<T extends Document> {
     update: UpdateFilter<T>,
     options?: UpdateOptions
   ): Promise<boolean> {
-    const collection = await this.getCollection();
-    const result = await collection.updateOne(filter, update, options);
-    return result.modifiedCount > 0 || result.upsertedCount > 0;
+    return withQueryMonitoring(this.collectionName, 'updateOne', async () => {
+      const collection = await this.getCollection();
+      const result = await collection.updateOne(filter, update, options);
+      return result.modifiedCount > 0 || result.upsertedCount > 0;
+    });
   }
   
   async upsertOne(
@@ -43,9 +52,11 @@ export abstract class BaseRepository<T extends Document> {
   }
   
   async deleteOne(filter: Filter<T>): Promise<boolean> {
-    const collection = await this.getCollection();
-    const result = await collection.deleteOne(filter);
-    return result.deletedCount > 0;
+    return withQueryMonitoring(this.collectionName, 'deleteOne', async () => {
+      const collection = await this.getCollection();
+      const result = await collection.deleteOne(filter);
+      return result.deletedCount > 0;
+    });
   }
   
   async count(filter: Filter<T>): Promise<number> {

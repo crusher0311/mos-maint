@@ -80,6 +80,17 @@ export async function GET(req: NextRequest) {
             let: { shopId: "$shopId" },
             pipeline: [
               { $match: { $expr: { $eq: ["$shopId", "$$shopId"] } } },
+              { $count: "count" }
+            ],
+            as: "eventStats"
+          }
+        },
+        {
+          $lookup: {
+            from: "events",
+            let: { shopId: "$shopId" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$shopId", "$$shopId"] } } },
               { $sort: { receivedAt: -1 } },
               { $limit: 1 },
               { $project: { receivedAt: 1 } }
@@ -93,7 +104,7 @@ export async function GET(req: NextRequest) {
               users: { $ifNull: [{ $arrayElemAt: ["$userStats.count", 0] }, 0] },
               customers: { $ifNull: [{ $arrayElemAt: ["$customerStats.count", 0] }, 0] },
               vehicles: { $ifNull: [{ $arrayElemAt: ["$vehicleStats.count", 0] }, 0] },
-              events: 0,
+              events: { $ifNull: [{ $arrayElemAt: ["$eventStats.count", 0] }, 0] },
               lastActivity: { $arrayElemAt: ["$lastEvent.receivedAt", 0] }
             }
           }
@@ -103,6 +114,7 @@ export async function GET(req: NextRequest) {
             userStats: 0,
             customerStats: 0,
             vehicleStats: 0,
+            eventStats: 0,
             lastEvent: 0
           }
         }
