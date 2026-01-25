@@ -1,59 +1,72 @@
-/**
- * @deprecated This file is deprecated and will be removed in a future version.
- * 
- * MIGRATION: Use the modular Protractor integration instead:
- * 
- * ```typescript
- * // Instead of:
- * import { fetchWorkOrderById, getVehicleByVin } from '@/lib/integrations/protractor';
- * 
- * // Use:
- * import { protractorAdapter } from '@/lib/integrations/protractor';
- * const result = await protractorAdapter.getWorkOrder(shopId, workOrderId);
- * 
- * // Or use the facade for auto-detection:
- * import { integrationFacade } from '@/lib/integrations';
- * const adapter = await integrationFacade.getConfiguredAdapter(shopId);
- * ```
- * 
- * See DEPRECATED.md for full migration guide.
- * New modular code: lib/integrations/protractor/
- */
-
-// Runtime warning removed - this file is used as backing implementation for modular re-exports
-// Direct imports should use: import { ... } from '@/lib/integrations/protractor';
-
 // Note: "server-only" import removed to allow standalone script usage
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
-import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { acquireRateLimitSlot as acquireSharedRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
+import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
-
-// Debug logging - disabled in production
-const DEBUG = process.env.PROTRACTOR_DEBUG === 'true';
-function debugLog(...args: unknown[]): void {
-  if (DEBUG) console.log('[Protractor Debug]', ...args);
-}
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process
 const protractorConcurrencyLimit = pLimit(3);
 
-// Rate limiting now handled by shared abstraction
+// Local rate limiter: 5 requests per second (enforced per-process)
 const RATE_LIMIT_RPS = 5;
+const RATE_LIMIT_INTERVAL_MS = 1000 / RATE_LIMIT_RPS; // 200ms between requests
+let lastRequestTime = 0;
+const rateLimitQueue: (() => void)[] = [];
+let isProcessingQueue = false;
 
 /**
- * Acquire rate limit slot with both local and distributed enforcement.
- * Delegates to shared rate limiter abstraction.
+ * Acquire rate limit slot with both local (5 rps) and distributed (300 rpm) enforcement.
+ * The distributed limiter uses MongoDB for cross-worker coordination.
+ * Returns false if circuit breaker is open.
  */
 async function acquireRateLimitSlot(): Promise<{ acquired: boolean }> {
-  const result = await acquireSharedRateLimitSlot('protractor', RATE_LIMIT_RPS);
-  return { acquired: result.acquired };
+  // First: acquire distributed slot (blocks if global limit exceeded)
+  const distributed = await acquireDistributedRateLimitSlot('protractor');
+  if (!distributed.acquired) {
+    if (distributed.circuitOpen) {
+      console.warn(`[Protractor] Circuit breaker open, skipping request`);
+      return { acquired: false };
+    }
+    console.warn(`[Protractor] Rate limit slot not acquired after ${distributed.waitedMs}ms, skipping request`);
+    return { acquired: false };
+  }
+  
+  // Then: local per-process queue (ensures 5 rps within this process)
+  await new Promise<void>((resolve) => {
+    rateLimitQueue.push(resolve);
+    processRateLimitQueue();
+  });
+  
+  return { acquired: true };
 }
 
+function processRateLimitQueue(): void {
+  if (isProcessingQueue || rateLimitQueue.length === 0) return;
+  isProcessingQueue = true;
+  
+  const processNext = () => {
+    if (rateLimitQueue.length === 0) {
+      isProcessingQueue = false;
+      return;
+    }
+    
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    const waitTime = Math.max(0, RATE_LIMIT_INTERVAL_MS - timeSinceLastRequest);
+    
+    setTimeout(() => {
+      lastRequestTime = Date.now();
+      const resolve = rateLimitQueue.shift();
+      if (resolve) resolve();
+      processNext();
+    }, waitTime);
+  };
+  
+  processNext();
+}
 
 export type ProtractorConfig = {
   connectionId: string;
@@ -265,10 +278,10 @@ function httpsRequest(
       ? crypto.createHash('md5').update(headers.connectionid).digest('hex').slice(0, 8)
       : 'none';
     
-    debugLog(`Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
-    debugLog(`${method} ${url.pathname}`);
-    debugLog(`Headers: ${Object.keys(headers).join(', ')}`);
-    debugLog(`ConnId hash: ${connIdHash}, Auth hash: ${authHash}`);
+    console.log(`[Protractor Debug] Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
+    console.log(`[Protractor Debug] ${method} ${url.pathname}`);
+    console.log(`[Protractor Debug] Headers: ${Object.keys(headers).join(', ')}`);
+    console.log(`[Protractor Debug] ConnId hash: ${connIdHash}, Auth hash: ${authHash}`);
     
     const req = https.request(options, (res) => {
       let data = "";
@@ -351,7 +364,7 @@ export async function protractorFetch<T>(
       const jitter = Math.random() * 500; // Add up to 500ms jitter
       const waitMs = baseWaitMs + jitter;
       
-      debugLog(`${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
+      console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
       await new Promise(r => setTimeout(r, waitMs));
       return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId);
     }
@@ -469,7 +482,7 @@ export async function fetchActiveWorkOrders(
     const pageItems = result.data?.ItemCollection || [];
     allWorkOrders.push(...pageItems);
     
-    debugLog(`Fetched work orders page: skip=${skip}, got ${pageItems.length}, total so far: ${allWorkOrders.length}`);
+    console.log(`[Protractor] Fetched work orders page: skip=${skip}, got ${pageItems.length}, total so far: ${allWorkOrders.length}`);
 
     // If we got fewer items than page size, we've reached the end
     if (pageItems.length < pageSize) {
@@ -480,7 +493,7 @@ export async function fetchActiveWorkOrders(
 
     // Safety limit: max 5000 work orders (50 pages)
     if (skip >= 5000) {
-      debugLog(`Reached safety limit of 5000 work orders`);
+      console.log(`[Protractor] Reached safety limit of 5000 work orders`);
       hasMore = false;
     }
   }
@@ -557,11 +570,11 @@ export async function fetchActiveInspections(
   );
 
   if (!result.ok) {
-    debugLog(` Inspections for WO ${workOrderId}: ${result.error}`);
+    console.log(`[Protractor] Inspections for WO ${workOrderId}: ${result.error}`);
     return { ok: false, error: result.error };
   }
 
-  debugLog(` Inspections for WO ${workOrderId}: ${result.data?.ItemCollection?.length || 0} inspections`);
+  console.log(`[Protractor] Inspections for WO ${workOrderId}: ${result.data?.ItemCollection?.length || 0} inspections`);
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
@@ -585,11 +598,11 @@ export async function fetchAllActiveInspections(
   );
 
   if (!result.ok) {
-    debugLog(` WorkOrder/Inspections: ${result.error}`);
+    console.log(`[Protractor] WorkOrder/Inspections: ${result.error}`);
     return { ok: false, error: result.error };
   }
 
-  debugLog(` WorkOrder/Inspections: ${result.data?.ItemCollection?.length || 0} inspections`);
+  console.log(`[Protractor] WorkOrder/Inspections: ${result.data?.ItemCollection?.length || 0} inspections`);
   return { ok: true, inspections: result.data?.ItemCollection || [] };
 }
 
@@ -648,8 +661,8 @@ export async function fetchInvoicesForVehicle(
 
   // Debug: Log the raw response structure
   const rawData = result.data as any;
-  debugLog(` Invoice fetch raw response keys:`, Object.keys(rawData || {}));
-  debugLog(` Invoice fetch ItemCollection length:`, rawData?.ItemCollection?.length ?? 'undefined');
+  console.log(`[Protractor] Invoice fetch raw response keys:`, Object.keys(rawData || {}));
+  console.log(`[Protractor] Invoice fetch ItemCollection length:`, rawData?.ItemCollection?.length ?? 'undefined');
   
   // Check if data is returned in a different format (array directly, or different property name)
   let invoices: ProtractorInvoice[] = [];
@@ -708,7 +721,7 @@ export async function findCachedJobPricing(
   }
   
   if (orConditions.length === 0) {
-    debugLog(`[Cache] No serviceItemId or VIN provided for job lookup`);
+    console.log(`[Protractor Cache] No serviceItemId or VIN provided for job lookup`);
     return { found: false };
   }
   
@@ -718,7 +731,7 @@ export async function findCachedJobPricing(
     $or: orConditions,
   }).sort({ performedAt: -1 }).limit(100).toArray();
   
-  debugLog(`[Cache] Found ${jobs.length} cached jobs for vehicle (shopId: ${shopId}, serviceItemId: ${options.serviceItemId || 'N/A'}, vin: ${options.vin || 'N/A'})`);
+  console.log(`[Protractor Cache] Found ${jobs.length} cached jobs for vehicle (shopId: ${shopId}, serviceItemId: ${options.serviceItemId || 'N/A'}, vin: ${options.vin || 'N/A'})`);
   
   if (jobs.length === 0) {
     return { found: false };
@@ -753,7 +766,7 @@ export async function findCachedJobPricing(
     }
     
     if (matched && job.lines && job.lines.length > 0) {
-      debugLog(`[Cache] Found matching job (${matchType}): "${jobTitle}" with ${job.lines.length} lines from WO#${job.workOrderNumber}`);
+      console.log(`[Protractor Cache] Found matching job (${matchType}): "${jobTitle}" with ${job.lines.length} lines from WO#${job.workOrderNumber}`);
       
       // Convert cached lines to Protractor format
       const protractorLines = job.lines.map((line: any) => ({
@@ -776,7 +789,7 @@ export async function findCachedJobPricing(
     }
   }
   
-  debugLog(`[Cache] No matching job found for "${options.jobTitle}" (code: ${options.jobCode})`);
+  console.log(`[Protractor Cache] No matching job found for "${options.jobTitle}" (code: ${options.jobCode})`);
   return { found: false };
 }
 
@@ -1155,7 +1168,7 @@ export async function fetchCannedJobs(
   const errors: string[] = [];
 
   // Try GET /ServicePackageTemplate first (this is what works for Protractor)
-  debugLog(` Trying GET /ServicePackageTemplate...`);
+  console.log(`[Protractor] Trying GET /ServicePackageTemplate...`);
   const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
     "/ServicePackageTemplate",
     config,
@@ -1165,7 +1178,7 @@ export async function fetchCannedJobs(
   );
 
   if (getResult.ok && getResult.data?.ItemCollection?.length) {
-    debugLog(` Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
+    console.log(`[Protractor] Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
     return { ok: true, cannedJobs: getResult.data.ItemCollection };
   }
   
@@ -1186,7 +1199,7 @@ export async function fetchCannedJobs(
   ];
   
   for (const { endpoint, body } of postEndpoints) {
-    debugLog(` Trying POST ${endpoint}...`);
+    console.log(`[Protractor] Trying POST ${endpoint}...`);
     const result = await protractorFetch<{ 
       ItemCollection?: ProtractorCannedJob[];
       ServicePackageTemplates?: ProtractorCannedJob[];
@@ -1204,7 +1217,7 @@ export async function fetchCannedJobs(
                   result.data?.ServicePackageTemplateReadResponse?.ItemCollection;
     
     if (result.ok && items?.length) {
-      debugLog(` Found ${items.length} service packages via POST ${endpoint}`);
+      console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
       return { ok: true, cannedJobs: items };
     }
     
@@ -1302,7 +1315,7 @@ export async function fetchServicePackageTemplates(
   ];
 
   for (const endpoint of getEndpoints) {
-    debugLog(` Trying GET ${endpoint}...`);
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<{ ItemCollection?: ProtractorServicePackageTemplate[] }>(
       endpoint,
       config,
@@ -1311,10 +1324,10 @@ export async function fetchServicePackageTemplates(
       shopId
     );
 
-    debugLog(` GET ${endpoint}: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}`);
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}, items=${result.data?.ItemCollection?.length || 0}`);
     
     if (result.ok && result.data?.ItemCollection?.length) {
-      debugLog(` Found ${result.data.ItemCollection.length} templates via GET ${endpoint}`);
+      console.log(`[Protractor] Found ${result.data.ItemCollection.length} templates via GET ${endpoint}`);
       return { ok: true, templates: result.data.ItemCollection };
     }
   }
@@ -1343,7 +1356,7 @@ export async function fetchServicePackageTemplateDetail(
   ];
 
   for (const endpoint of getEndpoints) {
-    debugLog(` Trying GET ${endpoint}...`);
+    console.log(`[Protractor] Trying GET ${endpoint}...`);
     const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
       endpoint,
       config,
@@ -1352,12 +1365,12 @@ export async function fetchServicePackageTemplateDetail(
       shopId
     );
 
-    debugLog(` GET ${endpoint}: ok=${result.ok}`);
+    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}`);
     
     if (result.ok && result.data) {
       const template = (result.data as any).ServicePackageTemplate || result.data;
       const linesCount = template.ServicePackageLines?.ItemCollection?.length || 0;
-      debugLog(` Got template detail with ${linesCount} lines`);
+      console.log(`[Protractor] Got template detail with ${linesCount} lines`);
       
       if (template.ID) {
         return { ok: true, template };
@@ -1366,7 +1379,7 @@ export async function fetchServicePackageTemplateDetail(
     
     // Log raw response for debugging
     if (result.error) {
-      debugLog(` GET ${endpoint} error:`, result.error);
+      console.log(`[Protractor] GET ${endpoint} error:`, result.error);
     }
   }
 
@@ -1397,13 +1410,13 @@ export async function resolveWorkOrderGuid(
     return { ok: false, error: "Invalid RO number" };
   }
 
-  debugLog(` Looking up GUID for RO number: ${roNumber}`);
+  console.log(`[Protractor] Looking up GUID for RO number: ${roNumber}`);
 
   const activeResult = await fetchActiveWorkOrders(shopId, { readInProgress: true });
   if (activeResult.ok && activeResult.workOrders) {
     const match = activeResult.workOrders.find(wo => wo.WorkOrderNumber === roNumber);
     if (match) {
-      debugLog(` Found GUID ${match.ID} for RO ${roNumber}`);
+      console.log(`[Protractor] Found GUID ${match.ID} for RO ${roNumber}`);
       return { ok: true, workOrderGuid: match.ID, workOrder: match };
     }
   }
@@ -1415,7 +1428,7 @@ export async function resolveWorkOrderGuid(
   });
   
   if (cached?.data?.ID) {
-    debugLog(` Found cached GUID ${cached.data.ID} for RO ${roNumber}`);
+    console.log(`[Protractor] Found cached GUID ${cached.data.ID} for RO ${roNumber}`);
     const fullWO = await fetchWorkOrderById(shopId, cached.data.ID);
     if (fullWO.ok && fullWO.workOrder) {
       return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
@@ -1445,14 +1458,14 @@ export async function applyCannedJobToWorkOrder(
   const updateLineEnabled = shop?.protractor?.updateWorkOrderLine === true;
   
   if (!updatePackageEnabled || !updateLineEnabled) {
-    debugLog(` Warning: Required parameters not enabled. UpdateWorkOrderPackage: ${updatePackageEnabled}, UpdateWorkOrderLine: ${updateLineEnabled}`);
+    console.log(`[Protractor] Warning: Required parameters not enabled. UpdateWorkOrderPackage: ${updatePackageEnabled}, UpdateWorkOrderLine: ${updateLineEnabled}`);
     return { 
       ok: false, 
       error: "Required Protractor parameters not enabled. Please enable 'UpdateWorkOrderPackage' and 'UpdateWorkOrderLine' in your Protractor Integration settings (Actions → Add → set value to 'Yes') and toggle them on in MOS Settings." 
     };
   }
 
-  debugLog(` Adding service package "${cannedJobCode}" to work order ${workOrderIdOrNumber}`);
+  console.log(`[Protractor] Adding service package "${cannedJobCode}" to work order ${workOrderIdOrNumber}`);
 
   const resolveResult = await resolveWorkOrderGuid(shopId, workOrderIdOrNumber);
   if (!resolveResult.ok || !resolveResult.workOrderGuid || !resolveResult.workOrder) {
@@ -1462,7 +1475,7 @@ export async function applyCannedJobToWorkOrder(
   const workOrderGuid = resolveResult.workOrderGuid;
   const existingWorkOrder = resolveResult.workOrder;
 
-  debugLog(` Work order GUID: ${workOrderGuid}, Type: ${existingWorkOrder.Type}`);
+  console.log(`[Protractor] Work order GUID: ${workOrderGuid}, Type: ${existingWorkOrder.Type}`);
 
   if (existingWorkOrder.Type !== "WorkOrder" && existingWorkOrder.Type !== "Estimate" && existingWorkOrder.Type !== "Appointment") {
     return { ok: false, error: `Cannot add service packages to work order type: ${existingWorkOrder.Type}` };
@@ -1476,7 +1489,7 @@ export async function applyCannedJobToWorkOrder(
   const cachedTemplates = cannedJobsCache?.items || [];
   
   if (cachedTemplates.length > 0) {
-    debugLog(` Checking ${cachedTemplates.length} cached templates for "${cannedJobCode}"...`);
+    console.log(`[Protractor] Checking ${cachedTemplates.length} cached templates for "${cannedJobCode}"...`);
     const cachedMatch = cachedTemplates.find(
       (t: any) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle || t.ID === templateId
     );
@@ -1484,7 +1497,7 @@ export async function applyCannedJobToWorkOrder(
     if (cachedMatch) {
       template = cachedMatch;
       const linesCount = template?.ServicePackageLines?.ItemCollection?.length || 0;
-      debugLog(` Found cached template: ${template?.Code}, ${linesCount} lines`);
+      console.log(`[Protractor] Found cached template: ${template?.Code}, ${linesCount} lines`);
     }
   }
   
@@ -1494,30 +1507,30 @@ export async function applyCannedJobToWorkOrder(
       const templateResult = await fetchServicePackageTemplateDetail(shopId, templateId);
       if (templateResult.ok && templateResult.template) {
         template = templateResult.template;
-        debugLog(` Found template detail from API with ID: ${template.ID}`);
+        console.log(`[Protractor] Found template detail from API with ID: ${template.ID}`);
       }
     }
 
     if (!template || !template.ServicePackageLines?.ItemCollection?.length) {
-      debugLog(` Looking up service package templates from API...`);
+      console.log(`[Protractor] Looking up service package templates from API...`);
       const templatesResult = await fetchServicePackageTemplates(shopId);
       
       if (templatesResult.ok && templatesResult.templates?.length) {
-        debugLog(` Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
+        console.log(`[Protractor] Found ${templatesResult.templates.length} templates, searching for "${cannedJobCode}"...`);
         const matchedSummary = templatesResult.templates.find(
           (t) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle
         );
         
         if (matchedSummary) {
-          debugLog(` Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
+          console.log(`[Protractor] Found template summary by code/title: ${matchedSummary.ID}, fetching details...`);
           const detailResult = await fetchServicePackageTemplateDetail(shopId, matchedSummary.ID);
           if (detailResult.ok && detailResult.template) {
             template = detailResult.template;
-            debugLog(` Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
+            console.log(`[Protractor] Got template detail with ${template.ServicePackageLines?.ItemCollection?.length || 0} lines`);
           } else {
             // Use the summary directly - it has the ID we need
             template = matchedSummary;
-            debugLog(` Using template summary directly (ID: ${matchedSummary.ID})`);
+            console.log(`[Protractor] Using template summary directly (ID: ${matchedSummary.ID})`);
           }
         }
       }
@@ -1525,7 +1538,7 @@ export async function applyCannedJobToWorkOrder(
     
     // Template API not available - use direct WorkOrder POST to add service package by code
     if (!template) {
-      debugLog(` No template found, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
+      console.log(`[Protractor] No template found, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
       
       // Per Protractor docs: POST /WorkOrder/{workOrderID} with service package in request body
       const newServicePackage = {
@@ -1551,8 +1564,8 @@ export async function applyCannedJobToWorkOrder(
         }
       };
       
-      debugLog(` POSTing work order update with new service package...`);
-      debugLog(` Request payload:`, JSON.stringify({
+      console.log(`[Protractor] POSTing work order update with new service package...`);
+      console.log(`[Protractor] Request payload:`, JSON.stringify({
         ServicePackages: { ItemCollection: [{ Code: cannedJobCode, Title: cannedJobTitle }] }
       }));
       
@@ -1567,8 +1580,8 @@ export async function applyCannedJobToWorkOrder(
         shopId
       );
       
-      debugLog(` WorkOrder update response: ok=${updateResult.ok}`);
-      debugLog(` Response data:`, JSON.stringify(updateResult.data || {}).substring(0, 500));
+      console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
+      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data || {}).substring(0, 500));
       
       if (updateResult.ok) {
         // Check if the response actually contains our service package
@@ -1579,7 +1592,7 @@ export async function applyCannedJobToWorkOrder(
         );
         
         if (added) {
-          debugLog(` SUCCESS: Verified service package "${cannedJobCode}" in response`);
+          console.log(`[Protractor] SUCCESS: Verified service package "${cannedJobCode}" in response`);
           return {
             ok: true,
             servicePackage: {
@@ -1591,7 +1604,7 @@ export async function applyCannedJobToWorkOrder(
             }
           };
         } else {
-          debugLog(` WARNING: API returned OK but service package not found in response`);
+          console.log(`[Protractor] WARNING: API returned OK but service package not found in response`);
           // Still return success since API said OK - Protractor may add it asynchronously
           return {
             ok: true,
@@ -1605,7 +1618,7 @@ export async function applyCannedJobToWorkOrder(
           };
         }
       } else {
-        debugLog(` WorkOrder update failed: ${updateResult.error}`);
+        console.log(`[Protractor] WorkOrder update failed: ${updateResult.error}`);
         return {
           ok: false,
           error: `Failed to add service package via WorkOrder update: ${updateResult.error}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
@@ -1632,10 +1645,10 @@ export async function applyCannedJobToWorkOrder(
   };
   
   if (template && template.ServicePackageLines?.ItemCollection?.length) {
-    debugLog(` Using TimeClock API to insert service package lines...`);
+    console.log(`[Protractor] Using TimeClock API to insert service package lines...`);
     
     const lines = template.ServicePackageLines.ItemCollection;
-    debugLog(` Found ${lines.length} lines in template`);
+    console.log(`[Protractor] Found ${lines.length} lines in template`);
     
     const errors: string[] = [];
     let successCount = 0;
@@ -1650,7 +1663,7 @@ export async function applyCannedJobToWorkOrder(
         ServicePackageLineID: line.ID,
       };
       
-      debugLog(` Posting to TimeClock for line ${line.ID} (${lineType})...`);
+      console.log(`[Protractor] Posting to TimeClock for line ${line.ID} (${lineType})...`);
       
       const timeClockResult = await protractorFetch<any>(
         `/TimeClock/List/WorkOrder/${workOrderGuid}`,
@@ -1665,16 +1678,16 @@ export async function applyCannedJobToWorkOrder(
       
       if (timeClockResult.ok) {
         successCount++;
-        debugLog(` TimeClock line ${line.ID} added successfully`);
+        console.log(`[Protractor] TimeClock line ${line.ID} added successfully`);
       } else {
         const errorMsg = `Line ${line.ID} (${lineType}): ${timeClockResult.error || "Unknown error"}`;
         errors.push(errorMsg);
-        debugLog(` TimeClock line failed: ${errorMsg}`);
+        console.log(`[Protractor] TimeClock line failed: ${errorMsg}`);
       }
     }
     
     if (successCount === lines.length) {
-      debugLog(` SUCCESS: Added all ${lines.length} lines via TimeClock`);
+      console.log(`[Protractor] SUCCESS: Added all ${lines.length} lines via TimeClock`);
       return { 
         ok: true, 
         servicePackage: {
@@ -1688,11 +1701,11 @@ export async function applyCannedJobToWorkOrder(
     }
     
     if (errors.length > 0 && successCount === 0) {
-      debugLog(` TimeClock approach failed for all lines: ${errors.join("; ")}`);
-      debugLog(` Falling back to WorkOrder POST with lines included...`);
+      console.log(`[Protractor] TimeClock approach failed for all lines: ${errors.join("; ")}`);
+      console.log(`[Protractor] Falling back to WorkOrder POST with lines included...`);
       // Fall through to WorkOrder POST approach below
     } else if (errors.length > 0) {
-      debugLog(` Partial success: ${successCount}/${lines.length} lines added. Some lines failed: ${errors.join("; ")}`);
+      console.log(`[Protractor] Partial success: ${successCount}/${lines.length} lines added. Some lines failed: ${errors.join("; ")}`);
       // Fall through to try WorkOrder POST approach
     }
   }
@@ -1706,7 +1719,7 @@ export async function applyCannedJobToWorkOrder(
 
   // Try adding via WorkOrder POST with full template details including lines
   const templateLines = template.ServicePackageLines?.ItemCollection || [];
-  debugLog(` Adding via WorkOrder POST with template ID: ${template.ID} and ${templateLines.length} lines...`);
+  console.log(`[Protractor] Adding via WorkOrder POST with template ID: ${template.ID} and ${templateLines.length} lines...`);
   
   // Per Protractor docs: workOrderID should be GUID
   // Include WorkOrderID in the service package payload
@@ -1811,8 +1824,8 @@ export async function applyCannedJobToWorkOrder(
   
   for (let i = 0; i < payloadVariants.length; i++) {
     const payload = payloadVariants[i];
-    debugLog(` Trying payload format ${i + 1}/${payloadVariants.length}...`);
-    debugLog(` Request payload:`, JSON.stringify(payload).substring(0, 500));
+    console.log(`[Protractor] Trying payload format ${i + 1}/${payloadVariants.length}...`);
+    console.log(`[Protractor] Request payload:`, JSON.stringify(payload).substring(0, 500));
     
     const updateResult = await protractorFetch<any>(
       `/WorkOrder/${workOrderGuid}`,
@@ -1825,9 +1838,9 @@ export async function applyCannedJobToWorkOrder(
       shopId
     );
     
-    debugLog(` WorkOrder update response: ok=${updateResult.ok}`);
+    console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
     if (updateResult.data) {
-      debugLog(` Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
+      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
     }
     
     if (updateResult.ok) {
@@ -1840,9 +1853,9 @@ export async function applyCannedJobToWorkOrder(
       );
       
       if (added) {
-        debugLog(` SUCCESS: Verified service package in response (format ${i + 1})`);
+        console.log(`[Protractor] SUCCESS: Verified service package in response (format ${i + 1})`);
       } else {
-        debugLog(` API returned OK (format ${i + 1}) - service package likely added`);
+        console.log(`[Protractor] API returned OK (format ${i + 1}) - service package likely added`);
       }
       
       return {
@@ -1857,12 +1870,12 @@ export async function applyCannedJobToWorkOrder(
       };
     } else {
       lastError = updateResult.error || "Unknown error";
-      debugLog(` Format ${i + 1} failed: ${lastError}`);
+      console.log(`[Protractor] Format ${i + 1} failed: ${lastError}`);
     }
   }
     
   // All formats failed
-  debugLog(` All payload formats failed. Last error: ${lastError}`);
+  console.log(`[Protractor] All payload formats failed. Last error: ${lastError}`);
   return {
     ok: false,
     error: `Failed to add service package via WorkOrder update: ${lastError}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
@@ -1897,7 +1910,7 @@ export async function fetchWorkOrdersForVehicle(
   }
 
   // API not available, try cached work orders from MongoDB
-  debugLog(` API endpoint not available, checking cached work orders for serviceItemId: ${serviceItemId}`);
+  console.log(`[Protractor] API endpoint not available, checking cached work orders for serviceItemId: ${serviceItemId}`);
   const db = await getDb();
   
   // Work orders are cached with flat structure from upsertProtractorWorkOrderSnapshot
@@ -1911,7 +1924,7 @@ export async function fetchWorkOrdersForVehicle(
     .sort({ fetchedAt: -1 })
     .toArray();
 
-  debugLog(` Found ${cached.length} cached work orders`);
+  console.log(`[Protractor] Found ${cached.length} cached work orders`);
 
   if (cached.length > 0) {
     // Convert cached snapshots back to work order format
@@ -1995,7 +2008,7 @@ export async function enrichCannedJobsWithDetails(
   const batchSize = 50; // Process 50 at a time (~50/sec rate limit)
   const filterEmpty = options?.filterEmptyTitles ?? true;
   
-  debugLog(` Enriching ${jobs.length} jobs with details (filter empty titles: ${filterEmpty})...`);
+  console.log(`[Protractor] Enriching ${jobs.length} jobs with details (filter empty titles: ${filterEmpty})...`);
   
   for (let i = 0; i < jobs.length; i += batchSize) {
     const batch = jobs.slice(i, i + batchSize);
@@ -2057,7 +2070,7 @@ export async function enrichCannedJobsWithDetails(
     
     // Log progress every 500 items
     if ((i + batchSize) % 500 === 0 || i + batchSize >= jobs.length) {
-      debugLog(` Progress: ${Math.min(i + batchSize, jobs.length)}/${jobs.length} processed, ${enrichedJobs.length} kept`);
+      console.log(`[Protractor] Progress: ${Math.min(i + batchSize, jobs.length)}/${jobs.length} processed, ${enrichedJobs.length} kept`);
     }
     
     // 1 second delay per batch of 50 = ~50/sec rate limit
@@ -2066,7 +2079,7 @@ export async function enrichCannedJobsWithDetails(
     }
   }
   
-  debugLog(` Enrichment complete: ${enrichedJobs.length} jobs with titles/lines out of ${jobs.length} total`);
+  console.log(`[Protractor] Enrichment complete: ${enrichedJobs.length} jobs with titles/lines out of ${jobs.length} total`);
   return enrichedJobs;
 }
 
@@ -2096,7 +2109,7 @@ export async function fetchCannedJobsWithCache(
   const hasItems = cached?.items?.length > 0;
   
   if (!options?.forceRefresh && isEnriched && hasItems) {
-    debugLog(` Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
+    console.log(`[Protractor] Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
     return {
       ok: true,
       cannedJobs: normalizeCachedItems(cached.items),
@@ -2106,7 +2119,7 @@ export async function fetchCannedJobsWithCache(
 
   // If no enriched cache exists, return basic list immediately and run enrichment in background
   if (!isEnriched || !hasItems) {
-    debugLog(` No enriched cache found for shop ${shopId}, fetching basic list...`);
+    console.log(`[Protractor] No enriched cache found for shop ${shopId}, fetching basic list...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
@@ -2137,7 +2150,7 @@ export async function fetchCannedJobsWithCache(
     );
 
     // Run enrichment in background (fire and forget) - don't block the response
-    debugLog(` Starting background enrichment for ${listResult.cannedJobs.length} jobs...`);
+    console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs...`);
     enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, { filterEmptyTitles: true })
       .then(async (enrichedJobs) => {
         const enrichedNow = new Date();
@@ -2151,7 +2164,7 @@ export async function fetchCannedJobsWithCache(
             },
           }
         );
-        debugLog(` Background enrichment complete: ${enrichedJobs.length} jobs saved`);
+        console.log(`[Protractor] Background enrichment complete: ${enrichedJobs.length} jobs saved`);
       })
       .catch((err) => {
         console.error(`[Protractor] Background enrichment failed:`, err);
@@ -2167,7 +2180,7 @@ export async function fetchCannedJobsWithCache(
 
   // Force refresh requested - re-run deep sync
   if (options?.forceRefresh) {
-    debugLog(` Force refresh requested for shop ${shopId}, re-running deep sync...`);
+    console.log(`[Protractor] Force refresh requested for shop ${shopId}, re-running deep sync...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
@@ -2240,7 +2253,7 @@ export async function createProtractorAppointment(
 ): Promise<ProtractorAppointmentResult> {
   const { shopId, contactId, vehicleId, scheduledTime, duration, notes, serviceAdvisorId } = params;
   
-  debugLog(` Creating appointment for contact ${contactId}, vehicle ${vehicleId} at ${scheduledTime}`);
+  console.log(`[Protractor] Creating appointment for contact ${contactId}, vehicle ${vehicleId} at ${scheduledTime}`);
   
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -2270,7 +2283,7 @@ export async function createProtractorAppointment(
   if (notes) body.Note = notes;  // Field is "Note" not "Notes"
   if (serviceAdvisorId) body.ServiceAdvisor = { ID: serviceAdvisorId };
   
-  debugLog(` POST /WorkOrder/${newWorkOrderId} with body:`, JSON.stringify(body));
+  console.log(`[Protractor] POST /WorkOrder/${newWorkOrderId} with body:`, JSON.stringify(body));
   
   const result = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${newWorkOrderId}`,
@@ -2285,7 +2298,7 @@ export async function createProtractorAppointment(
     return { ok: false, error: result.error || "Failed to create appointment" };
   }
   
-  debugLog(` Appointment created with ID: ${result.data.ID}, WorkOrderNumber: ${result.data.WorkOrderNumber}`);
+  console.log(`[Protractor] Appointment created with ID: ${result.data.ID}, WorkOrderNumber: ${result.data.WorkOrderNumber}`);
   return { 
     ok: true, 
     appointmentId: result.data.ID,
@@ -2397,7 +2410,7 @@ export async function addDeferredWorkToWorkOrder(
 
   // Debug: Log work order fields to find vehicle ID
   const woAny = existingWorkOrder as any;
-  debugLog(` Work order fields for vehicle lookup:`, JSON.stringify({
+  console.log(`[Protractor] Work order fields for vehicle lookup:`, JSON.stringify({
     ServiceItemID: existingWorkOrder.ServiceItemID,
     ServiceItem: woAny.ServiceItem ? { ID: woAny.ServiceItem.ID, VIN: woAny.ServiceItem.VIN } : null,
     ContactID: existingWorkOrder.ContactID,
@@ -2408,7 +2421,7 @@ export async function addDeferredWorkToWorkOrder(
   let originalServicePackageLines: any[] = [];
   
   // Log the deferred item details for debugging
-  debugLog(` Deferred item details:`, JSON.stringify({
+  console.log(`[Protractor] Deferred item details:`, JSON.stringify({
     ID: deferredItem.ID,
     ServiceItemID: deferredItem.ServiceItemID,
     OriginalWorkOrderID: deferredItem.OriginalWorkOrderID,
@@ -2423,7 +2436,7 @@ export async function addDeferredWorkToWorkOrder(
   const deferredItemAny = deferredItem as any;
   
   // Log what ServicePackageLines actually contains
-  debugLog(` ServicePackageLines on deferred item:`, JSON.stringify(deferredItemAny.ServicePackageLines, null, 2));
+  console.log(`[Protractor] ServicePackageLines on deferred item:`, JSON.stringify(deferredItemAny.ServicePackageLines, null, 2));
   
   if (deferredItemAny.ServicePackageLines) {
     const linesRaw = deferredItemAny.ServicePackageLines;
@@ -2434,18 +2447,18 @@ export async function addDeferredWorkToWorkOrder(
     }
     
     if (originalServicePackageLines.length > 0) {
-      debugLog(` Found ${originalServicePackageLines.length} lines directly on deferred item`);
+      console.log(`[Protractor] Found ${originalServicePackageLines.length} lines directly on deferred item`);
       originalServicePackageLines.forEach((line: any, i: number) => {
-        debugLog(`   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+        console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
       });
     } else {
-      debugLog(` ServicePackageLines exists but is empty (array/ItemCollection length = 0)`);
+      console.log(`[Protractor] ServicePackageLines exists but is empty (array/ItemCollection length = 0)`);
     }
   }
   
   // If no lines found on the deferred item, try to fetch from original work order
   if (originalServicePackageLines.length === 0 && deferredItem.OriginalWorkOrderID) {
-    debugLog(` Fetching original work order ${deferredItem.OriginalWorkOrderID} for deferred work details...`);
+    console.log(`[Protractor] Fetching original work order ${deferredItem.OriginalWorkOrderID} for deferred work details...`);
     
     const originalWoResult = await protractorFetch<ProtractorWorkOrder>(
       `/WorkOrder/${deferredItem.OriginalWorkOrderID}`,
@@ -2462,14 +2475,14 @@ export async function addDeferredWorkToWorkOrder(
         ? originalPackagesRaw 
         : (originalPackagesRaw?.ItemCollection || []);
       
-      debugLog(` Original work order has ${originalPackages.length} service packages`);
+      console.log(`[Protractor] Original work order has ${originalPackages.length} service packages`);
       
       // Log all package titles for debugging
       originalPackages.forEach((pkg: any, i: number) => {
         const pkgTitle = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.Code || 'Unknown';
         const linesRaw = pkg.ServicePackageLines;
         const lineCount = Array.isArray(linesRaw) ? linesRaw.length : (linesRaw?.ItemCollection?.length || 0);
-        debugLog(`   Package ${i}: "${pkgTitle}" (ID: ${pkg.ID}, Lines: ${lineCount})`);
+        console.log(`[Protractor]   Package ${i}: "${pkgTitle}" (ID: ${pkg.ID}, Lines: ${lineCount})`);
       });
       
       // Find the matching service package by ID or title (case-insensitive)
@@ -2496,20 +2509,20 @@ export async function addDeferredWorkToWorkOrder(
           originalServicePackageLines = linesRaw.ItemCollection;
         }
         
-        debugLog(` Found matching package with ${originalServicePackageLines.length} lines`);
+        console.log(`[Protractor] Found matching package with ${originalServicePackageLines.length} lines`);
         
         // Log line details
         originalServicePackageLines.forEach((line: any, i: number) => {
-          debugLog(`   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
+          console.log(`[Protractor]   Line ${i}: ${line.LineType || 'Unknown'} - "${line.Description}" Qty:${line.Quantity} Price:${line.UnitPrice}`);
         });
       } else {
-        debugLog(` Could not find matching service package. Looking for: "${title}" or code: "${deferredItem.Code}"`);
+        console.log(`[Protractor] Could not find matching service package. Looking for: "${title}" or code: "${deferredItem.Code}"`);
       }
     } else {
-      debugLog(` Failed to fetch original work order: ${originalWoResult.error}`);
+      console.log(`[Protractor] Failed to fetch original work order: ${originalWoResult.error}`);
     }
   } else if (originalServicePackageLines.length === 0) {
-    debugLog(` No OriginalWorkOrderID on deferred item and no lines found directly - searching closed work orders...`);
+    console.log(`[Protractor] No OriginalWorkOrderID on deferred item and no lines found directly - searching closed work orders...`);
   }
   
   // If still no lines, search the vehicle's job history from CACHED data (job_index)
@@ -2519,8 +2532,8 @@ export async function addDeferredWorkToWorkOrder(
   const vehicleServiceItemId = deferredItem.ServiceItemID || existingWorkOrder.ServiceItemID || woAny.ServiceItem?.ID;
   
   if (originalServicePackageLines.length === 0) {
-    debugLog(` Searching cached job history for service package matching: "${title}" (code: ${deferredItem.Code})`);
-    debugLog(` Vehicle ServiceItemID: ${vehicleServiceItemId || 'N/A'}, VIN: ${vin}`);
+    console.log(`[Protractor] Searching cached job history for service package matching: "${title}" (code: ${deferredItem.Code})`);
+    console.log(`[Protractor] Vehicle ServiceItemID: ${vehicleServiceItemId || 'N/A'}, VIN: ${vin}`);
     
     // Use cached job_index data instead of live API calls
     const cachedResult = await findCachedJobPricing(shopId, {
@@ -2531,11 +2544,11 @@ export async function addDeferredWorkToWorkOrder(
     });
     
     if (cachedResult.found && cachedResult.lines && cachedResult.lines.length > 0) {
-      debugLog(` Using cached pricing (${cachedResult.source}) with ${cachedResult.lines.length} lines:`);
+      console.log(`[Protractor] Using cached pricing (${cachedResult.source}) with ${cachedResult.lines.length} lines:`);
       
       // Convert cached lines to Protractor ServicePackageLine format
       originalServicePackageLines = cachedResult.lines.map((line, i) => {
-        debugLog(`   Line ${i}: ${line.lineType} - "${line.description}" Qty:${line.quantity} Price:$${line.unitPrice}`);
+        console.log(`[Protractor]   Line ${i}: ${line.lineType} - "${line.description}" Qty:${line.quantity} Price:$${line.unitPrice}`);
         return {
           Type: line.lineType === 'Labor' ? 'Labor' : 'Material',
           Description: line.description,
@@ -2548,7 +2561,7 @@ export async function addDeferredWorkToWorkOrder(
         };
       });
     } else {
-      debugLog(` No cached job pricing found for "${title}"`);
+      console.log(`[Protractor] No cached job pricing found for "${title}"`);
     }
   }
   
@@ -2558,7 +2571,7 @@ export async function addDeferredWorkToWorkOrder(
   // If still no lines, try fetching from ServicePackageTemplate (canned job) - last resort
   if (originalServicePackageLines.length === 0 && deferredItemAny.ServicePackageTemplateID) {
     const templateId = deferredItemAny.ServicePackageTemplateID;
-    debugLog(` Trying to fetch ServicePackageTemplate (fallback): ${templateId}`);
+    console.log(`[Protractor] Trying to fetch ServicePackageTemplate (fallback): ${templateId}`);
     
     const templateResult = await protractorFetch<any>(
       `/ServicePackageTemplate/${templateId}`,
@@ -2576,17 +2589,17 @@ export async function addDeferredWorkToWorkOrder(
       
       if (templateLines.length > 0) {
         originalServicePackageLines = templateLines;
-        debugLog(` Found ${templateLines.length} lines from ServicePackageTemplate`);
-        debugLog(` Template raw response keys:`, Object.keys(templateResult.data));
+        console.log(`[Protractor] Found ${templateLines.length} lines from ServicePackageTemplate`);
+        console.log(`[Protractor] Template raw response keys:`, Object.keys(templateResult.data));
         templateLines.forEach((line: any, i: number) => {
-          debugLog(`   Line ${i} keys:`, Object.keys(line));
-          debugLog(`   Line ${i} raw:`, JSON.stringify(line, null, 2));
+          console.log(`[Protractor]   Line ${i} keys:`, Object.keys(line));
+          console.log(`[Protractor]   Line ${i} raw:`, JSON.stringify(line, null, 2));
         });
       } else {
-        debugLog(` ServicePackageTemplate exists but has no lines`);
+        console.log(`[Protractor] ServicePackageTemplate exists but has no lines`);
       }
     } else {
-      debugLog(` Failed to fetch ServicePackageTemplate: ${templateResult.error}`);
+      console.log(`[Protractor] Failed to fetch ServicePackageTemplate: ${templateResult.error}`);
     }
   }
 
@@ -2627,7 +2640,7 @@ export async function addDeferredWorkToWorkOrder(
       : { ItemCollection: updatedPackages }
   };
 
-  debugLog(` Adding deferred work "${title}" to work order ${workOrderGuid} with ${originalServicePackageLines.length} lines...`);
+  console.log(`[Protractor] Adding deferred work "${title}" to work order ${workOrderGuid} with ${originalServicePackageLines.length} lines...`);
 
   const updateResult = await protractorFetch<any>(
     `/WorkOrder/${workOrderGuid}`,
@@ -2641,7 +2654,7 @@ export async function addDeferredWorkToWorkOrder(
   );
 
   if (updateResult.ok) {
-    debugLog(` Successfully added deferred work "${title}" with all details`);
+    console.log(`[Protractor] Successfully added deferred work "${title}" with all details`);
     return {
       ok: true,
       servicePackage: {

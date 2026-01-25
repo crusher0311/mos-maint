@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { fetchWorkOrderById } from "@/lib/integrations/protractor";
-import { getTekmetricWorkOrderWithMileage } from "@/lib/integrations/tekmetric";
+import { getTekmetricWorkOrderWithMileage } from "@/lib/tekmetric";
 
 const BATCH_SIZE = 3; // Reduced from 5 to avoid rate limits
 const BATCH_DELAY_MS = 3000; // Increased from 2000

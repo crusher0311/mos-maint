@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
 import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
-import CopyFromLocationDropdown from "@/components/ui/CopyFromLocationDropdown";
 
 interface IntervalConfig {
   mileage: number;
@@ -21,7 +20,6 @@ interface IntervalsConfig {
 interface StickerDataConfig {
   enabled: boolean;
   logo: string;
-  logoSource: "branding" | "custom";
   phone: string;
   tagline: string;
   taglineLine2: string;
@@ -62,7 +60,6 @@ const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: strin
 const DEFAULT_CONFIG: StickerDataConfig = {
   enabled: true,
   logo: "",
-  logoSource: "branding",
   phone: "",
   tagline: "",
   taglineLine2: "",
@@ -86,7 +83,6 @@ export default function StickerSettingsPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [brandingLogo, setBrandingLogo] = useState<string | null>(null);
   
   const [config, setConfig] = useState<StickerDataConfig>(DEFAULT_CONFIG);
   const [designerLayout, setDesignerLayout] = useState<StickerLayout>(() => createDefaultLayout(DEFAULT_STICKER_SIZE));
@@ -143,7 +139,6 @@ export default function StickerSettingsPage() {
           body: JSON.stringify({
             enabled: config.enabled,
             logo: config.logo,
-            logoSource: config.logoSource,
             phone: config.phone,
             tagline: config.tagline,
             taglineLine2: config.taglineLine2,
@@ -181,23 +176,13 @@ export default function StickerSettingsPage() {
 
   async function fetchSettings() {
     try {
-      const [stickerRes, brandingRes] = await Promise.all([
-        fetch("/api/sticker/settings"),
-        fetch("/api/settings/branding")
-      ]);
-      
-      if (brandingRes.ok) {
-        const brandingData = await brandingRes.json();
-        setBrandingLogo(brandingData.logo || null);
-      }
-      
-      if (stickerRes.ok) {
-        const data = await stickerRes.json();
+      const res = await fetch("/api/sticker/settings");
+      if (res.ok) {
+        const data = await res.json();
         if (data.config) {
           const fetchedConfig = {
             enabled: data.config.enabled ?? DEFAULT_CONFIG.enabled,
             logo: data.config.logo ?? DEFAULT_CONFIG.logo,
-            logoSource: data.config.logoSource ?? DEFAULT_CONFIG.logoSource,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
             tagline: data.config.tagline ?? DEFAULT_CONFIG.tagline,
             taglineLine2: data.config.taglineLine2 ?? DEFAULT_CONFIG.taglineLine2,
@@ -461,23 +446,13 @@ export default function StickerSettingsPage() {
     );
   }
 
-  const handleCopyComplete = useCallback(() => {
-    window.location.reload();
-  }, []);
-
   return (
     <main className="p-6 max-w-7xl">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Oil Change Sticker Designer</h1>
-          <p className="text-gray-600 mt-1">
-            Design your custom oil change stickers with drag-and-drop positioning.
-          </p>
-        </div>
-        <CopyFromLocationDropdown 
-          settingType="stickers" 
-          onCopyComplete={handleCopyComplete}
-        />
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Oil Change Sticker Designer</h1>
+        <p className="text-gray-600 mt-1">
+          Design your custom oil change stickers with drag-and-drop positioning.
+        </p>
       </div>
 
       {message && (
@@ -501,87 +476,40 @@ export default function StickerSettingsPage() {
           
           {expandedSections.content && (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="md:col-span-2 lg:col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sticker Logo</label>
-                <div className="flex gap-4 mb-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="logoSource"
-                      value="branding"
-                      checked={config.logoSource === "branding"}
-                      onChange={() => setConfig({ ...config, logoSource: "branding" })}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">Use Shop Branding Logo</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="logoSource"
-                      value="custom"
-                      checked={config.logoSource === "custom"}
-                      onChange={() => setConfig({ ...config, logoSource: "custom" })}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">Use Custom Sticker Logo</span>
-                  </label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Shop Logo</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={config.logo}
+                    onChange={(e) => setConfig({ ...config, logo: e.target.value })}
+                    placeholder="Logo URL or upload"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  </button>
                 </div>
-                
-                {config.logoSource === "branding" ? (
-                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    {brandingLogo ? (
-                      <div className="flex items-center gap-4">
-                        <img 
-                          src={brandingLogo} 
-                          alt="Shop Branding Logo" 
-                          className="max-h-12 object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                        <span className="text-sm text-gray-600">Using logo from Shop Branding settings</span>
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-500">
-                        No branding logo found. <a href="/dashboard/settings/branding" className="text-blue-600 hover:underline">Upload one in Shop Branding</a> or switch to custom logo.
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        value={config.logo}
-                        onChange={(e) => setConfig({ ...config, logo: e.target.value })}
-                        placeholder="Logo URL or upload"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      />
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploading}
-                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    {config.logo && (
-                      <div className="mt-2 p-2 bg-gray-50 rounded-lg">
-                        <img 
-                          src={config.logo} 
-                          alt="Custom Logo" 
-                          className="max-h-12 mx-auto object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      </div>
-                    )}
+                {config.logo && (
+                  <div className="mt-2 p-2 bg-gray-50 rounded-lg">
+                    <img 
+                      src={config.logo} 
+                      alt="Logo" 
+                      className="max-h-12 mx-auto object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
                   </div>
                 )}
               </div>

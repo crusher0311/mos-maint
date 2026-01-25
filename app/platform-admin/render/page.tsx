@@ -136,7 +136,7 @@ export default function RenderObservabilityDashboard() {
       case 'warning':
         return <AlertCircle className="w-4 h-4 text-amber-500" />;
       case 'info':
-        return <Info className="w-4 h-4 text-purple-500" />;
+        return <Info className="w-4 h-4 text-blue-500" />;
       default:
         return <Activity className="w-4 h-4 text-gray-400" />;
     }
@@ -150,7 +150,7 @@ export default function RenderObservabilityDashboard() {
       case 'warning':
         return 'bg-amber-50 border-amber-100';
       case 'info':
-        return 'bg-purple-50 border-purple-100';
+        return 'bg-blue-50 border-blue-100';
       default:
         return 'bg-gray-50 border-gray-100';
     }
@@ -203,7 +203,7 @@ export default function RenderObservabilityDashboard() {
                     href="https://dashboard.render.com/u/settings" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-purple-600 hover:underline inline-flex items-center gap-1"
+                    className="text-blue-600 hover:underline inline-flex items-center gap-1"
                   >
                     Render Account Settings <ExternalLink className="w-3 h-3" />
                   </a>
@@ -235,7 +235,7 @@ export default function RenderObservabilityDashboard() {
           </label>
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-3 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -247,8 +247,8 @@ export default function RenderObservabilityDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Activity className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Activity className="w-5 h-5 text-blue-600" />
               </div>
               <span className="text-sm text-gray-600">Total Logs</span>
             </div>
@@ -283,12 +283,12 @@ export default function RenderObservabilityDashboard() {
 
           <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Info className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Info className="w-5 h-5 text-blue-600" />
               </div>
               <span className="text-sm text-gray-600">Info</span>
             </div>
-            <div className="text-2xl font-bold text-purple-600">
+            <div className="text-2xl font-bold text-blue-600">
               {data.stats.byLevel.info}
             </div>
           </div>

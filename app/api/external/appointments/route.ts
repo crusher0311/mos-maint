@@ -80,7 +80,7 @@ export const POST = createExternalEndpoint(
     
     if (hasTekmetric) {
       try {
-        const { createAppointment } = await import("@/lib/integrations/tekmetric");
+        const { createAppointment } = await import("@/lib/tekmetric");
         const { findTekmetricCustomerAndVehicle } = await import("@/lib/auto-booking/scheduler");
         
         const tekmetricShopId = Number(shop.tekmetric.shopId);

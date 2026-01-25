@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import { renderHtmlToImage } from "@/lib/browser-pool";
+import nodeHtmlToImage from "node-html-to-image";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
@@ -152,7 +152,6 @@ interface FontStyle {
 
 interface StickerConfig {
   logo?: string;
-  logoSource?: "branding" | "custom";
   logoObjectPath?: string;
   phone?: string;
   tagline?: string;
@@ -677,10 +676,7 @@ export async function POST(request: NextRequest) {
     const useHours = unit === "hrs";
 
     let logoDataUrl: string | null = null;
-    const logoSource = stickerConfig.logoSource || "branding";
-    if (logoSource === "branding" && shop.branding?.logo) {
-      logoDataUrl = await fetchLogoAsBase64(shop.branding.logo, undefined);
-    } else if (stickerConfig.logo || stickerConfig.logoObjectPath) {
+    if (stickerConfig.logo || stickerConfig.logoObjectPath) {
       logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath);
     }
     const configWithLogo = { 
@@ -725,9 +721,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const image = await renderHtmlToImage(html, {
-      width: dimensions.width,
-      height: dimensions.height,
+    const image = await nodeHtmlToImage({
+      html,
+      type: "png",
+      transparent: false,
+      puppeteerArgs: {
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+      },
     });
 
     await db.collection("sticker_generations").insertOne({

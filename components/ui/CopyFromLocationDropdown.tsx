@@ -9,7 +9,7 @@ type EnterpriseLocation = {
 };
 
 type Props = {
-  settingType: "branding" | "maintenance" | "intervals" | "cannedJobs" | "stickers" | "keytags";
+  settingType: "branding" | "maintenance" | "intervals" | "cannedJobs";
   onCopyComplete: () => void;
   disabled?: boolean;
 };

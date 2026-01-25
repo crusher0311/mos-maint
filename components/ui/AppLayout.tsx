@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { Sidebar } from "./Sidebar";
 import { HelpCircle, Menu } from "lucide-react";
 
@@ -90,13 +89,9 @@ export function AppLayout({
             </div>
             <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
               {actions}
-              <Link 
-                href="/dashboard/help" 
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors hidden sm:block"
-                title="Help Center"
-              >
+              <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors hidden sm:block">
                 <HelpCircle className="w-5 h-5" />
-              </Link>
+              </button>
               <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs sm:text-sm font-medium">
                 {userInitials || "U"}
               </div>

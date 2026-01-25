@@ -8,7 +8,7 @@ import {
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
-} from "@/lib/integrations/tekmetric";
+} from "@/lib/tekmetric";
 import { 
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 

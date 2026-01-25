@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, Loader2, Check, AlertCircle, ChevronDown, X, Copy, ClipboardCheck, RefreshCw } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Loader2, Check, AlertCircle, ChevronDown, X, Copy, ClipboardCheck } from "lucide-react";
 
 type CannedJobOption = {
   id: string;
@@ -36,10 +36,8 @@ export function AddToROButton({
   const [manualRONumber, setManualRONumber] = useState("");
   const [pendingJob, setPendingJob] = useState<CannedJobOption | null>(null);
   const [apiUnavailable, setApiUnavailable] = useState(false);
-  const [lastFailedJob, setLastFailedJob] = useState<CannedJobOption | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const applyInProgressRef = useRef(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -63,14 +61,10 @@ export function AddToROButton({
 
   async function handleApply(cannedJobId: string, cannedJobTitle: string, manualWorkOrderId?: string) {
     if (status === "loading" || status === "success") return;
-    
-    if (applyInProgressRef.current) return;
-    applyInProgressRef.current = true;
 
     setStatus("loading");
     setErrorMsg(null);
     setShowDropdown(false);
-    setLastFailedJob({ id: cannedJobId, title: cannedJobTitle });
 
     const effectiveWorkOrderId = manualWorkOrderId || propWorkOrderId;
     const effectiveRepairOrderId = manualWorkOrderId || propRepairOrderId;
@@ -121,14 +115,6 @@ export function AddToROButton({
     } catch (err: unknown) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Network error");
-    } finally {
-      applyInProgressRef.current = false;
-    }
-  }
-
-  function handleRetry() {
-    if (lastFailedJob) {
-      handleApply(lastFailedJob.id, lastFailedJob.title);
     }
   }
 
@@ -226,11 +212,14 @@ export function AddToROButton({
   if (status === "error") {
     return (
       <span
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium cursor-pointer hover:bg-red-200 transition-colors"
-        title={errorMsg || "Click to retry"}
-        onClick={handleRetry}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium cursor-pointer"
+        title={errorMsg || "Error"}
+        onClick={() => {
+          setStatus("idle");
+          setErrorMsg(null);
+        }}
       >
-        <RefreshCw className="w-3 h-3" />
+        <AlertCircle className="w-3 h-3" />
         Retry
       </span>
     );

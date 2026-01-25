@@ -2,21 +2,10 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
-import { WelcomeModal } from "@/components/ui/WelcomeModal";
-import { AnnouncementBanner } from "@/components/ui/AnnouncementBanner";
+import JobLookup from "@/components/JobLookup";
+import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
-
-const JobLookup = dynamic(() => import("@/components/JobLookup"), {
-  ssr: false,
-  loading: () => <div className="p-4 text-gray-500">Loading job lookup...</div>
-});
-
-const CommonFailuresPanel = dynamic(() => import("@/components/CommonFailuresPanel"), {
-  ssr: false,
-  loading: () => <div className="p-4 text-gray-500">Loading common failures...</div>
-});
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -147,19 +136,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-
-  useEffect(() => {
-    const hasSeenWelcome = localStorage.getItem('mos_welcome_seen');
-    if (!hasSeenWelcome) {
-      setShowWelcomeModal(true);
-    }
-  }, []);
-
-  const handleCloseWelcome = () => {
-    localStorage.setItem('mos_welcome_seen', 'true');
-    setShowWelcomeModal(false);
-  };
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -913,7 +889,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <AnnouncementBanner />
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-5">
             <div className="flex items-center gap-2 sm:gap-4">
@@ -1475,13 +1450,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             </div>
           </div>
         </div>
-      )}
-
-      {showWelcomeModal && (
-        <WelcomeModal 
-          shopName={data?.user?.shopName}
-          onClose={handleCloseWelcome}
-        />
       )}
     </div>
   );

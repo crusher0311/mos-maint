@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import { renderHtmlToImage } from "@/lib/browser-pool";
+import nodeHtmlToImage from "node-html-to-image";
 import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
 
 export const runtime = "nodejs";
@@ -123,6 +123,8 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
     <html>
     <head>
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
         * {
           margin: 0;
           padding: 0;
@@ -132,7 +134,7 @@ function generateDesignerHtml(layout: DesignerLayout, data: KeytagRequest): stri
         html, body {
           width: ${DYMO_30252.renderWidth}px;
           height: ${DYMO_30252.renderHeight}px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
           background: ${layout.backgroundColor};
         }
         
@@ -198,6 +200,8 @@ function generateLegacyHtml(
     <html>
     <head>
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
         * {
           margin: 0;
           padding: 0;
@@ -207,7 +211,7 @@ function generateLegacyHtml(
         html, body {
           width: ${DYMO_30252.renderWidth}px;
           height: ${DYMO_30252.renderHeight}px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
           background: ${backgroundColor};
           color: ${textColor};
         }
@@ -408,12 +412,16 @@ export async function POST(req: NextRequest) {
       html = generateLegacyHtml(config, body);
     }
 
-    const imageBuffer = await renderHtmlToImage(html, {
-      width: DYMO_30252.renderWidth,
-      height: DYMO_30252.renderHeight,
-      selector: ".canvas",
-    });
-    const image = imageBuffer.toString("base64");
+    const image = await nodeHtmlToImage({
+      html,
+      type: "png",
+      transparent: false,
+      encoding: "base64",
+      puppeteerArgs: {
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+      },
+    }) as string;
 
     return NextResponse.json(
       {

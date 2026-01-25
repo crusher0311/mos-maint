@@ -2,20 +2,10 @@
 
 import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { Sidebar } from "@/components/ui/Sidebar";
-import { SWRProvider } from "@/lib/swr-config";
+import QuickStickerModal from "@/components/stickers/QuickStickerModal";
+import SupportChatWidget from "@/components/ui/SupportChatWidget";
 import { Menu, X } from "lucide-react";
-
-const QuickStickerModal = dynamic(
-  () => import("@/components/stickers/QuickStickerModal"),
-  { ssr: false }
-);
-
-const SupportChatWidget = dynamic(
-  () => import("@/components/ui/SupportChatWidget"),
-  { ssr: false }
-);
 
 interface UserInfo {
   email: string;
@@ -82,7 +72,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     : "??";
 
   return (
-    <SWRProvider>
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Desktop Sidebar - hidden on mobile */}
       <div className="hidden md:block md:w-64 flex-shrink-0">
@@ -175,6 +164,5 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       <SupportChatWidget />
     </div>
-    </SWRProvider>
   );
 }

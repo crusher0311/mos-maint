@@ -76,7 +76,7 @@ export default function CobrowsePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Monitor className="w-7 h-7 text-mos-purple" />
+            <Monitor className="w-7 h-7 text-purple-600" />
             Remote Support
           </h1>
           <p className="text-gray-600">Connect to user screens for live support</p>
@@ -84,7 +84,7 @@ export default function CobrowsePage() {
         <button
           onClick={refreshDevices}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -103,7 +103,7 @@ export default function CobrowsePage() {
             onChange={(e) => setConnectCode(e.target.value.toUpperCase())}
             placeholder="Enter 6-digit code"
             maxLength={6}
-            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-mos-purple font-mono text-lg tracking-wider uppercase"
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-lg tracking-wider uppercase"
           />
           <button
             onClick={connectWithCode}
@@ -173,7 +173,7 @@ export default function CobrowsePage() {
                 <button
                   onClick={() => connectToDevice(device.id)}
                   disabled={!device.online}
-                  className="flex items-center gap-2 px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   <ExternalLink className="w-4 h-4" />
                   Connect
@@ -184,9 +184,9 @@ export default function CobrowsePage() {
         )}
       </div>
 
-      <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-        <h3 className="font-semibold text-purple-900 mb-2">How Remote Support Works</h3>
-        <ol className="text-sm text-purple-800 space-y-2 list-decimal list-inside">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <h3 className="font-semibold text-blue-900 mb-2">How Remote Support Works</h3>
+        <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
           <li>User clicks "Share My Screen" on their support ticket page</li>
           <li>They receive a 6-digit session code</li>
           <li>User shares the code with you (via chat, email, or phone)</li>

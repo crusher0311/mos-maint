@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Loader2, Printer, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Loader2, Printer } from "lucide-react";
 
 interface IntervalConfig {
   mileage: number;
@@ -55,8 +55,6 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   const [roundMileage, setRoundMileage] = useState(true);
   const [intervals, setIntervals] = useState<IntervalsConfig>(DEFAULT_INTERVALS);
   const [error, setError] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
-  const printInProgressRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -115,23 +113,14 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     return { nextServiceMileage, nextServiceDate };
   }
 
-  const handlePrint = useCallback(async (isRetry = false) => {
+  async function handlePrint() {
     if (!currentMileage || parseInt(currentMileage.replace(/,/g, ""), 10) <= 0) {
       setError("Please enter a valid current reading");
       return;
     }
 
-    if (printInProgressRef.current) {
-      return;
-    }
-    printInProgressRef.current = true;
-
     setError(null);
-    if (isRetry) {
-      setRetrying(true);
-    } else {
-      setGenerating(true);
-    }
+    setGenerating(true);
 
     try {
       const { nextServiceMileage, nextServiceDate } = calculateServiceValues();
@@ -271,10 +260,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       setError("Failed to generate sticker. Please try again.");
     } finally {
       setGenerating(false);
-      setRetrying(false);
-      printInProgressRef.current = false;
     }
-  }, [currentMileage, stickerSize, unit, intervals, intervalType, customMileage, customMonths, onClose]);
+  }
 
   function formatMileageInput(value: string): string {
     const numericValue = value.replace(/[^\d]/g, "");
@@ -407,28 +394,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
               )}
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-start gap-2">
-                    <p className="text-sm text-red-700 flex-1">{error}</p>
-                    <button
-                      onClick={() => handlePrint(true)}
-                      disabled={retrying}
-                      className="text-red-700 hover:text-red-800 text-sm font-medium inline-flex items-center gap-1 disabled:opacity-50 flex-shrink-0"
-                    >
-                      {retrying ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Retrying...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-3 w-3" />
-                          Retry
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
+                <p className="text-sm text-red-600">{error}</p>
               )}
             </>
           )}
@@ -442,8 +408,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             Cancel
           </button>
           <button
-            onClick={() => handlePrint(false)}
-            disabled={generating || retrying || loading || !currentMileage}
+            onClick={handlePrint}
+            disabled={generating || loading || !currentMileage}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {generating ? (

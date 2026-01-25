@@ -172,7 +172,7 @@ export default function PlatformUsersPage() {
 
   const roleColors: Record<string, string> = {
     owner: "bg-purple-100 text-purple-700",
-    admin: "bg-purple-100 text-purple-700",
+    admin: "bg-blue-100 text-blue-700",
     manager: "bg-green-100 text-green-700",
     user: "bg-gray-100 text-gray-700",
     viewer: "bg-yellow-100 text-yellow-700",
@@ -212,7 +212,7 @@ export default function PlatformUsersPage() {
             placeholder="Search by email or shop name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           />
         </div>
         <select
@@ -256,15 +256,15 @@ export default function PlatformUsersPage() {
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                        <span className="text-purple-600 font-medium text-sm">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-blue-600 font-medium text-sm">
                           {user.email?.charAt(0).toUpperCase()}
                         </span>
                       </div>
                       <div>
                         <div className="font-medium text-gray-900">{user.email}</div>
                         {user.isPlatformAdmin && (
-                          <span className="text-xs text-mos-purple flex items-center gap-1">
+                          <span className="text-xs text-purple-600 flex items-center gap-1">
                             <Shield className="w-3 h-3" />
                             Platform Admin
                           </span>
@@ -313,7 +313,7 @@ export default function PlatformUsersPage() {
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden">
             {modalLoading ? (
               <div className="p-12 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-mos-purple" />
+                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
               </div>
             ) : selectedUser && (
               <>
@@ -338,7 +338,7 @@ export default function PlatformUsersPage() {
                     <select
                       value={editedRole}
                       onChange={(e) => setEditedRole(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                       <option value="owner">Owner</option>
                       <option value="admin">Admin</option>
@@ -354,11 +354,11 @@ export default function PlatformUsersPage() {
                         type="checkbox"
                         checked={editedIsPlatformAdmin}
                         onChange={(e) => setEditedIsPlatformAdmin(e.target.checked)}
-                        className="w-4 h-4 text-mos-purple rounded border-gray-300 focus:ring-mos-purple"
+                        className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
                       />
                       <div>
                         <div className="font-medium text-gray-900 flex items-center gap-2">
-                          <Shield className="w-4 h-4 text-mos-purple" />
+                          <Shield className="w-4 h-4 text-purple-600" />
                           Platform Admin
                         </div>
                         <div className="text-xs text-gray-500">
@@ -385,7 +385,7 @@ export default function PlatformUsersPage() {
                         // Remove new primary from shopIds
                         setEditedShopIds(prev => prev.filter(id => id !== newPrimaryId));
                       }}
-                      className="w-full p-3 bg-purple-50 rounded-lg border border-purple-200 focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+                      className="w-full p-3 bg-purple-50 rounded-lg border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                       {allShops.map(shop => (
                         <option key={shop.shopId} value={shop.shopId}>
@@ -413,7 +413,7 @@ export default function PlatformUsersPage() {
                                 type="checkbox"
                                 checked={editedShopIds.includes(shop.shopId)}
                                 onChange={() => toggleShopSelection(shop.shopId)}
-                                className="w-4 h-4 text-mos-purple rounded border-gray-300 focus:ring-mos-purple"
+                                className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-gray-900 text-sm truncate">
@@ -460,7 +460,7 @@ export default function PlatformUsersPage() {
                             placeholder="Search locations..."
                             value={locationSearch}
                             onChange={(e) => setLocationSearch(e.target.value)}
-                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                           />
                         </div>
                         <div className="max-h-[140px] overflow-y-auto space-y-1">
@@ -480,7 +480,7 @@ export default function PlatformUsersPage() {
                                   type="checkbox"
                                   checked={editedShopIds.includes(shop.shopId)}
                                   onChange={() => toggleShopSelection(shop.shopId)}
-                                  className="w-4 h-4 text-mos-purple rounded border-gray-300 focus:ring-mos-purple"
+                                  className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <div className="font-medium text-gray-900 text-sm truncate">
@@ -530,7 +530,7 @@ export default function PlatformUsersPage() {
                               {shop?.name || `Shop ${shopId}`}
                               <button
                                 onClick={() => toggleShopSelection(shopId)}
-                                className="hover:text-mos-purple"
+                                className="hover:text-purple-600"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -570,7 +570,7 @@ export default function PlatformUsersPage() {
                     <button
                       onClick={handleSaveUser}
                       disabled={saving}
-                      className="px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                       Save Changes

@@ -1,31 +1,37 @@
 # MOS Maintenance MVP
 
 ## Overview
-This project is a Next.js-based automotive maintenance management system designed to streamline operations for auto shops. It offers AI-powered insights, multi-shop user management, and a comprehensive dashboard. The system integrates with industry-specific services to enhance efficiency and customer satisfaction. The primary goal is to provide an AI-enhanced platform for automotive maintenance management, improving operational efficiency and customer engagement.
+This Next.js-based automotive maintenance management system streamlines operations for auto shops by providing tools for managing vehicle maintenance recommendations and customer data. It offers AI-powered insights, multi-shop user management, and a comprehensive dashboard to enhance efficiency and customer satisfaction through integrations with industry-specific services. The project's ambition is to provide a comprehensive, AI-enhanced platform for automotive maintenance management, improving operational efficiency and customer engagement for auto shops.
 
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
 
 ## System Architecture
-The application is built using Next.js 14.2.5 with React 18, Next.js API Routes, MongoDB Atlas, and Tailwind CSS, primarily in TypeScript/JavaScript.
+The application uses Next.js 14.2.5 with React 18, Next.js API Routes, MongoDB Atlas, and Tailwind CSS, built with TypeScript/JavaScript.
 
 **UI/UX Decisions:**
-The design features a modern SaaS-style interface characterized by a dark sidebar, light content areas, card-based layouts, and blue as the accent color. Key UI elements include a unified integrations page, a tabbed vehicle detail page, visual data source badges for recommendations, and a "My Oil Sticker" dashboard with live QR code previews and customization options. A "Quick Sticker" feature allows rapid sticker printing with configurable units and service intervals, while keytag printing offers a visual designer with drag-and-drop editing and live preview. In-app guidance includes a Welcome modal for first-time users, Help Center page with searchable guides and FAQs, and reusable Tooltip components for contextual help.
+The design features a modern SaaS-style interface with a dark sidebar, light content areas, card-based layouts, and blue as the accent color. It includes a unified integrations page, a tabbed vehicle detail page, and visual data source badges for recommendations. The "My Oil Sticker" dashboard UI allows live QR code previews, color customization, and sticker downloads. A "Quick Sticker" feature provides rapid sticker printing with unit selection and service interval presets. Keytag printing features a visual designer with drag-and-drop layout editing, element styling, and live preview.
 
 **Technical Implementations:**
-*   **Data Management**: MongoDB Atlas is used for caching API responses, state tracking, and normalized data storage.
-*   **Integration Mechanisms**: Features include webhooks for real-time updates and an incremental synchronization system for shop management systems (e.g., Tekmetric, Protractor), incorporating robust error handling, OAuth token management, and rate limiting. A modular adapter architecture (`ISMSAdapter`) normalizes data layers across different shop management systems.
-*   **Authentication & Authorization**: Role-based access control is implemented with bcrypt hashing and token-based authentication.
-*   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration for payment processing, and feature flags to manage modular functionality.
-*   **Admin & Monitoring**: Comprehensive audit logging, unified API usage monitoring, Chrome Extension Version API, and a support ticketing system with email and in-app notifications.
-*   **Notification System**: Email notifications are handled via Resend API, complemented by an in-app notification bell with real-time polling. System-wide announcements can be sent from Platform Admin to targeted users (all users, by shop, by role, or by SMS integration type like Tekmetric/Protractor/AutoFlow) with dual delivery via in-app notifications and email. Critical announcements display as banners on the dashboard.
-*   **AI Support Chatbot**: A floating chat widget utilizes OpenAI for responses, retrieves information from a knowledge base of resolved tickets, and supports chat session persistence and ticket escalation.
-*   **Sticker & Keytag Generation**: QR code generation uses the HoverCode API, sticker images are generated via Puppeteer browser pool (`lib/browser-pool.ts`) for fast rendering, and Dymo label printing is used for keytags with a visual designer. Browser pool reuses instances (max 3, recycled after 50 uses/5min).
-*   **AI & Recommendations**: The system provides AI-powered maintenance recommendations, AI-scored job searches, smart job autocompletion, and a common failures advisor using shop data and AI.
-*   **Auto Booking**: A feature-gated system enables automated oil change appointment scheduling, including lead time configuration, holiday/business hour management, and a review queue, triggered by sticker printing.
-*   **Chrome Extension**: A side panel extension integrates with Tekmetric, offering maintenance recommendations, common failures, job history search, canned jobs, and oil change sticker printing.
-*   **Enterprise Capabilities**: Supports multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
-*   **Performance Optimizations**: Batch operations utility (`lib/batch-operations.ts`) for bulk upserts and parallel processing. NodeCache-based caching layer for OEM schedules (24hr TTL) and shop configs (5min TTL). Query monitoring tracks operations >500ms at `/api/admin/query-stats`. Tekmetric sync uses bulk operations instead of per-vehicle queries. Client-side SWR provider (`lib/swr-config.tsx`) with reusable hooks (`hooks/use-api.ts`) for data caching and deduplication. Lazy-loaded heavy components (QuickStickerModal, SupportChatWidget, JobLookup, CommonFailuresPanel) via next/dynamic for faster initial load. Gzip/brotli compression enabled via Next.js. Comprehensive database indexes (`lib/db-indexes.ts`) for common query patterns including job lookups, vehicle cache, work orders, repair patterns, rate limits, sticker prints, and auto-booking queue.
+*   **Data Management**: MongoDB Atlas for caching third-party API responses, state tracking, and normalized data storage.
+*   **Integration Mechanisms**: Webhooks for real-time updates and an incremental sync system for shop management systems (e.g., Tekmetric, Protractor) with robust error handling, OAuth token management, and rate limiting.
+*   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based setup.
+*   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration for checkout and billing portal, and feature flags for modular functionality.
+*   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring across all external services, Chrome Extension Version API, and a support ticketing system for customer issue management with email and in-app notifications.
+*   **Notification System**: Email notifications via Resend API and in-app notification bell with real-time polling. Notifications for ticket creation, status updates, and new messages. Admin notifications distributed to SUPER_ADMINS list.
+*   **AI Support Chatbot**: Floating chat widget with OpenAI-powered responses, knowledge base retrieval from resolved tickets, chat session persistence, and ticket escalation path. Admins can save ticket resolutions to the knowledge base for AI learning.
+*   **Sticker & Keytag Generation**: QR code generation using HoverCode API, sticker image generation via `node-html-to-image`, and Dymo label printing for keytags with a visual designer.
+*   **AI & Recommendations**: AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor leveraging shop data and AI.
+*   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems, enabling a normalized, SMS-agnostic data layer with provenance tracking and dual-write ingestion.
+*   **Auto Booking**: A feature-gated system for automated oil change appointment scheduling, including lead time configuration, holiday/business hour management, and a review queue, with a trigger from sticker printing.
+*   **Chrome Extension**: A side panel extension integrating with Tekmetric for maintenance recommendations, common failures, job history search, canned jobs, and oil change sticker printing.
+
+**Feature Specifications:**
+*   **Core Management**: Vehicle analysis, customer dashboard, multi-shop management.
+*   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services.
+*   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
+*   **Modular Features**: A la carte feature flags (maintenance, job lookup, common failures, oil sticker, keytags, auto booking, part cross-reference) managed via platform admin.
+*   **User Preferences**: Shops can choose distance units (miles/kilometers).
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas
@@ -36,3 +42,99 @@ The design features a modern SaaS-style interface characterized by a dark sideba
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
+
+## Future Implementations
+
+### SSO (Single Sign-On) - Planned for Later
+Two SSO approaches identified for future development:
+
+**1. SAML SP (Service Provider) - For Enterprise Shops**
+- Let enterprise shops use existing identity providers (Azure AD, Okta, Google Workspace)
+- Employees log into MOS Tools with company credentials
+- MOS acts as Service Provider accepting logins from shop's IdP
+- Benefits: Centralized access control, auto-disable on employee departure
+- Priority for multi-location enterprise customers with existing IT infrastructure
+
+**2. OAuth 2.0 Provider - For Partner Apps (AppFueled, etc.)**
+- Partner apps can offer "Login with MOS Tools"
+- Users authorize access without sharing passwords
+- Scope-based permissions (profile, shop:read, appointments:write)
+- Endpoints needed: /oauth/authorize, /oauth/token, /oauth/userinfo
+- Partner app registration system required
+
+**Implementation Order:** SAML first (enterprise shops already have IdPs), OAuth second (partner ecosystem)
+
+## Integration Modular Architecture (Completed)
+
+The integration layer has been refactored into a modular architecture enabling independent development of each integration.
+
+**Directory Structure:**
+```
+lib/integrations/
+├── core/               # Foundation layer
+│   ├── types.ts        # IIntegrationAdapter interface, Result<T>, normalized types
+│   ├── facade.ts       # IntegrationFacade, IntegrationRegistry
+│   ├── rate-limiter.ts # Shared rate limiting utilities
+│   └── index.ts
+├── protractor/         # Self-contained Protractor module
+│   ├── types.ts        # Protractor-specific types
+│   ├── client.ts       # API client and auth resolution
+│   ├── transform.ts    # Protractor → Normalized data transformers
+│   ├── adapter.ts      # IIntegrationAdapter implementation
+│   └── index.ts        # Auto-registers with facade
+├── tekmetric/          # Self-contained Tekmetric module
+│   ├── types.ts        # Tekmetric-specific types
+│   ├── auth.ts         # OAuth token management
+│   ├── client.ts       # API client functions
+│   ├── adapter.ts      # IIntegrationAdapter implementation
+│   └── index.ts        # Auto-registers with facade
+├── autoflow/           # Self-contained AutoFlow DVI module
+│   ├── types.ts        # DVI-specific types
+│   ├── client.ts       # API client for DVI fetching
+│   ├── adapter.ts      # IIntegrationAdapter implementation
+│   └── index.ts        # Auto-registers with facade
+└── index.ts            # Main exports, auto-registers all adapters
+```
+
+**Key Patterns:**
+- **Unified Interface**: All adapters implement `IIntegrationAdapter` with standard methods
+- **Auto-Registration**: Each adapter registers itself with `integrationRegistry` on import
+- **Integration Facade**: `integrationFacade.getConfiguredAdapter(shopId)` returns active adapter
+- **Backward Compatibility**: Legacy exports maintained via re-exports from main index
+
+**Usage:**
+```typescript
+import { integrationFacade, integrationRegistry } from '@/lib/integrations';
+
+// Get configured adapter for a shop
+const adapter = await integrationFacade.getConfiguredAdapter(shopId);
+
+// Or use specific adapter
+import { protractorAdapter } from '@/lib/integrations/protractor';
+const vehicle = await protractorAdapter.getVehicleByVin(shopId, vin);
+```
+
+**Benefits:**
+- Independent development: Work on Tekmetric without affecting Protractor
+- Clear boundaries: Each integration is self-contained
+- Consistent API: All adapters follow the same interface
+- Easy testing: Mock individual adapters independently
+
+See **`TECHNICAL_DEBT_REVIEW.md`** for original analysis and phase plan.
+
+## Recent Changes
+
+**January 25, 2026:**
+- Completed full modular architecture refactoring for integration layer (all 6 phases)
+- Created foundation layer with unified `IIntegrationAdapter` interface and `IntegrationFacade`
+- Split Protractor monolith (2,671 lines) into 6 focused modules (~100-500 lines each)
+- Modularized Tekmetric integration with OAuth management and API client separation
+- Modularized AutoFlow DVI integration with self-contained structure
+- Implemented auto-registration pattern for all integration adapters
+- Maintained backward compatibility through re-exports in main index
+
+**January 24, 2026:**
+- Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
+- Fixed Next.js Suspense boundary issues in setup pages using dynamic imports with `ssr: false`
+- Payment-first signup flow implemented (no free trial)
+- Protractor backfill runs inline on connection with adaptive chunk sizing

@@ -1,27 +1,5 @@
-/**
- * @deprecated This file is deprecated and will be removed in a future version.
- * 
- * MIGRATION: Use the modular AutoFlow integration instead:
- * 
- * ```typescript
- * // Instead of:
- * import { getAutoFlowDVI } from '@/lib/integrations/autoflow';
- * 
- * // Use:
- * import { autoflowAdapter } from '@/lib/integrations/autoflow';
- * const result = await autoflowAdapter.getDVI(shopId, vehicleId);
- * ```
- * 
- * See DEPRECATED.md for full migration guide.
- * New modular code: lib/integrations/autoflow/
- */
-
-// Runtime warning removed - this file is used as backing implementation for modular re-exports
-// Direct imports should use: import { ... } from '@/lib/integrations/autoflow';
-
 import "server-only";
 import { getDb } from "@/lib/mongo";
-import { withCache } from "@/lib/cache";
 
 type Fetcher = typeof fetch;
 
@@ -100,57 +78,55 @@ function normalizeAutoflowDomain(input?: string | null): string {
 
 /** ---------- Config resolution (per-shop) ---------- */
 export async function resolveAutoflowConfig(shopId: number) {
-  return withCache('shopConfig', `autoflow:${shopId}`, async () => {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      {
-        projection: {
-          autoflow: 1,
-          autoflowDomain: 1,
-          autoflowApiKey: 1,
-          autoflowApiPassword: 1,
-        },
-      }
-    );
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    {
+      projection: {
+        autoflow: 1,
+        autoflowDomain: 1,
+        autoflowApiKey: 1,
+        autoflowApiPassword: 1,
+      },
+    }
+  );
 
-    const domainRaw =
-      shop?.autoflowDomain ??
-      shop?.autoflow?.domain ??
-      shop?.autoflow?.subdomain ??
-      process.env.AUTOFLOW_DOMAIN ??
-      process.env.AUTOFLOW_SUBDOMAIN ??
-      "";
+  const domainRaw =
+    shop?.autoflowDomain ??
+    shop?.autoflow?.domain ??
+    shop?.autoflow?.subdomain ??
+    process.env.AUTOFLOW_DOMAIN ??
+    process.env.AUTOFLOW_SUBDOMAIN ??
+    "";
 
-    const apiKey =
-      shop?.autoflowApiKey ??
-      shop?.autoflow?.apiKey ??
-      process.env.AUTOFLOW_API_KEY ??
-      "";
+  const apiKey =
+    shop?.autoflowApiKey ??
+    shop?.autoflow?.apiKey ??
+    process.env.AUTOFLOW_API_KEY ??
+    "";
 
-    const apiPassword =
-      shop?.autoflowApiPassword ??
-      shop?.autoflow?.apiPassword ??
-      process.env.AUTOFLOW_API_PASSWORD ??
-      "";
+  const apiPassword =
+    shop?.autoflowApiPassword ??
+    shop?.autoflow?.apiPassword ??
+    process.env.AUTOFLOW_API_PASSWORD ??
+    "";
 
-    const domain = normalizeAutoflowDomain(domainRaw);
-    const base = domain ? `https://${domain}` : "";
+  const domain = normalizeAutoflowDomain(domainRaw);
+  const base = domain ? `https://${domain}` : "";
 
-    // Per Autoflow docs: require BOTH key and password for Basic auth
-    const configured = Boolean(domain && apiKey && apiPassword);
+  // Per Autoflow docs: require BOTH key and password for Basic auth
+  const configured = Boolean(domain && apiKey && apiPassword);
 
-    const subdomain = domain ? domain.split(".")[0] : "";
+  const subdomain = domain ? domain.split(".")[0] : "";
 
-    return {
-      base,
-      domain,
-      subdomain,
-      apiKey: apiKey || null,
-      apiPassword: apiPassword || null,
-      configured,
-    };
-  }, 300);
+  return {
+    base,
+    domain,
+    subdomain,
+    apiKey: apiKey || null,
+    apiPassword: apiPassword || null,
+    configured,
+  };
 }
 
 /** ---------- Live fetch from AutoFlow (getDvi) ---------- */

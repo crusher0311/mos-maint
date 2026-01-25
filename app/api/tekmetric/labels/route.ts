@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getRepairOrders } from "@/lib/integrations/tekmetric";
+import { getRepairOrders } from "@/lib/tekmetric";
 
 export const dynamic = "force-dynamic";
 

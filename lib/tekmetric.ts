@@ -1,44 +1,13 @@
-/**
- * @deprecated This file is deprecated and will be removed in a future version.
- * 
- * MIGRATION: Use the modular Tekmetric integration instead:
- * 
- * ```typescript
- * // Instead of:
- * import { getTekmetricRepairOrders } from '@/lib/tekmetric';
- * 
- * // Use:
- * import { tekmetricAdapter } from '@/lib/integrations/tekmetric';
- * const result = await tekmetricAdapter.getWorkOrders(shopId, options);
- * 
- * // Or use the facade for auto-detection:
- * import { integrationFacade } from '@/lib/integrations';
- * const adapter = await integrationFacade.getConfiguredAdapter(shopId);
- * ```
- * 
- * See DEPRECATED.md for full migration guide.
- * New modular code: lib/integrations/tekmetric/
- */
-
-// Runtime warning removed - this file is used as backing implementation for modular re-exports
-// Direct imports should use: import { ... } from '@/lib/integrations/tekmetric';
-
-import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { acquireRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
+import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
-// Debug logging - disabled in production
-const DEBUG = process.env.TEKMETRIC_DEBUG === 'true';
-function debugLog(...args: unknown[]): void {
-  if (DEBUG) console.log('[Tekmetric Debug]', ...args);
-}
-
 async function tekmetricRequest(endpoint: string, options: RequestInit = {}, shopId?: number, isRetry = false): Promise<any> {
-  const rateLimitResult = await acquireRateLimitSlot('tekmetric', 10);
+  // Acquire distributed rate limit slot (blocks if limit exceeded)
+  const rateLimitResult = await acquireDistributedRateLimitSlot('tekmetric');
   if (!rateLimitResult.acquired) {
-    console.warn(`[Tekmetric] Rate limit slot not acquired, proceeding anyway`);
+    console.warn(`[Tekmetric] Rate limit slot not acquired after ${rateLimitResult.waitedMs}ms, proceeding anyway`);
   }
 
   const token = await getValidToken();
@@ -64,7 +33,7 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
 
     // Handle 401 Unauthorized - attempt token refresh
     if (response.status === 401 && !isRetry) {
-      debugLog('Received 401, refreshing token and retrying...');
+      console.log('[Tekmetric] Received 401, refreshing token and retrying...');
       clearCachedToken();
       await refreshToken();
       return tekmetricRequest(endpoint, options, shopId, true);
@@ -292,7 +261,7 @@ export async function getRepairOrderInspections(repairOrderId: number): Promise<
     const response = await tekmetricRequest(`/repair-orders/${repairOrderId}/inspections`);
     return response.content || response || [];
   } catch (error: any) {
-    debugLog(` Inspections API returned: ${error.message}`);
+    console.log(`[Tekmetric] Inspections API returned: ${error.message}`);
     return [];
   }
 }
@@ -507,8 +476,8 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   if (appointmentOptionId) body.appointmentOptionId = appointmentOptionId;
   const savedAppointmentOptionId = appointmentOptionId;
   
-  debugLog(` Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
-  debugLog(` Appointment body:`, JSON.stringify(body, null, 2));
+  console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
+  console.log(`[Tekmetric] Appointment body:`, JSON.stringify(body, null, 2));
   
   const result = await tekmetricRequest('/appointments', {
     method: 'POST',
@@ -516,7 +485,7 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   }, shopId);
   
   const appointmentId = result.data || result.id;
-  debugLog(` Appointment created with ID: ${appointmentId}`);
+  console.log(`[Tekmetric] Appointment created with ID: ${appointmentId}`);
   
   // If appointmentOption was requested, update the appointment via PATCH
   if (savedAppointmentOptionId && appointmentId) {
@@ -527,17 +496,17 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
     };
     const appointmentOptionObj = optionMap[savedAppointmentOptionId] || optionMap[1];
     
-    debugLog(` Updating appointment ${appointmentId} with appointmentOption:`, appointmentOptionObj);
+    console.log(`[Tekmetric] Updating appointment ${appointmentId} with appointmentOption:`, appointmentOptionObj);
     
     try {
       // Try sending just the appointmentOptionId instead of the full object
       const patchBody = { appointmentOptionId: savedAppointmentOptionId };
-      debugLog(` PATCH body:`, JSON.stringify(patchBody));
+      console.log(`[Tekmetric] PATCH body:`, JSON.stringify(patchBody));
       const patchResult = await tekmetricRequest(`/appointments/${appointmentId}`, {
         method: 'PATCH',
         body: JSON.stringify(patchBody),
       }, shopId);
-      debugLog(` PATCH response:`, JSON.stringify(patchResult, null, 2));
+      console.log(`[Tekmetric] PATCH response:`, JSON.stringify(patchResult, null, 2));
     } catch (patchError: any) {
       console.error(`[Tekmetric] Failed to update appointment option:`, patchError?.message || patchError);
     }

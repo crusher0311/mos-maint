@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getCannedJobs } from "@/lib/integrations/tekmetric";
+import { getCannedJobs } from "@/lib/tekmetric";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

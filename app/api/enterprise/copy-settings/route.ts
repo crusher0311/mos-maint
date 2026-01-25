@@ -64,23 +64,6 @@ export async function GET(req: NextRequest) {
     settings.hiddenCannedJobIds = sourceShop.hiddenCannedJobIds || sourceShop.protractor?.hiddenJobIds || [];
   }
 
-  if (!settingType || settingType === "stickers") {
-    const stickerConfig = sourceShop.stickerConfig || null;
-    if (stickerConfig) {
-      const { 
-        phone, appointmentUrl, hovercodeQRId, cachedQrCodeDataUri,
-        ...copyableConfig 
-      } = stickerConfig;
-      settings.stickers = copyableConfig;
-    } else {
-      settings.stickers = null;
-    }
-  }
-
-  if (!settingType || settingType === "keytags") {
-    settings.keytags = sourceShop.keytagConfig || null;
-  }
-
   return NextResponse.json({
     ok: true,
     sourceShopId,
@@ -162,23 +145,6 @@ export async function POST(req: NextRequest) {
       updates["protractor.hiddenJobIds"] = hiddenIds;
       updates.hiddenCannedJobIds = hiddenIds;
     }
-  }
-
-  if (types.includes("stickers") && sourceShop.stickerConfig) {
-    const { 
-      phone, appointmentUrl, hovercodeQRId, cachedQrCodeDataUri,
-      ...copyableConfig 
-    } = sourceShop.stickerConfig;
-    
-    for (const [key, value] of Object.entries(copyableConfig)) {
-      if (value !== undefined) {
-        updates[`stickerConfig.${key}`] = value;
-      }
-    }
-  }
-
-  if (types.includes("keytags") && sourceShop.keytagConfig) {
-    updates.keytagConfig = sourceShop.keytagConfig;
   }
 
   await db.collection("shops").updateOne(

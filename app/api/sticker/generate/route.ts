@@ -3,10 +3,9 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
-import { renderHtmlToImage } from "@/lib/browser-pool";
+import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
-import { cacheGet, cacheSet } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,13 +31,6 @@ const storage = new Storage({
 });
 
 async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
-  const cacheKey = logoObjectPath || logoUrl;
-  if (!cacheKey) return null;
-  
-  // Check cache first
-  const cached = cacheGet<string>('shopConfig', `logo:${cacheKey}`);
-  if (cached) return cached;
-  
   try {
     if (logoObjectPath) {
       const pathParts = logoObjectPath.split("/").filter(Boolean);
@@ -53,9 +45,7 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
           const [buffer] = await file.download();
           const [metadata] = await file.getMetadata();
           const contentType = metadata.contentType || "image/png";
-          const result = `data:${contentType};base64,${buffer.toString("base64")}`;
-          cacheSet('shopConfig', `logo:${cacheKey}`, result, 300);
-          return result;
+          return `data:${contentType};base64,${buffer.toString("base64")}`;
         }
       }
     }
@@ -65,13 +55,10 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
       if (response.ok) {
         const buffer = await response.arrayBuffer();
         const contentType = response.headers.get("content-type") || "image/png";
-        const result = `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
-        cacheSet('shopConfig', `logo:${cacheKey}`, result, 300);
-        return result;
+        return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
       }
     }
     
-    // Don't cache null results
     return null;
   } catch (error) {
     console.error("[Sticker Generate] Logo fetch failed:", error);
@@ -211,7 +198,6 @@ interface FontStyle {
 
 interface StickerConfig {
   logo?: string;
-  logoSource?: "branding" | "custom";
   logoObjectPath?: string;
   phone?: string;
   tagline?: string;
@@ -676,10 +662,7 @@ export async function POST(req: NextRequest) {
     const includeQR = body.includeQR !== false;
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { name: 1, stickerConfig: 1, designerLayout: 1, branding: 1 } }
-    );
+    const shop = await db.collection("shops").findOne({ shopId });
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -689,32 +672,72 @@ export async function POST(req: NextRequest) {
     const config: StickerConfig = body.previewConfig ? { ...dbConfig, ...body.previewConfig } : dbConfig;
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
-    // Determine which logo to use based on logoSource
-    const logoSource = config.logoSource || "branding";
-    let effectiveLogo = config.logo || "";
-    let effectiveLogoObjectPath = config.logoObjectPath;
-    
-    if (logoSource === "branding" && shop.branding?.logo) {
-      effectiveLogo = shop.branding.logo;
-      effectiveLogoObjectPath = undefined;
+    let logoDataUrl: string | null = null;
+    if (config.logo || config.logoObjectPath) {
+      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath);
     }
-
-    // Fetch logo in parallel - QR code is already stored in config
-    const logoDataUrl = effectiveLogo
-      ? await fetchLogoAsBase64(effectiveLogo, effectiveLogoObjectPath)
-      : null;
-
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
-    
-    // Use stored QR code from account settings (no API calls needed)
-    const qrDataUrl = includeQR ? config.cachedQrCodeDataUri || null : null;
 
-    // Require a valid QR code if requested
-    if (includeQR && !qrDataUrl) {
-      console.error("[Sticker Generate] No cached QR code found");
-      return NextResponse.json({ 
-        error: "No QR code configured. Please go to Sticker Settings and generate a QR code first." 
-      }, { status: 400 });
+    let qrDataUrl: string | null = null;
+    if (includeQR) {
+      const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
+      const qrColor = config.colors?.primary || "#1976d2";
+      const qrBgColor = config.colors?.background || "#ffffff";
+      const shopName = shop.name || `Shop ${shopId}`;
+      
+      // First, try to use cached QR code (fastest, most reliable)
+      if (config.cachedQrCodeDataUri) {
+        console.log("[Sticker Generate] Using cached QR code from config");
+        qrDataUrl = config.cachedQrCodeDataUri;
+      }
+      
+      // If no cached QR, try existing HoverCode
+      if (!qrDataUrl && config.hovercodeQRId) {
+        console.log(`[Sticker Generate] Fetching HoverCode QR: ${config.hovercodeQRId}`);
+        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+        if (existingQR.dataUri) {
+          qrDataUrl = existingQR.dataUri;
+          // Cache it for next time
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
+          );
+          console.log("[Sticker Generate] Cached HoverCode QR for future use");
+        }
+      }
+      
+      // If still no QR, create a new HoverCode
+      if (!qrDataUrl) {
+        const newQR = await createHovercodeQR(redirectUrl, {
+          size: 300,
+          color: qrColor,
+          backgroundColor: qrBgColor,
+          displayName: `${shopName} - Oil Sticker`,
+        });
+        
+        if (newQR?.dataUri) {
+          qrDataUrl = newQR.dataUri;
+          
+          // Save both the HoverCode ID and cache the QR image
+          const updateFields: Record<string, string> = {
+            "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
+          };
+          if (newQR.id && !config.hovercodeQRId) {
+            updateFields["stickerConfig.hovercodeQRId"] = newQR.id;
+          }
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: updateFields }
+          );
+          console.log(`[Sticker Generate] Created and cached new HoverCode QR: ${newQR.id}`);
+        }
+      }
+      
+      // Require a valid QR code - no fallback
+      if (!qrDataUrl) {
+        console.error("[Sticker Generate] Failed to get QR code from HoverCode");
+        return NextResponse.json({ error: "Failed to generate QR code. Please try refreshing the QR code in settings." }, { status: 500 });
+      }
     }
 
     let html: string;
@@ -739,7 +762,7 @@ export async function POST(req: NextRequest) {
     if (designerLayout && designerLayout.elements) {
       // Debug: Log element details
       console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
-      designerLayout.elements.forEach((el: DesignerElement) => {
+      designerLayout.elements.forEach(el => {
         if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
           console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
         }
@@ -771,11 +794,23 @@ export async function POST(req: NextRequest) {
       html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
     }
 
-    // Render at output size for high DPI
-    const imageBuffer = await renderHtmlToImage(html, {
-      width: outputWidth,
-      height: outputHeight,
+    // Render at canvas size, then scale up the image for pixel-perfect matching
+    const scaleUp = outputWidth / renderWidth;
+    
+    const image = await nodeHtmlToImage({
+      html,
+      type: "png",
+      transparent: false,
       selector: "#sticker-canvas",
+      puppeteerArgs: {
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+        defaultViewport: {
+          width: renderWidth,
+          height: renderHeight,
+          deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
+        },
+      },
     });
 
     await db.collection("sticker_generations").insertOne({
@@ -812,6 +847,7 @@ export async function POST(req: NextRequest) {
       console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
     }
 
+    const imageBuffer = image as Buffer;
     return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         "Content-Type": "image/png",

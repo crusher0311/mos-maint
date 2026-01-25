@@ -175,7 +175,7 @@ export default function PlatformEnterprisesPage() {
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
           >
             <Plus className="w-4 h-4" />
             Create Enterprise
@@ -190,7 +190,7 @@ export default function PlatformEnterprisesPage() {
           placeholder="Search enterprises..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
         />
       </div>
 
@@ -203,7 +203,7 @@ export default function PlatformEnterprisesPage() {
           {!search && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-4 text-mos-purple hover:text-purple-700 font-medium"
+              className="mt-4 text-purple-600 hover:text-purple-700 font-medium"
             >
               Create your first enterprise
             </button>
@@ -219,7 +219,7 @@ export default function PlatformEnterprisesPage() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-mos-purple" />
+                    <Building2 className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
                     <div className="font-semibold text-gray-900">{enterprise.name}</div>
@@ -324,7 +324,7 @@ export default function PlatformEnterprisesPage() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="e.g., Big Auto Group"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
 
@@ -347,7 +347,7 @@ export default function PlatformEnterprisesPage() {
                             setSelectedShops(selectedShops.filter(id => id !== shop.shopId));
                           }
                         }}
-                        className="rounded border-gray-300 text-mos-purple focus:ring-mos-purple"
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                       />
                       <span className="text-sm">{shop.name}</span>
                     </label>
@@ -369,7 +369,7 @@ export default function PlatformEnterprisesPage() {
               <button
                 onClick={createEnterprise}
                 disabled={!newName.trim() || actionLoading === "create"}
-                className="px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {actionLoading === "create" && <Loader2 className="w-4 h-4 animate-spin" />}
                 Create Enterprise

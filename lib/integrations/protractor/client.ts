@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
-import { shopRepository } from "@/lib/data/repositories";
+import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { acquireRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
 import type { ProtractorConfig } from "./types";
@@ -21,16 +21,36 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
 }
 
 export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
-  const config = await shopRepository.getProtractorConfig(shopId);
-  
-  const configured = config.configured;
-  const authentication = configured 
-    ? computeAuthentication(config.connectionId, config.apiKey) 
-    : "";
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+    {
+      projection: {
+        protractor: 1,
+        protractorConnectionId: 1,
+        protractorApiKey: 1,
+      },
+    }
+  );
+
+  const connectionId =
+    shop?.protractorConnectionId ??
+    shop?.protractor?.connectionId ??
+    process.env.PROTRACTOR_CONNECTION_ID ??
+    "";
+
+  const apiKey =
+    shop?.protractorApiKey ??
+    shop?.protractor?.apiKey ??
+    process.env.PROTRACTOR_API_KEY ??
+    "";
+
+  const configured = Boolean(connectionId && apiKey);
+  const authentication = configured ? computeAuthentication(connectionId, apiKey) : "";
 
   return {
-    connectionId: config.connectionId,
-    apiKey: config.apiKey,
+    connectionId,
+    apiKey,
     authentication,
     configured,
   };

@@ -20,4 +20,3 @@ export { AppLayout } from "./AppLayout";
 export { Toggle } from "./Toggle";
 export { Tabs } from "./Tabs";
 export { Checkbox } from "./Checkbox";
-export { default as ErrorWithRetry } from "./ErrorWithRetry";

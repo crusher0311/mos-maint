@@ -9,7 +9,7 @@ export default async function PlatformAdminLoginPage() {
     <div className="min-h-screen bg-gray-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-12 h-12 bg-mos-blue rounded-xl flex items-center justify-center">
+          <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center">
             <Shield className="w-7 h-7 text-white" />
           </div>
         </div>

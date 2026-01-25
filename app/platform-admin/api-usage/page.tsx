@@ -339,7 +339,7 @@ export default function ApiUsageDashboard() {
           </label>
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-3 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -350,8 +350,8 @@ export default function ApiUsageDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Activity className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Activity className="w-5 h-5 text-blue-600" />
             </div>
             <span className="text-sm text-gray-600">Requests (1hr)</span>
           </div>
@@ -419,7 +419,7 @@ export default function ApiUsageDashboard() {
           <div 
             key={provider.provider} 
             className={`bg-white rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing transition-all ${
-              draggedCard === provider.provider ? 'opacity-50 scale-95 border-purple-300' : 'border-gray-100 hover:shadow-md'
+              draggedCard === provider.provider ? 'opacity-50 scale-95 border-blue-300' : 'border-gray-100 hover:shadow-md'
             }`}
             draggable
             onDragStart={() => handleDragStart(provider.provider)}
@@ -567,7 +567,7 @@ export default function ApiUsageDashboard() {
                         onClick={() => openShopDrawer(shop.shopId, provider.provider, shop.shopName)}
                         className="flex items-center justify-between text-sm w-full hover:bg-gray-50 rounded px-1 py-0.5 transition-colors group"
                       >
-                        <span className="text-purple-600 hover:underline truncate max-w-[140px]" title={shop.shopName || `Shop #${shop.shopId}`}>
+                        <span className="text-blue-600 hover:underline truncate max-w-[140px]" title={shop.shopName || `Shop #${shop.shopId}`}>
                           {shop.shopName || `Shop #${shop.shopId}`}
                         </span>
                         <span className="font-medium text-gray-900 flex items-center gap-1">
@@ -643,7 +643,7 @@ export default function ApiUsageDashboard() {
                 <button
                   onClick={() => filterByStatus(null)}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    statusFilter === null ? 'bg-mos-purple text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    statusFilter === null ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
                   All ({drawerData.total})
@@ -654,7 +654,7 @@ export default function ApiUsageDashboard() {
                     onClick={() => filterByStatus(s.statusCode)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       statusFilter === s.statusCode 
-                        ? 'bg-mos-purple text-white' 
+                        ? 'bg-purple-600 text-white' 
                         : `${getHttpStatusColor(s.statusCode)} hover:opacity-80`
                     }`}
                   >
@@ -707,7 +707,7 @@ export default function ApiUsageDashboard() {
                         {record.shopId && (
                           <button
                             onClick={() => openShopDrawer(record.shopId!, record.provider, record.shopName)}
-                            className="text-purple-600 hover:underline"
+                            className="text-blue-600 hover:underline"
                           >
                             {record.shopName || `Shop #${record.shopId}`}
                           </button>

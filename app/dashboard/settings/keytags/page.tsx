@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Tag, Loader2 } from "lucide-react";
 import { KeytagDesigner } from "@/components/keytag-designer";
 import { DesignerLayout, DEFAULT_LAYOUT, SAMPLE_DATA, DYMO_30252 } from "@/lib/keytag-designer-types";
-import CopyFromLocationDropdown from "@/components/ui/CopyFromLocationDropdown";
 
 interface KeytagConfig {
   enabled: boolean;
@@ -118,24 +117,14 @@ export default function KeytagSettingsPage() {
     );
   }
 
-  const handleCopyComplete = useCallback(() => {
-    window.location.reload();
-  }, []);
-
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b bg-white">
-        <div className="flex items-center gap-3">
-          <Tag className="w-6 h-6 text-blue-600" />
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Keytag Designer</h1>
-            <p className="text-sm text-gray-500">Design your keytag layout with drag and drop</p>
-          </div>
+      <div className="flex items-center gap-3 p-4 border-b bg-white">
+        <Tag className="w-6 h-6 text-blue-600" />
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Keytag Designer</h1>
+          <p className="text-sm text-gray-500">Design your keytag layout with drag and drop</p>
         </div>
-        <CopyFromLocationDropdown 
-          settingType="keytags" 
-          onCopyComplete={handleCopyComplete}
-        />
       </div>
 
       {error && (

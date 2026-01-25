@@ -284,8 +284,8 @@ export default function PlatformSettingsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Link2 className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Link2 className="w-5 h-5 text-blue-600" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">General Settings</h2>
@@ -307,13 +307,13 @@ export default function PlatformSettingsPage() {
               value={bookDemoUrl}
               onChange={(e) => setBookDemoUrl(e.target.value)}
               placeholder="https://calendly.com/your-link"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <button
             onClick={() => saveSection("general", { bookDemoUrl })}
             disabled={savingSection === "general"}
-            className="w-fit px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+            className="w-fit px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
           >
             {savingSection === "general" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save General Settings
@@ -325,7 +325,7 @@ export default function PlatformSettingsPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
-              <Settings className="w-5 h-5 text-mos-purple" />
+              <Settings className="w-5 h-5 text-purple-600" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Trial Settings</h2>
@@ -348,12 +348,12 @@ export default function PlatformSettingsPage() {
                 min="1"
                 value={vinLimit}
                 onChange={(e) => setVinLimit(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mos-purple focus:border-transparent"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
               <button
                 onClick={() => saveSection("trial", { vinLimit: Number(vinLimit) })}
                 disabled={savingSection === "trial" || !vinLimit || Number(vinLimit) < 1}
-                className="px-4 py-2 bg-mos-purple text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {savingSection === "trial" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save
@@ -379,7 +379,7 @@ export default function PlatformSettingsPage() {
               <button
                 onClick={loadStripeProducts}
                 disabled={loadingProducts}
-                className="text-sm bg-mos-purple text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                className="text-sm bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
               >
                 {loadingProducts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Import from Stripe
@@ -388,7 +388,7 @@ export default function PlatformSettingsPage() {
                 href="https://dashboard.stripe.com/products"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-purple-600 hover:text-purple-500 flex items-center gap-1"
+                className="text-sm text-blue-600 hover:text-blue-500 flex items-center gap-1"
               >
                 <ExternalLink className="w-4 h-4" />
                 Stripe Dashboard
@@ -446,53 +446,53 @@ export default function PlatformSettingsPage() {
               </div>
             </div>
 
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-purple-900 flex items-center gap-2">
+                <h3 className="font-semibold text-blue-900 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" />
                   Plus - ${billing.plusPrice || 229.95}/month
                 </h3>
-                <span className="text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full">Most Popular</span>
+                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Most Popular</span>
               </div>
-              <p className="text-xs text-purple-700 mb-3">Maintenance + Job Lookup + Oil Sticker</p>
+              <p className="text-xs text-blue-700 mb-3">Maintenance + Job Lookup + Oil Sticker</p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Product ID</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Product ID</label>
                   <input
                     type="text"
                     value={billing.plusProductId || billing.mosProProductId || ""}
                     onChange={(e) => setBilling({ ...billing, plusProductId: e.target.value })}
                     placeholder="prod_..."
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ID</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Price ID</label>
                   <input
                     type="text"
                     value={billing.plusPriceId || billing.mosProPriceId || ""}
                     onChange={(e) => setBilling({ ...billing, plusPriceId: e.target.value })}
                     placeholder="price_..."
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Price ($)</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Price ($)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={billing.plusPrice || 229.95}
                     onChange={(e) => setBilling({ ...billing, plusPrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-purple-700 mb-1">Included VINs</label>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Included VINs</label>
                   <input
                     type="number"
                     value={billing.plusIncludedVins || 300}
                     onChange={(e) => setBilling({ ...billing, plusIncludedVins: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-purple-300 rounded-md text-sm bg-white"
+                    className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm bg-white"
                   />
                 </div>
               </div>
@@ -899,7 +899,7 @@ export default function PlatformSettingsPage() {
                     setAppliedMappings({});
                   }}
                   disabled={savingSection === "billing"}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {savingSection === "billing" ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
