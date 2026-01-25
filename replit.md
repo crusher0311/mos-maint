@@ -164,6 +164,11 @@ Legacy integration files have been marked as deprecated but remain functional fo
 - **Background Job Queue**: Added `lib/job-queue.ts` with priority queuing, retry logic, exponential backoff, and stale job recovery
 - **OpenAPI Documentation**: Created `lib/openapi.ts` with OpenAPI 3.0.3 spec for key endpoints, served at `/api/docs/openapi.json`
 - **E2E Test Coverage**: Added `tests/e2e/critical-flows.test.ts` for health check, authentication, and API documentation tests
+- **Performance Optimization - N+1 Query Fix**: Refactored admin/shops endpoint from 5 countDocuments per shop to single aggregation with $lookup
+- **Performance Optimization - Parallel API Calls**: Vehicle-analyzer now fetches DVI, CARFAX, and OEM data in parallel instead of sequentially
+- **Performance Optimization - OEM Caching**: Added 24-hour cache for OEM maintenance schedule lookups (expensive aggregation)
+- **Query Monitoring**: Added `lib/query-monitor.ts` with slow query detection (>500ms), wired into BaseRepository. Admin endpoint at `/api/admin/query-stats`
+- **MongoDB Index Initialization**: Created `scripts/init-indexes.ts` for running index creation; 12 new indexes added to high-traffic collections
 
 **January 24, 2026:**
 - Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
