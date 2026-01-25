@@ -92,6 +92,7 @@ interface DesignerLayout {
 interface StickerConfig {
   enabled?: boolean;
   logo?: string;
+  logoSource?: "branding" | "custom";
   phone?: string;
   tagline?: string;
   taglineLine2?: string;
@@ -200,6 +201,7 @@ export async function PUT(req: NextRequest) {
     const allowedFields = [
       "enabled",
       "logo",
+      "logoSource",
       "phone",
       "tagline",
       "taglineLine2",

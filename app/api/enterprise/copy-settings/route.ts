@@ -65,11 +65,20 @@ export async function GET(req: NextRequest) {
   }
 
   if (!settingType || settingType === "stickers") {
-    settings.stickers = sourceShop.stickers || null;
+    const stickerConfig = sourceShop.stickerConfig || null;
+    if (stickerConfig) {
+      const { 
+        phone, appointmentUrl, hovercodeQRId, cachedQrCodeDataUri,
+        ...copyableConfig 
+      } = stickerConfig;
+      settings.stickers = copyableConfig;
+    } else {
+      settings.stickers = null;
+    }
   }
 
   if (!settingType || settingType === "keytags") {
-    settings.keytags = sourceShop.keytags || null;
+    settings.keytags = sourceShop.keytagConfig || null;
   }
 
   return NextResponse.json({
@@ -155,12 +164,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (types.includes("stickers") && sourceShop.stickers) {
-    updates.stickers = sourceShop.stickers;
+  if (types.includes("stickers") && sourceShop.stickerConfig) {
+    const { 
+      phone, appointmentUrl, hovercodeQRId, cachedQrCodeDataUri,
+      ...copyableConfig 
+    } = sourceShop.stickerConfig;
+    
+    for (const [key, value] of Object.entries(copyableConfig)) {
+      if (value !== undefined) {
+        updates[`stickerConfig.${key}`] = value;
+      }
+    }
   }
 
-  if (types.includes("keytags") && sourceShop.keytags) {
-    updates.keytags = sourceShop.keytags;
+  if (types.includes("keytags") && sourceShop.keytagConfig) {
+    updates.keytagConfig = sourceShop.keytagConfig;
   }
 
   await db.collection("shops").updateOne(

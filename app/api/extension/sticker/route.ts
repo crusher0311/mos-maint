@@ -152,6 +152,7 @@ interface FontStyle {
 
 interface StickerConfig {
   logo?: string;
+  logoSource?: "branding" | "custom";
   logoObjectPath?: string;
   phone?: string;
   tagline?: string;
@@ -676,7 +677,10 @@ export async function POST(request: NextRequest) {
     const useHours = unit === "hrs";
 
     let logoDataUrl: string | null = null;
-    if (stickerConfig.logo || stickerConfig.logoObjectPath) {
+    const logoSource = stickerConfig.logoSource || "branding";
+    if (logoSource === "branding" && shop.branding?.logo) {
+      logoDataUrl = await fetchLogoAsBase64(shop.branding.logo, undefined);
+    } else if (stickerConfig.logo || stickerConfig.logoObjectPath) {
       logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath);
     }
     const configWithLogo = { 

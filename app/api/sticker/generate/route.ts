@@ -211,6 +211,7 @@ interface FontStyle {
 
 interface StickerConfig {
   logo?: string;
+  logoSource?: "branding" | "custom";
   logoObjectPath?: string;
   phone?: string;
   tagline?: string;
@@ -677,7 +678,7 @@ export async function POST(req: NextRequest) {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { name: 1, stickerConfig: 1, designerLayout: 1 } }
+      { projection: { name: 1, stickerConfig: 1, designerLayout: 1, branding: 1 } }
     );
 
     if (!shop) {
@@ -688,9 +689,19 @@ export async function POST(req: NextRequest) {
     const config: StickerConfig = body.previewConfig ? { ...dbConfig, ...body.previewConfig } : dbConfig;
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
+    // Determine which logo to use based on logoSource
+    const logoSource = config.logoSource || "branding";
+    let effectiveLogo = config.logo || "";
+    let effectiveLogoObjectPath = config.logoObjectPath;
+    
+    if (logoSource === "branding" && shop.branding?.logo) {
+      effectiveLogo = shop.branding.logo;
+      effectiveLogoObjectPath = undefined;
+    }
+
     // Fetch logo in parallel - QR code is already stored in config
-    const logoDataUrl = (config.logo || config.logoObjectPath)
-      ? await fetchLogoAsBase64(config.logo || "", config.logoObjectPath)
+    const logoDataUrl = effectiveLogo
+      ? await fetchLogoAsBase64(effectiveLogo, effectiveLogoObjectPath)
       : null;
 
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
