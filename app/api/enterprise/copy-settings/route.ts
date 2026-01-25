@@ -64,6 +64,14 @@ export async function GET(req: NextRequest) {
     settings.hiddenCannedJobIds = sourceShop.hiddenCannedJobIds || sourceShop.protractor?.hiddenJobIds || [];
   }
 
+  if (!settingType || settingType === "stickers") {
+    settings.stickers = sourceShop.stickers || null;
+  }
+
+  if (!settingType || settingType === "keytags") {
+    settings.keytags = sourceShop.keytags || null;
+  }
+
   return NextResponse.json({
     ok: true,
     sourceShopId,
@@ -145,6 +153,14 @@ export async function POST(req: NextRequest) {
       updates["protractor.hiddenJobIds"] = hiddenIds;
       updates.hiddenCannedJobIds = hiddenIds;
     }
+  }
+
+  if (types.includes("stickers") && sourceShop.stickers) {
+    updates.stickers = sourceShop.stickers;
+  }
+
+  if (types.includes("keytags") && sourceShop.keytags) {
+    updates.keytags = sourceShop.keytags;
   }
 
   await db.collection("shops").updateOne(
