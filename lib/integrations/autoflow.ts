@@ -21,6 +21,7 @@
 
 import "server-only";
 import { getDb } from "@/lib/mongo";
+import { withCache } from "@/lib/cache";
 
 type Fetcher = typeof fetch;
 
@@ -99,55 +100,57 @@ function normalizeAutoflowDomain(input?: string | null): string {
 
 /** ---------- Config resolution (per-shop) ---------- */
 export async function resolveAutoflowConfig(shopId: number) {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    {
-      projection: {
-        autoflow: 1,
-        autoflowDomain: 1,
-        autoflowApiKey: 1,
-        autoflowApiPassword: 1,
-      },
-    }
-  );
+  return withCache('shopConfig', `autoflow:${shopId}`, async () => {
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      {
+        projection: {
+          autoflow: 1,
+          autoflowDomain: 1,
+          autoflowApiKey: 1,
+          autoflowApiPassword: 1,
+        },
+      }
+    );
 
-  const domainRaw =
-    shop?.autoflowDomain ??
-    shop?.autoflow?.domain ??
-    shop?.autoflow?.subdomain ??
-    process.env.AUTOFLOW_DOMAIN ??
-    process.env.AUTOFLOW_SUBDOMAIN ??
-    "";
+    const domainRaw =
+      shop?.autoflowDomain ??
+      shop?.autoflow?.domain ??
+      shop?.autoflow?.subdomain ??
+      process.env.AUTOFLOW_DOMAIN ??
+      process.env.AUTOFLOW_SUBDOMAIN ??
+      "";
 
-  const apiKey =
-    shop?.autoflowApiKey ??
-    shop?.autoflow?.apiKey ??
-    process.env.AUTOFLOW_API_KEY ??
-    "";
+    const apiKey =
+      shop?.autoflowApiKey ??
+      shop?.autoflow?.apiKey ??
+      process.env.AUTOFLOW_API_KEY ??
+      "";
 
-  const apiPassword =
-    shop?.autoflowApiPassword ??
-    shop?.autoflow?.apiPassword ??
-    process.env.AUTOFLOW_API_PASSWORD ??
-    "";
+    const apiPassword =
+      shop?.autoflowApiPassword ??
+      shop?.autoflow?.apiPassword ??
+      process.env.AUTOFLOW_API_PASSWORD ??
+      "";
 
-  const domain = normalizeAutoflowDomain(domainRaw);
-  const base = domain ? `https://${domain}` : "";
+    const domain = normalizeAutoflowDomain(domainRaw);
+    const base = domain ? `https://${domain}` : "";
 
-  // Per Autoflow docs: require BOTH key and password for Basic auth
-  const configured = Boolean(domain && apiKey && apiPassword);
+    // Per Autoflow docs: require BOTH key and password for Basic auth
+    const configured = Boolean(domain && apiKey && apiPassword);
 
-  const subdomain = domain ? domain.split(".")[0] : "";
+    const subdomain = domain ? domain.split(".")[0] : "";
 
-  return {
-    base,
-    domain,
-    subdomain,
-    apiKey: apiKey || null,
-    apiPassword: apiPassword || null,
-    configured,
-  };
+    return {
+      base,
+      domain,
+      subdomain,
+      apiKey: apiKey || null,
+      apiPassword: apiPassword || null,
+      configured,
+    };
+  }, 300);
 }
 
 /** ---------- Live fetch from AutoFlow (getDvi) ---------- */

@@ -2,6 +2,7 @@
 import "server-only";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { withCache } from "@/lib/cache";
 
 type Fetcher = typeof fetch;
 
@@ -30,30 +31,32 @@ export type CarfaxResult = {
 
 /** -------- Config (env + per-shop locationId) -------- */
 export async function resolveCarfaxConfig(shopId: number) {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { carfax: 1, carfaxLocationId: 1 } }
-  );
+  return withCache('shopConfig', `carfax:${shopId}`, async () => {
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { carfax: 1, carfaxLocationId: 1 } }
+    );
 
-  // Per-shop location (preferred nested, fallback flat)
-  const locationId =
-    shop?.carfax?.locationId ??
-    shop?.carfaxLocationId ??
-    null;
+    // Per-shop location (preferred nested, fallback flat)
+    const locationId =
+      shop?.carfax?.locationId ??
+      shop?.carfaxLocationId ??
+      null;
 
-  // ENV (same for all shops) — use ONLY these two names
-  const base = (process.env.CARFAX_POST_URL || "").replace(/\/+$/, "");
-  const productDataId = process.env.CARFAX_PDI || "";
+    // ENV (same for all shops) — use ONLY these two names
+    const base = (process.env.CARFAX_POST_URL || "").replace(/\/+$/, "");
+    const productDataId = process.env.CARFAX_PDI || "";
 
-  return {
-    base,               // e.g. https://servicesocket.carfax.com/data/1
-    productDataId,      // provided by CARFAX; same for all shops
-    locationId,         // per-shop, user enters in Settings
-    hasEnv: Boolean(base) && Boolean(productDataId),
-    hasLocation: Boolean(locationId),
-    configured: Boolean(base) && Boolean(productDataId) && Boolean(locationId),
-  };
+    return {
+      base,               // e.g. https://servicesocket.carfax.com/data/1
+      productDataId,      // provided by CARFAX; same for all shops
+      locationId,         // per-shop, user enters in Settings
+      hasEnv: Boolean(base) && Boolean(productDataId),
+      hasLocation: Boolean(locationId),
+      configured: Boolean(base) && Boolean(productDataId) && Boolean(locationId),
+    };
+  }, 300);
 }
 
 function toInt(val: any): number | null {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrderFull, TekmetricVehicle, TekmetricCustomer } from "@/lib/integrations/tekmetric";
+import { bulkUpsert, parallelBatchProcess } from "@/lib/batch-operations";
 
 async function getUserShopId(): Promise<string | null> {
   const store = await cookies();
@@ -91,22 +92,61 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    for (const { vehicle, ro, customer } of vehicleMap.values()) {
+    // Batch 1: Collect all VINs and fetch existing vehicles in one query
+    const allVins = [...vehicleMap.values()].map(v => v.vehicle.vin!.toUpperCase());
+    const existingVehicles = await db.collection("vehicles")
+      .find({ vin: { $in: allVins } })
+      .project({ vin: 1, status: 1 })
+      .toArray();
+    const existingVehicleMap = new Map(existingVehicles.map(v => [v.vin, v]));
+
+    // Batch 2: Prepare bulk upsert for tekmetric_work_orders
+    const workOrderUpserts = [...vehicleMap.values()].map(({ vehicle, ro, customer }) => {
       const vin = vehicle.vin!.toUpperCase();
-      const existing = await db.collection("vehicles").findOne({ vin });
-      
-      // Get status and label from the full repair order structure
       const roStatus = ro.repairOrderStatus?.name || "Work-In-Progress";
       const roLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || null;
       const roLabelColor = ro.color || null;
       const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
-      
-      // Log first few for debugging
-      if (vehicleMap.size <= 3) {
-        console.log(`[Tekmetric Sync] Sample RO #${ro.repairOrderNumber}: status="${roStatus}", vin=${vin}, mileage=${roMileage}`);
-      }
-      
-      // Build the active source entry for this work order
+      const customerName = customer 
+        ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer"
+        : "Unknown Customer";
+
+      return {
+        filter: { workOrderId: String(ro.id) },
+        update: {
+          workOrderId: String(ro.id),
+          workOrderNumber: ro.repairOrderNumber,
+          shopId: String(userShopId),
+          tekmetricShopId: shopId,
+          vin,
+          vehicleYear: vehicle.year,
+          vehicleMake: vehicle.make,
+          vehicleModel: vehicle.model,
+          vehicleEngine: vehicle.engine,
+          customerName,
+          customerId: ro.customerId,
+          odometer: roMileage,
+          status: roStatus,
+          label: roLabel,
+          labelColor: roLabelColor,
+          fetchedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        setOnInsert: { createdAt: new Date() },
+      };
+    });
+
+    await bulkUpsert('tekmetric_work_orders', workOrderUpserts);
+
+    // Batch 3: Prepare bulk operations for vehicles
+    const vehicleUpserts = [...vehicleMap.values()].map(({ vehicle, ro, customer }) => {
+      const vin = vehicle.vin!.toUpperCase();
+      const existing = existingVehicleMap.get(vin);
+      const roStatus = ro.repairOrderStatus?.name || "Work-In-Progress";
+      const roLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || null;
+      const roLabelColor = ro.color || null;
+      const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
+
       const workOrderSource = {
         provider: "tekmetric",
         workOrderId: String(ro.id),
@@ -114,41 +154,7 @@ export async function POST(request: NextRequest) {
         status: roStatus,
         addedAt: new Date(),
       };
-      
-      // Also upsert into tekmetric_work_orders (this is what the dashboard queries)
-      const customerName = customer 
-        ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer"
-        : "Unknown Customer";
-      
-      await db.collection("tekmetric_work_orders").updateOne(
-        { workOrderId: String(ro.id) },
-        {
-          $set: {
-            workOrderId: String(ro.id),
-            workOrderNumber: ro.repairOrderNumber,
-            shopId: String(userShopId),
-            tekmetricShopId: shopId,
-            vin,
-            vehicleYear: vehicle.year,
-            vehicleMake: vehicle.make,
-            vehicleModel: vehicle.model,
-            vehicleEngine: vehicle.engine,
-            customerName,
-            customerId: ro.customerId,
-            odometer: roMileage,
-            status: roStatus,
-            label: roLabel,
-            labelColor: roLabelColor,
-            fetchedAt: new Date(),
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            createdAt: new Date(),
-          }
-        },
-        { upsert: true }
-      );
-      
+
       const vehicleData: Record<string, any> = {
         vin,
         year: vehicle.year,
@@ -166,7 +172,7 @@ export async function POST(request: NextRequest) {
           firstName: customer.firstName,
           lastName: customer.lastName,
           email: customer.email,
-          phone: customer.phone?.find(p => p.primary)?.number || customer.phone?.[0]?.number,
+          phone: customer.phone?.find((p: any) => p.primary)?.number || customer.phone?.[0]?.number,
         } : undefined,
         tekmetric: {
           vehicleId: vehicle.id,
@@ -181,50 +187,43 @@ export async function POST(request: NextRequest) {
         },
         updatedAt: new Date(),
       };
-      
+
       if (existing) {
-        // Update existing vehicle, add/update this work order source
         const existingSources = existing.status?.sources || [];
         const sourceIndex = existingSources.findIndex(
           (s: any) => s.provider === "tekmetric" && s.workOrderId === String(ro.id)
         );
-        
-        let updatedSources;
-        if (sourceIndex >= 0) {
-          // Update existing source
-          updatedSources = [...existingSources];
-          updatedSources[sourceIndex] = workOrderSource;
-        } else {
-          // Add new source
-          updatedSources = [...existingSources, workOrderSource];
-        }
+        let updatedSources = sourceIndex >= 0
+          ? existingSources.map((s: any, i: number) => i === sourceIndex ? workOrderSource : s)
+          : [...existingSources, workOrderSource];
 
-        await db.collection("vehicles").updateOne(
-          { vin },
-          { 
-            $set: {
-              ...vehicleData,
-              "status.active": true,
-              "status.sources": updatedSources,
-              "status.updatedAt": new Date(),
-            }
-          }
-        );
         stats.vehiclesUpdated++;
-      } else {
-        await db.collection("vehicles").insertOne({
-          ...vehicleData,
-          shopId: shop._id,
-          status: {
-            active: true,
-            sources: [workOrderSource],
-            updatedAt: new Date(),
+        return {
+          filter: { vin },
+          update: {
+            ...vehicleData,
+            "status.active": true,
+            "status.sources": updatedSources,
+            "status.updatedAt": new Date(),
           },
-          createdAt: new Date(),
-        });
+        };
+      } else {
         stats.vehiclesImported++;
+        return {
+          filter: { vin },
+          update: {
+            ...vehicleData,
+            shopId: shop._id,
+            "status.active": true,
+            "status.sources": [workOrderSource],
+            "status.updatedAt": new Date(),
+          },
+          setOnInsert: { createdAt: new Date() },
+        };
       }
-    }
+    });
+
+    await bulkUpsert('vehicles', vehicleUpserts);
 
     await db.collection("shops").updateOne(
       { shopId: { $in: [userShopId, Number(userShopId)] } },
