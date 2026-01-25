@@ -20,12 +20,8 @@
  * New modular code: lib/integrations/protractor/
  */
 
-if (process.env.NODE_ENV === 'development') {
-  console.warn(
-    '[DEPRECATED] lib/integrations/protractor.ts is deprecated. ' +
-    'Use lib/integrations/protractor/ module instead. See DEPRECATED.md for migration guide.'
-  );
-}
+// Runtime warning removed - this file is used as backing implementation for modular re-exports
+// Direct imports should use: import { ... } from '@/lib/integrations/protractor';
 
 // Note: "server-only" import removed to allow standalone script usage
 import crypto from "node:crypto";

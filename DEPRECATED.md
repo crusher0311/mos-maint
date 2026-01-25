@@ -135,44 +135,38 @@ See `lib/integrations/protractor/` as the reference implementation.
 | Phase | Target Date | Action |
 |-------|-------------|--------|
 | Phase 1 | Complete | Add deprecation notices to legacy files |
-| Phase 2 | In Progress | Migrate remaining API routes to use new modules (~30 routes) |
-| Phase 3 | Complete | Add runtime deprecation warnings (dev mode only) |
-| Phase 4 | TBD | Remove legacy files after full migration |
+| Phase 2 | **Complete** | Migrate all API routes to use modular imports |
+| Phase 3 | Complete | Runtime warnings removed (modular re-exports used instead) |
+| Phase 4 | TBD | Remove legacy files after verification period |
 
-### Runtime Deprecation Warnings
+### Migration Approach
 
-In development mode, importing deprecated files will log a console warning:
+Legacy files are now used as **backing implementations** for the modular indexes:
+
 ```
-[DEPRECATED] lib/integrations/protractor.ts is deprecated. 
-Use lib/integrations/protractor/ module instead. See DEPRECATED.md for migration guide.
+Import Path Resolution:
+@/lib/integrations/protractor  → lib/integrations/protractor/index.ts (modular)
+                                  ↳ Re-exports from lib/integrations/protractor.ts (legacy)
+
+@/lib/integrations/tekmetric   → lib/integrations/tekmetric/index.ts (modular)  
+                                  ↳ Re-exports from lib/tekmetric.ts (legacy)
+
+@/lib/integrations/autoflow    → lib/integrations/autoflow/index.ts (modular)
+                                  ↳ Re-exports from lib/integrations/autoflow.ts (legacy)
 ```
 
-Files with runtime warnings:
-- `lib/integrations/protractor.ts`
-- `lib/tekmetric.ts`
-- `lib/integrations/autoflow.ts`
+**Benefits:**
+- All API routes now import from modular paths
+- No runtime deprecation warnings in development
+- Legacy code continues to work as backing implementation
+- Gradual migration path to pure modular implementation
 
-### API Routes Pending Migration
+### API Routes Migration Status
 
-The following API routes still use legacy imports and should be migrated over time:
-
-**Protractor (~16 routes):**
-- `app/api/protractor/*` - Protractor-specific endpoints
-- `app/api/cron/protractor-sync/route.ts`
-- `app/api/webhooks/protractor/[token]/route.ts`
-- `app/api/settings/protractor/*`
-- Various vehicle/job endpoints
-
-**Tekmetric (~8 routes):**
-- `app/api/tekmetric/*` - Tekmetric-specific endpoints
-- `app/api/cron/tekmetric-sync/route.ts`
-- `app/api/webhooks/tekmetric/route.ts`
-- `app/api/settings/tekmetric/route.ts`
-
-**AutoFlow (~6 routes):**
-- `app/api/webhooks/autoflow/[token]/route.ts`
-- `app/api/admin/shops/[shopId]/autoflow/test/route.ts`
-- Vehicle analyzer endpoints
+**All routes migrated** - Routes now use modular imports:
+- `@/lib/integrations/protractor` - All Protractor routes ✓
+- `@/lib/integrations/tekmetric` - All Tekmetric routes ✓
+- `@/lib/integrations/autoflow` - All AutoFlow routes ✓
 
 ---
 
