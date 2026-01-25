@@ -20,6 +20,13 @@
  * New modular code: lib/integrations/tekmetric/
  */
 
+if (process.env.NODE_ENV === 'development') {
+  console.warn(
+    '[DEPRECATED] lib/tekmetric.ts is deprecated. ' +
+    'Use lib/integrations/tekmetric/ module instead. See DEPRECATED.md for migration guide.'
+  );
+}
+
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import { getValidToken, refreshToken, clearCachedToken } from "@/lib/tekmetric-auth";
 

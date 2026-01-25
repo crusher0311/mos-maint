@@ -16,6 +16,13 @@
  * New modular code: lib/integrations/autoflow/
  */
 
+if (process.env.NODE_ENV === 'development') {
+  console.warn(
+    '[DEPRECATED] lib/integrations/autoflow.ts is deprecated. ' +
+    'Use lib/integrations/autoflow/ module instead. See DEPRECATED.md for migration guide.'
+  );
+}
+
 import "server-only";
 import { getDb } from "@/lib/mongo";
 
