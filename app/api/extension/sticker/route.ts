@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import nodeHtmlToImage from "node-html-to-image";
+import { renderHtmlToImage } from "@/lib/browser-pool";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
@@ -721,14 +721,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const image = await nodeHtmlToImage({
-      html,
-      type: "png",
-      transparent: false,
-      puppeteerArgs: {
-        executablePath: process.env.CHROMIUM_PATH || undefined,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-      },
+    const image = await renderHtmlToImage(html, {
+      width: dimensions.width,
+      height: dimensions.height,
     });
 
     await db.collection("sticker_generations").insertOne({

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
-import nodeHtmlToImage from "node-html-to-image";
+import { renderHtmlToImage } from "@/lib/browser-pool";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { cacheGet, cacheSet } from "@/lib/cache";
@@ -760,23 +760,11 @@ export async function POST(req: NextRequest) {
       html = generateStickerHtml(configWithBase64Logo, body, qrDataUrl, dimensions);
     }
 
-    // Render at canvas size, then scale up the image for pixel-perfect matching
-    const scaleUp = outputWidth / renderWidth;
-    
-    const image = await nodeHtmlToImage({
-      html,
-      type: "png",
-      transparent: false,
+    // Render at output size for high DPI
+    const imageBuffer = await renderHtmlToImage(html, {
+      width: outputWidth,
+      height: outputHeight,
       selector: "#sticker-canvas",
-      puppeteerArgs: {
-        executablePath: process.env.CHROMIUM_PATH || undefined,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-        defaultViewport: {
-          width: renderWidth,
-          height: renderHeight,
-          deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
-        },
-      },
     });
 
     await db.collection("sticker_generations").insertOne({
@@ -813,7 +801,6 @@ export async function POST(req: NextRequest) {
       console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
     }
 
-    const imageBuffer = image as Buffer;
     return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         "Content-Type": "image/png",
