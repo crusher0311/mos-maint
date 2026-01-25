@@ -145,9 +145,9 @@ Legacy integration files have been marked as deprecated but remain functional fo
 - Modularized Tekmetric integration with OAuth management and API client separation
 - Modularized AutoFlow DVI integration with self-contained structure
 - Implemented auto-registration pattern for all integration adapters
-- Maintained backward compatibility through re-exports in main index
-- Added deprecation notices to all legacy integration files with migration guidance
-- Created DEPRECATED.md documenting legacy files and their modular replacements
+- **Migrated all ~30 API routes** from legacy to modular import paths
+- Implemented "legacy as backing implementation" pattern: modular indexes re-export from legacy files
+- Removed runtime deprecation warnings (no longer needed with modular imports throughout)
 - Standardized admin panel colors to mos-blue (#3C81C3) brand color
 
 **January 24, 2026:**
