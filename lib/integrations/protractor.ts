@@ -2486,19 +2486,30 @@ export async function addDeferredWorkToWorkOrder(
       });
       
       // Find the matching service package by ID or title (case-insensitive)
+      // Priority: exact ID match > exact title match > exact code match > partial title match
       const titleLower = title.toLowerCase();
       const codeLower = (deferredItem.Code || '').toLowerCase();
-      const matchingPackage = originalPackages.find((pkg: any) => {
+      
+      // First try exact matches
+      let matchingPackage = originalPackages.find((pkg: any) => {
         const pkgTitle = (pkg.ServicePackageHeader?.Title || pkg.Title || '').toLowerCase();
         const pkgCode = (pkg.Code || '').toLowerCase();
         return (
           pkg.ID === deferredItem.ID || 
           pkgTitle === titleLower ||
-          pkgCode === codeLower ||
-          pkgTitle.includes(titleLower) ||
-          titleLower.includes(pkgTitle)
+          (codeLower && pkgCode === codeLower)
         );
       });
+      
+      // If no exact match, try partial matches (only where pkg title contains search term, not reverse)
+      if (!matchingPackage) {
+        matchingPackage = originalPackages.find((pkg: any) => {
+          const pkgTitle = (pkg.ServicePackageHeader?.Title || pkg.Title || '').toLowerCase();
+          // Only match if the package title contains our search term
+          // NOT the reverse (which caused "Air Filter" to match "Cabin Air Filter")
+          return pkgTitle.includes(titleLower);
+        });
+      }
       
       if (matchingPackage) {
         // Extract the service package lines (labor and parts)
