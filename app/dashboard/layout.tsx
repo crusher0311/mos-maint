@@ -6,7 +6,8 @@ import { Sidebar } from "@/components/ui/Sidebar";
 import QuickStickerModal from "@/components/stickers/QuickStickerModal";
 import SupportChatWidget from "@/components/ui/SupportChatWidget";
 import { GhostModeBanner } from "@/components/ui/GhostModeBanner";
-import { Menu, X } from "lucide-react";
+import { AnnouncementBanner } from "@/components/ui/AnnouncementBanner";
+import { Menu } from "lucide-react";
 
 interface UserInfo {
   email: string;
@@ -156,6 +157,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
+          <div className="px-4 pt-4 sm:px-6 sm:pt-6">
+            <AnnouncementBanner />
+          </div>
           {children}
         </div>
       </div>
