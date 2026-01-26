@@ -159,7 +159,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       <div className="p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(60, 129, 195, 0.75)' }}>
               <Shield className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -191,7 +191,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 onClick={handleNavClick}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
-                    ? "bg-purple-600 text-white"
+                    ? "bg-[rgba(60,129,195,0.75)] text-white"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
@@ -208,9 +208,10 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               onClick={() => setTicketsExpanded(!ticketsExpanded)}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isTicketsSection
-                  ? "bg-purple-600/20 text-purple-300"
+                  ? "text-[#7ab3e0]"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
               }`}
+              style={isTicketsSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}
             >
               <div className="flex items-center gap-3">
                 <Ticket className="w-5 h-5" />
@@ -238,7 +239,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                       onClick={handleNavClick}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                         isActive(subItem.href)
-                          ? "bg-purple-600 text-white"
+                          ? "bg-[rgba(60,129,195,0.75)] text-white"
                           : "text-slate-400 hover:bg-slate-800 hover:text-white"
                       }`}
                     >
@@ -263,9 +264,10 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               onClick={() => setSettingsExpanded(!settingsExpanded)}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isSettingsSection
-                  ? "bg-purple-600/20 text-purple-300"
+                  ? "text-[#7ab3e0]"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
               }`}
+              style={isSettingsSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}
             >
               <div className="flex items-center gap-3">
                 <Settings className="w-5 h-5" />
@@ -288,7 +290,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                         onClick={handleNavClick}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                           isActive(subItem.href)
-                            ? "bg-purple-600 text-white"
+                            ? "bg-[rgba(60,129,195,0.75)] text-white"
                             : "text-slate-400 hover:bg-slate-800 hover:text-white"
                         }`}
                       >
@@ -309,7 +311,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 onClick={handleNavClick}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive(item.href)
-                    ? "bg-purple-600 text-white"
+                    ? "bg-[rgba(60,129,195,0.75)] text-white"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
@@ -325,7 +327,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
 
       <div className="p-4 border-t border-slate-700">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-medium">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: 'rgba(60, 129, 195, 0.75)' }}>
             {userEmail?.charAt(0).toUpperCase() || "A"}
           </div>
           <div className="flex-1 min-w-0">
