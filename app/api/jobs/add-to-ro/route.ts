@@ -128,12 +128,18 @@ export async function POST(req: NextRequest) {
     };
 
     if (line.lineType === "labor") {
-      // Labor: use RateCode to let Protractor apply shop's current labor rate
+      // Labor: use RateCode WITHOUT Total - force Protractor to calculate from shop's rate
       return {
-        ...baseLine,
+        ID: ZERO_GUID,
+        Rank: idx + 1,
+        Type: "Labor",
+        Description: line.description,
+        Quantity: String(line.quantity),
         RateCode: "1",
         TechnicianHour: String(line.quantity),
-        TotalCost: String(line.extendedPrice.toFixed(2)),
+        MinimumCharge: 0,
+        Discount: 0,
+        Completed: false,
       };
     } else {
       // Parts/materials: use historical pricing
