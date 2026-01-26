@@ -607,7 +607,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         {isPlatformAdmin && (
           <Link
             href="/platform-admin"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition-colors"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            style={{ backgroundColor: 'rgba(96, 99, 100, 0.3)', color: 'rgba(255, 255, 255, 0.9)' }}
           >
             <Shield className="w-5 h-5" />
             <span>MOS Admin Panel</span>
