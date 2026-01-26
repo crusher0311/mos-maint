@@ -95,6 +95,32 @@ export async function POST(req: NextRequest) {
   }
   const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
+  // Extract labor rate from existing work order lines to use shop's current rate
+  const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
+  const existingPackagesForRate = Array.isArray(existingPackagesRaw)
+    ? existingPackagesRaw
+    : (existingPackagesRaw?.ItemCollection || []);
+  
+  let shopLaborRate = 0;
+  for (const pkg of existingPackagesForRate) {
+    const linesRaw = pkg.ServicePackageLines;
+    const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+    for (const line of lines) {
+      if ((line.Type === 'Labor' || line.LineType === 'Labor') && line.Price && parseFloat(line.Price) > 0) {
+        shopLaborRate = parseFloat(line.Price);
+        break;
+      }
+    }
+    if (shopLaborRate > 0) break;
+  }
+  
+  // If no rate found on work order, use a sensible default (common shop rate)
+  if (shopLaborRate === 0) {
+    shopLaborRate = 150; // Default fallback - most shops charge $100-200/hr
+  }
+  
+  console.log(`[Jobs Add to RO] Using labor rate: $${shopLaborRate}/hr`);
+
   const mapLineType = (lineType: string): string => {
     switch (lineType) {
       case "labor": return "Labor";
@@ -106,15 +132,19 @@ export async function POST(req: NextRequest) {
 
   const servicePackageLines = job.lines.map((line, idx) => {
     if (line.lineType === "labor") {
-      // For labor: only set hours and rate code - let Protractor calculate totals using shop's default rate
+      // For labor: use shop's current labor rate (extracted from work order or default)
+      const laborTotal = line.quantity * shopLaborRate;
       return {
         ID: ZERO_GUID,
         Rank: idx + 1,
         Type: "Labor",
         Description: line.description,
-        RateCode: "1", // Uses shop's default labor rate for rate code 1
+        RateCode: "1",
         TechnicianHour: String(line.quantity),
         Quantity: String(line.quantity),
+        Price: String(shopLaborRate.toFixed(2)),
+        Total: String(laborTotal.toFixed(2)),
+        ExtendedTotal: String(laborTotal.toFixed(2)),
         MinimumCharge: 0,
         Discount: 0,
         Completed: false,
@@ -142,16 +172,11 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
-  const existingPackages = Array.isArray(existingPackagesRaw)
-    ? existingPackagesRaw
-    : (existingPackagesRaw?.ItemCollection || []);
-
   const newServicePackage = {
     ID: ZERO_GUID,
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
-    Rank: existingPackages.length + 1,
+    Rank: existingPackagesForRate.length + 1,
     Status: "Pending",
     ServicePackageHeader: {
       Title: job.title,
@@ -165,7 +190,7 @@ export async function POST(req: NextRequest) {
   const updatedWorkOrder = {
     ...existingWorkOrder,
     ServicePackages: {
-      ItemCollection: [...existingPackages, newServicePackage],
+      ItemCollection: [...existingPackagesForRate, newServicePackage],
     },
   };
 
