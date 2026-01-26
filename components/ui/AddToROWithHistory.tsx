@@ -66,8 +66,8 @@ function normalizeServiceTitle(title: string): string {
     [/brake\s*pad|front\s*brake|rear\s*brake/i, "brake pads"],
     [/brake\s*rotor/i, "brake rotors"],
     
-    // Spark plugs and ignition
-    [/spark\s*plug/i, "spark plugs"],
+    // Spark plugs and ignition - use singular for better search matching
+    [/spark\s*plug/i, "spark plug"],
     [/ignition\s*coil/i, "ignition coil"],
     
     // Wipers

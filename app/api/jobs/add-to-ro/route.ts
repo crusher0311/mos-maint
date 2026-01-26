@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
   const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
-  const existingPackagesForRate = Array.isArray(existingPackagesRaw)
+  const existingPackages = Array.isArray(existingPackagesRaw)
     ? existingPackagesRaw
     : (existingPackagesRaw?.ItemCollection || []);
 
@@ -109,50 +109,30 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  const servicePackageLines = job.lines.map((line, idx) => {
-    if (line.lineType === "labor") {
-      // For labor: use RateCode to let Protractor apply shop's default labor rate
-      // Do NOT send Price - this lets Protractor use the rate from RateCode "1"
-      return {
-        ID: ZERO_GUID,
-        Rank: idx + 1,
-        Type: "Labor",
-        Description: line.description,
-        RateCode: "1", // Protractor uses this to look up the shop's configured rate
-        TechnicianHour: String(line.quantity),
-        Quantity: String(line.quantity),
-        MinimumCharge: 0,
-        Discount: 0,
-        Completed: false,
-      };
-    } else {
-      // For parts/materials: use historical pricing
-      return {
-        ID: ZERO_GUID,
-        Rank: idx + 1,
-        Type: mapLineType(line.lineType),
-        Description: line.description,
-        Quantity: String(line.quantity),
-        MinimumCharge: 0,
-        Discount: 0,
-        Total: String(line.extendedPrice.toFixed(2)),
-        ExtendedTotal: String(line.extendedPrice.toFixed(2)),
-        Completed: false,
-        Unit: "Each",
-        Price: String(line.unitPrice.toFixed(2)),
-        Cost: String((line.unitPrice * 0.6).toFixed(2)),
-        TotalCost: String((line.extendedPrice * 0.6).toFixed(2)),
-        PartNumber: line.partNumber || "",
-        Manufacturer: line.manufacturer || "",
-      };
-    }
-  });
+  // Use unified line format - Protractor will apply shop's labor rate via RateCode
+  const servicePackageLines = job.lines.map((line, idx) => ({
+    ID: ZERO_GUID,
+    Rank: idx + 1,
+    Type: mapLineType(line.lineType),
+    Description: line.description,
+    Quantity: String(line.quantity),
+    RateCode: "1",
+    MinimumCharge: 0,
+    Total: String(line.extendedPrice.toFixed(2)),
+    Discount: 0,
+    ExtendedTotal: String(line.extendedPrice.toFixed(2)),
+    TotalCost: String(line.extendedPrice.toFixed(2)),
+    PartNumber: line.partNumber || "",
+    Manufacturer: line.manufacturer || "",
+    Completed: false,
+    TechnicianHour: line.lineType === "labor" ? String(line.quantity) : "0",
+  }));
 
   const newServicePackage = {
     ID: ZERO_GUID,
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
-    Rank: existingPackagesForRate.length + 1,
+    Rank: existingPackages.length + 1,
     Status: "Pending",
     ServicePackageHeader: {
       Title: job.title,
