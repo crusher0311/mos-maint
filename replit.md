@@ -122,7 +122,14 @@ const vehicle = await protractorAdapter.getVehicleByVin(shopId, vin);
 
 See **`TECHNICAL_DEBT_REVIEW.md`** for original analysis and phase plan.
 
+See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details including labor rate calculations and line formatting.
+
 ## Recent Changes
+
+**January 26, 2026:**
+- Fixed labor rate calculation when adding jobs from history - now uses 3-tier fallback (WO lines → shop job history → historical rate)
+- Improved service title normalization for job search matching (singular forms for better matching)
+- Fixed deferred work matching to prevent partial matches (e.g., "Cabin Air Filter" no longer matches "Air Filter")
 
 **January 25, 2026:**
 - Completed full modular architecture refactoring for integration layer (all 6 phases)
