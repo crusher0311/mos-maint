@@ -109,6 +109,9 @@ export async function POST(req: NextRequest) {
     }
   };
 
+  // Debug: log job line data
+  console.log(`[Jobs Add to RO] Job lines data:`, JSON.stringify(job.lines, null, 2));
+
   // Use unified line format - Protractor will apply shop's labor rate via RateCode
   const servicePackageLines = job.lines.map((line, idx) => ({
     ID: ZERO_GUID,
