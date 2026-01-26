@@ -17,6 +17,8 @@ import {
   Mail,
   Bell,
   CheckCircle,
+  X,
+  Loader2,
 } from "lucide-react";
 
 interface Announcement {
@@ -66,12 +68,22 @@ const PRIORITY_STYLES = {
   critical: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700", icon: AlertTriangle },
 };
 
+interface RecipientPreview {
+  email: string;
+  shopId?: number;
+  shopName?: string;
+  role?: string;
+}
+
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewRecipients, setPreviewRecipients] = useState<RecipientPreview[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -104,6 +116,7 @@ export default function AnnouncementsPage() {
   };
 
   const handlePreview = async () => {
+    setPreviewLoading(true);
     try {
       const res = await fetch("/api/admin/announcements", {
         method: "POST",
@@ -120,9 +133,13 @@ export default function AnnouncementsPage() {
       const data = await res.json();
       if (data.recipientCount !== undefined) {
         setPreviewCount(data.recipientCount);
+        setPreviewRecipients(data.sampleRecipients || []);
+        setShowPreviewModal(true);
       }
     } catch (error) {
       console.error("Error getting preview:", error);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -431,9 +448,10 @@ export default function AnnouncementsPage() {
             <div className="flex justify-end gap-3 pt-4 border-t">
               <button
                 onClick={handlePreview}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={previewLoading}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                <Eye className="w-4 h-4" />
+                {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
                 Preview Recipients
               </button>
               <button
@@ -541,6 +559,83 @@ export default function AnnouncementsPage() {
           </div>
         )}
       </div>
+
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Recipients Preview</h3>
+                <p className="text-sm text-gray-600">
+                  {previewCount} total recipient{previewCount !== 1 ? "s" : ""} will receive this announcement
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {previewRecipients.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>No recipients found for this target</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-500 mb-3">
+                    Showing {previewRecipients.length} of {previewCount} recipients:
+                  </p>
+                  {previewRecipients.map((recipient, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-[rgba(60,129,195,0.15)] rounded-full flex items-center justify-center">
+                          <Users className="w-4 h-4 text-[#3c81c3]" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{recipient.email}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            {recipient.shopName && (
+                              <span className="flex items-center gap-1">
+                                <Building2 className="w-3 h-3" />
+                                {recipient.shopName}
+                              </span>
+                            )}
+                            {recipient.role && (
+                              <span className="flex items-center gap-1">
+                                <Shield className="w-3 h-3" />
+                                {recipient.role}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {(previewCount ?? 0) > previewRecipients.length && (
+                    <p className="text-center text-sm text-gray-500 pt-2">
+                      ...and {(previewCount ?? 0) - previewRecipients.length} more
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t">
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
