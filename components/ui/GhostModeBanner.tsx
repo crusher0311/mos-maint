@@ -51,7 +51,7 @@ export function GhostModeBanner() {
   if (!ghostInfo) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[100] bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 text-white shadow-lg">
+    <div className="fixed top-0 left-0 right-0 z-[100] text-white shadow-lg" style={{ background: 'linear-gradient(to right, rgba(96, 99, 100, 0.95), rgba(96, 99, 100, 0.85), rgba(96, 99, 100, 0.95))' }}>
       <div className="max-w-7xl mx-auto px-4 py-2">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -71,7 +71,7 @@ export function GhostModeBanner() {
             <button
               onClick={exitGhostMode}
               disabled={exiting}
-              className="flex items-center gap-2 bg-white text-purple-700 hover:bg-purple-50 px-4 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 bg-white text-gray-700 hover:bg-gray-50 px-4 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-50"
             >
               {exiting ? (
                 <>
