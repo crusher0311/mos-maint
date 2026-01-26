@@ -135,7 +135,6 @@ export async function POST(req: NextRequest) {
       const laborLine = recentJob.lines.find((l: any) => l.lineType === "labor" && l.unitPrice > 0);
       if (laborLine) {
         shopLaborRate = laborLine.unitPrice;
-        console.log(`[Jobs Add to RO] Found shop labor rate from job history: $${shopLaborRate}/hr`);
       }
     }
   }
@@ -145,11 +144,12 @@ export async function POST(req: NextRequest) {
     const laborLine = job.lines.find(l => l.lineType === "labor");
     if (laborLine && laborLine.unitPrice > 0) {
       shopLaborRate = laborLine.unitPrice;
-      console.log(`[Jobs Add to RO] Using historical labor rate: $${shopLaborRate}/hr`);
     }
   }
   
-  console.log(`[Jobs Add to RO] Final labor rate: $${shopLaborRate}/hr`);
+  if (shopLaborRate > 0) {
+    console.log(`[Jobs Add to RO] Using labor rate: $${shopLaborRate}/hr`);
+  }
 
   const servicePackageLines = job.lines.map((line, idx) => {
     const baseLine = {
