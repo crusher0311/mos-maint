@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { 
@@ -9,7 +10,6 @@ import {
   DollarSign, 
   LayoutDashboard,
   LogOut,
-  Shield,
   Settings,
   QrCode,
   Activity,
@@ -159,9 +159,13 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       <div className="p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(60, 129, 195, 0.75)' }}>
-              <Shield className="w-6 h-6 text-white" />
-            </div>
+            <Image 
+              src="/mos-icon.png" 
+              alt="MOS Tools" 
+              width={40} 
+              height={40} 
+              className="rounded-lg"
+            />
             <div>
               <h1 className="text-white font-bold">MOS Admin</h1>
               <p className="text-slate-400 text-xs">Platform Management</p>

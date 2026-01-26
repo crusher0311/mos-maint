@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, ReactNode } from "react";
+import Image from "next/image";
 import { PlatformAdminSidebar } from "./PlatformAdminSidebar";
-import { Menu, Shield } from "lucide-react";
+import { Menu } from "lucide-react";
 
 interface PlatformAdminLayoutClientProps {
   children: ReactNode;
@@ -38,9 +39,13 @@ export function PlatformAdminLayoutClient({
           <Menu className="w-6 h-6" />
         </button>
         <div className="flex items-center gap-2 ml-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(60, 129, 195, 0.75)' }}>
-            <Shield className="w-5 h-5 text-white" />
-          </div>
+          <Image 
+            src="/mos-icon.png" 
+            alt="MOS Tools" 
+            width={32} 
+            height={32} 
+            className="rounded-lg"
+          />
           <span className="text-white font-semibold">MOS Admin</span>
         </div>
       </div>
