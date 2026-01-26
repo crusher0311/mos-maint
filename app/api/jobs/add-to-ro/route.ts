@@ -112,25 +112,42 @@ export async function POST(req: NextRequest) {
   // Debug: log job line data
   console.log(`[Jobs Add to RO] Job lines data:`, JSON.stringify(job.lines, null, 2));
 
-  // Build lines with all required fields for Protractor
-  const servicePackageLines = job.lines.map((line, idx) => ({
-    ID: ZERO_GUID,
-    Rank: idx + 1,
-    Type: mapLineType(line.lineType),
-    Description: line.description,
-    Quantity: String(line.quantity),
-    RateCode: "1",
-    MinimumCharge: 0,
-    Price: String(line.unitPrice.toFixed(2)),
-    Total: String(line.extendedPrice.toFixed(2)),
-    Discount: 0,
-    ExtendedTotal: String(line.extendedPrice.toFixed(2)),
-    TotalCost: String((line.extendedPrice * 0.6).toFixed(2)),
-    PartNumber: line.partNumber || "",
-    Manufacturer: line.manufacturer || "",
-    Completed: false,
-    TechnicianHour: line.lineType === "labor" ? String(line.quantity) : "0",
-  }));
+  // Build lines - labor uses RateCode (shop's rate), parts use historical Price
+  const servicePackageLines = job.lines.map((line, idx) => {
+    const baseLine = {
+      ID: ZERO_GUID,
+      Rank: idx + 1,
+      Type: mapLineType(line.lineType),
+      Description: line.description,
+      Quantity: String(line.quantity),
+      MinimumCharge: 0,
+      Discount: 0,
+      Total: String(line.extendedPrice.toFixed(2)),
+      ExtendedTotal: String(line.extendedPrice.toFixed(2)),
+      Completed: false,
+    };
+
+    if (line.lineType === "labor") {
+      // Labor: use RateCode to let Protractor apply shop's current labor rate
+      return {
+        ...baseLine,
+        RateCode: "1",
+        TechnicianHour: String(line.quantity),
+        TotalCost: String(line.extendedPrice.toFixed(2)),
+      };
+    } else {
+      // Parts/materials: use historical pricing
+      return {
+        ...baseLine,
+        Unit: "Each",
+        Price: String(line.unitPrice.toFixed(2)),
+        Cost: String((line.unitPrice * 0.6).toFixed(2)),
+        TotalCost: String((line.extendedPrice * 0.6).toFixed(2)),
+        PartNumber: line.partNumber || "",
+        Manufacturer: line.manufacturer || "",
+      };
+    }
+  });
 
   const newServicePackage = {
     ID: ZERO_GUID,
