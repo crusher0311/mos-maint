@@ -757,10 +757,9 @@ export async function findCachedJobPricing(
       matched = true;
       matchType = 'exact title';
     }
-    // Partial title match
-    else if (targetTitle && targetTitle.length > 5 && 
-             (normalizedJobTitle.includes(targetTitle.slice(0, 15)) || 
-              targetTitle.includes(normalizedJobTitle.slice(0, 15)))) {
+    // Partial title match - only match when cached job title CONTAINS target title
+    // NOT the reverse (which caused "Air Filter" to match "Cabin Air Filter")
+    else if (targetTitle && targetTitle.length > 5 && normalizedJobTitle.includes(targetTitle)) {
       matched = true;
       matchType = 'partial title';
     }
