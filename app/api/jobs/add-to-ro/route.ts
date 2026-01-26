@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
   
   // If no rate found from WO, check shop's job history cache for their typical rate
   if (shopLaborRate === 0) {
-    const { getDb } = await import("@/lib/db");
+    const { getDb } = await import("@/lib/mongo");
     const db = await getDb();
     const recentJob = await db.collection("job_index").findOne(
       { shopId, "lines.lineType": "labor", "lines.unitPrice": { $gt: 0 } },
