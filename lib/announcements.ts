@@ -285,7 +285,6 @@ export async function getActiveAnnouncements(userId: string): Promise<Announceme
       .collection("system_announcements")
       .find({
         status: "sent",
-        priority: "critical",
         $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: now } }],
       })
       .sort({ sentAt: -1 })
