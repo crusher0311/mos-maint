@@ -10,6 +10,7 @@ import {
   DollarSign, 
   LayoutDashboard,
   LogOut,
+  Shield,
   Settings,
   QrCode,
   Activity,
