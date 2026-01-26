@@ -105,32 +105,33 @@ export async function POST(req: NextRequest) {
   };
 
   const servicePackageLines = job.lines.map((line, idx) => {
-    const baseLine = {
-      ID: ZERO_GUID,
-      Rank: idx + 1,
-      Type: mapLineType(line.lineType),
-      Description: line.description,
-      Quantity: String(line.quantity),
-      MinimumCharge: 0,
-      Discount: 0,
-      Total: String(line.extendedPrice.toFixed(2)),
-      ExtendedTotal: String(line.extendedPrice.toFixed(2)),
-      Completed: false,
-    };
-
     if (line.lineType === "labor") {
-      // Calculate hourly rate from extended price / hours
-      const hourlyRate = line.quantity > 0 ? line.extendedPrice / line.quantity : line.unitPrice;
+      // For labor: only set hours and rate code - let Protractor calculate totals using shop's default rate
       return {
-        ...baseLine,
-        RateCode: "1",
+        ID: ZERO_GUID,
+        Rank: idx + 1,
+        Type: "Labor",
+        Description: line.description,
+        RateCode: "1", // Uses shop's default labor rate for rate code 1
         TechnicianHour: String(line.quantity),
-        Price: String(hourlyRate.toFixed(2)), // Hourly labor rate
-        TotalCost: String(line.extendedPrice.toFixed(2)),
+        Quantity: String(line.quantity),
+        MinimumCharge: 0,
+        Discount: 0,
+        Completed: false,
       };
     } else {
+      // For parts/materials: use historical pricing
       return {
-        ...baseLine,
+        ID: ZERO_GUID,
+        Rank: idx + 1,
+        Type: mapLineType(line.lineType),
+        Description: line.description,
+        Quantity: String(line.quantity),
+        MinimumCharge: 0,
+        Discount: 0,
+        Total: String(line.extendedPrice.toFixed(2)),
+        ExtendedTotal: String(line.extendedPrice.toFixed(2)),
+        Completed: false,
         Unit: "Each",
         Price: String(line.unitPrice.toFixed(2)),
         Cost: String((line.unitPrice * 0.6).toFixed(2)),
