@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { title, message, priority, target, deliveryChannels, sendNow, previewOnly } = body;
 
-    if (!title || !message || !priority || !target) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!target) {
+      return NextResponse.json({ error: "Missing target configuration" }, { status: 400 });
     }
 
     const targetConfig: AnnouncementTarget = {
@@ -61,6 +61,10 @@ export async function POST(req: NextRequest) {
         recipientCount: recipients.length,
         sampleRecipients: recipients.slice(0, 10),
       });
+    }
+
+    if (!title || !message || !priority) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const announcementId = await createAnnouncement({
