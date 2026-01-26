@@ -119,10 +119,13 @@ export async function POST(req: NextRequest) {
     };
 
     if (line.lineType === "labor") {
+      // Calculate hourly rate from extended price / hours
+      const hourlyRate = line.quantity > 0 ? line.extendedPrice / line.quantity : line.unitPrice;
       return {
         ...baseLine,
         RateCode: "1",
         TechnicianHour: String(line.quantity),
+        Price: String(hourlyRate.toFixed(2)), // Hourly labor rate
         TotalCost: String(line.extendedPrice.toFixed(2)),
       };
     } else {
