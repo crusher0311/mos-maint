@@ -94,7 +94,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   };
 
   return (
-    <aside className={`bg-slate-900 flex flex-col ${isMobile ? 'w-full h-full' : 'w-64 min-h-screen'}`}>
+    <aside className={`bg-slate-900 flex flex-col ${isMobile ? 'w-full h-full' : 'w-64 h-screen sticky top-0'}`}>
       <div className="p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
