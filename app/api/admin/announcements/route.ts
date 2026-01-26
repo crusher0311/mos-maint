@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         preview: true,
         recipientCount: recipients.length,
-        sampleRecipients: recipients.slice(0, 10),
+        sampleRecipients: recipients,
       });
     }
 

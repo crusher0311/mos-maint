@@ -586,7 +586,7 @@ export default function AnnouncementsPage() {
               ) : (
                 <div className="space-y-2">
                   <p className="text-sm text-gray-500 mb-3">
-                    Showing {previewRecipients.length} of {previewCount} recipients:
+                    All {previewRecipients.length} recipients:
                   </p>
                   {previewRecipients.map((recipient, index) => (
                     <div
@@ -617,11 +617,6 @@ export default function AnnouncementsPage() {
                       </div>
                     </div>
                   ))}
-                  {(previewCount ?? 0) > previewRecipients.length && (
-                    <p className="text-center text-sm text-gray-500 pt-2">
-                      ...and {(previewCount ?? 0) - previewRecipients.length} more
-                    </p>
-                  )}
                 </div>
               )}
             </div>
