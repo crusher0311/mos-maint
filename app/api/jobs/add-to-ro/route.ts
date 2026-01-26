@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
   const updatedWorkOrder = {
     ...existingWorkOrder,
     ServicePackages: {
-      ItemCollection: [...existingPackagesForRate, newServicePackage],
+      ItemCollection: [...existingPackages, newServicePackage],
     },
   };
 
