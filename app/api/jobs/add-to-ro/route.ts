@@ -109,10 +109,48 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  // Debug: log job line data
-  console.log(`[Jobs Add to RO] Job lines data:`, JSON.stringify(job.lines, null, 2));
+  // Try to extract shop's current labor rate from existing work order lines
+  let shopLaborRate = 0;
+  for (const pkg of existingPackages) {
+    const linesRaw = pkg.ServicePackageLines;
+    const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+    for (const line of lines) {
+      if ((line.Type === 'Labor' || line.LineType === 'Labor') && line.Price && parseFloat(line.Price) > 0) {
+        shopLaborRate = parseFloat(line.Price);
+        break;
+      }
+    }
+    if (shopLaborRate > 0) break;
+  }
+  
+  // If no rate found from WO, check shop's job history cache for their typical rate
+  if (shopLaborRate === 0) {
+    const { getDb } = await import("@/lib/db");
+    const db = await getDb();
+    const recentJob = await db.collection("job_index").findOne(
+      { shopId, "lines.lineType": "labor", "lines.unitPrice": { $gt: 0 } },
+      { sort: { lastPerformed: -1 } }
+    );
+    if (recentJob?.lines) {
+      const laborLine = recentJob.lines.find((l: any) => l.lineType === "labor" && l.unitPrice > 0);
+      if (laborLine) {
+        shopLaborRate = laborLine.unitPrice;
+        console.log(`[Jobs Add to RO] Found shop labor rate from job history: $${shopLaborRate}/hr`);
+      }
+    }
+  }
+  
+  // Final fallback: use historical rate from the job being added
+  if (shopLaborRate === 0) {
+    const laborLine = job.lines.find(l => l.lineType === "labor");
+    if (laborLine && laborLine.unitPrice > 0) {
+      shopLaborRate = laborLine.unitPrice;
+      console.log(`[Jobs Add to RO] Using historical labor rate: $${shopLaborRate}/hr`);
+    }
+  }
+  
+  console.log(`[Jobs Add to RO] Final labor rate: $${shopLaborRate}/hr`);
 
-  // Build lines - labor uses RateCode (shop's rate), parts use historical Price
   const servicePackageLines = job.lines.map((line, idx) => {
     const baseLine = {
       ID: ZERO_GUID,
@@ -128,7 +166,8 @@ export async function POST(req: NextRequest) {
     };
 
     if (line.lineType === "labor") {
-      // Labor: use RateCode WITHOUT Total - force Protractor to calculate from shop's rate
+      // Use shop's labor rate (from WO or fallback to historical)
+      const laborTotal = line.quantity * shopLaborRate;
       return {
         ID: ZERO_GUID,
         Rank: idx + 1,
@@ -137,12 +176,15 @@ export async function POST(req: NextRequest) {
         Quantity: String(line.quantity),
         RateCode: "1",
         TechnicianHour: String(line.quantity),
+        Price: String(shopLaborRate.toFixed(2)),
+        Total: String(laborTotal.toFixed(2)),
+        ExtendedTotal: String(laborTotal.toFixed(2)),
         MinimumCharge: 0,
         Discount: 0,
+        TotalCost: String(laborTotal.toFixed(2)),
         Completed: false,
       };
     } else {
-      // Parts/materials: use historical pricing
       return {
         ...baseLine,
         Unit: "Each",
