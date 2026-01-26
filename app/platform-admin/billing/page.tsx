@@ -55,7 +55,7 @@ interface BillingEvent {
 const planColors: Record<string, string> = {
   trial: "bg-gray-100 text-gray-700",
   starter: "bg-blue-100 text-blue-700",
-  professional: "bg-purple-100 text-purple-700",
+  professional: "bg-[rgba(60,129,195,0.15)] text-[#3c81c3]",
   enterprise: "bg-green-100 text-green-700",
   demo: "bg-yellow-100 text-yellow-700",
   churned: "bg-red-100 text-red-700",
@@ -123,7 +123,7 @@ export default function PlatformBillingPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <RefreshCw className="w-8 h-8 animate-spin text-purple-600" />
+        <RefreshCw className="w-8 h-8 animate-spin text-[#3c81c3]" />
       </div>
     );
   }
@@ -160,8 +160,8 @@ export default function PlatformBillingPage() {
 
             <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <CreditCard className="w-5 h-5 text-purple-600" />
+                <div className="p-2 bg-[rgba(60,129,195,0.15)] rounded-lg">
+                  <CreditCard className="w-5 h-5 text-[#3c81c3]" />
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Paid Shops</p>
@@ -215,7 +215,7 @@ export default function PlatformBillingPage() {
                     <div className="flex items-center gap-2">
                       <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-purple-500 rounded-full"
+                          className="h-full bg-[rgba(60,129,195,0.1)]0 rounded-full"
                           style={{ width: `${summary.totalShops > 0 ? (count / summary.totalShops) * 100 : 0}%` }}
                         />
                       </div>
@@ -253,13 +253,13 @@ export default function PlatformBillingPage() {
                   placeholder="Search shops..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
                 />
               </div>
               <select
                 value={planFilter}
                 onChange={(e) => setPlanFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
               >
                 <option value="all">All Plans</option>
                 <option value="trial">Trial</option>
@@ -299,7 +299,7 @@ export default function PlatformBillingPage() {
                           {shop.locationIdentifier && <span className="mr-2">{shop.locationIdentifier}</span>}
                           ID: {shop.shopId}
                           {shop.enterpriseName && (
-                            <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
+                            <span className="ml-2 px-1.5 py-0.5 bg-[rgba(60,129,195,0.15)] text-[#3c81c3] rounded">
                               {shop.enterpriseName}
                             </span>
                           )}
@@ -326,7 +326,7 @@ export default function PlatformBillingPage() {
                           </div>
                           <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden mx-auto mt-1">
                             <div
-                              className={`h-full rounded-full ${shop.vinViewCount >= shop.vinLimit ? "bg-red-500" : "bg-purple-500"}`}
+                              className={`h-full rounded-full ${shop.vinViewCount >= shop.vinLimit ? "bg-red-500" : "bg-[rgba(60,129,195,0.1)]0"}`}
                               style={{ width: `${Math.min(100, (shop.vinViewCount / shop.vinLimit) * 100)}%` }}
                             />
                           </div>

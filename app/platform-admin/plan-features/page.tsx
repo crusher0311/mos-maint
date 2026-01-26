@@ -17,7 +17,7 @@ interface PlatformFeature {
 const TIERS = [
   { slug: "starter", name: "Starter", color: "bg-gray-100" },
   { slug: "plus", name: "Plus", color: "bg-blue-100" },
-  { slug: "elite", name: "Elite", color: "bg-purple-100" },
+  { slug: "elite", name: "Elite", color: "bg-[rgba(60,129,195,0.15)]" },
   { slug: "enterprise", name: "Enterprise", color: "bg-amber-100" },
 ];
 

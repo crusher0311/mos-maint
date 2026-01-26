@@ -147,8 +147,8 @@ export default function PlatformUsagePage() {
 
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Calendar className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-[rgba(60,129,195,0.15)] rounded-lg">
+              <Calendar className="w-5 h-5 text-[#3c81c3]" />
             </div>
             <span className="text-sm text-gray-600">Total Tokens</span>
           </div>
@@ -323,9 +323,9 @@ export default function PlatformUsagePage() {
         </div>
       </div>
 
-      <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
-        <h3 className="font-medium text-purple-900 mb-2">Cost Estimation Notes</h3>
-        <ul className="text-sm text-purple-800 space-y-1">
+      <div className="bg-[rgba(60,129,195,0.1)] border border-[rgba(60,129,195,0.2)] rounded-xl p-4">
+        <h3 className="font-medium text-[#2d6aa3] mb-2">Cost Estimation Notes</h3>
+        <ul className="text-sm text-[#3c81c3] space-y-1">
           <li>Costs are estimates based on OpenAI published pricing</li>
           <li>GPT-4o-mini: $0.15/1M input, $0.60/1M output tokens</li>
           <li>GPT-4o: $5/1M input, $15/1M output tokens</li>

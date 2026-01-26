@@ -235,7 +235,7 @@ export default function RenderObservabilityDashboard() {
           </label>
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+            className="flex items-center gap-2 px-3 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] text-sm"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -420,7 +420,7 @@ export default function RenderObservabilityDashboard() {
                       </span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                         log.environment === 'Production' 
-                          ? 'bg-purple-100 text-purple-700' 
+                          ? 'bg-[rgba(60,129,195,0.15)] text-[#3c81c3]' 
                           : 'bg-gray-100 text-gray-600'
                       }`}>
                         {log.environment}

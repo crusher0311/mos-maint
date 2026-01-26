@@ -109,7 +109,7 @@ export default function HovercodePage() {
     <div className="p-8">
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
-          <QrCode className="w-8 h-8 text-purple-600" />
+          <QrCode className="w-8 h-8 text-[#3c81c3]" />
           <h1 className="text-2xl font-bold text-gray-900">HoverCode QR Management</h1>
         </div>
         <p className="text-gray-600">
@@ -138,7 +138,7 @@ export default function HovercodePage() {
               placeholder="Search by shop name, ID, or QR ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-[#3c81c3]"
             />
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function HovercodePage() {
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         placeholder="Paste HoverCode QR ID..."
-                        className="w-full px-3 py-1.5 text-sm border border-purple-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        className="w-full px-3 py-1.5 text-sm border border-[rgba(60,129,195,0.4)] rounded focus:ring-2 focus:ring-[#3c81c3] focus:border-[#3c81c3]"
                         autoFocus
                       />
                     ) : (
@@ -200,7 +200,7 @@ export default function HovercodePage() {
                         <button
                           onClick={() => saveHovercodeId(shop.shopId)}
                           disabled={savingShopId === shop.shopId}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-[rgba(60,129,195,0.75)] rounded hover:bg-[#3c81c3] disabled:opacity-50"
                         >
                           {savingShopId === shop.shopId ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -219,7 +219,7 @@ export default function HovercodePage() {
                     ) : (
                       <button
                         onClick={() => startEditing(shop)}
-                        className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                        className="text-sm text-[#3c81c3] hover:text-[#3c81c3] font-medium"
                       >
                         {shop.hovercodeQRId ? "Edit" : "Set QR ID"}
                       </button>

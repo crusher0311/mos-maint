@@ -92,7 +92,7 @@ export default function TicketReportsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <BarChart3 className="w-7 h-7 text-purple-600" />
+            <BarChart3 className="w-7 h-7 text-[#3c81c3]" />
             Support Ticket Reports
           </h1>
           <p className="text-gray-600">Analytics and insights for support tickets</p>
@@ -101,7 +101,7 @@ export default function TicketReportsPage() {
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3c81c3]"
           >
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
@@ -110,7 +110,7 @@ export default function TicketReportsPage() {
           </select>
           <button
             onClick={fetchStats}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -123,7 +123,7 @@ export default function TicketReportsPage() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
               <div className="flex items-center gap-2 mb-1">
-                <BarChart3 className="w-4 h-4 text-purple-500" />
+                <BarChart3 className="w-4 h-4 text-[#3c81c3]" />
                 <span className="text-sm text-gray-600">Total Tickets</span>
               </div>
               <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
@@ -151,7 +151,7 @@ export default function TicketReportsPage() {
             </div>
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
               <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-purple-500" />
+                <TrendingUp className="w-4 h-4 text-[#3c81c3]" />
                 <span className="text-sm text-gray-600">Avg Resolution</span>
               </div>
               <div className="text-2xl font-bold text-gray-900">
@@ -171,7 +171,7 @@ export default function TicketReportsPage() {
                     <div className="w-24 text-sm text-gray-600">{getCategoryLabel(category)}</div>
                     <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
                       <div
-                        className="bg-purple-500 h-full rounded-full"
+                        className="bg-[rgba(60,129,195,0.1)]0 h-full rounded-full"
                         style={{ width: `${(count / stats.total) * 100}%` }}
                       />
                     </div>
@@ -212,7 +212,7 @@ export default function TicketReportsPage() {
                     className="flex-1 flex flex-col items-center group"
                   >
                     <div
-                      className="w-full bg-purple-500 rounded-t transition-all hover:bg-purple-600"
+                      className="w-full bg-[rgba(60,129,195,0.1)]0 rounded-t transition-all hover:bg-[rgba(60,129,195,0.75)]"
                       style={{ height: `${Math.max(height, 2)}%` }}
                       title={`${day.date}: ${day.count} tickets`}
                     />
