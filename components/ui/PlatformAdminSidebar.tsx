@@ -40,18 +40,30 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const [openTicketCount, setOpenTicketCount] = useState(0);
   const [ticketsExpanded, setTicketsExpanded] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [enterprisesExpanded, setEnterprisesExpanded] = useState(false);
+  const [shopsExpanded, setShopsExpanded] = useState(false);
 
-  const isTicketsSection = pathname?.startsWith("/platform-admin/tickets");
-  const isSettingsSection = pathname?.startsWith("/platform-admin/settings") || pathname?.startsWith("/platform-admin/announcements");
+  const isTicketsSection = pathname?.startsWith("/platform-admin/tickets") || 
+                           pathname?.startsWith("/platform-admin/cobrowse") ||
+                           pathname?.startsWith("/platform-admin/database");
+  const isSettingsSection = pathname?.startsWith("/platform-admin/settings") || 
+                            pathname?.startsWith("/platform-admin/announcements") ||
+                            pathname?.startsWith("/platform-admin/features") ||
+                            pathname?.startsWith("/platform-admin/plan-features");
+  const isEnterprisesSection = pathname?.startsWith("/platform-admin/enterprises") ||
+                               pathname?.startsWith("/platform-admin/shops") ||
+                               pathname?.startsWith("/platform-admin/users") ||
+                               pathname?.startsWith("/platform-admin/hovercode");
+  const isShopsSection = pathname?.startsWith("/platform-admin/shops") ||
+                         pathname?.startsWith("/platform-admin/users") ||
+                         pathname?.startsWith("/platform-admin/hovercode");
 
   useEffect(() => {
-    if (isTicketsSection) {
-      setTicketsExpanded(true);
-    }
-    if (isSettingsSection) {
-      setSettingsExpanded(true);
-    }
-  }, [isTicketsSection, isSettingsSection]);
+    if (isTicketsSection) setTicketsExpanded(true);
+    if (isSettingsSection) setSettingsExpanded(true);
+    if (isEnterprisesSection) setEnterprisesExpanded(true);
+    if (isShopsSection) setShopsExpanded(true);
+  }, [isTicketsSection, isSettingsSection, isEnterprisesSection, isShopsSection]);
 
   useEffect(() => {
     const fetchTicketCount = async () => {
@@ -74,80 +86,6 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const isActive = (href: string) => {
     return pathname === href;
   };
-
-  const navItems = [
-    {
-      name: "Overview",
-      href: "/platform-admin",
-      icon: <LayoutDashboard className="w-5 h-5" />
-    },
-    {
-      name: "Shops",
-      href: "/platform-admin/shops",
-      icon: <Building2 className="w-5 h-5" />
-    },
-    {
-      name: "Enterprises",
-      href: "/platform-admin/enterprises",
-      icon: <Shield className="w-5 h-5" />
-    },
-    {
-      name: "Users",
-      href: "/platform-admin/users",
-      icon: <Users className="w-5 h-5" />
-    },
-    {
-      name: "Usage & Costs",
-      href: "/platform-admin/usage",
-      icon: <DollarSign className="w-5 h-5" />
-    },
-    {
-      name: "Billing",
-      href: "/platform-admin/billing",
-      icon: <CreditCard className="w-5 h-5" />
-    },
-    {
-      name: "API Traffic",
-      href: "/platform-admin/api-usage",
-      icon: <Activity className="w-5 h-5" />
-    },
-    {
-      name: "Render Logs",
-      href: "/platform-admin/render",
-      icon: <FileText className="w-5 h-5" />
-    },
-    {
-      name: "HoverCode QRs",
-      href: "/platform-admin/hovercode",
-      icon: <QrCode className="w-5 h-5" />
-    },
-    {
-      name: "Database",
-      href: "/platform-admin/database",
-      icon: <Database className="w-5 h-5" />
-    },
-    {
-      name: "Features",
-      href: "/platform-admin/features",
-      icon: <Package className="w-5 h-5" />
-    },
-    {
-      name: "Plan Features",
-      href: "/platform-admin/plan-features",
-      icon: <Grid3X3 className="w-5 h-5" />
-    }
-  ];
-
-  const settingsSubItems = [
-    { name: "General", href: "/platform-admin/settings", icon: Settings },
-    { name: "Announcements", href: "/platform-admin/announcements", icon: Megaphone }
-  ];
-
-  const ticketSubItems = [
-    { name: "All Tickets", href: "/platform-admin/tickets" },
-    { name: "Reports", href: "/platform-admin/tickets/reports" },
-    { name: "Remote Support", href: "/platform-admin/cobrowse" }
-  ];
 
   const handleNavClick = () => {
     if (isMobile && onClose) {
@@ -187,27 +125,198 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
         </div>
       </div>
 
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-1">
-          {navItems.slice(0, 8).map((item) => (
-            <li key={item.name}>
-              <Link
-                href={item.href}
-                onClick={handleNavClick}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? "bg-[rgba(60,129,195,0.75)] text-white"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {item.icon}
-                  <span>{item.name}</span>
-                </div>
-              </Link>
-            </li>
-          ))}
+          {/* Overview */}
+          <li>
+            <Link
+              href="/platform-admin"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              <span>Overview</span>
+            </Link>
+          </li>
 
+          {/* Enterprises with Shops submenu */}
+          <li>
+            <button
+              onClick={() => setEnterprisesExpanded(!enterprisesExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isEnterprisesSection
+                  ? "text-[#7ab3e0]"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+              style={isEnterprisesSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}
+            >
+              <div className="flex items-center gap-3">
+                <Shield className="w-5 h-5" />
+                <span>Enterprises</span>
+              </div>
+              {enterprisesExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            {enterprisesExpanded && (
+              <ul className="ml-4 mt-1 space-y-1">
+                <li>
+                  <Link
+                    href="/platform-admin/enterprises"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/enterprises")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span>All Enterprises</span>
+                  </Link>
+                </li>
+                {/* Shops submenu under Enterprises */}
+                <li>
+                  <button
+                    onClick={() => setShopsExpanded(!shopsExpanded)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isShopsSection
+                        ? "text-[#7ab3e0]"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                    style={isShopsSection ? { backgroundColor: 'rgba(60, 129, 195, 0.15)' } : undefined}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4" />
+                      <span>Shops</span>
+                    </div>
+                    {shopsExpanded ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </button>
+                  {shopsExpanded && (
+                    <ul className="ml-4 mt-1 space-y-1">
+                      <li>
+                        <Link
+                          href="/platform-admin/shops"
+                          onClick={handleNavClick}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                            isActive("/platform-admin/shops")
+                              ? "bg-[rgba(60,129,195,0.75)] text-white"
+                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          }`}
+                        >
+                          <Building2 className="w-4 h-4" />
+                          <span>All Shops</span>
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          href="/platform-admin/users"
+                          onClick={handleNavClick}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                            isActive("/platform-admin/users")
+                              ? "bg-[rgba(60,129,195,0.75)] text-white"
+                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          }`}
+                        >
+                          <Users className="w-4 h-4" />
+                          <span>Users</span>
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          href="/platform-admin/hovercode"
+                          onClick={handleNavClick}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                            isActive("/platform-admin/hovercode")
+                              ? "bg-[rgba(60,129,195,0.75)] text-white"
+                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          }`}
+                        >
+                          <QrCode className="w-4 h-4" />
+                          <span>HoverCode QRs</span>
+                        </Link>
+                      </li>
+                    </ul>
+                  )}
+                </li>
+              </ul>
+            )}
+          </li>
+
+          {/* Usage & Costs */}
+          <li>
+            <Link
+              href="/platform-admin/usage"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin/usage")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <DollarSign className="w-5 h-5" />
+              <span>Usage & Costs</span>
+            </Link>
+          </li>
+
+          {/* Client Billing */}
+          <li>
+            <Link
+              href="/platform-admin/billing"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin/billing")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <CreditCard className="w-5 h-5" />
+              <span>Client Billing</span>
+            </Link>
+          </li>
+
+          {/* API Traffic */}
+          <li>
+            <Link
+              href="/platform-admin/api-usage"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin/api-usage")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <Activity className="w-5 h-5" />
+              <span>API Traffic</span>
+            </Link>
+          </li>
+
+          {/* Render Logs */}
+          <li>
+            <Link
+              href="/platform-admin/render"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin/render")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              <span>Render Logs</span>
+            </Link>
+          </li>
+
+          {/* Support Tickets with Database */}
           <li>
             <button
               onClick={() => setTicketsExpanded(!ticketsExpanded)}
@@ -237,33 +346,67 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
             </button>
             {ticketsExpanded && (
               <ul className="ml-8 mt-1 space-y-1">
-                {ticketSubItems.map((subItem) => (
-                  <li key={subItem.name}>
-                    <Link
-                      href={subItem.href}
-                      onClick={handleNavClick}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                        isActive(subItem.href)
-                          ? "bg-[rgba(60,129,195,0.75)] text-white"
-                          : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                      }`}
-                    >
-                      {subItem.name === "Reports" ? (
-                        <BarChart3 className="w-4 h-4" />
-                      ) : subItem.name === "Remote Support" ? (
-                        <Monitor className="w-4 h-4" />
-                      ) : (
-                        <Ticket className="w-4 h-4" />
-                      )}
-                      <span>{subItem.name}</span>
-                    </Link>
-                  </li>
-                ))}
+                <li>
+                  <Link
+                    href="/platform-admin/tickets"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/tickets")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Ticket className="w-4 h-4" />
+                    <span>All Tickets</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/tickets/reports"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/tickets/reports")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    <span>Reports</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/cobrowse"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/cobrowse")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Monitor className="w-4 h-4" />
+                    <span>Remote Support</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/database"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/database")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Database className="w-4 h-4" />
+                    <span>Database</span>
+                  </Link>
+                </li>
               </ul>
             )}
           </li>
 
-          {/* Settings Submenu */}
+          {/* Settings with Features */}
           <li>
             <button
               onClick={() => setSettingsExpanded(!settingsExpanded)}
@@ -286,47 +429,65 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
             </button>
             {settingsExpanded && (
               <ul className="ml-8 mt-1 space-y-1">
-                {settingsSubItems.map((subItem) => {
-                  const Icon = subItem.icon;
-                  return (
-                    <li key={subItem.name}>
-                      <Link
-                        href={subItem.href}
-                        onClick={handleNavClick}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isActive(subItem.href)
-                            ? "bg-[rgba(60,129,195,0.75)] text-white"
-                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>{subItem.name}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
+                <li>
+                  <Link
+                    href="/platform-admin/settings"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/settings")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span>General</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/announcements"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/announcements")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Megaphone className="w-4 h-4" />
+                    <span>Announcements</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/features"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/features")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Package className="w-4 h-4" />
+                    <span>Features</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/plan-features"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/plan-features")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                    <span>Plan Features</span>
+                  </Link>
+                </li>
               </ul>
             )}
           </li>
-
-          {navItems.slice(8).map((item) => (
-            <li key={item.name}>
-              <Link
-                href={item.href}
-                onClick={handleNavClick}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? "bg-[rgba(60,129,195,0.75)] text-white"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {item.icon}
-                  <span>{item.name}</span>
-                </div>
-              </Link>
-            </li>
-          ))}
         </ul>
       </nav>
 
