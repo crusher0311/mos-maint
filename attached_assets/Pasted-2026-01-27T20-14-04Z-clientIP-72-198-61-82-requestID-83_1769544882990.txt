@@ -1,0 +1,57 @@
+2026-01-27T20:14:04Z clientIP="72.198.61.82" requestID="8323a7a4-5413-4c9b" responseTimeMS=398 responseBytes=318 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:05Z clientIP="72.198.61.82" requestID="8fb24fa1-0f0c-4a3e" responseTimeMS=35 responseBytes=3122 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:08.045562632Z [Startup] Waiting for server... (attempt 24/30)
+2026-01-27T20:14:08.049987176Z [Startup] Server is ready! (status: 200)
+2026-01-27T20:14:09Z clientIP="72.198.61.82" requestID="b5082277-5fef-43f3" responseTimeMS=687 responseBytes=538 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:12Z clientIP="72.198.61.82" requestID="8cfb2600-75e1-4c8b" responseTimeMS=125 responseBytes=1037 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:12.051587278Z [Startup] Waiting for server... (attempt 25/30)
+2026-01-27T20:14:12.055539893Z [Startup] Server is ready! (status: 200)
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="0d29c72a-158a-40d8" responseTimeMS=10 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="fad50363-dfa5-4a68" responseTimeMS=7 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="d7121a42-ce60-4c6a" responseTimeMS=29 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="5f900201-ef45-4b09" responseTimeMS=28 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="bdb746fe-da5b-4b97" responseTimeMS=778 responseBytes=4517 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="69e703ae-ed0b-4721" responseTimeMS=25 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="c6ef0cfd-a1a6-42d1" responseTimeMS=21 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="f1f6def9-55a1-4336" responseTimeMS=7 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="40252e8e-a348-45c0" responseTimeMS=9 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="501f126e-b5c0-439d" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="13da5b34-6a04-49a2" responseTimeMS=4 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:13Z clientIP="72.198.61.82" requestID="47035ac8-de80-4150" responseTimeMS=4 responseBytes=493 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:14Z clientIP="72.198.61.82" requestID="8006308a-a5ac-42d8" responseTimeMS=60 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:15Z clientIP="72.198.61.82" requestID="d2e7aaab-5d7c-464b" responseTimeMS=231 responseBytes=17926 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:15Z clientIP="72.198.61.82" requestID="8c3e6735-1f08-4114" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:16Z clientIP="72.198.61.82" requestID="f05052b6-0ba3-4b94" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:16Z clientIP="72.198.61.82" requestID="9ca46bb7-4504-45bc" responseTimeMS=735 responseBytes=579 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:16.058577203Z [Startup] Waiting for server... (attempt 26/30)
+2026-01-27T20:14:16.062441777Z [Startup] Server is ready! (status: 200)
+2026-01-27T20:14:16.098031582Z [Sticker Generate] Using logo from MongoDB shop_media
+2026-01-27T20:14:16.098065223Z [Sticker Generate] Using cached QR code from config
+2026-01-27T20:14:16.098211706Z [Generate API] Layout canvas: 200x200
+2026-01-27T20:14:16.098278397Z [Generate API] Element phone: fontSize=14px, width=130px, height=15px
+2026-01-27T20:14:16.098288607Z [Generate API] Element tagline: fontSize=11px, width=130px, height=16px
+2026-01-27T20:14:16.098306058Z [Generate API] Element serviceLabel: fontSize=10px, width=105px, height=15px
+2026-01-27T20:14:16.098336048Z [Generate API] Element serviceDate: fontSize=14px, width=105px, height=15px
+2026-01-27T20:14:16.098376669Z [Generate API] Element serviceMileage: fontSize=14px, width=105px, height=20px
+2026-01-27T20:14:16.407620053Z [Sticker Generate] Puppeteer/Chromium error: Error: Unable to launch browser, error message: Could not find Chrome (ver. 128.0.6613.119). This can occur if either
+2026-01-27T20:14:16.407649683Z  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install ${browserType}`) or
+2026-01-27T20:14:16.407653333Z  2. your cache path is incorrectly configured (which is: /opt/render/project/puppeteer).
+2026-01-27T20:14:16.407655703Z For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-01-27T20:14:16.407657883Z     at f.<anonymous> (/opt/render/project/src/.next/server/chunks/1597.js:1:84834)
+2026-01-27T20:14:16.407660513Z     at Generator.throw (<anonymous>)
+2026-01-27T20:14:16.407663114Z     at a (/opt/render/project/src/.next/server/chunks/1597.js:1:82386)
+2026-01-27T20:14:20Z clientIP="152.117.99.75" requestID="afb35ed6-6907-45d1" responseTimeMS=691 responseBytes=3260 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-27T20:14:20.06556655Z [Startup] Waiting for server... (attempt 27/30)
+2026-01-27T20:14:20.069974923Z [Startup] Server is ready! (status: 200)
+2026-01-27T20:14:23Z clientIP="72.198.61.82" requestID="1dc4fc75-982d-45ea" responseTimeMS=59 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:23Z clientIP="72.198.61.82" requestID="b740020c-5dcf-4d3f" responseTimeMS=64 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:24Z clientIP="72.198.61.82" requestID="7ce7433c-ea95-4f63" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:24.07164658Z [Startup] Waiting for server... (attempt 28/30)
+2026-01-27T20:14:24.075382711Z [Startup] Server is ready! (status: 200)
+2026-01-27T20:14:25Z clientIP="72.198.61.82" requestID="be1e5e68-8c5f-4854" responseTimeMS=60 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:26Z clientIP="72.198.61.82" requestID="81830bd4-75ec-4134" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:28.076565318Z [Startup] Waiting for server... (attempt 29/30)
+2026-01-27T20:14:28.082293807Z [Startup] Server is ready! (status: 200)
+2026-01-27T20:14:27Z clientIP="72.198.61.82" requestID="fb0be55d-42e9-48ca" responseTimeMS=60 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:28Z clientIP="72.198.61.82" requestID="0716edd5-db76-4b84" responseTimeMS=60 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T20:14:29Z clientIP="72.198.61.82" requestID="6be65d78-11ef-478d" responseTimeMS=65 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"

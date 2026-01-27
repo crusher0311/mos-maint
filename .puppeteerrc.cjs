@@ -6,8 +6,8 @@ const { join } = require('path');
  * Render doesn't persist the default cache directory (/opt/render/.cache),
  * so we need to store Chrome in the project directory.
  * 
- * Set PUPPETEER_CACHE_DIR=/opt/render/project/src/.cache/puppeteer in Render environment
+ * Set PUPPETEER_CACHE_DIR=/opt/render/project/puppeteer in Render environment
  */
 module.exports = {
-  cacheDirectory: process.env.PUPPETEER_CACHE_DIR || join(__dirname, '.cache', 'puppeteer'),
+  cacheDirectory: process.env.PUPPETEER_CACHE_DIR || '/opt/render/project/puppeteer',
 };
