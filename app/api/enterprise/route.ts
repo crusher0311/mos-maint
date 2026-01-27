@@ -131,11 +131,11 @@ export async function PUT(req: NextRequest) {
             .project({ shopId: 1, enabledFeatures: 1, preferences: 1 })
             .toArray();
           
-          console.log(`[Enterprise] Found ${existingShops.length} enterprise shops`);
+          console.log(`[Enterprise] Found ${existingShops.length} enterprise shops, currentUserShopId: ${currentUserShopId}`);
           
           // Try to use the current user's shop first, otherwise use first shop with data
           let sourceShop = currentUserShopId 
-            ? existingShops.find((s: any) => s.shopId === currentUserShopId)
+            ? existingShops.find((s: any) => Number(s.shopId) === Number(currentUserShopId))
             : null;
           
           if (!sourceShop) {
@@ -143,9 +143,13 @@ export async function PUT(req: NextRequest) {
             sourceShop = existingShops.find((s: any) => 
               Array.isArray(s.enabledFeatures) && s.enabledFeatures.length > 0
             );
+            console.log(`[Enterprise] Using fallback - first shop with features: ${sourceShop?.shopId || 'none'}`);
+          } else {
+            console.log(`[Enterprise] Using current user's shop ${sourceShop.shopId} as source`);
           }
           
           if (sourceShop) {
+            console.log(`[Enterprise] Source shop ${sourceShop.shopId} enabledFeatures: ${JSON.stringify(sourceShop.enabledFeatures)?.slice(0, 300)}`);
             if (Array.isArray(sourceShop.enabledFeatures) && sourceShop.enabledFeatures.length > 0) {
               featuresToCopy = sourceShop.enabledFeatures;
             }
