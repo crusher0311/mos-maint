@@ -14,6 +14,22 @@ interface ShopAnalytics {
   activeVehicles?: number;
 }
 
+interface EnterpriseUser {
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: string;
+  shopAccess: { shopId: number; shopName: string }[];
+}
+
+interface EnterpriseShop {
+  shopId: number;
+  name: string;
+  locationIdentifier?: string | null;
+  protractor?: boolean;
+  tekmetric?: boolean;
+}
+
 interface EnterpriseAnalytics {
   enterprise: {
     id: string;
@@ -47,6 +63,8 @@ export default function EnterpriseDashboardPage() {
   const [newEnterpriseName, setNewEnterpriseName] = useState("");
   const [expandedShops, setExpandedShops] = useState<Set<number>>(new Set());
   const [dateRange, setDateRange] = useState<"7d" | "30d" | "90d" | "all">("30d");
+  const [users, setUsers] = useState<EnterpriseUser[]>([]);
+  const [shops, setShops] = useState<EnterpriseShop[]>([]);
 
   useEffect(() => {
     loadEnterprises();
@@ -55,6 +73,7 @@ export default function EnterpriseDashboardPage() {
   useEffect(() => {
     if (selectedEnterprise) {
       loadAnalytics(selectedEnterprise);
+      loadUsersAndShops(selectedEnterprise);
     }
   }, [selectedEnterprise, dateRange]);
 
@@ -92,6 +111,17 @@ export default function EnterpriseDashboardPage() {
       console.error("Error loading analytics:", err);
     } finally {
       setAnalyticsLoading(false);
+    }
+  };
+
+  const loadUsersAndShops = async (enterpriseId: string) => {
+    try {
+      const res = await fetch(`/api/enterprise/users?enterpriseId=${enterpriseId}`);
+      const data = await res.json();
+      setUsers(data.users || []);
+      setShops(data.shops || []);
+    } catch (err) {
+      console.error("Error loading users and shops:", err);
     }
   };
 
@@ -382,28 +412,105 @@ export default function EnterpriseDashboardPage() {
                       <p className="text-sm text-gray-500">Configure canned job mappings for all locations</p>
                     </div>
                   </Link>
-                  
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <div className="bg-white rounded-xl border border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-blue-600" />
+                    <h2 className="font-semibold text-gray-900">Locations ({shops.length})</h2>
+                  </div>
                   <Link
                     href={`/admin/enterprise/shops?id=${selectedEnterprise}`}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    <Building2 className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium text-gray-900">Manage Shops</p>
-                      <p className="text-sm text-gray-500">Add or remove locations from this enterprise</p>
-                    </div>
+                    Manage
                   </Link>
-                  
+                </div>
+                <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                  {shops.length === 0 ? (
+                    <div className="px-6 py-8 text-center text-gray-500">
+                      <Building2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p>No locations yet</p>
+                      <Link
+                        href={`/admin/enterprise/shops?id=${selectedEnterprise}`}
+                        className="text-blue-600 hover:underline text-sm mt-1 inline-block"
+                      >
+                        Add your first location
+                      </Link>
+                    </div>
+                  ) : (
+                    shops.map((shop) => (
+                      <div key={shop.shopId} className="px-6 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <Building2 className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 text-sm">{shop.name}</p>
+                            <p className="text-xs text-gray-500">ID: {shop.shopId}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {shop.protractor && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">Protractor</span>
+                          )}
+                          {shop.tekmetric && (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Tekmetric</span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600" />
+                    <h2 className="font-semibold text-gray-900">Users ({users.length})</h2>
+                  </div>
                   <Link
                     href={`/admin/enterprise/users?id=${selectedEnterprise}`}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    <Users className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium text-gray-900">User Access</p>
-                      <p className="text-sm text-gray-500">Manage user access to multiple locations</p>
-                    </div>
+                    Manage
                   </Link>
+                </div>
+                <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                  {users.length === 0 ? (
+                    <div className="px-6 py-8 text-center text-gray-500">
+                      <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p>No users yet</p>
+                      <Link
+                        href={`/admin/enterprise/users?id=${selectedEnterprise}`}
+                        className="text-blue-600 hover:underline text-sm mt-1 inline-block"
+                      >
+                        Manage user access
+                      </Link>
+                    </div>
+                  ) : (
+                    users.map((user) => (
+                      <div key={user.email} className="px-6 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-medium">
+                            {user.email.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 text-sm">{user.email}</p>
+                            {user.name && <p className="text-xs text-gray-500">{user.name}</p>}
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          {user.shopAccess.length} location{user.shopAccess.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
