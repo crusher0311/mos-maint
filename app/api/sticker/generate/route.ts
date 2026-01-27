@@ -25,11 +25,12 @@ function findChromePath(): string | undefined {
   
   // Common Chrome paths on different platforms - check glob patterns first
   const globPatterns = [
-    // Local .cache directory (set by .puppeteerrc.cjs)
-    ".cache/puppeteer/chrome/*/chrome-linux64/chrome",
-    // Render project cache
+    // Render project cache (most common on Render.com)
+    "/opt/render/project/puppeteer/chrome/linux-*/chrome-linux64/chrome",
     "/opt/render/project/puppeteer/chrome/*/chrome-linux64/chrome",
     "/opt/render/project/.puppeteer_cache/chrome/*/chrome-linux64/chrome",
+    // Local .cache directory (set by .puppeteerrc.cjs)
+    ".cache/puppeteer/chrome/*/chrome-linux64/chrome",
     // Home directory cache
     "~/.cache/puppeteer/chrome/*/chrome-linux64/chrome",
     // Nix/Replit
