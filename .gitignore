@@ -82,3 +82,4 @@ node_modules/
 # MongoDB data directory (Replit)
 data/db/
 data/mongodb.log
+.cache/

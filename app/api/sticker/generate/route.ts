@@ -6,9 +6,71 @@ import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types"
 import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
+import { existsSync } from "fs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Find Chrome executable path - try multiple locations for different environments
+function findChromePath(): string | undefined {
+  // Environment variable override (highest priority)
+  if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
+    console.log("[Sticker] Using Chrome from CHROMIUM_PATH:", process.env.CHROMIUM_PATH);
+    return process.env.CHROMIUM_PATH;
+  }
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    console.log("[Sticker] Using Chrome from PUPPETEER_EXECUTABLE_PATH:", process.env.PUPPETEER_EXECUTABLE_PATH);
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  
+  // Common Chrome paths on different platforms - check glob patterns first
+  const globPatterns = [
+    // Local .cache directory (set by .puppeteerrc.cjs)
+    ".cache/puppeteer/chrome/*/chrome-linux64/chrome",
+    // Render project cache
+    "/opt/render/project/puppeteer/chrome/*/chrome-linux64/chrome",
+    "/opt/render/project/.puppeteer_cache/chrome/*/chrome-linux64/chrome",
+    // Home directory cache
+    "~/.cache/puppeteer/chrome/*/chrome-linux64/chrome",
+    // Nix/Replit
+    "/nix/store/*-chromium-*/bin/chromium",
+  ];
+  
+  try {
+    const glob = require("glob");
+    for (const pattern of globPatterns) {
+      const expandedPattern = pattern.replace("~", process.env.HOME || "");
+      const matches = glob.sync(expandedPattern);
+      if (matches.length > 0 && existsSync(matches[0])) {
+        console.log("[Sticker] Found Chrome at:", matches[0]);
+        return matches[0];
+      }
+    }
+  } catch {
+    // glob not available
+  }
+  
+  // Check fixed paths
+  const fixedPaths = [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable", 
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/opt/google/chrome/chrome",
+    "/opt/google/chrome/google-chrome",
+  ];
+  
+  for (const path of fixedPaths) {
+    if (existsSync(path)) {
+      console.log("[Sticker] Found Chrome at:", path);
+      return path;
+    }
+  }
+  
+  // Let Puppeteer try to find it
+  console.log("[Sticker] Chrome not found in common paths, letting Puppeteer try default detection");
+  return undefined;
+}
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
@@ -801,7 +863,7 @@ export async function POST(req: NextRequest) {
     if (designerLayout && designerLayout.elements) {
       // Debug: Log element details
       console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
-      designerLayout.elements.forEach(el => {
+      designerLayout.elements.forEach((el: DesignerElement) => {
         if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
           console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
         }
@@ -838,18 +900,28 @@ export async function POST(req: NextRequest) {
     
     let image: Buffer;
     try {
+      const chromePath = findChromePath();
+      console.log("[Sticker Generate] Using Chrome path:", chromePath || "default");
+      
       const result = await nodeHtmlToImage({
         html,
         type: "png",
         transparent: false,
         selector: "#sticker-canvas",
         puppeteerArgs: {
-          executablePath: process.env.CHROMIUM_PATH || undefined,
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+          executablePath: chromePath,
+          args: [
+            "--no-sandbox", 
+            "--disable-setuid-sandbox", 
+            "--disable-gpu", 
+            "--disable-dev-shm-usage",
+            "--disable-software-rasterizer",
+            "--single-process",
+          ],
           defaultViewport: {
             width: renderWidth,
             height: renderHeight,
-            deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
+            deviceScaleFactor: scaleUp,
           },
         },
       });
@@ -857,6 +929,15 @@ export async function POST(req: NextRequest) {
     } catch (puppeteerError) {
       console.error("[Sticker Generate] Puppeteer/Chromium error:", puppeteerError);
       const errorMsg = puppeteerError instanceof Error ? puppeteerError.message : "Chromium rendering failed";
+      
+      // Provide specific guidance for Chrome not found errors
+      if (errorMsg.includes("Could not find Chrome") || errorMsg.includes("executable")) {
+        return NextResponse.json(
+          { error: "Chrome/Chromium is not installed on the server. On Render, add the 'Google Chrome' buildpack in your service settings and redeploy." },
+          { status: 500 }
+        );
+      }
+      
       return NextResponse.json(
         { error: `Sticker rendering failed: ${errorMsg}. Please contact support if this persists.` },
         { status: 500 }
