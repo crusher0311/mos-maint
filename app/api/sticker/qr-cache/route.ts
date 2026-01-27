@@ -22,7 +22,11 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: str
   }
 
   try {
-    console.log("[QR Cache] Calling HoverCode API for URL:", appointmentUrl);
+    // Use the same logo URL as the sticker generation
+    const devDomain = process.env.REPLIT_DEV_DOMAIN || process.env.RENDER_EXTERNAL_HOSTNAME || "mos-maintenance-mvp.replit.app";
+    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    
+    console.log("[QR Cache] Calling HoverCode API for URL:", appointmentUrl, "with logo:", logoUrl);
     const response = await fetch(`${HOVERCODE_API_BASE}/`, {
       method: "POST",
       headers: {
@@ -33,6 +37,13 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: str
         workspace: HOVERCODE_WORKSPACE_ID,
         qr_data: appointmentUrl,
         generate_png: true,
+        dynamic: true,
+        pattern: "Squares",
+        size: 300,
+        primary_color: "#000000",
+        background_color: "#ffffff",
+        logo_image: logoUrl,
+        logo_size: 0.25,
       }),
     });
 
