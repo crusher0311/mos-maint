@@ -14,6 +14,8 @@ export type SessionInfo = {
   role: string;
   isPlatformAdmin?: boolean;
   isTestAuth?: boolean;
+  isImpersonation?: boolean;
+  impersonatedBy?: string;
 };
 
 export async function getSession(): Promise<SessionInfo | null> {
@@ -70,6 +72,8 @@ export async function getSession(): Promise<SessionInfo | null> {
     email: String(user.email),
     role: String(user.role ?? "owner"),
     isPlatformAdmin: Boolean(user.isPlatformAdmin),
+    isImpersonation: Boolean(sess.isImpersonation),
+    impersonatedBy: sess.impersonatedBy ? String(sess.impersonatedBy) : undefined,
   };
 }
 

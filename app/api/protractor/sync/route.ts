@@ -18,6 +18,7 @@ import {
   upsertJobIndexEntries,
   updatePartCrossReferences,
 } from "@/lib/job-index";
+import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -41,6 +42,20 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
+
+  // Check if backfill has been completed - if not, trigger it
+  const shop = await db.collection("shops").findOne({ shopId });
+  if (shop && !shop.protractorBackfillComplete) {
+    const backfillProgress = await db.collection("backfill_progress").findOne({ shopId });
+    if (!backfillProgress || !backfillProgress.completed) {
+      console.log(`[Protractor Sync] Backfill not complete for shop ${shopId}, triggering in background`);
+      runProtractorBackfill(shopId).then(result => {
+        console.log(`[Protractor Sync] Backfill completed for shop ${shopId}:`, result);
+      }).catch(err => {
+        console.error(`[Protractor Sync] Backfill failed for shop ${shopId}:`, err.message);
+      });
+    }
+  }
 
   // Use 30-day window for manual sync (fast) - background worker handles full history
   const endDate = new Date();
