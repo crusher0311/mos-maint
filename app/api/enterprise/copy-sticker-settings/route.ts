@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
   const userRole = session.role;
   const isPlatformAdmin = session.isPlatformAdmin;
   const isImpersonation = session.isImpersonation;
-  if (userRole !== "enterprise_admin" && userRole !== "admin" && !isPlatformAdmin && !isImpersonation) {
+  const allowedRoles = ["enterprise_admin", "admin", "owner"];
+  if (!allowedRoles.includes(userRole) && !isPlatformAdmin && !isImpersonation) {
     return NextResponse.json({ error: "Enterprise admin access required" }, { status: 403 });
   }
 
@@ -197,7 +198,8 @@ export async function GET(req: NextRequest) {
   const userRole = session.role;
   const isPlatformAdmin = session.isPlatformAdmin;
   const isImpersonation = session.isImpersonation;
-  if (userRole !== "enterprise_admin" && userRole !== "admin" && !isPlatformAdmin && !isImpersonation) {
+  const allowedRoles = ["enterprise_admin", "admin", "owner"];
+  if (!allowedRoles.includes(userRole) && !isPlatformAdmin && !isImpersonation) {
     return NextResponse.json({ error: "Enterprise admin access required" }, { status: 403 });
   }
 
