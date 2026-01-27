@@ -14,13 +14,14 @@ interface HoverCodeResponse {
   png: string;
 }
 
-async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: number; pngUrl: string } | null> {
+async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: number; pngUrl: string; error?: string } | null> {
   if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
-    console.log("[QR Cache] HoverCode not configured");
-    return null;
+    console.log("[QR Cache] HoverCode not configured - TOKEN:", !!HOVERCODE_API_TOKEN, "WORKSPACE:", !!HOVERCODE_WORKSPACE_ID);
+    return { qrId: 0, pngUrl: "", error: "HoverCode not configured" };
   }
 
   try {
+    console.log("[QR Cache] Calling HoverCode API for URL:", appointmentUrl);
     const response = await fetch(`${HOVERCODE_API_BASE}/`, {
       method: "POST",
       headers: {
@@ -34,15 +35,17 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: num
     });
 
     if (!response.ok) {
-      console.error("[QR Cache] HoverCode create error:", response.status);
-      return null;
+      const errorText = await response.text();
+      console.error("[QR Cache] HoverCode create error:", response.status, errorText);
+      return { qrId: 0, pngUrl: "", error: `HoverCode API error: ${response.status}` };
     }
 
     const data: HoverCodeResponse = await response.json();
+    console.log("[QR Cache] HoverCode success, QR ID:", data.id);
     return { qrId: data.id, pngUrl: data.png };
   } catch (error) {
     console.error("[QR Cache] HoverCode fetch error:", error);
-    return null;
+    return { qrId: 0, pngUrl: "", error: `HoverCode fetch error: ${error}` };
   }
 }
 
@@ -124,13 +127,20 @@ export async function GET(req: NextRequest) {
 
     const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
     if (!appointmentUrl) {
+      console.log("[QR Cache GET] No appointment URL for shop:", shopId);
       return NextResponse.json({ error: "No appointment URL configured" }, { status: 400 });
     }
 
     // Generate new QR code via HoverCode
     const result = await fetchQRFromHoverCode(appointmentUrl);
-    if (!result) {
-      return NextResponse.json({ error: "Failed to generate QR code" }, { status: 500 });
+    if (!result || result.error) {
+      console.error("[QR Cache GET] HoverCode failed:", result?.error);
+      return NextResponse.json({ error: result?.error || "Failed to generate QR code" }, { status: 500 });
+    }
+
+    if (!result.pngUrl) {
+      console.error("[QR Cache GET] No PNG URL from HoverCode");
+      return NextResponse.json({ error: "No QR image URL returned" }, { status: 500 });
     }
 
     // Download and cache the QR code
@@ -185,13 +195,20 @@ export async function POST(req: NextRequest) {
 
     const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
     if (!appointmentUrl) {
+      console.log("[QR Cache POST] No appointment URL for shop:", shopId);
       return NextResponse.json({ error: "No appointment URL configured" }, { status: 400 });
     }
 
     // Generate new QR code via HoverCode
     const result = await fetchQRFromHoverCode(appointmentUrl);
-    if (!result) {
-      return NextResponse.json({ error: "Failed to generate QR code" }, { status: 500 });
+    if (!result || result.error) {
+      console.error("[QR Cache POST] HoverCode failed:", result?.error);
+      return NextResponse.json({ error: result?.error || "Failed to generate QR code" }, { status: 500 });
+    }
+
+    if (!result.pngUrl) {
+      console.error("[QR Cache POST] No PNG URL from HoverCode");
+      return NextResponse.json({ error: "No QR image URL returned" }, { status: 500 });
     }
 
     // Download and cache the QR code
