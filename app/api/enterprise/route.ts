@@ -110,12 +110,43 @@ export async function PUT(req: NextRequest) {
     if (action === "add_shop" && shopId) {
       await addShopToEnterprise(enterpriseId, shopId);
       
+      // Get existing enterprise shops to copy features from
+      const enterprise = await getEnterpriseById(enterpriseId);
+      let featuresToCopy: string[] = [];
+      
+      if (enterprise && enterprise.shopIds.length > 0) {
+        // Get features from existing enterprise shops
+        const existingShops = await db.collection("shops")
+          .find({ 
+            shopId: { $in: enterprise.shopIds.filter((id: number) => id !== shopId) },
+            enabledFeatures: { $exists: true, $ne: [] }
+          })
+          .project({ enabledFeatures: 1 })
+          .toArray();
+        
+        if (existingShops.length > 0) {
+          // Use the first shop's features as the template
+          featuresToCopy = existingShops[0].enabledFeatures || [];
+          console.log(`[Enterprise] Copying features from existing shop to new location ${shopId}:`, featuresToCopy);
+        }
+      }
+      
+      // Update the new shop with enterprise ID and copied features
+      const updateFields: Record<string, any> = { 
+        enterpriseId: new ObjectId(enterpriseId), 
+        updatedAt: new Date() 
+      };
+      
+      if (featuresToCopy.length > 0) {
+        updateFields.enabledFeatures = featuresToCopy;
+      }
+      
       await db.collection("shops").updateOne(
         { shopId },
-        { $set: { enterpriseId: new ObjectId(enterpriseId), updatedAt: new Date() } }
+        { $set: updateFields }
       );
       
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, featuresCopied: featuresToCopy.length });
     }
     
     if (action === "remove_shop" && shopId) {
