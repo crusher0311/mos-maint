@@ -809,7 +809,7 @@ export default function StickerSettingsPage() {
             {expandedSections.enterprise && (
               <div className="mt-4 space-y-4">
                 <p className="text-sm text-gray-600">
-                  Copy logo, layout, colors, fonts, taglines, and service label to other locations. 
+                  Copy logo, layout, colors, fonts, taglines, service label, sticker options, and service intervals to other locations. 
                   Phone numbers, appointment URLs, and QR codes will remain unique per location.
                 </p>
 
