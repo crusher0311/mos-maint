@@ -30,26 +30,49 @@ const storage = new Storage({
   projectId: "",
 });
 
-async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
+async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: number): Promise<string | null> {
   try {
-    if (logoObjectPath) {
-      const pathParts = logoObjectPath.split("/").filter(Boolean);
-      if (pathParts.length >= 2) {
-        const bucketName = pathParts[0];
-        const objectName = pathParts.slice(1).join("/");
-        const bucket = storage.bucket(bucketName);
-        const file = bucket.file(objectName);
-        
-        const [exists] = await file.exists();
-        if (exists) {
-          const [buffer] = await file.download();
-          const [metadata] = await file.getMetadata();
-          const contentType = metadata.contentType || "image/png";
-          return `data:${contentType};base64,${buffer.toString("base64")}`;
+    // First, try to get logo from MongoDB shop_media collection
+    if (shopId) {
+      try {
+        const db = await getDb();
+        const logoMedia = await db.collection("shop_media").findOne({
+          shopId,
+          type: "logo",
+        });
+        if (logoMedia?.dataUri) {
+          console.log("[Sticker Generate] Using logo from MongoDB shop_media");
+          return logoMedia.dataUri;
         }
+      } catch (dbError) {
+        console.error("[Sticker Generate] MongoDB logo fetch failed:", dbError);
+      }
+    }
+
+    // Try object storage (only works on Replit)
+    if (logoObjectPath) {
+      try {
+        const pathParts = logoObjectPath.split("/").filter(Boolean);
+        if (pathParts.length >= 2) {
+          const bucketName = pathParts[0];
+          const objectName = pathParts.slice(1).join("/");
+          const bucket = storage.bucket(bucketName);
+          const file = bucket.file(objectName);
+          
+          const [exists] = await file.exists();
+          if (exists) {
+            const [buffer] = await file.download();
+            const [metadata] = await file.getMetadata();
+            const contentType = metadata.contentType || "image/png";
+            return `data:${contentType};base64,${buffer.toString("base64")}`;
+          }
+        }
+      } catch (storageError) {
+        console.error("[Sticker Generate] Object storage failed (expected on non-Replit):", storageError);
       }
     }
     
+    // Try fetching from URL
     if (logoUrl && logoUrl.startsWith("http")) {
       const response = await fetch(logoUrl);
       if (response.ok) {
@@ -673,8 +696,8 @@ export async function POST(req: NextRequest) {
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
     let logoDataUrl: string | null = null;
-    if (config.logo || config.logoObjectPath) {
-      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath);
+    if (config.logo || config.logoObjectPath || shopId) {
+      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath, shopId);
     }
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
 
@@ -685,10 +708,26 @@ export async function POST(req: NextRequest) {
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
-      // First, try to use cached QR code (fastest, most reliable)
+      // First, try to use cached QR code from shop config (fastest)
       if (config.cachedQrCodeDataUri) {
         console.log("[Sticker Generate] Using cached QR code from config");
         qrDataUrl = config.cachedQrCodeDataUri;
+      }
+      
+      // Try shop_media collection (MongoDB-based cache, works on Render)
+      if (!qrDataUrl) {
+        try {
+          const qrMedia = await db.collection("shop_media").findOne({
+            shopId,
+            type: "qr_code",
+          });
+          if (qrMedia?.dataUri) {
+            console.log("[Sticker Generate] Using cached QR code from shop_media");
+            qrDataUrl = qrMedia.dataUri;
+          }
+        } catch (mediaError) {
+          console.error("[Sticker Generate] shop_media QR fetch failed:", mediaError);
+        }
       }
       
       // If no cached QR, try existing HoverCode
