@@ -2,16 +2,20 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import PlatformAdminLoginForm from "./PlatformAdminLoginForm";
-import { Shield } from "lucide-react";
+import Image from "next/image";
 
 export default async function PlatformAdminLoginPage() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center">
-            <Shield className="w-7 h-7 text-white" />
-          </div>
+          <Image 
+            src="/mos-icon.png" 
+            alt="MOS Tools" 
+            width={48} 
+            height={48} 
+            className="rounded-xl"
+          />
         </div>
         <h1 className="mt-6 text-center text-3xl font-bold text-white">
           Platform Admin
