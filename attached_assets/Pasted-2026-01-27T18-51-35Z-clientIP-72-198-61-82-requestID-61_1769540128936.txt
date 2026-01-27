@@ -1,0 +1,500 @@
+2026-01-27T18:51:35Z clientIP="72.198.61.82" requestID="61d278ad-1605-4487" responseTimeMS=3 responseBytes=1661 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:35Z clientIP="72.198.61.82" requestID="e4b06710-b7c5-4859" responseTimeMS=5 responseBytes=470 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:35Z clientIP="72.198.61.82" requestID="3dfcfa01-a5af-43dd" responseTimeMS=4 responseBytes=1660 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:35Z clientIP="72.198.61.82" requestID="d601c557-90fb-459b" responseTimeMS=2 responseBytes=1658 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:35Z clientIP="72.198.61.82" requestID="d01695ae-5e11-4264" responseTimeMS=4 responseBytes=1660 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:35Z clientIP="72.198.61.82" requestID="79dfec40-953a-43e1" responseTimeMS=2 responseBytes=1674 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:36Z clientIP="72.198.61.82" requestID="92178ac2-8820-40cf" responseTimeMS=2 responseBytes=1658 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:36Z clientIP="72.198.61.82" requestID="e5dc21b9-281f-4abc" responseTimeMS=2 responseBytes=1656 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:36Z clientIP="72.198.61.82" requestID="60c3ef29-b317-43f7" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:37Z clientIP="72.198.61.82" requestID="5dc9649e-62d5-4bd6" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:37Z clientIP="72.198.61.82" requestID="fb76d7ac-fa9c-4c60" responseTimeMS=236 responseBytes=17922 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:37.65479041Z [2026-01-27T18:51:37.654Z] Running Tekmetric sync...
+2026-01-27T18:51:38Z clientIP="72.198.61.82" requestID="d05d6361-d885-4dee" responseTimeMS=520 responseBytes=293 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:38.657574191Z [QR Cache] HoverCode create error: 404
+2026-01-27T18:51:39.035176817Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-27T18:50:05.268Z)
+2026-01-27T18:51:39.362557332Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-27T18:49:55.013Z)
+2026-01-27T18:51:39.797973808Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-27T18:49:55.627Z)
+2026-01-27T18:51:40Z clientIP="72.198.61.82" requestID="e6f952d7-ac55-4a3a" responseTimeMS=120 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:40Z clientIP="72.198.61.82" requestID="8eff8742-c48d-4166" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:40Z clientIP="72.198.61.82" requestID="4cdbc514-1886-425f" responseTimeMS=176 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:40Z clientIP="72.198.61.82" requestID="e4e6a7a5-7d83-4812" responseTimeMS=178 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:40Z clientIP="72.198.61.82" requestID="972d8544-fcaa-47c1" responseTimeMS=176 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:40Z clientIP="72.198.61.82" requestID="e755872c-968e-42bc" responseTimeMS=122 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:40.179646736Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-27T18:49:56.010Z)
+2026-01-27T18:51:40.619797678Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-27T18:49:56.229Z)
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="c51ab2fc-d97c-4480" responseTimeMS=117 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="f4c0e4fa-63d7-4039" responseTimeMS=120 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="ec72d94b-e8b1-41cc" responseTimeMS=118 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="a4d3db18-fbe6-44dc" responseTimeMS=176 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="e68e86de-f104-4c1f" responseTimeMS=119 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="d49ca087-e71d-47bb" responseTimeMS=119 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="ff7090d5-d142-4fc9" responseTimeMS=180 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="56ce4e3b-0b9e-46bc" responseTimeMS=119 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:41Z clientIP="72.198.61.82" requestID="ba679d20-4dcc-4f03" responseTimeMS=183 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:42.141043704Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 2 ROs (updated since 2026-01-27T18:50:06.993Z)
+2026-01-27T18:51:42.524663975Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-27T18:50:07.121Z)
+2026-01-27T18:51:42.929885112Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-27T18:50:07.536Z)
+2026-01-27T18:51:43.05026541Z [Cron] Tekmetric incremental sync completed in 5161ms: 3 synced, 0 removed, 4/4 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-27T18:51:43.05203935Z [2026-01-27T18:51:37.654Z] Sync complete: {
+2026-01-27T18:51:43.05205303Z   "ok": true,
+2026-01-27T18:51:43.052058301Z   "duration": "5161ms",
+2026-01-27T18:51:43.052062421Z   "summary": {
+2026-01-27T18:51:43.052066211Z     "totalShops": 8,
+2026-01-27T18:51:43.052070571Z     "totalSynced": 3,
+2026-01-27T18:51:43.052074611Z     "totalRemoved": 0,
+2026-01-27T18:51:43.052078731Z     "fromCache": {
+2026-01-27T18:51:43.052082521Z       "vehicles": 4,
+2026-01-27T18:51:43.052086271Z       "customers": 4
+2026-01-27T18:51:43.052090031Z     },
+2026-01-27T18:51:43.052093821Z     "pagesQueued": 0,
+2026-01-27T18:51:43.052097901Z     "errors": 0,
+2026-01-27T18:51:43.052101822Z     "skipped": 0
+2026-01-27T18:51:43.052105631Z   },
+2026-01-27T18:51:43.052110002Z   "shops": [
+2026-01-27T18:51:43.052113872Z     {
+2026-01-27T18:51:43.052117782Z       "shopId": 1,
+2026-01-27T18:51:43.052122222Z       "tekmetricShopId": 14956,
+2026-01-27T18:51:43.052125982Z       "synced": 0,
+2026-01-27T18:51:43.052129642Z       "removed": 0,
+2026-01-27T18:51:43.052133412Z       "fromCache": {
+2026-01-27T18:51:43.052137392Z         "vehicles": 0,
+2026-01-27T18:51:43.052141252Z         "customers": 0
+2026-01-27T18:51:43.052161543Z       },
+2026-01-27T18:51:43.052163973Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052166243Z       "terminalSwept": false
+2026-01-27T18:51:43.052168283Z     },
+2026-01-27T18:51:43.052170443Z     {
+2026-01-27T18:51:43.052172483Z       "shopId": 28,
+2026-01-27T18:51:43.052174583Z       "tekmetricShopId": 14956,
+2026-01-27T18:51:43.052176663Z       "synced": 0,
+2026-01-27T18:51:43.052178863Z       "removed": 0,
+2026-01-27T18:51:43.052181163Z       "fromCache": {
+2026-01-27T18:51:43.052183453Z         "vehicles": 0,
+2026-01-27T18:51:43.052185553Z         "customers": 0
+2026-01-27T18:51:43.052187803Z       },
+2026-01-27T18:51:43.052189833Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052191993Z       "terminalSwept": false
+2026-01-27T18:51:43.052194044Z     },
+2026-01-27T18:51:43.052196033Z     {
+2026-01-27T18:51:43.052197994Z       "shopId": 32,
+2026-01-27T18:51:43.052200024Z       "tekmetricShopId": 469,
+2026-01-27T18:51:43.052202044Z       "synced": 0,
+2026-01-27T18:51:43.052203984Z       "removed": 0,
+2026-01-27T18:51:43.052206044Z       "fromCache": {
+2026-01-27T18:51:43.052208304Z         "vehicles": 1,
+2026-01-27T18:51:43.052210464Z         "customers": 1
+2026-01-27T18:51:43.052212584Z       },
+2026-01-27T18:51:43.052214714Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052216764Z       "terminalSwept": false
+2026-01-27T18:51:43.052218794Z     },
+2026-01-27T18:51:43.052223814Z     {
+2026-01-27T18:51:43.052226044Z       "shopId": 36,
+2026-01-27T18:51:43.052228134Z       "tekmetricShopId": 470,
+2026-01-27T18:51:43.052230224Z       "synced": 0,
+2026-01-27T18:51:43.052232214Z       "removed": 0,
+2026-01-27T18:51:43.052234134Z       "fromCache": {
+2026-01-27T18:51:43.052236185Z         "vehicles": 0,
+2026-01-27T18:51:43.052238185Z         "customers": 0
+2026-01-27T18:51:43.052240254Z       },
+2026-01-27T18:51:43.052242295Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052244275Z       "terminalSwept": false
+2026-01-27T18:51:43.052246285Z     },
+2026-01-27T18:51:43.052248235Z     {
+2026-01-27T18:51:43.052250285Z       "shopId": 37,
+2026-01-27T18:51:43.052252405Z       "tekmetricShopId": 471,
+2026-01-27T18:51:43.052254445Z       "synced": 1,
+2026-01-27T18:51:43.052256525Z       "removed": 0,
+2026-01-27T18:51:43.052258525Z       "fromCache": {
+2026-01-27T18:51:43.052260475Z         "vehicles": 1,
+2026-01-27T18:51:43.052262575Z         "customers": 1
+2026-01-27T18:51:43.052264565Z       },
+2026-01-27T18:51:43.052266685Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052268635Z       "terminalSwept": false
+2026-01-27T18:51:43.052270575Z     },
+2026-01-27T18:51:43.052272605Z     {
+2026-01-27T18:51:43.052274685Z       "shopId": 54,
+2026-01-27T18:51:43.052276715Z       "tekmetricShopId": 275,
+2026-01-27T18:51:43.052278746Z       "synced": 2,
+2026-01-27T18:51:43.052280706Z       "removed": 0,
+2026-01-27T18:51:43.052282666Z       "fromCache": {
+2026-01-27T18:51:43.052284675Z         "vehicles": 2,
+2026-01-27T18:51:43.052286686Z         "customers": 2
+2026-01-27T18:51:43.052288576Z       },
+2026-01-27T18:51:43.052290526Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052292656Z       "terminalSwept": false
+2026-01-27T18:51:43.052294726Z     },
+2026-01-27T18:51:43.052296736Z     {
+2026-01-27T18:51:43.052298736Z       "shopId": 57,
+2026-01-27T18:51:43.052301056Z       "tekmetricShopId": 11803,
+2026-01-27T18:51:43.052303066Z       "synced": 0,
+2026-01-27T18:51:43.052305056Z       "removed": 0,
+2026-01-27T18:51:43.052311646Z       "fromCache": {
+2026-01-27T18:51:43.052314036Z         "vehicles": 0,
+2026-01-27T18:51:43.052316126Z         "customers": 0
+2026-01-27T18:51:43.052318186Z       },
+2026-01-27T18:51:43.052320246Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052322207Z       "terminalSwept": false
+2026-01-27T18:51:43.052324267Z     },
+2026-01-27T18:51:43.052326356Z     {
+2026-01-27T18:51:43.052328427Z       "shopId": 63,
+2026-01-27T18:51:43.052330417Z       "tekmetricShopId": 14245,
+2026-01-27T18:51:43.052332427Z       "synced": 0,
+2026-01-27T18:51:43.052334397Z       "removed": 0,
+2026-01-27T18:51:43.052336397Z       "fromCache": {
+2026-01-27T18:51:43.052338307Z         "vehicles": 0,
+2026-01-27T18:51:43.052340317Z         "customers": 0
+2026-01-27T18:51:43.052342257Z       },
+2026-01-27T18:51:43.052344237Z       "pagesQueued": 0,
+2026-01-27T18:51:43.052346227Z       "terminalSwept": false
+2026-01-27T18:51:43.052348357Z     }
+2026-01-27T18:51:43.052350367Z   ]
+2026-01-27T18:51:43.052352367Z }
+2026-01-27T18:51:48Z clientIP="162.212.202.163" requestID="7ec682a7-6054-4ddf" responseTimeMS=3 responseBytes=345 userAgent=""
+2026-01-27T18:51:48Z clientIP="162.212.202.163" requestID="5b67a331-f63c-41a9" responseTimeMS=3 responseBytes=345 userAgent=""
+2026-01-27T18:51:50.019325474Z [Cron] Protractor sync normalized: shop 51, WOs: 0/2/53, payments: 0, inspections: 0, recommendations: 0
+2026-01-27T18:51:50.198700789Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:51:50.198774581Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/
+2026-01-27T18:51:50.198790731Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:51:50.198795261Z [Protractor Debug] ConnId hash: f610446a, Auth hash: 9d9bd930
+2026-01-27T18:51:50.596256484Z [Protractor] Fetched work orders page: skip=0, got 4, total so far: 4
+2026-01-27T18:51:50.596456568Z [Cron] Shop 66 - WorkflowStage counts: {
+2026-01-27T18:51:50.596468439Z   InspectionInProgress: 1,
+2026-01-27T18:51:50.596473188Z   WorkAuthorized: 1,
+2026-01-27T18:51:50.596477389Z   EstimateCompleted: 1,
+2026-01-27T18:51:50.596481249Z   Unassigned: 1
+2026-01-27T18:51:50.596484809Z }
+2026-01-27T18:51:50.71610608Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:51:50.716134191Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/3b3052be-e3d2-4116-ae26-52cd50090412
+2026-01-27T18:51:50.716140171Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:51:50.716146541Z [Protractor Debug] ConnId hash: f610446a, Auth hash: 9d9bd930
+2026-01-27T18:51:50.916881577Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:51:50.916915978Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9e2a4bd6-3486-43ed-90aa-c11095ef2803
+2026-01-27T18:51:50.916921858Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:51:50.916927838Z [Protractor Debug] ConnId hash: f610446a, Auth hash: 9d9bd930
+2026-01-27T18:51:51.117285286Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:51:51.117316547Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/13fb7954-2d9b-4af1-aa9c-bdfeb69832c3
+2026-01-27T18:51:51.117323917Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:51:51.117330667Z [Protractor Debug] ConnId hash: f610446a, Auth hash: 9d9bd930
+2026-01-27T18:51:51.317883109Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:51:51.31790981Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b08b8578-8353-4a8c-a741-871063487a8a
+2026-01-27T18:51:51.31791585Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:51:51.31792224Z [Protractor Debug] ConnId hash: f610446a, Auth hash: 9d9bd930
+2026-01-27T18:51:54.175276617Z [Cron] Protractor sync normalized: shop 66, WOs: 0/0/4, payments: 0, inspections: 0, recommendations: 0
+2026-01-27T18:51:54.176393112Z [Cron] Protractor sync completed in 238880ms: [
+2026-01-27T18:51:54.176406952Z   { shopId: 25, synced: 69, removed: 0, vehiclesUpdated: 60 },
+2026-01-27T18:51:54.176410572Z   { shopId: 28, synced: 4, removed: 0, vehiclesUpdated: 4 },
+2026-01-27T18:51:54.176412522Z   { shopId: 29, synced: 54, removed: 0, vehiclesUpdated: 50 },
+2026-01-27T18:51:54.176414242Z   { shopId: 35, synced: 72, removed: 0, vehiclesUpdated: 54 },
+2026-01-27T18:51:54.176416012Z   { shopId: 50, synced: 43, removed: 0, vehiclesUpdated: 39 },
+2026-01-27T18:51:54.176419942Z   { shopId: 51, synced: 65, removed: 0, vehiclesUpdated: 55 },
+2026-01-27T18:51:54.176421742Z   { shopId: 66, synced: 4, removed: 0, vehiclesUpdated: 4 }
+2026-01-27T18:51:54.176423462Z ]
+2026-01-27T18:51:54.177598619Z [Cron] Triggered plan pre-generation for 7 shops
+2026-01-27T18:51:54.188156756Z [2026-01-27T18:47:54.649Z] Sync complete: {
+2026-01-27T18:51:54.188950474Z   "ok": true,
+2026-01-27T18:51:54.188959904Z   "duration": "238880ms",
+2026-01-27T18:51:54.188962104Z   "shops": [
+2026-01-27T18:51:54.188965014Z     {
+2026-01-27T18:51:54.188968874Z       "shopId": 25,
+2026-01-27T18:51:54.188971694Z       "synced": 69,
+2026-01-27T18:51:54.188974645Z       "removed": 0,
+2026-01-27T18:51:54.188977125Z       "vehiclesUpdated": 60
+2026-01-27T18:51:54.188979795Z     },
+2026-01-27T18:51:54.188982525Z     {
+2026-01-27T18:51:54.188985125Z       "shopId": 28,
+2026-01-27T18:51:54.188987735Z       "synced": 4,
+2026-01-27T18:51:54.188990765Z       "removed": 0,
+2026-01-27T18:51:54.188994195Z       "vehiclesUpdated": 4
+2026-01-27T18:51:54.188996395Z     },
+2026-01-27T18:51:54.188998175Z     {
+2026-01-27T18:51:54.188999805Z       "shopId": 29,
+2026-01-27T18:51:54.189001495Z       "synced": 54,
+2026-01-27T18:51:54.189003145Z       "removed": 0,
+2026-01-27T18:51:54.189004835Z       "vehiclesUpdated": 50
+2026-01-27T18:51:54.189006495Z     },
+2026-01-27T18:51:54.189008135Z     {
+2026-01-27T18:51:54.189009786Z       "shopId": 35,
+2026-01-27T18:51:54.189011415Z       "synced": 72,
+2026-01-27T18:51:54.189013126Z       "removed": 0,
+2026-01-27T18:51:54.189014795Z       "vehiclesUpdated": 54
+2026-01-27T18:51:54.189016466Z     },
+2026-01-27T18:51:54.189018106Z     {
+2026-01-27T18:51:54.189019746Z       "shopId": 50,
+2026-01-27T18:51:54.189021376Z       "synced": 43,
+2026-01-27T18:51:54.189022996Z       "removed": 0,
+2026-01-27T18:51:54.189024676Z       "vehiclesUpdated": 39
+2026-01-27T18:51:54.189026356Z     },
+2026-01-27T18:51:54.189028046Z     {
+2026-01-27T18:51:54.189029786Z       "shopId": 51,
+2026-01-27T18:51:54.189031426Z       "synced": 65,
+2026-01-27T18:51:54.189033066Z       "removed": 0,
+2026-01-27T18:51:54.189034706Z       "vehiclesUpdated": 55
+2026-01-27T18:51:54.189036366Z     },
+2026-01-27T18:51:54.189037986Z     {
+2026-01-27T18:51:54.189039616Z       "shopId": 66,
+2026-01-27T18:51:54.189041266Z       "synced": 4,
+2026-01-27T18:51:54.189042906Z       "removed": 0,
+2026-01-27T18:51:54.189044526Z       "vehiclesUpdated": 4
+2026-01-27T18:51:54.189046206Z     }
+2026-01-27T18:51:54.189047856Z   ]
+2026-01-27T18:51:54.189049566Z }
+2026-01-27T18:51:54.190769285Z [Cron] Plan pregenerate fire-and-forget failed for shop 25: fetch failed
+2026-01-27T18:51:54.191160564Z [Cron] Plan pregenerate fire-and-forget failed for shop 29: fetch failed
+2026-01-27T18:51:54.191467001Z [Cron] Plan pregenerate fire-and-forget failed for shop 28: fetch failed
+2026-01-27T18:51:54.191828069Z [Cron] Plan pregenerate fire-and-forget failed for shop 35: fetch failed
+2026-01-27T18:51:54.192238468Z [Cron] Plan pregenerate fire-and-forget failed for shop 50: fetch failed
+2026-01-27T18:51:54.192584006Z [Cron] Plan pregenerate fire-and-forget failed for shop 51: fetch failed
+2026-01-27T18:51:54.192913453Z [Cron] Plan pregenerate fire-and-forget failed for shop 66: fetch failed
+2026-01-27T18:51:59Z clientIP="72.198.61.82" requestID="c2c1a6f7-991a-44f1" responseTimeMS=179 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:51:59Z clientIP="72.198.61.82" requestID="118cb86a-4244-42af" responseTimeMS=179 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:55:06.035648071Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:06.035652931Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:06.234172137Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:06.234191748Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/417da7e3-be62-4e3d-8c51-09a740a1a6d4
+2026-01-27T18:55:06.234200608Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:06.234205738Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:06.434474003Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:06.434515515Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b9ce1711-a3ad-4701-bb42-a42a55e1b940
+2026-01-27T18:55:06.434523235Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:06.434528155Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:06.634917303Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:06.634954284Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5c273ac3-402f-479a-a1f5-fdb155684694
+2026-01-27T18:55:06.634958144Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:06.634961024Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:06.835551737Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:06.835578088Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/edf512e5-dbba-46fc-bd2c-eba55f75b76b
+2026-01-27T18:55:06.835588458Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:06.835591748Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:07.035757661Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:07.035784902Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/244093df-2064-481d-aa64-5ccee3d7cbbf
+2026-01-27T18:55:07.035787702Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:07.035790902Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:07.23614524Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:07.23617226Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/c3fac411-4c26-4574-8dff-c346aa045247
+2026-01-27T18:55:07.236176371Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:07.236180521Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:07.436376615Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:07.436393695Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/038a9b77-a0d6-4c05-8762-4427f6590174
+2026-01-27T18:55:07.436396425Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:07.436398745Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:07.636586599Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:07.6366107Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/33ddc47d-f420-4290-ac62-b9df273c4c36
+2026-01-27T18:55:07.63661517Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:07.63661954Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:07.836409605Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:07.836438905Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7865a948-fe4f-4b98-83fe-235bcf2c3cad
+2026-01-27T18:55:07.836442196Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:07.836445765Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:08.036080927Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:08.036108538Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/2d4597ba-b2dc-408f-bdf1-3c82a794fe90
+2026-01-27T18:55:08.036114568Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:08.036117868Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:08.236076367Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:08.236113077Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a85a2de0-4ca4-4e5d-bb9b-f71fc7a39624
+2026-01-27T18:55:08.236157998Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:08.236165639Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:08.436806443Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:08.436839633Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/fb13a129-8c7c-4e21-9caa-62b4034611cd
+2026-01-27T18:55:08.436842313Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:08.436844964Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:08.636846003Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:08.636866904Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ce2b2e1c-3a6d-4555-957e-17e4756cefc7
+2026-01-27T18:55:08.636869984Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:08.636872914Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:08.837710983Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:08.837739343Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1eb81184-487f-47a7-9272-cdf6dcab5930
+2026-01-27T18:55:08.837743043Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:08.837746463Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:09.037360594Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:09.037406245Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6bfdf42b-172a-4d0a-bd63-6e84efbbb833
+2026-01-27T18:55:09.037409075Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:09.037411755Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:09.237595909Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:09.23761865Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6899ed61-43ab-44cf-9918-dee7857f92e3
+2026-01-27T18:55:09.23762177Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:09.23762993Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:09.437545488Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:09.437562808Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e8165c70-d99b-491f-99d3-11481fb006df
+2026-01-27T18:55:09.437566348Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:09.437569328Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:09.636948804Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:09.636966084Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e2e484cd-16e2-432e-89a5-f3830ff40595
+2026-01-27T18:55:09.636975054Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:09.636982515Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:09.837769502Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:09.837794713Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/819976ca-3c27-4ed2-83fd-377845699848
+2026-01-27T18:55:09.837799493Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:09.837803803Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:10.037203309Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:10.0372266Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6d24f0ec-45c7-4a16-990f-e6833a776471
+2026-01-27T18:55:10.03723032Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:10.03723347Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:10.239419289Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:10.239454889Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d38fb71e-9160-4598-aedf-e13af69d5cea
+2026-01-27T18:55:10.23947065Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:10.23947424Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:10.43861319Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:10.438637931Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d993da60-0722-4c28-a7ef-524f3260a098
+2026-01-27T18:55:10.438642401Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:10.438646391Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:10.638835745Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:10.638940567Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/79df98c0-71d9-4bde-81c6-3ea416024565
+2026-01-27T18:55:10.638948457Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:10.638952277Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:10.839647413Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:10.839670203Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b7605ed2-f033-4178-8f0a-c289158ac89a
+2026-01-27T18:55:10.839673503Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:10.839676473Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:11.039724174Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:11.039749475Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/f356cfc6-d8e8-4ea7-8dd4-4c26937c9402
+2026-01-27T18:55:11.039752545Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:11.039755395Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:11.242696041Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:11.242723861Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a18a46e9-c7e5-4b78-a04b-9ffa7b1d2ded
+2026-01-27T18:55:11.242727341Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:11.242730821Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:11.442460545Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:11.442479006Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a5002e27-7cfc-451a-a20f-1cd1355c61da
+2026-01-27T18:55:11.442482375Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:11.442485636Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:11.64270542Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:11.642727261Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9e7d1ae4-0c8d-44cf-9451-0fbb8eab8468
+2026-01-27T18:55:11.642730241Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:11.642733411Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:11.842779342Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:11.842799312Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8a096231-1ad1-478e-9052-cc093634dff7
+2026-01-27T18:55:11.842802512Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:11.842805522Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:12.043902407Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:12.043931727Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/f6ff8cde-1359-4838-9a77-b8021b1b8107
+2026-01-27T18:55:12.043950188Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:12.043953888Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:12.244614552Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:12.244639113Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/540cf128-0d01-443d-8f12-47649a037cf6
+2026-01-27T18:55:12.244642173Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:12.244645003Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:12.44453052Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:12.444548331Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0668f8da-ca88-43a2-b15f-5ebec75f7a42
+2026-01-27T18:55:12.44455062Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:12.444661963Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:12.644156771Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:12.644182752Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/92d4cd4b-02f7-4bae-9cbe-a812bea635eb
+2026-01-27T18:55:12.644186072Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:12.644189082Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:12.844041208Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:12.844061369Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/35130be2-cff5-4232-ac82-4e4cd068ebb1
+2026-01-27T18:55:12.844064559Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:12.844067939Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:13.044268073Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:13.044288814Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/69178c2c-8a6b-489a-9ce7-0b4613988a0e
+2026-01-27T18:55:13.044292214Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:13.044295524Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:13.244792735Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:13.244815975Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1d6b2640-e871-4220-9a4a-929d790d8d5d
+2026-01-27T18:55:13.244819575Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:13.244822945Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:13.44502929Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:13.44504765Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/34a941c5-2e90-45c4-9939-09ec9cafa9b8
+2026-01-27T18:55:13.44505106Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:13.44505387Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:13.645389588Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:13.645409818Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/63691423-f4cb-44e8-be01-6ab4081292eb
+2026-01-27T18:55:13.645413628Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:13.645417348Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:13.845780946Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:13.845804206Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/02558687-2d0b-48bd-8ac5-01c0a34e6d5f
+2026-01-27T18:55:13.845820207Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:13.845823557Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:14.045448978Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:14.045466889Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/247206c2-0eba-474c-b0dd-6bdf37289ed8
+2026-01-27T18:55:14.045470059Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:14.045473059Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:14.245706694Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:14.245733774Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/77b6a6bf-0491-47df-9ffc-d967092c9817
+2026-01-27T18:55:14.245737074Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:14.245740464Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:14.445434537Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:14.445460498Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/a97a3d04-14c9-4054-aaea-4b3391dafb40
+2026-01-27T18:55:14.445463308Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:14.445466178Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:14.645310534Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:14.645336575Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/b08a8647-1cdb-497b-94ee-2f054d5c2e16
+2026-01-27T18:55:14.645354205Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:14.645359385Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:14.845047488Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:14.845080389Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/71862ef6-bb9f-4833-bf2c-104053b39d1c
+2026-01-27T18:55:14.845098259Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:14.845103099Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:15.045428786Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:15.045458867Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ffa27ed7-92b4-4446-8496-0cbcc197c437
+2026-01-27T18:55:15.045465807Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:15.045472017Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:15.245797494Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:15.245829725Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1a629240-9809-480e-b58d-51dfa6a75049
+2026-01-27T18:55:15.245836095Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:15.245842095Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:15.445795644Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:15.445831415Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/81a28602-df2d-4e1d-963b-0f0babebab0e
+2026-01-27T18:55:15.445838185Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:15.445844715Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:15.645990878Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:15.646014598Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/341fde01-c7be-4307-8f0c-048fdb57a3e4
+2026-01-27T18:55:15.646020628Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:15.646036929Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:15.847017881Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:15.8474604Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/e05e83e7-db87-4660-ab12-868b1c53dbb9
+2026-01-27T18:55:15.847474071Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:15.847479201Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:16.046858227Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:16.046886037Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/35db6386-9a54-4f5a-a208-5c59063fdfab
+2026-01-27T18:55:16.046891627Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:16.046896627Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:16.246703163Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:16.24699896Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/43b2813b-55e7-4ee3-850d-b1b05cb4d992
+2026-01-27T18:55:16.247590413Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:16.247603273Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:16.446759544Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:16.446790835Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6026c585-a4f8-422b-bb03-e98cfc928a73
+2026-01-27T18:55:16.446795944Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:16.446800575Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:16.645658089Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:16.645687019Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/9771a8d0-9104-49c4-bf13-da6ffeb61052
+2026-01-27T18:55:16.645691599Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:16.645696459Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:16.846648141Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:16.846673112Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/68af8dae-10a6-4c1d-bc22-6798ff22fb0d
+2026-01-27T18:55:16.846678012Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:16.846682192Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:17.047665823Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:17.047707234Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/2626dcb6-b570-4dbe-a68a-80f354ce27b7
+2026-01-27T18:55:17.047713435Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:17.047717735Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:17.247665633Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:17.247703154Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/ee5afb35-5894-4ac9-8d88-25df66ea57cd
+2026-01-27T18:55:17.247707914Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:17.247712134Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:17.446948447Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:17.446970857Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/0d35cec5-1064-47ad-b978-d3a1b9467cd4
+2026-01-27T18:55:17.446975117Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:17.447004708Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:17.647362456Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:17.647379246Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/11d5b2a4-0beb-488c-80c3-73e66827a6bb
+2026-01-27T18:55:17.647382466Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:17.647385426Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:17Z clientIP="72.198.61.82" requestID="b456992e-aebe-46a6" responseTimeMS=178 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:55:17.847416087Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:17.847445237Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7a137b2c-6bcf-45df-81d6-4a6aae58488b
+2026-01-27T18:55:17.847449237Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:17.847453857Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:17Z clientIP="72.198.61.82" requestID="e1d2455f-ec6a-47b9" responseTimeMS=175 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:55:18.047445257Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:18.047472137Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/2e5d46fc-21d2-45cb-9e94-d37d11fad8af
+2026-01-27T18:55:18.047475748Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:18.047479148Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:18.246945945Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:55:18.246987416Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/7723d9e5-4ab8-4dec-b26b-259de1414884
+2026-01-27T18:55:18.246991216Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:55:18.246994896Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-27T18:55:18Z clientIP="72.198.61.82" requestID="20dcad82-5b1d-4777" responseTimeMS=175 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T18:55:17Z clientIP="72.198.61.82" requestID="4cc78c3e-a678-4641" responseTimeMS=176 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
