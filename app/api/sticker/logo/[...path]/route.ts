@@ -6,11 +6,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ shopId: string }> }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const { shopId } = await params;
-    const shopIdNum = Number(shopId);
+    const { path } = await params;
+    const shopIdStr = path[0];
+    const shopIdNum = Number(shopIdStr);
     
     if (!shopIdNum) {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
@@ -26,7 +27,6 @@ export async function GET(
       return NextResponse.json({ error: "Logo not found" }, { status: 404 });
     }
 
-    // Parse data URI
     const matches = media.dataUri.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) {
       return NextResponse.json({ error: "Invalid logo data" }, { status: 500 });
@@ -39,7 +39,7 @@ export async function GET(
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400", // Cache for 1 day
+        "Cache-Control": "public, max-age=86400",
       },
     });
   } catch (error) {
