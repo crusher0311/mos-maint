@@ -126,6 +126,12 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 
 ## Recent Changes
 
+**January 27, 2026:**
+- Added `shop_media` MongoDB collection for storing logos and QR codes
+- Logo uploads now stored as base64 in MongoDB (works on Render without Replit object storage)
+- QR codes cached in MongoDB to reduce HoverCode API calls
+- Added location identifier display to enterprise overview page
+
 **January 26, 2026:**
 - Fixed labor rate calculation when adding jobs from history - now uses 3-tier fallback (WO lines → shop job history → historical rate)
 - Improved service title normalization for job search matching (singular forms for better matching)

@@ -224,7 +224,8 @@ export default function StickerSettingsPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/sticker/qr?size=200`);
+      // Use cached QR endpoint
+      const res = await fetch(`/api/sticker/qr-cache`);
       if (res.ok) {
         const blob = await res.blob();
         setQrUrl(URL.createObjectURL(blob));
@@ -238,7 +239,8 @@ export default function StickerSettingsPage() {
     setRegeneratingQr(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/sticker/regenerate-qr", {
+      // Use cached QR endpoint to regenerate
+      const res = await fetch("/api/sticker/qr-cache", {
         method: "POST",
       });
       if (res.ok) {
@@ -378,8 +380,8 @@ export default function StickerSettingsPage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setMessage({ type: "error", text: "File size must be under 5MB" });
+    if (file.size > 500 * 1024) {
+      setMessage({ type: "error", text: "File size must be under 500KB" });
       return;
     }
 
@@ -387,44 +389,33 @@ export default function StickerSettingsPage() {
     setMessage(null);
 
     try {
-      const urlRes = await fetch("/api/sticker/upload-logo", {
+      // Convert file to base64
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/sticker/upload-logo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: file.name,
           contentType: file.type,
+          base64Data,
         }),
       });
 
-      if (!urlRes.ok) {
-        const err = await urlRes.json();
-        throw new Error(err.error || "Failed to get upload URL");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to upload logo");
       }
 
-      const { uploadURL, publicURL, objectPath } = await urlRes.json();
-
-      const uploadRes = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error("Failed to upload file");
-      }
-
-      const finalizeRes = await fetch("/api/sticker/finalize-logo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objectPath, publicURL }),
-      });
-
-      if (!finalizeRes.ok) {
-        const err = await finalizeRes.json();
-        throw new Error(err.error || "Failed to finalize upload");
-      }
-
-      const { logoUrl } = await finalizeRes.json();
+      const { logoUrl } = await res.json();
       setConfig({ ...config, logo: logoUrl });
       setMessage({ type: "success", text: "Logo uploaded successfully!" });
     } catch (err) {

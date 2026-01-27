@@ -1,42 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
-
-async function signObjectURL({
-  bucketName,
-  objectName,
-  method,
-  ttlSec,
-}: {
-  bucketName: string;
-  objectName: string;
-  method: "GET" | "PUT" | "DELETE" | "HEAD";
-  ttlSec: number;
-}): Promise<string> {
-  const request = {
-    bucket_name: bucketName,
-    object_name: objectName,
-    method,
-    expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
-  };
-  const response = await fetch(
-    `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-    }
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to sign object URL: ${response.status}`);
-  }
-  const { signed_url: signedURL } = await response.json();
-  return signedURL;
-}
+const MAX_LOGO_SIZE = 500 * 1024; // 500KB
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -57,11 +26,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { name, contentType } = await req.json();
+    const body = await req.json();
+    const { contentType, base64Data } = body;
 
-    if (!name || !contentType) {
+    if (!contentType || !base64Data) {
       return NextResponse.json(
-        { error: "Missing name or contentType" },
+        { error: "Missing contentType or base64Data" },
         { status: 400 }
       );
     }
@@ -73,42 +43,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const publicPaths = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const publicPath = publicPaths.split(",")[0]?.trim();
-
-    if (!publicPath) {
+    // Validate base64 data size
+    const dataSize = (base64Data.length * 3) / 4;
+    if (dataSize > MAX_LOGO_SIZE) {
       return NextResponse.json(
-        { error: "Object storage not configured" },
-        { status: 500 }
+        { error: `Logo too large. Maximum size is ${Math.round(MAX_LOGO_SIZE / 1024)}KB` },
+        { status: 400 }
       );
     }
 
-    const ext = name.split(".").pop() || "png";
-    const objectName = `shop-logos/${shopId}/logo-${Date.now()}.${ext}`;
-    const fullPath = `${publicPath}/${objectName}`;
+    // Create data URI
+    const dataUri = `data:${contentType};base64,${base64Data}`;
 
-    const pathParts = fullPath.split("/").filter(Boolean);
-    const bucketName = pathParts[0];
-    const objectPath = pathParts.slice(1).join("/");
+    const db = await getDb();
+    
+    // Store in shop_media collection
+    await db.collection("shop_media").updateOne(
+      { shopId, type: "logo" },
+      {
+        $set: {
+          shopId,
+          type: "logo",
+          dataUri,
+          contentType,
+          updatedAt: new Date(),
+          updatedBy: session.email,
+        },
+      },
+      { upsert: true }
+    );
 
-    const uploadURL = await signObjectURL({
-      bucketName,
-      objectName: objectPath,
-      method: "PUT",
-      ttlSec: 900,
-    });
-
-    const publicURL = `https://storage.googleapis.com/${bucketName}/${objectPath}`;
+    // Also update the shop's stickerConfig.logo for backward compatibility
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $set: {
+          "stickerConfig.logo": `/api/sticker/logo/${shopId}`,
+          "stickerConfig.logoUpdatedAt": new Date(),
+        },
+      }
+    );
 
     return NextResponse.json({
-      uploadURL,
-      publicURL,
-      objectPath: `/${bucketName}/${objectPath}`,
+      logoUrl: `/api/sticker/logo/${shopId}`,
+      success: true,
     });
   } catch (error) {
     console.error("[Upload Logo] Error:", error);
     return NextResponse.json(
-      { error: "Failed to generate upload URL" },
+      { error: "Failed to upload logo" },
       { status: 500 }
     );
   }

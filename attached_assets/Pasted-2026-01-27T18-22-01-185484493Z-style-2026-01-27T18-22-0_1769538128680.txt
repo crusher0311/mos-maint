@@ -1,0 +1,300 @@
+2026-01-27T18:22:01.185484493Z </style>
+2026-01-27T18:22:01.185486642Z </head>
+2026-01-27T18:22:01.185488783Z <body>
+2026-01-27T18:22:01.185490943Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:01.185493063Z <div id="content">
+2026-01-27T18:22:01.185495133Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:01.185511534Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:01.185514095Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:01.185516335Z  </fieldset></div>
+2026-01-27T18:22:01.185518505Z </div>
+2026-01-27T18:22:01.185520735Z </body>
+2026-01-27T18:22:01.185522945Z </html>
+2026-01-27T18:22:01.185525125Z 
+2026-01-27T18:22:01.185527415Z [Protractor] Trying GET /ServicePackageTemplate/b8fbc617-4207-4d17-b204-47d282fea9db...
+2026-01-27T18:22:01.302693979Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:01.302747002Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/d568563e-80e8-40d3-956e-5c3da3192da8
+2026-01-27T18:22:01.302756503Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:01.302761053Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:01.40425806Z [Protractor] GET /ServicePackageTemplate/Read/d568563e-80e8-40d3-956e-5c3da3192da8: ok=false
+2026-01-27T18:22:01.404273811Z [Protractor] GET /ServicePackageTemplate/Read/d568563e-80e8-40d3-956e-5c3da3192da8 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:01.404276782Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:01.404278712Z <head>
+2026-01-27T18:22:01.404281382Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:01.404284092Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:01.404286442Z <style type="text/css">
+2026-01-27T18:22:01.404288272Z <!--
+2026-01-27T18:22:01.404290573Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:01.404292363Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:01.404294103Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:01.404295773Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:01.404298293Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:01.404300583Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:01.404302933Z background-color:#555555;}
+2026-01-27T18:22:01.404304644Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:01.404306404Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:01.404308094Z -->
+2026-01-27T18:22:01.404309884Z </style>
+2026-01-27T18:22:01.404311614Z </head>
+2026-01-27T18:22:01.404313344Z <body>
+2026-01-27T18:22:01.404315124Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:01.404316854Z <div id="content">
+2026-01-27T18:22:01.404318554Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:01.404320255Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:01.404322115Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:01.404323895Z  </fieldset></div>
+2026-01-27T18:22:01.404325595Z </div>
+2026-01-27T18:22:01.404327275Z </body>
+2026-01-27T18:22:01.404328945Z </html>
+2026-01-27T18:22:01.404330545Z 
+2026-01-27T18:22:01.404332335Z [Protractor] Trying GET /ServicePackageTemplate/d568563e-80e8-40d3-956e-5c3da3192da8...
+2026-01-27T18:22:04.364217128Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:04.364220788Z <head>
+2026-01-27T18:22:04.364225699Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:04.364230159Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:04.364233009Z <style type="text/css">
+2026-01-27T18:22:04.36423512Z <!--
+2026-01-27T18:22:04.36423793Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:04.36424012Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:04.36424234Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:04.36424448Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:04.36424654Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:04.36424933Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:04.364251941Z background-color:#555555;}
+2026-01-27T18:22:04.364254131Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:04.364256271Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:04.364258431Z -->
+2026-01-27T18:22:04.364260591Z </style>
+2026-01-27T18:22:04.364262762Z </head>
+2026-01-27T18:22:04.364264931Z <body>
+2026-01-27T18:22:04.364267122Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:04.364269282Z <div id="content">
+2026-01-27T18:22:04.364271432Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:04.364276212Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:04.364278432Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:04.364280593Z  </fieldset></div>
+2026-01-27T18:22:04.364282703Z </div>
+2026-01-27T18:22:04.364284803Z </body>
+2026-01-27T18:22:04.364286873Z </html>
+2026-01-27T18:22:04.364288853Z 
+2026-01-27T18:22:04.364291043Z [Protractor] Trying GET /ServicePackageTemplate/595ecf03-72a8-4349-b9bb-03c52b04602b...
+2026-01-27T18:22:04.506709687Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:04.506776602Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/47e7f5df-e391-4810-b7f4-2f11cda85d67
+2026-01-27T18:22:04.506780142Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:04.506783183Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:04.564574429Z [Protractor] GET /ServicePackageTemplate/Read/47e7f5df-e391-4810-b7f4-2f11cda85d67: ok=false
+2026-01-27T18:22:04.564600631Z [Protractor] GET /ServicePackageTemplate/Read/47e7f5df-e391-4810-b7f4-2f11cda85d67 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:04.564622873Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:04.564625533Z <head>
+2026-01-27T18:22:04.564628263Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:04.564630593Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:04.564632883Z <style type="text/css">
+2026-01-27T18:22:04.564634554Z <!--
+2026-01-27T18:22:04.564636904Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:04.564638724Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:04.564640644Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:04.564642324Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:04.564644024Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:04.564646324Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:04.564648495Z background-color:#555555;}
+2026-01-27T18:22:04.564650204Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:04.564651955Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:04.564653655Z -->
+2026-01-27T18:22:04.564655355Z </style>
+2026-01-27T18:22:04.564657115Z </head>
+2026-01-27T18:22:04.564658885Z <body>
+2026-01-27T18:22:04.564660605Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:04.564662685Z <div id="content">
+2026-01-27T18:22:04.564664456Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:04.564666186Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:04.564667916Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:04.564669626Z  </fieldset></div>
+2026-01-27T18:22:04.564671326Z </div>
+2026-01-27T18:22:04.564673066Z </body>
+2026-01-27T18:22:04.564674786Z </html>
+2026-01-27T18:22:04.564676366Z 
+2026-01-27T18:22:04.564681717Z [Protractor] Trying GET /ServicePackageTemplate/47e7f5df-e391-4810-b7f4-2f11cda85d67...
+2026-01-27T18:22:04.706930239Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:04.706953131Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/97e7c271-0e1a-4e7c-b2c0-240fcf36c398
+2026-01-27T18:22:04.706957031Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:04.706960351Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:04.763848545Z [Protractor] GET /ServicePackageTemplate/Read/97e7c271-0e1a-4e7c-b2c0-240fcf36c398: ok=false
+2026-01-27T18:22:04.763882588Z [Protractor] GET /ServicePackageTemplate/Read/97e7c271-0e1a-4e7c-b2c0-240fcf36c398 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:04.763892528Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:04.763895209Z <head>
+2026-01-27T18:22:04.763898579Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:04.763901309Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:04.763904299Z <style type="text/css">
+2026-01-27T18:22:04.763906419Z <!--
+2026-01-27T18:22:04.76390901Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:04.76391135Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:04.76391365Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:04.763934991Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:04.763937841Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:04.763940712Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:04.763943532Z background-color:#555555;}
+2026-01-27T18:22:04.763945782Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:04.763948512Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:04.763950622Z -->
+2026-01-27T18:22:04.763952782Z </style>
+2026-01-27T18:22:04.763955003Z </head>
+2026-01-27T18:22:04.763957153Z <body>
+2026-01-27T18:22:04.763959523Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:04.763961763Z <div id="content">
+2026-01-27T18:22:04.763964013Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:04.763966303Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:04.763968443Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:04.763970594Z  </fieldset></div>
+2026-01-27T18:22:04.763972614Z </div>
+2026-01-27T18:22:04.763974784Z </body>
+2026-01-27T18:22:04.763977044Z </html>
+2026-01-27T18:22:04.763978994Z 
+2026-01-27T18:22:04.763981215Z [Protractor] Trying GET /ServicePackageTemplate/97e7c271-0e1a-4e7c-b2c0-240fcf36c398...
+2026-01-27T18:22:04.908828377Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:04.908853709Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/6bcf6ac6-0eb4-4444-b3a8-e3a4e342f7a6
+2026-01-27T18:22:04.908857829Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:04.908861349Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:04.990096231Z [Protractor] GET /ServicePackageTemplate/Read/6bcf6ac6-0eb4-4444-b3a8-e3a4e342f7a6: ok=false
+2026-01-27T18:22:04.990124903Z [Protractor] GET /ServicePackageTemplate/Read/6bcf6ac6-0eb4-4444-b3a8-e3a4e342f7a6 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:04.990129294Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:04.990131714Z <head>
+2026-01-27T18:22:04.990135244Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:04.990138854Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:04.990142184Z <style type="text/css">
+2026-01-27T18:22:04.990144564Z <!--
+2026-01-27T18:22:04.990147615Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:04.990149855Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:04.990152055Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:04.990154145Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:04.990156245Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:04.990159376Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:04.990162526Z background-color:#555555;}
+2026-01-27T18:22:04.990164766Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:04.990167106Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:04.990169216Z -->
+2026-01-27T18:22:04.990171397Z </style>
+2026-01-27T18:22:04.990173517Z </head>
+2026-01-27T18:22:04.990175677Z <body>
+2026-01-27T18:22:04.990213539Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:04.99021636Z <div id="content">
+2026-01-27T18:22:04.99021889Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:04.99022119Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:04.99022357Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:04.99022575Z  </fieldset></div>
+2026-01-27T18:22:04.99022791Z </div>
+2026-01-27T18:22:04.990230041Z </body>
+2026-01-27T18:22:04.990232201Z </html>
+2026-01-27T18:22:04.990234151Z 
+2026-01-27T18:22:04.990236731Z [Protractor] Trying GET /ServicePackageTemplate/6bcf6ac6-0eb4-4444-b3a8-e3a4e342f7a6...
+2026-01-27T18:22:05.106566296Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:05.106588478Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/f16a2198-5c95-4fae-aa4d-5c431af95d96
+2026-01-27T18:22:05.106592048Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:05.106595218Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:05.164593249Z [Protractor] GET /ServicePackageTemplate/Read/f16a2198-5c95-4fae-aa4d-5c431af95d96: ok=false
+2026-01-27T18:22:05.164616641Z [Protractor] GET /ServicePackageTemplate/Read/f16a2198-5c95-4fae-aa4d-5c431af95d96 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:05.164620761Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:05.164623101Z <head>
+2026-01-27T18:22:05.164626442Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:05.164629462Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:05.164632622Z <style type="text/css">
+2026-01-27T18:22:05.164634762Z <!--
+2026-01-27T18:22:05.164637752Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:05.164640193Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:05.164642323Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:05.164644593Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:05.164646643Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:05.164649563Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:05.164652914Z background-color:#555555;}
+2026-01-27T18:22:05.164655054Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:05.164657314Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:05.164659524Z -->
+2026-01-27T18:22:05.164661684Z </style>
+2026-01-27T18:22:05.164663854Z </head>
+2026-01-27T18:22:05.164666214Z <body>
+2026-01-27T18:22:05.164668395Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:05.164671865Z <div id="content">
+2026-01-27T18:22:05.164674105Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:05.164676275Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:05.164678505Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:05.164680645Z  </fieldset></div>
+2026-01-27T18:22:05.164682756Z </div>
+2026-01-27T18:22:05.164684926Z </body>
+2026-01-27T18:22:05.164687026Z </html>
+2026-01-27T18:22:05.164689046Z 
+2026-01-27T18:22:05.164691346Z [Protractor] Trying GET /ServicePackageTemplate/f16a2198-5c95-4fae-aa4d-5c431af95d96...
+2026-01-27T18:22:05.306947669Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:05.307086899Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/4294800f-778b-4785-9bb3-6f8ceec90088
+2026-01-27T18:22:05.30767895Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:05.3076869Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:05.365510789Z [Protractor] GET /ServicePackageTemplate/Read/4294800f-778b-4785-9bb3-6f8ceec90088: ok=false
+2026-01-27T18:22:05.365684401Z [Protractor] GET /ServicePackageTemplate/Read/4294800f-778b-4785-9bb3-6f8ceec90088 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:05.365693072Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:05.365695702Z <head>
+2026-01-27T18:22:05.365698802Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:05.365701633Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:05.365704453Z <style type="text/css">
+2026-01-27T18:22:05.365706573Z <!--
+2026-01-27T18:22:05.365709353Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:05.365758396Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:05.365761217Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:05.365763537Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:05.365766507Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:05.365769487Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:05.365772697Z background-color:#555555;}
+2026-01-27T18:22:05.365774798Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:05.365777488Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:05.365779718Z -->
+2026-01-27T18:22:05.365781888Z </style>
+2026-01-27T18:22:05.365784088Z </head>
+2026-01-27T18:22:05.365786188Z <body>
+2026-01-27T18:22:05.365788419Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:05.365790529Z <div id="content">
+2026-01-27T18:22:05.365792679Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:05.365794859Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:05.365797109Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:05.365799329Z  </fieldset></div>
+2026-01-27T18:22:05.365801499Z </div>
+2026-01-27T18:22:05.365803609Z </body>
+2026-01-27T18:22:05.36580565Z </html>
+2026-01-27T18:22:05.36580765Z 
+2026-01-27T18:22:05.365896266Z [Protractor] Trying GET /ServicePackageTemplate/4294800f-778b-4785-9bb3-6f8ceec90088...
+2026-01-27T18:22:05.506236656Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:05.506262458Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/f0c02ec5-3f81-4ed6-ac71-e0328d90786c
+2026-01-27T18:22:05.506266178Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:05.506269018Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
+2026-01-27T18:22:05.564402509Z [Protractor] GET /ServicePackageTemplate/Read/f0c02ec5-3f81-4ed6-ac71-e0328d90786c: ok=false
+2026-01-27T18:22:05.564429891Z [Protractor] GET /ServicePackageTemplate/Read/f0c02ec5-3f81-4ed6-ac71-e0328d90786c error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-27T18:22:05.564433721Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-27T18:22:05.564451632Z <head>
+2026-01-27T18:22:05.564454792Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-27T18:22:05.564457682Z <title>404 - File or directory not found.</title>
+2026-01-27T18:22:05.564460113Z <style type="text/css">
+2026-01-27T18:22:05.564462133Z <!--
+2026-01-27T18:22:05.564464853Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-27T18:22:05.564467163Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-27T18:22:05.564469593Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-27T18:22:05.564471823Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-27T18:22:05.564473964Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-27T18:22:05.564476634Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-27T18:22:05.564479244Z background-color:#555555;}
+2026-01-27T18:22:05.564481564Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-27T18:22:05.564484134Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-27T18:22:05.564486304Z -->
+2026-01-27T18:22:05.564488535Z </style>
+2026-01-27T18:22:05.564490705Z </head>
+2026-01-27T18:22:05.564492975Z <body>
+2026-01-27T18:22:05.564495205Z <div id="header"><h1>Server Error</h1></div>
+2026-01-27T18:22:05.564497305Z <div id="content">
+2026-01-27T18:22:05.564499325Z  <div class="content-container"><fieldset>
+2026-01-27T18:22:05.564501516Z   <h2>404 - File or directory not found.</h2>
+2026-01-27T18:22:05.564503816Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-27T18:22:05.564505896Z  </fieldset></div>
+2026-01-27T18:22:05.564507956Z </div>
+2026-01-27T18:22:05.564510026Z </body>
+2026-01-27T18:22:05.564512136Z </html>
+2026-01-27T18:22:05.564514056Z 
+2026-01-27T18:22:05.564516337Z [Protractor] Trying GET /ServicePackageTemplate/f0c02ec5-3f81-4ed6-ac71-e0328d90786c...
+2026-01-27T18:22:05.706661302Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T18:22:05.706688874Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/6599fce6-0388-47c4-8fcd-3009b96b3323
+2026-01-27T18:22:05.706692354Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T18:22:05.706694964Z [Protractor Debug] ConnId hash: 53b24ac2, Auth hash: 4ccb7c1c
