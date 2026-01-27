@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { getEnterpriseByShopId } from "@/lib/enterprise";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,19 @@ export async function GET() {
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: Number(sess.shopId) });
+  const shopId = Number(sess.shopId);
+  const shop = await db.collection("shops").findOne({ shopId });
+  
+  // Get enterprise info for job history location selection
+  let enterpriseShops: { shopId: number; name: string }[] = [];
+  const enterprise = await getEnterpriseByShopId(shopId);
+  if (enterprise && enterprise.shopIds.length > 1) {
+    const siblingShops = await db.collection("shops")
+      .find({ shopId: { $in: enterprise.shopIds } })
+      .project({ shopId: 1, name: 1 })
+      .toArray();
+    enterpriseShops = siblingShops.map((s: any) => ({ shopId: s.shopId, name: s.name }));
+  }
 
   return NextResponse.json({
     distanceUnit: shop?.preferences?.distanceUnit || "miles",
@@ -21,6 +34,8 @@ export async function GET() {
     showInspectItems: shop?.preferences?.showInspectItems !== false, // default true
     showOnlyWithMileage: shop?.preferences?.showOnlyWithMileage !== false, // default true
     tekmetricLabels: shop?.preferences?.tekmetricLabels || [], // empty = show all
+    jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null, // null = all enterprise shops
+    enterpriseShops, // for UI to display options
   });
 }
 
@@ -37,7 +52,7 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, tekmetricLabels } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, tekmetricLabels, jobHistoryShopIds } = await req.json();
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
@@ -56,6 +71,7 @@ export async function PUT(req: NextRequest) {
   if (showInspectItems !== undefined) updates["preferences.showInspectItems"] = showInspectItems;
   if (showOnlyWithMileage !== undefined) updates["preferences.showOnlyWithMileage"] = showOnlyWithMileage;
   if (tekmetricLabels !== undefined) updates["preferences.tekmetricLabels"] = tekmetricLabels;
+  if (jobHistoryShopIds !== undefined) updates["preferences.jobHistoryShopIds"] = jobHistoryShopIds;
 
   await db.collection("shops").updateOne(
     { shopId: Number(sess.shopId) },

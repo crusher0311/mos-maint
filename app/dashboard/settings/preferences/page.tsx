@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag } from "lucide-react";
+import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag, Building2 } from "lucide-react";
 
 const WORKFLOW_STAGES = [
   { key: "Unassigned", label: "Unassigned", description: "New work orders not yet assigned" },
@@ -15,6 +15,7 @@ const WORKFLOW_STAGES = [
 const DEFAULT_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted"];
 
 type TekmetricLabel = { name: string; color: string };
+type EnterpriseShop = { shopId: number; name: string };
 
 export default function PreferencesPage() {
   const [distanceUnit, setDistanceUnit] = useState("miles");
@@ -28,6 +29,8 @@ export default function PreferencesPage() {
   const [hasTekmetric, setHasTekmetric] = useState(false);
   const [tekmetricLabels, setTekmetricLabels] = useState<TekmetricLabel[]>([]);
   const [selectedTekmetricLabels, setSelectedTekmetricLabels] = useState<string[]>([]);
+  const [enterpriseShops, setEnterpriseShops] = useState<EnterpriseShop[]>([]);
+  const [jobHistoryShopIds, setJobHistoryShopIds] = useState<number[] | null>(null);
 
   useEffect(() => {
     fetchPreferences();
@@ -48,6 +51,8 @@ export default function PreferencesPage() {
         setShowInspectItems(data.showInspectItems !== false);
         setShowOnlyWithMileage(data.showOnlyWithMileage !== false);
         setSelectedTekmetricLabels(data.tekmetricLabels || []);
+        setEnterpriseShops(data.enterpriseShops || []);
+        setJobHistoryShopIds(data.jobHistoryShopIds || null);
       }
       
       if (integrationsRes.ok) {
@@ -83,6 +88,27 @@ export default function PreferencesPage() {
     );
   }
 
+  function toggleJobHistoryShop(shopIdToToggle: number) {
+    setJobHistoryShopIds(prev => {
+      if (prev === null) {
+        // First selection - enable only selected shops (excluding this one means include all others)
+        return enterpriseShops
+          .map(s => s.shopId)
+          .filter(id => id !== shopIdToToggle);
+      }
+      if (prev.includes(shopIdToToggle)) {
+        const newList = prev.filter(id => id !== shopIdToToggle);
+        // If removing last one, set to null (show all)
+        return newList.length === 0 ? null : newList;
+      }
+      return [...prev, shopIdToToggle];
+    });
+  }
+
+  function selectAllEnterpriseShops() {
+    setJobHistoryShopIds(null); // null means all
+  }
+
   async function savePreferences() {
     setSaving(true);
     setSaved(false);
@@ -95,7 +121,8 @@ export default function PreferencesPage() {
           workflowStages, 
           showInspectItems, 
           showOnlyWithMileage,
-          tekmetricLabels: selectedTekmetricLabels
+          tekmetricLabels: selectedTekmetricLabels,
+          jobHistoryShopIds
         }),
       });
       if (res.ok) {
@@ -275,6 +302,72 @@ export default function PreferencesPage() {
                   <p className="text-sm text-blue-800">
                     {selectedTekmetricLabels.length} label{selectedTekmetricLabels.length > 1 ? 's' : ''} selected. 
                     Dashboard will only show repair orders with these labels.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {enterpriseShops.length > 1 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Building2 className="w-5 h-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Job History Locations</h2>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Select which locations in your organization you want to see job history from when searching.
+                This affects job search results across your enterprise.
+              </p>
+
+              <div className="flex items-center gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={selectAllEnterpriseShops}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    jobHistoryShopIds === null
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  All Locations
+                </button>
+                <span className="text-sm text-gray-500">or select specific locations:</span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {enterpriseShops.map((shop) => {
+                  const isSelected = jobHistoryShopIds === null || jobHistoryShopIds.includes(shop.shopId);
+                  return (
+                    <label
+                      key={shop.shopId}
+                      className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                        isSelected
+                          ? "border-blue-500 bg-blue-50"
+                          : "border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleJobHistoryShop(shop.shopId)}
+                        className="w-4 h-4 text-blue-600 mt-0.5"
+                      />
+                      <div>
+                        <p className="font-medium text-gray-900">{shop.name}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {jobHistoryShopIds !== null && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    {jobHistoryShopIds.length} location{jobHistoryShopIds.length !== 1 ? 's' : ''} selected. 
+                    Job search will only include history from these locations.
                   </p>
                 </div>
               )}

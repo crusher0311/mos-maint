@@ -216,12 +216,27 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   
-  // Check if shop is part of an enterprise - if so, search all enterprise shops
+  // Check if shop is part of an enterprise - if so, search enterprise shops based on preferences
   let searchShopIds: number[] = [shopId];
   const enterprise = await getEnterpriseByShopId(shopId);
   if (enterprise && enterprise.shopIds.length > 1) {
-    searchShopIds = enterprise.shopIds;
-    console.log(`[Jobs Search] Enterprise search: shops ${searchShopIds.join(', ')}`);
+    // Check shop preferences for job history location selection
+    const shop = await db.collection("shops").findOne({ shopId });
+    const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
+    
+    if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
+      // Use the shop's selected locations (must be within enterprise)
+      searchShopIds = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
+      // Always include own shop
+      if (!searchShopIds.includes(shopId)) {
+        searchShopIds.push(shopId);
+      }
+      console.log(`[Jobs Search] Enterprise search (custom): shops ${searchShopIds.join(', ')}`);
+    } else {
+      // Default: search all enterprise shops
+      searchShopIds = enterprise.shopIds;
+      console.log(`[Jobs Search] Enterprise search (all): shops ${searchShopIds.join(', ')}`);
+    }
   }
   
   // Build shop lookup map for location names
