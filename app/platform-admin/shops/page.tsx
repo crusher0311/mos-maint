@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4 } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play } from "lucide-react";
 
 interface ShopBilling {
   plan: string;
@@ -170,6 +170,30 @@ export default function PlatformShopsPage() {
     } catch (err) {
       console.error("Update shop settings error:", err);
       alert("Update failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const triggerBackfill = async (shopId: number | string, action: "resume" | "reset") => {
+    const numericShopId = typeof shopId === 'string' ? parseInt(shopId) : shopId;
+    setActionLoading(`${shopId}-backfill`);
+    try {
+      const res = await fetch("/api/platform-admin/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId: numericShopId, action }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message);
+        loadShops();
+      } else {
+        alert(data.error || "Backfill action failed");
+      }
+    } catch (err) {
+      console.error("Backfill error:", err);
+      alert("Backfill action failed");
     } finally {
       setActionLoading(null);
     }
