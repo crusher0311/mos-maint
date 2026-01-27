@@ -111,9 +111,10 @@ export async function PUT(req: NextRequest) {
       const numericShopId = Number(shopId);
       await addShopToEnterprise(enterpriseId, numericShopId);
       
-      // Get existing enterprise shops to copy features from
+      // Get existing enterprise shops to copy features and preferences from
       const enterprise = await getEnterpriseById(enterpriseId);
       let featuresToCopy: string[] = [];
+      let preferencesToCopy: Record<string, any> | null = null;
       
       if (enterprise && enterprise.shopIds.length > 0) {
         // Filter out the new shop from the list of existing shops
@@ -121,32 +122,46 @@ export async function PUT(req: NextRequest) {
         console.log(`[Enterprise] Adding shop ${numericShopId} to enterprise. Other shops:`, otherShopIds);
         
         if (otherShopIds.length > 0) {
-          // Get features from existing enterprise shops - check for non-empty array
+          // Get features and preferences from existing enterprise shops
+          // Prioritize the current user's shop if they're logged in
+          const currentUserShopId = auth.session?.shopId ? Number(auth.session.shopId) : null;
+          
           const existingShops = await db.collection("shops")
-            .find({ 
-              shopId: { $in: otherShopIds },
-              enabledFeatures: { $exists: true, $type: "array" }
-            })
-            .project({ shopId: 1, enabledFeatures: 1 })
+            .find({ shopId: { $in: otherShopIds } })
+            .project({ shopId: 1, enabledFeatures: 1, preferences: 1 })
             .toArray();
           
-          console.log(`[Enterprise] Found ${existingShops.length} shops with enabledFeatures field`);
+          console.log(`[Enterprise] Found ${existingShops.length} enterprise shops`);
           
-          // Find a shop with actual features
-          const shopWithFeatures = existingShops.find((s: any) => 
-            Array.isArray(s.enabledFeatures) && s.enabledFeatures.length > 0
-          );
+          // Try to use the current user's shop first, otherwise use first shop with data
+          let sourceShop = currentUserShopId 
+            ? existingShops.find((s: any) => s.shopId === currentUserShopId)
+            : null;
           
-          if (shopWithFeatures) {
-            featuresToCopy = shopWithFeatures.enabledFeatures;
-            console.log(`[Enterprise] Copying features from shop ${shopWithFeatures.shopId} to new location ${numericShopId}:`, featuresToCopy);
+          if (!sourceShop) {
+            // Fall back to first shop with features
+            sourceShop = existingShops.find((s: any) => 
+              Array.isArray(s.enabledFeatures) && s.enabledFeatures.length > 0
+            );
+          }
+          
+          if (sourceShop) {
+            if (Array.isArray(sourceShop.enabledFeatures) && sourceShop.enabledFeatures.length > 0) {
+              featuresToCopy = sourceShop.enabledFeatures;
+            }
+            if (sourceShop.preferences && Object.keys(sourceShop.preferences).length > 0) {
+              // Copy preferences but exclude job history shop IDs (those should be set per-shop)
+              const { jobHistoryShopIds, ...otherPrefs } = sourceShop.preferences;
+              preferencesToCopy = otherPrefs;
+            }
+            console.log(`[Enterprise] Copying from shop ${sourceShop.shopId} to new location ${numericShopId}: features=${featuresToCopy.length}, hasPrefs=${!!preferencesToCopy}`);
           } else {
-            console.log(`[Enterprise] No shops with enabled features found`);
+            console.log(`[Enterprise] No source shop found for copying`);
           }
         }
       }
       
-      // Update the new shop with enterprise ID and copied features
+      // Update the new shop with enterprise ID, copied features, and preferences
       const updateFields: Record<string, any> = { 
         enterpriseId: new ObjectId(enterpriseId), 
         updatedAt: new Date() 
@@ -156,12 +171,20 @@ export async function PUT(req: NextRequest) {
         updateFields.enabledFeatures = featuresToCopy;
       }
       
+      if (preferencesToCopy) {
+        updateFields.preferences = preferencesToCopy;
+      }
+      
       await db.collection("shops").updateOne(
         { shopId: numericShopId },
         { $set: updateFields }
       );
       
-      return NextResponse.json({ ok: true, featuresCopied: featuresToCopy.length });
+      return NextResponse.json({ 
+        ok: true, 
+        featuresCopied: featuresToCopy.length,
+        preferencesCopied: !!preferencesToCopy 
+      });
     }
     
     if (action === "remove_shop" && shopId) {
