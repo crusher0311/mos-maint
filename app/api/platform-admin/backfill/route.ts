@@ -6,12 +6,14 @@ import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
+
 async function requirePlatformAdmin() {
   const session = await getSession();
   if (!session) {
     return { error: "Unauthorized", status: 401 };
   }
-  if (session.role !== "admin") {
+  if (!SUPER_ADMINS.includes(session.email)) {
     return { error: "Platform admin access required", status: 403 };
   }
   return { session };
