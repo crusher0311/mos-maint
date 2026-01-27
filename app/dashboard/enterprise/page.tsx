@@ -21,6 +21,7 @@ interface EnterpriseUser {
 interface Shop {
   shopId: number;
   name: string;
+  locationIdentifier?: string | null;
 }
 
 interface Enterprise {
@@ -259,7 +260,14 @@ export default function EnterpriseUserAccessPage() {
                         <Building2 className="w-4 h-4 text-blue-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{shop.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900 text-sm">{shop.name}</p>
+                          {shop.locationIdentifier && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">
+                              {shop.locationIdentifier}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">ID: {shop.shopId}</p>
                       </div>
                     </div>

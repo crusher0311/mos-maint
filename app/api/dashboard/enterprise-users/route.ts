@@ -32,7 +32,7 @@ export async function GET() {
     const shops = await db
       .collection("shops")
       .find({ shopId: { $in: shopIds } })
-      .project({ shopId: 1, name: 1 })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
 
     const shopMap = new Map(shops.map((s) => [s.shopId, s.name || `Shop ${s.shopId}`]));
@@ -74,6 +74,7 @@ export async function GET() {
       shops: shops.map((s) => ({
         shopId: s.shopId,
         name: s.name || `Shop ${s.shopId}`,
+        locationIdentifier: s.locationIdentifier || null,
       })),
       users: userList,
     });
