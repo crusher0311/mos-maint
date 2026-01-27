@@ -836,21 +836,32 @@ export async function POST(req: NextRequest) {
     // Render at canvas size, then scale up the image for pixel-perfect matching
     const scaleUp = outputWidth / renderWidth;
     
-    const image = await nodeHtmlToImage({
-      html,
-      type: "png",
-      transparent: false,
-      selector: "#sticker-canvas",
-      puppeteerArgs: {
-        executablePath: process.env.CHROMIUM_PATH || undefined,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-        defaultViewport: {
-          width: renderWidth,
-          height: renderHeight,
-          deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
+    let image: Buffer;
+    try {
+      const result = await nodeHtmlToImage({
+        html,
+        type: "png",
+        transparent: false,
+        selector: "#sticker-canvas",
+        puppeteerArgs: {
+          executablePath: process.env.CHROMIUM_PATH || undefined,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+          defaultViewport: {
+            width: renderWidth,
+            height: renderHeight,
+            deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
+          },
         },
-      },
-    });
+      });
+      image = result as Buffer;
+    } catch (puppeteerError) {
+      console.error("[Sticker Generate] Puppeteer/Chromium error:", puppeteerError);
+      const errorMsg = puppeteerError instanceof Error ? puppeteerError.message : "Chromium rendering failed";
+      return NextResponse.json(
+        { error: `Sticker rendering failed: ${errorMsg}. Please contact support if this persists.` },
+        { status: 500 }
+      );
+    }
 
     await db.collection("sticker_generations").insertOne({
       shopId,
@@ -886,8 +897,7 @@ export async function POST(req: NextRequest) {
       console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
     }
 
-    const imageBuffer = image as Buffer;
-    return new NextResponse(new Uint8Array(imageBuffer), {
+    return new NextResponse(new Uint8Array(image), {
       headers: {
         "Content-Type": "image/png",
         "Content-Disposition": `inline; filename="sticker-${shopId}-${Date.now()}.png"`,
@@ -895,8 +905,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("[Sticker Generate] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to generate sticker image" },
+      { error: `Failed to generate sticker image: ${errorMessage}` },
       { status: 500 }
     );
   }
