@@ -128,41 +128,43 @@ export async function GET(req: NextRequest) {
   try {
     const db = await getDb();
 
+    // Get shop config first to check for configured hovercodeQRId
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
+    );
+
+    const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
+    const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
+
     // Check for cached QR code
     const cached = await db.collection("shop_media").findOne({
       shopId,
       type: "qr_code",
     });
 
-    if (cached?.dataUri) {
-      // Return cached QR as image
-      const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
-      if (matches) {
-        const buffer = Buffer.from(matches[2], "base64");
-        return new NextResponse(buffer, {
-          headers: {
-            "Content-Type": "image/png",
-            "Cache-Control": "public, max-age=3600",
-          },
-        });
+    // If there's a configured QR ID in platform admin, use that
+    if (configuredQRId) {
+      // Check if cache matches the configured ID
+      if (cached?.dataUri && cached?.hovercodeId === configuredQRId) {
+        console.log("[QR Cache GET] Using cached QR matching configured ID:", configuredQRId);
+        const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const buffer = Buffer.from(matches[2], "base64");
+          return new NextResponse(buffer, {
+            headers: {
+              "Content-Type": "image/png",
+              "Cache-Control": "public, max-age=3600",
+            },
+          });
+        }
       }
-    }
 
-    // No cache - check if shop has existing hovercodeQRId or appointmentUrl
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
-    );
-
-    const existingQRId = shop?.stickerConfig?.hovercodeQRId;
-    const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
-
-    // Try to fetch existing QR by ID first
-    if (existingQRId) {
-      console.log("[QR Cache GET] Trying existing QR ID:", existingQRId);
-      const existingPngUrl = await fetchExistingQR(existingQRId);
+      // Cache doesn't match configured ID - fetch and cache the configured QR
+      console.log("[QR Cache GET] Fetching configured QR ID:", configuredQRId);
+      const existingPngUrl = await fetchExistingQR(configuredQRId);
       if (existingPngUrl) {
-        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, existingQRId, db);
+        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId, db);
         if (dataUri) {
           const matches = dataUri.match(/^data:([^;]+);base64,(.+)$/);
           if (matches) {
@@ -176,15 +178,33 @@ export async function GET(req: NextRequest) {
           }
         }
       }
-      console.log("[QR Cache GET] Existing QR fetch failed, will create new");
+      console.error("[QR Cache GET] Failed to fetch configured QR ID:", configuredQRId);
+      return NextResponse.json({ error: "Failed to fetch configured QR code" }, { status: 500 });
     }
 
+    // No configured QR ID - check if we have any cached QR
+    if (cached?.dataUri) {
+      console.log("[QR Cache GET] Using existing cached QR");
+      const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        const buffer = Buffer.from(matches[2], "base64");
+        return new NextResponse(buffer, {
+          headers: {
+            "Content-Type": "image/png",
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      }
+    }
+
+    // No configured ID and no cache - create new if appointment URL exists
     if (!appointmentUrl) {
       console.log("[QR Cache GET] No appointment URL for shop:", shopId);
       return NextResponse.json({ error: "No appointment URL configured" }, { status: 400 });
     }
 
     // Generate new QR code via HoverCode
+    console.log("[QR Cache GET] Creating new QR for appointment URL");
     const result = await fetchQRFromHoverCode(appointmentUrl);
     if (!result || result.error) {
       console.error("[QR Cache GET] HoverCode failed:", result?.error);
@@ -201,6 +221,12 @@ export async function GET(req: NextRequest) {
     if (!dataUri) {
       return NextResponse.json({ error: "Failed to cache QR code" }, { status: 500 });
     }
+
+    // Also save the new QR ID to shop config
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { "stickerConfig.hovercodeQRId": result.qrId } }
+    );
 
     // Return the QR image
     const matches = dataUri.match(/^data:([^;]+);base64,(.+)$/);
