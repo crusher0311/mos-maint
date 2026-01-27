@@ -22,9 +22,13 @@ export async function GET() {
   if (enterprise && enterprise.shopIds.length > 1) {
     const siblingShops = await db.collection("shops")
       .find({ shopId: { $in: enterprise.shopIds } })
-      .project({ shopId: 1, name: 1 })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
-    enterpriseShops = siblingShops.map((s: any) => ({ shopId: s.shopId, name: s.name }));
+    enterpriseShops = siblingShops.map((s: any) => ({ 
+      shopId: s.shopId, 
+      name: s.name,
+      locationIdentifier: s.locationIdentifier || null
+    }));
   }
 
   return NextResponse.json({

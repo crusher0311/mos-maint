@@ -15,7 +15,7 @@ const WORKFLOW_STAGES = [
 const DEFAULT_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted"];
 
 type TekmetricLabel = { name: string; color: string };
-type EnterpriseShop = { shopId: number; name: string };
+type EnterpriseShop = { shopId: number; name: string; locationIdentifier: string | null };
 
 export default function PreferencesPage() {
   const [distanceUnit, setDistanceUnit] = useState("miles");
@@ -356,7 +356,14 @@ export default function PreferencesPage() {
                         className="w-4 h-4 text-blue-600 mt-0.5"
                       />
                       <div>
-                        <p className="font-medium text-gray-900">{shop.name}</p>
+                        <p className="font-medium text-gray-900">
+                          {shop.name}
+                          {shop.locationIdentifier && (
+                            <span className="ml-2 text-sm font-normal text-gray-500">
+                              ({shop.locationIdentifier})
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </label>
                   );
