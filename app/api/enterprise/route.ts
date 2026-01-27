@@ -108,7 +108,8 @@ export async function PUT(req: NextRequest) {
     const db = await getDb();
     
     if (action === "add_shop" && shopId) {
-      await addShopToEnterprise(enterpriseId, shopId);
+      const numericShopId = Number(shopId);
+      await addShopToEnterprise(enterpriseId, numericShopId);
       
       // Get existing enterprise shops to copy features from
       const enterprise = await getEnterpriseById(enterpriseId);
@@ -116,8 +117,8 @@ export async function PUT(req: NextRequest) {
       
       if (enterprise && enterprise.shopIds.length > 0) {
         // Filter out the new shop from the list of existing shops
-        const otherShopIds = enterprise.shopIds.filter((id: number) => id !== shopId);
-        console.log(`[Enterprise] Looking for features in existing shops:`, otherShopIds);
+        const otherShopIds = enterprise.shopIds.filter((id: number) => Number(id) !== numericShopId);
+        console.log(`[Enterprise] Adding shop ${numericShopId} to enterprise. Other shops:`, otherShopIds);
         
         if (otherShopIds.length > 0) {
           // Get features from existing enterprise shops - check for non-empty array
@@ -138,7 +139,7 @@ export async function PUT(req: NextRequest) {
           
           if (shopWithFeatures) {
             featuresToCopy = shopWithFeatures.enabledFeatures;
-            console.log(`[Enterprise] Copying features from shop ${shopWithFeatures.shopId} to new location ${shopId}:`, featuresToCopy);
+            console.log(`[Enterprise] Copying features from shop ${shopWithFeatures.shopId} to new location ${numericShopId}:`, featuresToCopy);
           } else {
             console.log(`[Enterprise] No shops with enabled features found`);
           }
@@ -156,7 +157,7 @@ export async function PUT(req: NextRequest) {
       }
       
       await db.collection("shops").updateOne(
-        { shopId },
+        { shopId: numericShopId },
         { $set: updateFields }
       );
       
