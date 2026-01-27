@@ -11,7 +11,7 @@ import pLimit from "p-limit";
 
 const YEARS_TO_BACKFILL = 5;
 const MAX_CHUNKS_PER_RUN = 50;
-const MAX_WALL_CLOCK_MS = 240000; // 4 minutes max
+const MAX_WALL_CLOCK_MS = 1200000; // 20 minutes max
 
 async function fetchInvoicesForDateRange(
   shopId: number,
