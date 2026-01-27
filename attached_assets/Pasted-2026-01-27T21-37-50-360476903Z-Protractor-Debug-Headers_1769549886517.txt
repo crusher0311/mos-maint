@@ -1,0 +1,62 @@
+2026-01-27T21:37:50.360476903Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:50.360479823Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:50.560460481Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:50.560489262Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/4c8f8142-5b17-44bf-81f2-3ddb4e858a89
+2026-01-27T21:37:50.560493602Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:50.560505662Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:50.760050402Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:50.760083512Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/60867b6e-93df-4733-ae29-6b1a4203ee74
+2026-01-27T21:37:50.760086542Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:50.760089443Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:50.959732224Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:50.959756484Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d0329d93-515a-4855-acfb-fb3e51933619
+2026-01-27T21:37:50.959760044Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:50.959763554Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:51.160254182Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:51.160282803Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/1b057e72-2528-4ef2-84df-bc45393c028d
+2026-01-27T21:37:51.160286103Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:51.160289343Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:51.360427544Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:51.360444984Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6ddd5d58-2ed7-40eb-8908-1227f67cb4cb
+2026-01-27T21:37:51.360472305Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:51.360476015Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:51.560249989Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:51.560270339Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/602023b0-a6cc-42e5-99a1-96942e0f8c80
+2026-01-27T21:37:51.56027888Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:51.560283589Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:51.760668835Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:51.760690846Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/bba7d4e6-dad2-4b4f-942d-7609ea448456
+2026-01-27T21:37:51.760719716Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:51.760725227Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:51.959840408Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:51.959869818Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/369817c6-9495-41ed-8f80-3de4ae645286
+2026-01-27T21:37:51.959873608Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:51.959877868Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:52.07062393Z [Startup] Waiting for server... (attempt 23/30)
+2026-01-27T21:37:52.07415756Z [Startup] Server is ready! (status: 200)
+2026-01-27T21:37:52.160134142Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:52.160160702Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/5f8fe4d5-db17-417e-8591-906782524c63
+2026-01-27T21:37:52.160164642Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:52.160169462Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:52.360758142Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:52.360772052Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/3eeaad8d-1481-4bdb-9683-6ecf09948588
+2026-01-27T21:37:52.360775143Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:52.360778083Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:52.56174468Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-27T21:37:52.56176281Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d6892525-d138-4821-9dbb-18c2566f026d
+2026-01-27T21:37:52.56176867Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-27T21:37:52.561772201Z [Protractor Debug] ConnId hash: 54bc3955, Auth hash: 8f4bc39d
+2026-01-27T21:37:56.076681126Z [Startup] Waiting for server... (attempt 24/30)
+2026-01-27T21:37:56.080238977Z [Startup] Server is ready! (status: 200)
+2026-01-27T21:37:58.305702972Z [2026-01-27T21:37:58.305Z] Running Tekmetric sync...
+2026-01-27T21:37:58Z clientIP="72.198.61.82" requestID="5b69e5d1-ae50-4ac4" responseTimeMS=180 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T21:37:59Z clientIP="72.198.61.82" requestID="304971c7-9c65-4bce" responseTimeMS=182 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T21:37:58Z clientIP="72.198.61.82" requestID="25cf33f2-571f-4760" responseTimeMS=179 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T21:37:59.726998132Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-27T21:36:12.522Z)
+2026-01-27T21:37:59Z clientIP="72.198.61.82" requestID="ff00be5d-77e8-4ca8" responseTimeMS=187 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-27T21:38:00.08159853Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-27T21:36:12.806Z)
+2026-01-27T21:38:00.08163226Z [Startup] Waiting for server... (attempt 25/30)
+2026-01-27T21:38:00.086844974Z [Startup] Server is ready! (status: 200)
+2026-01-27T21:38:00.496751656Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-27T21:36:13.230Z)
+2026-01-27T21:38:00.929255826Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 1 ROs (updated since 2026-01-27T21:36:13.842Z)
+2026-01-27T21:38:01.330575559Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-27T21:36:14.057Z)
