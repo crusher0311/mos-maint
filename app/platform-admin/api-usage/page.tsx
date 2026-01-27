@@ -15,7 +15,10 @@ import {
   ChevronRight,
   ExternalLink,
   Filter,
-  GripVertical
+  GripVertical,
+  Copy,
+  Loader2,
+  Check
 } from "lucide-react";
 
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -95,6 +98,8 @@ export default function ApiUsageDashboard() {
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
   const dragOverCard = useRef<string | null>(null);
+  const [copyingAll, setCopyingAll] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   useEffect(() => {
     const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
@@ -263,6 +268,64 @@ export default function ApiUsageDashboard() {
       console.error("Error filtering errors:", err);
     } finally {
       setDrawerLoading(false);
+    }
+  };
+
+  const copyAllErrors = async () => {
+    setCopyingAll(true);
+    setCopiedAll(false);
+    
+    try {
+      const allErrors: ErrorRecord[] = [];
+      let cursor: string | undefined = undefined;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const params = new URLSearchParams({ 
+          hours: '24',
+          limit: '500'
+        });
+        if (drawer.provider) params.set('provider', drawer.provider);
+        if (statusFilter) params.set('statusCode', statusFilter.toString());
+        if (cursor) params.set('cursor', cursor);
+        
+        const res = await fetch(`/api/platform-admin/api-usage/errors?${params}`);
+        const data = await res.json();
+        
+        if (data.errors && data.errors.length > 0) {
+          allErrors.push(...data.errors);
+          cursor = data.nextCursor;
+          hasMore = data.hasMore && data.nextCursor;
+        } else {
+          hasMore = false;
+        }
+        
+        if (allErrors.length >= 10000) {
+          hasMore = false;
+        }
+      }
+      
+      const formattedErrors = allErrors.map(e => ({
+        timestamp: e.timestamp,
+        provider: e.provider,
+        shopId: e.shopId,
+        shopName: e.shopName,
+        endpoint: e.endpoint,
+        method: e.method,
+        statusCode: e.statusCode,
+        errorMessage: e.errorMessage,
+        latencyMs: e.latencyMs,
+        requestId: e.requestId
+      }));
+      
+      await navigator.clipboard.writeText(JSON.stringify(formattedErrors, null, 2));
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 2000);
+    } catch (err) {
+      console.error("Error copying all errors:", err);
+      alert("Failed to copy errors to clipboard");
+    } finally {
+      setCopyingAll(false);
     }
   };
 
@@ -608,12 +671,39 @@ export default function ApiUsageDashboard() {
                 {drawer.provider ? `Provider: ${drawer.provider}` : 'All providers'} - Last 24 hours
               </p>
             </div>
-            <button
-              onClick={closeDrawer}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {drawer.type === 'errors' && drawerData?.total && drawerData.total > 0 && (
+                <button
+                  onClick={copyAllErrors}
+                  disabled={copyingAll}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  title={`Copy all ${drawerData.total} errors to clipboard as JSON`}
+                >
+                  {copyingAll ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Copying...
+                    </>
+                  ) : copiedAll ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copy All ({drawerData.total})
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={closeDrawer}
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {drawer.type === 'shop' && drawerData?.stats && (
