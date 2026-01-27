@@ -214,11 +214,11 @@ export default function EnterpriseUserAccessPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Users className="w-6 h-6 text-blue-600" />
+                <Building2 className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">User Access Management</h1>
-                <p className="text-gray-600">{enterprise.name} - Manage location access for your team</p>
+                <h1 className="text-2xl font-bold text-gray-900">Enterprise Overview</h1>
+                <p className="text-gray-600">{enterprise.name} - Manage your locations and team</p>
               </div>
             </div>
             <button
@@ -230,6 +230,81 @@ export default function EnterpriseUserAccessPage() {
             </button>
           </div>
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-blue-600" />
+                <h2 className="font-semibold text-gray-900">Locations ({shops.length})</h2>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {shops.length === 0 ? (
+                <div className="px-6 py-8 text-center text-gray-500">
+                  <Building2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p>No locations yet</p>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="text-blue-600 hover:underline text-sm mt-1"
+                  >
+                    Create your first location
+                  </button>
+                </div>
+              ) : (
+                shops.map((shop) => (
+                  <div key={shop.shopId} className="px-6 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <Building2 className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{shop.name}</p>
+                        <p className="text-xs text-gray-500">ID: {shop.shopId}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-600" />
+                <h2 className="font-semibold text-gray-900">Team Members ({users.length})</h2>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {users.length === 0 ? (
+                <div className="px-6 py-8 text-center text-gray-500">
+                  <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p>No team members yet</p>
+                </div>
+              ) : (
+                users.map((user) => (
+                  <div key={user.email} className="px-6 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-medium">
+                        {user.email.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{user.email}</p>
+                        {user.name && <p className="text-xs text-gray-500">{user.name}</p>}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                      {user.shopAccess.length} location{user.shopAccess.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">User Access Management</h2>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
           <div className="p-4 border-b border-gray-200">
