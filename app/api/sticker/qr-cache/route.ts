@@ -258,7 +258,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - Force regenerate and cache QR code
+// POST - Refresh cached QR code (re-fetch from HoverCode if configured, or create new)
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -277,19 +277,44 @@ export async function POST(req: NextRequest) {
   try {
     const db = await getDb();
 
-    // Get shop's appointment URL
+    // Get shop's config
     const shop = await db.collection("shops").findOne(
       { shopId },
       { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
     );
 
+    const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
     const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
+
+    // If shop has a configured QR ID (set by platform admin), re-fetch that from HoverCode
+    if (configuredQRId) {
+      console.log("[QR Cache POST] Re-fetching configured QR ID:", configuredQRId);
+      const existingPngUrl = await fetchExistingQR(configuredQRId);
+      if (existingPngUrl) {
+        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId, db);
+        if (dataUri) {
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: { "stickerConfig.qrCachedAt": new Date() } }
+          );
+          return NextResponse.json({
+            success: true,
+            message: "QR code cache refreshed from HoverCode",
+          });
+        }
+      }
+      console.error("[QR Cache POST] Failed to fetch configured QR ID:", configuredQRId);
+      return NextResponse.json({ error: "Failed to refresh configured QR code" }, { status: 500 });
+    }
+
+    // No configured QR ID - create a new one if appointment URL exists
     if (!appointmentUrl) {
       console.log("[QR Cache POST] No appointment URL for shop:", shopId);
       return NextResponse.json({ error: "No appointment URL configured" }, { status: 400 });
     }
 
     // Generate new QR code via HoverCode
+    console.log("[QR Cache POST] Creating new QR for shop without configured ID");
     const result = await fetchQRFromHoverCode(appointmentUrl);
     if (!result || result.error) {
       console.error("[QR Cache POST] HoverCode failed:", result?.error);
@@ -320,7 +345,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "QR code regenerated and cached",
+      message: "QR code generated and cached",
     });
   } catch (error) {
     console.error("[QR Cache POST] Error:", error);
