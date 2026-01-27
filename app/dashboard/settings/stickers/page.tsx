@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save } from "lucide-react";
+import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save, Copy, Building2 } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
 import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
 
@@ -96,7 +96,19 @@ export default function StickerSettingsPage() {
     content: true,
     intervals: true,
     options: false,
+    enterprise: false,
   });
+  
+  const [enterpriseShops, setEnterpriseShops] = useState<{
+    shopId: number;
+    name: string;
+    locationIdentifier?: string;
+    hasLogo: boolean;
+  }[]>([]);
+  const [currentShopId, setCurrentShopId] = useState<number | null>(null);
+  const [selectedTargetShops, setSelectedTargetShops] = useState<number[]>([]);
+  const [copyingSettings, setCopyingSettings] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -224,7 +236,6 @@ export default function StickerSettingsPage() {
       return;
     }
     try {
-      // Use cached QR endpoint
       const res = await fetch(`/api/sticker/qr-cache`);
       if (res.ok) {
         const blob = await res.blob();
@@ -233,6 +244,73 @@ export default function StickerSettingsPage() {
     } catch (err) {
       console.error("Failed to load QR preview:", err);
     }
+  }
+
+  async function fetchEnterpriseShops() {
+    try {
+      const res = await fetch("/api/enterprise/copy-sticker-settings");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.shops && data.shops.length > 1) {
+          setEnterpriseShops(data.shops);
+          setCurrentShopId(data.currentShopId);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch enterprise shops:", err);
+    }
+  }
+
+  useEffect(() => {
+    fetchEnterpriseShops();
+  }, []);
+
+  async function copySettingsToLocations() {
+    if (selectedTargetShops.length === 0 || !currentShopId) {
+      setCopyMessage({ type: "error", text: "Please select at least one location" });
+      return;
+    }
+
+    setCopyingSettings(true);
+    setCopyMessage(null);
+
+    try {
+      const res = await fetch("/api/enterprise/copy-sticker-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceShopId: currentShopId,
+          targetShopIds: selectedTargetShops,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setCopyMessage({ type: "success", text: data.message });
+        setSelectedTargetShops([]);
+      } else {
+        setCopyMessage({ type: "error", text: data.error || "Failed to copy settings" });
+      }
+    } catch (err) {
+      console.error("Failed to copy settings:", err);
+      setCopyMessage({ type: "error", text: "Failed to copy settings" });
+    } finally {
+      setCopyingSettings(false);
+    }
+  }
+
+  function toggleTargetShop(shopId: number) {
+    setSelectedTargetShops(prev => 
+      prev.includes(shopId) 
+        ? prev.filter(id => id !== shopId)
+        : [...prev, shopId]
+    );
+  }
+
+  function selectAllTargetShops() {
+    const otherShops = enterpriseShops.filter(s => s.shopId !== currentShopId).map(s => s.shopId);
+    setSelectedTargetShops(otherShops);
   }
 
   async function regenerateQrCode() {
@@ -714,6 +792,95 @@ export default function StickerSettingsPage() {
             </div>
           )}
         </div>
+
+        {enterpriseShops.length > 1 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => toggleSection("enterprise")}
+            >
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-blue-600" />
+                <h2 className="font-semibold text-gray-900">Copy to Other Locations</h2>
+              </div>
+              {expandedSections.enterprise ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            </div>
+
+            {expandedSections.enterprise && (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-gray-600">
+                  Copy logo, layout, colors, fonts, taglines, and service label to other locations. 
+                  Phone numbers, appointment URLs, and QR codes will remain unique per location.
+                </p>
+
+                {copyMessage && (
+                  <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                    copyMessage.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                  }`}>
+                    {copyMessage.type === "success" ? <Check className="w-4 h-4" /> : null}
+                    {copyMessage.text}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Select locations:</span>
+                  <button
+                    type="button"
+                    onClick={selectAllTargetShops}
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    Select All
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                  {enterpriseShops
+                    .filter(shop => shop.shopId !== currentShopId)
+                    .map(shop => (
+                      <label
+                        key={shop.shopId}
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                          selectedTargetShops.includes(shop.shopId)
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedTargetShops.includes(shop.shopId)}
+                          onChange={() => toggleTargetShop(shop.shopId)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {shop.name}
+                          </div>
+                          {shop.locationIdentifier && (
+                            <div className="text-xs text-gray-500 truncate">
+                              {shop.locationIdentifier}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                </div>
+
+                <button
+                  onClick={copySettingsToLocations}
+                  disabled={copyingSettings || selectedTargetShops.length === 0}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {copyingSettings ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                  Copy Settings to {selectedTargetShops.length} Location{selectedTargetShops.length !== 1 ? "s" : ""}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-4 items-center">
           <div className="flex items-center gap-2">
