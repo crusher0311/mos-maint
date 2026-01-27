@@ -115,19 +115,33 @@ export async function PUT(req: NextRequest) {
       let featuresToCopy: string[] = [];
       
       if (enterprise && enterprise.shopIds.length > 0) {
-        // Get features from existing enterprise shops
-        const existingShops = await db.collection("shops")
-          .find({ 
-            shopId: { $in: enterprise.shopIds.filter((id: number) => id !== shopId) },
-            enabledFeatures: { $exists: true, $ne: [] }
-          })
-          .project({ enabledFeatures: 1 })
-          .toArray();
+        // Filter out the new shop from the list of existing shops
+        const otherShopIds = enterprise.shopIds.filter((id: number) => id !== shopId);
+        console.log(`[Enterprise] Looking for features in existing shops:`, otherShopIds);
         
-        if (existingShops.length > 0) {
-          // Use the first shop's features as the template
-          featuresToCopy = existingShops[0].enabledFeatures || [];
-          console.log(`[Enterprise] Copying features from existing shop to new location ${shopId}:`, featuresToCopy);
+        if (otherShopIds.length > 0) {
+          // Get features from existing enterprise shops - check for non-empty array
+          const existingShops = await db.collection("shops")
+            .find({ 
+              shopId: { $in: otherShopIds },
+              enabledFeatures: { $exists: true, $type: "array" }
+            })
+            .project({ shopId: 1, enabledFeatures: 1 })
+            .toArray();
+          
+          console.log(`[Enterprise] Found ${existingShops.length} shops with enabledFeatures field`);
+          
+          // Find a shop with actual features
+          const shopWithFeatures = existingShops.find((s: any) => 
+            Array.isArray(s.enabledFeatures) && s.enabledFeatures.length > 0
+          );
+          
+          if (shopWithFeatures) {
+            featuresToCopy = shopWithFeatures.enabledFeatures;
+            console.log(`[Enterprise] Copying features from shop ${shopWithFeatures.shopId} to new location ${shopId}:`, featuresToCopy);
+          } else {
+            console.log(`[Enterprise] No shops with enabled features found`);
+          }
         }
       }
       
