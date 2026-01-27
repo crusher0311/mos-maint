@@ -50,7 +50,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Source shop not found" }, { status: 404 });
     }
 
-    if (sourceShop.enterpriseId !== userShop.enterpriseId) {
+    const userEnterpriseId = String(userShop.enterpriseId);
+    const sourceEnterpriseId = String(sourceShop.enterpriseId);
+    
+    if (sourceEnterpriseId !== userEnterpriseId) {
+      console.error(`[Copy Sticker] Enterprise mismatch: user=${userEnterpriseId}, source=${sourceEnterpriseId}, userShopId=${userShopId}, sourceShopId=${sourceShopId}`);
       return NextResponse.json({ error: "Source shop is not in your enterprise" }, { status: 403 });
     }
 
