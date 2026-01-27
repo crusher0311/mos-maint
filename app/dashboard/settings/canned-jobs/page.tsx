@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Package,
   Loader2,
@@ -97,6 +97,10 @@ export default function CannedJobsSettingsPage() {
   const [hiddenJobIds, setHiddenJobIds] = useState<string[]>([]);
   const [originalHiddenJobIds, setOriginalHiddenJobIds] = useState<string[]>([]);
   const [showHiddenJobs, setShowHiddenJobs] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastAutoSaved, setLastAutoSaved] = useState<Date | null>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     checkIntegrationStatus();
@@ -234,8 +238,10 @@ export default function CannedJobsSettingsPage() {
         setHiddenJobIds(hidden);
         setOriginalHiddenJobIds(hidden);
       }
+      isInitialLoadRef.current = false;
     } catch (err) {
       console.error("Failed to fetch mappings:", err);
+      isInitialLoadRef.current = false;
     }
   }
 
@@ -278,6 +284,54 @@ export default function CannedJobsSettingsPage() {
       setSaving(false);
     }
   }
+
+  const performAutoSave = useCallback(async () => {
+    setAutoSaving(true);
+    try {
+      const res = await fetch("/api/settings/canned-job-mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ mappings, manualJobs, hiddenJobIds }),
+      });
+
+      if (res.ok) {
+        setOriginalMappings({ ...mappings });
+        setOriginalManualJobs([...manualJobs]);
+        setOriginalHiddenJobIds([...hiddenJobIds]);
+        setLastAutoSaved(new Date());
+      }
+    } catch (err) {
+      console.error("Autosave failed:", err);
+    } finally {
+      setAutoSaving(false);
+    }
+  }, [mappings, manualJobs, hiddenJobIds]);
+
+  useEffect(() => {
+    if (isInitialLoadRef.current || loading) return;
+    
+    const hasChanges = 
+      JSON.stringify(mappings) !== JSON.stringify(originalMappings) ||
+      JSON.stringify(manualJobs) !== JSON.stringify(originalManualJobs) ||
+      JSON.stringify(hiddenJobIds.sort()) !== JSON.stringify(originalHiddenJobIds.sort());
+    
+    if (!hasChanges) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      performAutoSave();
+    }, 1000);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [mappings, manualJobs, hiddenJobIds, originalMappings, originalManualJobs, originalHiddenJobIds, loading, performAutoSave]);
 
   function addCannedJobToService(serviceKey: string, cannedJobId: string) {
     if (!cannedJobId) return;
@@ -323,7 +377,7 @@ export default function CannedJobsSettingsPage() {
     });
     setManualId("");
     setManualTitle("");
-    setMessage({ type: "success", text: `Added "${newJob.title}" - click Save Mappings to keep it` });
+    setMessage({ type: "success", text: `Added "${newJob.title}" - changes will save automatically` });
   }
 
   const hasChanges = 
@@ -614,10 +668,30 @@ export default function CannedJobsSettingsPage() {
           </div>
         )}
 
-        <div className="p-4 border-t border-gray-200 flex justify-end">
+        <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+          <div className="text-sm text-gray-500 flex items-center gap-2">
+            {autoSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                <span>Saving changes...</span>
+              </>
+            ) : lastAutoSaved ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <span>Saved {lastAutoSaved.toLocaleTimeString()}</span>
+              </>
+            ) : hasChanges ? (
+              <>
+                <AlertCircle className="w-4 h-4 text-amber-500" />
+                <span>Unsaved changes</span>
+              </>
+            ) : (
+              <span className="text-gray-400">All changes saved</span>
+            )}
+          </div>
           <button
             onClick={handleSave}
-            disabled={saving || !hasChanges}
+            disabled={saving || autoSaving || !hasChanges}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {saving ? (
@@ -628,7 +702,7 @@ export default function CannedJobsSettingsPage() {
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                Save Mappings
+                Save Now
               </>
             )}
           </button>
