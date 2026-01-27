@@ -25,13 +25,52 @@ export async function POST(req: NextRequest) {
 
   try {
     const { shopId, action } = await req.json();
+    const db = await getDb();
+
+    if (action === "resume_all_incomplete") {
+      console.log("[Platform Admin] Finding all incomplete backfills...");
+      
+      const protractorShops = await db.collection("shops")
+        .find({ "protractor.configured": true })
+        .project({ shopId: 1, name: 1 })
+        .toArray();
+      
+      const backfillProgress = await db.collection("backfill_progress")
+        .find({ completed: true })
+        .project({ shopId: 1 })
+        .toArray();
+      
+      const completedShopIds = new Set(backfillProgress.map((b: any) => b.shopId));
+      const incompleteShops = protractorShops.filter((s: any) => !completedShopIds.has(s.shopId));
+      
+      console.log(`[Platform Admin] Found ${incompleteShops.length} shops with incomplete backfills`);
+      
+      const resumedShopIds: number[] = [];
+      for (const shop of incompleteShops) {
+        await db.collection("backfill_progress").updateOne(
+          { shopId: shop.shopId },
+          { $set: { inProgress: false } }
+        );
+        
+        runProtractorBackfill(shop.shopId).catch(err => {
+          console.error(`[Platform Admin] Backfill error for shop ${shop.shopId}:`, err.message);
+        });
+        
+        resumedShopIds.push(shop.shopId);
+      }
+      
+      return NextResponse.json({
+        ok: true,
+        message: `Resumed backfill for ${resumedShopIds.length} shops`,
+        shopIds: resumedShopIds
+      });
+    }
     
     if (!shopId) {
       return NextResponse.json({ error: "Shop ID is required" }, { status: 400 });
     }
 
     const numericShopId = Number(shopId);
-    const db = await getDb();
 
     if (action === "resume") {
       const shop = await db.collection("shops").findOne({ shopId: numericShopId });

@@ -326,12 +326,44 @@ export default function PlatformShopsPage() {
           <h1 className="text-2xl font-bold text-gray-900">All Shops</h1>
           <p className="text-gray-600">Manage all client shops on the platform</p>
         </div>
-        <button
-          onClick={loadShops}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              if (!confirm("Resume backfill for all shops that haven't completed? This will restart any stalled backfills.")) return;
+              setActionLoading("resume-all");
+              try {
+                const res = await fetch("/api/platform-admin/backfill", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "resume_all_incomplete" }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                  alert(`Resumed backfill for ${data.shopIds?.length || 0} shops`);
+                  loadShops();
+                } else {
+                  alert(data.error || "Failed to resume backfills");
+                }
+              } catch (err) {
+                console.error("Resume all error:", err);
+                alert("Failed to resume backfills");
+              } finally {
+                setActionLoading(null);
+              }
+            }}
+            disabled={actionLoading === "resume-all"}
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50"
+          >
+            {actionLoading === "resume-all" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            Resume All Incomplete
+          </button>
+          <button
+            onClick={loadShops}
+            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4 items-center">
