@@ -157,8 +157,8 @@ export async function GET() {
             ? (backfill?.completed || false) 
             : (tekmetricBackfill?.completed === true),
           inProgress: hasProtractor
-            ? (backfill && !backfill.completed)
-            : (tekmetricBackfill && !tekmetricBackfill.completed),
+            ? (backfill?.inProgress === true)
+            : (tekmetricBackfill?.inProgress === true),
           totalJobsIndexed: hasProtractor 
             ? (jobIndexCount || backfill?.totalJobsIndexed || 0) 
             : (jobIndexCount || tekmetricBackfill?.totalJobsIndexed || 0),
@@ -166,6 +166,12 @@ export async function GET() {
             ? (backfill?.currentChunkEnd || backfill?.currentChunkStart || null)
             : (tekmetricBackfill?.currentChunkEnd || tekmetricBackfill?.currentChunkStart || null),
           source: hasProtractor ? "protractor" : "tekmetric",
+          lastAttemptedAt: hasProtractor 
+            ? (backfill?.lastAttemptedAt || backfill?.lastRunAt || null)
+            : (tekmetricBackfill?.lastAttemptedAt || tekmetricBackfill?.lastRunAt || null),
+          processedCount: hasProtractor
+            ? (backfill?.processedCount || 0)
+            : (tekmetricBackfill?.processedCount || 0),
         } : null,
         integrationDetails: {
           protractor: shop.protractor?.configured ? {
