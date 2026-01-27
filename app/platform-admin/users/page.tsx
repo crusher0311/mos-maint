@@ -3,14 +3,19 @@
 import { useState, useEffect } from "react";
 import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, ChevronDown, ChevronRight, Plus } from "lucide-react";
 
+interface ShopInfo {
+  shopId: number | string;
+  name: string;
+  locationIdentifier?: string | null;
+}
+
 interface User {
   _id: string;
   email: string;
   role: string;
-  shopId: number | string;
-  shopName: string;
-  locationIdentifier?: string | null;
-  shopIds?: string[];
+  primaryShopId: number | string;
+  shops: ShopInfo[];
+  locationCount: number;
   createdAt: string;
   isPlatformAdmin?: boolean;
 }
@@ -163,9 +168,12 @@ export default function PlatformUsersPage() {
   }
 
   const filteredUsers = users.filter(user => {
+    const shopNamesMatch = user.shops?.some(s => 
+      s.name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.locationIdentifier?.toLowerCase().includes(search.toLowerCase())
+    );
     const matchesSearch = 
-      user.email?.toLowerCase().includes(search.toLowerCase()) ||
-      user.shopName?.toLowerCase().includes(search.toLowerCase());
+      user.email?.toLowerCase().includes(search.toLowerCase()) || shopNamesMatch;
     const matchesRole = roleFilter === "all" || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -234,16 +242,15 @@ export default function PlatformUsersPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">User</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Shop</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Shops</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Role</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Locations</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                   {search || roleFilter !== "all" ? "No users match your filters" : "No users yet"}
                 </td>
               </tr>
@@ -273,26 +280,24 @@ export default function PlatformUsersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-gray-900">{user.shopName}</div>
-                    <div className="text-xs text-gray-500">
-                      {user.locationIdentifier && <span className="mr-2">{user.locationIdentifier}</span>}
-                      ID: {user.shopId}
+                    <div className="flex flex-wrap gap-1 max-w-md">
+                      {user.shops?.slice(0, 3).map((shop, idx) => (
+                        <span key={String(shop.shopId)} className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
+                          {shop.name}
+                          {shop.locationIdentifier && <span className="ml-1 text-gray-500">({shop.locationIdentifier})</span>}
+                        </span>
+                      ))}
+                      {user.shops?.length > 3 && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-[rgba(60,129,195,0.1)] text-[#3c81c3] rounded text-xs">
+                          +{user.shops.length - 3} more
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${roleColors[user.role] || roleColors.user}`}>
                       {user.role}
                     </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {user.shopIds && user.shopIds.length > 0 ? (
-                      <span className="flex items-center gap-1 text-sm text-gray-600">
-                        <MapPin className="w-3 h-3" />
-                        {user.shopIds.length + 1}
-                      </span>
-                    ) : (
-                      <span className="text-sm text-gray-400">1</span>
-                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
