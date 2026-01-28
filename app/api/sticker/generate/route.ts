@@ -11,8 +11,8 @@ import { existsSync } from "fs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Find Chrome executable path - try multiple locations for different environments
-function findChromePath(): string | undefined {
+// Get Chrome executable path using @sparticuz/chromium for serverless environments
+async function getChromePath(): Promise<string | undefined> {
   // Environment variable override (highest priority)
   if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
     console.log("[Sticker] Using Chrome from CHROMIUM_PATH:", process.env.CHROMIUM_PATH);
@@ -23,54 +23,66 @@ function findChromePath(): string | undefined {
     return process.env.PUPPETEER_EXECUTABLE_PATH;
   }
   
-  // Common Chrome paths on different platforms - check glob patterns first
-  const globPatterns = [
-    // Render project cache (most common on Render.com)
-    "/opt/render/project/puppeteer/chrome/linux-*/chrome-linux64/chrome",
-    "/opt/render/project/puppeteer/chrome/*/chrome-linux64/chrome",
-    "/opt/render/project/.puppeteer_cache/chrome/*/chrome-linux64/chrome",
-    // Local .cache directory (set by .puppeteerrc.cjs)
-    ".cache/puppeteer/chrome/*/chrome-linux64/chrome",
-    // Home directory cache
-    "~/.cache/puppeteer/chrome/*/chrome-linux64/chrome",
-    // Nix/Replit
-    "/nix/store/*-chromium-*/bin/chromium",
+  // Try @sparticuz/chromium for serverless environments (Render, Vercel, AWS Lambda)
+  try {
+    const chromium = await import("@sparticuz/chromium");
+    const execPath = await chromium.default.executablePath();
+    if (execPath) {
+      console.log("[Sticker] Using @sparticuz/chromium at:", execPath);
+      return execPath;
+    }
+  } catch (e) {
+    console.log("[Sticker] @sparticuz/chromium not available, trying local paths");
+  }
+  
+  // Check fixed paths for local development
+  const fixedPaths = [
+    "/nix/store/chromium-*/bin/chromium",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable", 
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
   ];
   
+  // Try glob for nix paths
   try {
     const glob = require("glob");
-    for (const pattern of globPatterns) {
-      const expandedPattern = pattern.replace("~", process.env.HOME || "");
-      const matches = glob.sync(expandedPattern);
-      if (matches.length > 0 && existsSync(matches[0])) {
-        console.log("[Sticker] Found Chrome at:", matches[0]);
-        return matches[0];
-      }
+    const nixMatches = glob.sync("/nix/store/*-chromium-*/bin/chromium");
+    if (nixMatches.length > 0 && existsSync(nixMatches[0])) {
+      console.log("[Sticker] Found Chrome at:", nixMatches[0]);
+      return nixMatches[0];
     }
   } catch {
     // glob not available
   }
   
-  // Check fixed paths
-  const fixedPaths = [
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable", 
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-    "/opt/google/chrome/chrome",
-    "/opt/google/chrome/google-chrome",
-  ];
-  
   for (const path of fixedPaths) {
-    if (existsSync(path)) {
+    if (!path.includes("*") && existsSync(path)) {
       console.log("[Sticker] Found Chrome at:", path);
       return path;
     }
   }
   
-  // Let Puppeteer try to find it
-  console.log("[Sticker] Chrome not found in common paths, letting Puppeteer try default detection");
+  console.log("[Sticker] Chrome not found, letting Puppeteer try default detection");
   return undefined;
+}
+
+// Get chromium args for serverless environments
+async function getChromiumArgs(): Promise<string[]> {
+  try {
+    const chromium = await import("@sparticuz/chromium");
+    return chromium.default.args;
+  } catch {
+    return [
+      "--no-sandbox", 
+      "--disable-setuid-sandbox", 
+      "--disable-gpu", 
+      "--disable-dev-shm-usage",
+      "--disable-software-rasterizer",
+      "--single-process",
+      "--no-zygote",
+    ];
+  }
 }
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
@@ -901,24 +913,26 @@ export async function POST(req: NextRequest) {
     
     let image: Buffer;
     try {
-      const chromePath = findChromePath();
+      const chromePath = await getChromePath();
+      const chromeArgs = await getChromiumArgs();
       console.log("[Sticker Generate] Using Chrome path:", chromePath || "default");
+      console.log("[Sticker Generate] Starting image generation...");
       
-      const result = await nodeHtmlToImage({
+      // Wrap in timeout to prevent infinite hangs (30 second limit)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sticker generation timed out after 30 seconds")), 30000);
+      });
+      
+      const renderPromise = nodeHtmlToImage({
         html,
         type: "png",
         transparent: false,
         selector: "#sticker-canvas",
         puppeteerArgs: {
           executablePath: chromePath,
-          args: [
-            "--no-sandbox", 
-            "--disable-setuid-sandbox", 
-            "--disable-gpu", 
-            "--disable-dev-shm-usage",
-            "--disable-software-rasterizer",
-            "--single-process",
-          ],
+          headless: true,
+          timeout: 25000,
+          args: chromeArgs,
           defaultViewport: {
             width: renderWidth,
             height: renderHeight,
@@ -926,15 +940,25 @@ export async function POST(req: NextRequest) {
           },
         },
       });
+      
+      const result = await Promise.race([renderPromise, timeoutPromise]);
+      console.log("[Sticker Generate] Image generation completed successfully");
       image = result as Buffer;
     } catch (puppeteerError) {
       console.error("[Sticker Generate] Puppeteer/Chromium error:", puppeteerError);
       const errorMsg = puppeteerError instanceof Error ? puppeteerError.message : "Chromium rendering failed";
       
-      // Provide specific guidance for Chrome not found errors
-      if (errorMsg.includes("Could not find Chrome") || errorMsg.includes("executable")) {
+      // Provide specific guidance for different error types
+      if (errorMsg.includes("timed out")) {
         return NextResponse.json(
-          { error: "Chrome/Chromium is not installed on the server. On Render, add the 'Google Chrome' buildpack in your service settings and redeploy." },
+          { error: "Sticker generation timed out. Chrome may not be properly installed or is having issues starting. Please check server logs." },
+          { status: 500 }
+        );
+      }
+      
+      if (errorMsg.includes("Could not find Chrome") || errorMsg.includes("executable") || errorMsg.includes("Failed to launch")) {
+        return NextResponse.json(
+          { error: "Chrome/Chromium is not installed or cannot be launched. On Render, ensure Chrome was installed during build and check logs for the installation path." },
           { status: 500 }
         );
       }
