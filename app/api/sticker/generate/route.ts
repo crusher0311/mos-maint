@@ -6,89 +6,9 @@ import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types"
 import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
-import { existsSync } from "fs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Get Chrome executable path - prioritize local paths, fallback to @sparticuz/chromium
-async function getChromePath(): Promise<string | undefined> {
-  // Check environment variable overrides first
-  if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
-    console.log("[Sticker] Using Chrome from CHROMIUM_PATH:", process.env.CHROMIUM_PATH);
-    return process.env.CHROMIUM_PATH;
-  }
-  if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-    console.log("[Sticker] Using Chrome from PUPPETEER_EXECUTABLE_PATH:", process.env.PUPPETEER_EXECUTABLE_PATH);
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  
-  // Try local paths first (for Replit/NixOS)
-  try {
-    const glob = require("glob");
-    const nixMatches = glob.sync("/nix/store/*-chromium-*/bin/chromium");
-    if (nixMatches.length > 0 && existsSync(nixMatches[0])) {
-      console.log("[Sticker] Using Nix Chromium at:", nixMatches[0]);
-      return nixMatches[0];
-    }
-  } catch {
-    // glob not available
-  }
-  
-  // Try standard Linux paths
-  const fixedPaths = [
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable", 
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-  ];
-  for (const path of fixedPaths) {
-    if (existsSync(path)) {
-      console.log("[Sticker] Using system Chrome at:", path);
-      return path;
-    }
-  }
-  
-  // Fallback to @sparticuz/chromium (for Render/Vercel/Lambda)
-  try {
-    const chromium = await import("@sparticuz/chromium");
-    const execPath = await chromium.default.executablePath();
-    if (execPath) {
-      console.log("[Sticker] Using @sparticuz/chromium at:", execPath);
-      return execPath;
-    }
-  } catch (e) {
-    console.log("[Sticker] @sparticuz/chromium not available");
-  }
-  
-  console.log("[Sticker] Chrome not found, letting Puppeteer try default detection");
-  return undefined;
-}
-
-// Get chromium args - use @sparticuz/chromium args on serverless, standard args locally
-async function getChromiumArgs(): Promise<string[]> {
-  // Check if we're using @sparticuz/chromium
-  try {
-    const chromium = await import("@sparticuz/chromium");
-    // Only use sparticuz args if we're actually using its executable
-    const execPath = await chromium.default.executablePath();
-    if (execPath && existsSync(execPath)) {
-      return chromium.default.args;
-    }
-  } catch {
-    // Not using sparticuz
-  }
-  
-  return [
-    "--no-sandbox", 
-    "--disable-setuid-sandbox", 
-    "--disable-gpu", 
-    "--disable-dev-shm-usage",
-    "--disable-software-rasterizer",
-    "--single-process",
-    "--no-zygote",
-  ];
-}
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
@@ -110,49 +30,26 @@ const storage = new Storage({
   projectId: "",
 });
 
-async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: number): Promise<string | null> {
+async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
   try {
-    // First, try to get logo from MongoDB shop_media collection
-    if (shopId) {
-      try {
-        const db = await getDb();
-        const logoMedia = await db.collection("shop_media").findOne({
-          shopId,
-          type: "logo",
-        });
-        if (logoMedia?.dataUri) {
-          console.log("[Sticker Generate] Using logo from MongoDB shop_media");
-          return logoMedia.dataUri;
-        }
-      } catch (dbError) {
-        console.error("[Sticker Generate] MongoDB logo fetch failed:", dbError);
-      }
-    }
-
-    // Try object storage (only works on Replit)
     if (logoObjectPath) {
-      try {
-        const pathParts = logoObjectPath.split("/").filter(Boolean);
-        if (pathParts.length >= 2) {
-          const bucketName = pathParts[0];
-          const objectName = pathParts.slice(1).join("/");
-          const bucket = storage.bucket(bucketName);
-          const file = bucket.file(objectName);
-          
-          const [exists] = await file.exists();
-          if (exists) {
-            const [buffer] = await file.download();
-            const [metadata] = await file.getMetadata();
-            const contentType = metadata.contentType || "image/png";
-            return `data:${contentType};base64,${buffer.toString("base64")}`;
-          }
+      const pathParts = logoObjectPath.split("/").filter(Boolean);
+      if (pathParts.length >= 2) {
+        const bucketName = pathParts[0];
+        const objectName = pathParts.slice(1).join("/");
+        const bucket = storage.bucket(bucketName);
+        const file = bucket.file(objectName);
+        
+        const [exists] = await file.exists();
+        if (exists) {
+          const [buffer] = await file.download();
+          const [metadata] = await file.getMetadata();
+          const contentType = metadata.contentType || "image/png";
+          return `data:${contentType};base64,${buffer.toString("base64")}`;
         }
-      } catch (storageError) {
-        console.error("[Sticker Generate] Object storage failed (expected on non-Replit):", storageError);
       }
     }
     
-    // Try fetching from URL
     if (logoUrl && logoUrl.startsWith("http")) {
       const response = await fetch(logoUrl);
       if (response.ok) {
@@ -776,8 +673,8 @@ export async function POST(req: NextRequest) {
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
     let logoDataUrl: string | null = null;
-    if (config.logo || config.logoObjectPath || shopId) {
-      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath, shopId);
+    if (config.logo || config.logoObjectPath) {
+      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath);
     }
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
 
@@ -788,26 +685,10 @@ export async function POST(req: NextRequest) {
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
-      // First, try to use cached QR code from shop config (fastest)
+      // First, try to use cached QR code (fastest, most reliable)
       if (config.cachedQrCodeDataUri) {
         console.log("[Sticker Generate] Using cached QR code from config");
         qrDataUrl = config.cachedQrCodeDataUri;
-      }
-      
-      // Try shop_media collection (MongoDB-based cache, works on Render)
-      if (!qrDataUrl) {
-        try {
-          const qrMedia = await db.collection("shop_media").findOne({
-            shopId,
-            type: "qr_code",
-          });
-          if (qrMedia?.dataUri) {
-            console.log("[Sticker Generate] Using cached QR code from shop_media");
-            qrDataUrl = qrMedia.dataUri;
-          }
-        } catch (mediaError) {
-          console.error("[Sticker Generate] shop_media QR fetch failed:", mediaError);
-        }
       }
       
       // If no cached QR, try existing HoverCode
@@ -881,7 +762,7 @@ export async function POST(req: NextRequest) {
     if (designerLayout && designerLayout.elements) {
       // Debug: Log element details
       console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
-      designerLayout.elements.forEach((el: DesignerElement) => {
+      designerLayout.elements.forEach(el => {
         if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
           console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
         }
@@ -916,63 +797,21 @@ export async function POST(req: NextRequest) {
     // Render at canvas size, then scale up the image for pixel-perfect matching
     const scaleUp = outputWidth / renderWidth;
     
-    let image: Buffer;
-    try {
-      const chromePath = await getChromePath();
-      const chromeArgs = await getChromiumArgs();
-      console.log("[Sticker Generate] Using Chrome path:", chromePath || "default");
-      console.log("[Sticker Generate] Starting image generation...");
-      
-      // Wrap in timeout to prevent infinite hangs (30 second limit)
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Sticker generation timed out after 30 seconds")), 30000);
-      });
-      
-      const renderPromise = nodeHtmlToImage({
-        html,
-        type: "png",
-        transparent: false,
-        selector: "#sticker-canvas",
-        puppeteerArgs: {
-          executablePath: chromePath,
-          headless: true,
-          timeout: 25000,
-          args: chromeArgs,
-          defaultViewport: {
-            width: renderWidth,
-            height: renderHeight,
-            deviceScaleFactor: scaleUp,
-          },
+    const image = await nodeHtmlToImage({
+      html,
+      type: "png",
+      transparent: false,
+      selector: "#sticker-canvas",
+      puppeteerArgs: {
+        executablePath: process.env.CHROMIUM_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+        defaultViewport: {
+          width: renderWidth,
+          height: renderHeight,
+          deviceScaleFactor: scaleUp, // Scale up the rendering for high DPI output
         },
-      });
-      
-      const result = await Promise.race([renderPromise, timeoutPromise]);
-      image = result as Buffer;
-      console.log("[Sticker Generate] Image generation completed successfully");
-    } catch (puppeteerError) {
-      console.error("[Sticker Generate] Puppeteer/Chromium error:", puppeteerError);
-      const errorMsg = puppeteerError instanceof Error ? puppeteerError.message : "Chromium rendering failed";
-      
-      // Provide specific guidance for different error types
-      if (errorMsg.includes("timed out")) {
-        return NextResponse.json(
-          { error: "Sticker generation timed out. Chrome may not be properly installed or is having issues starting. Please check server logs." },
-          { status: 500 }
-        );
-      }
-      
-      if (errorMsg.includes("Could not find Chrome") || errorMsg.includes("executable") || errorMsg.includes("Failed to launch")) {
-        return NextResponse.json(
-          { error: "Chrome/Chromium is not installed or cannot be launched. On Render, ensure Chrome was installed during build and check logs for the installation path." },
-          { status: 500 }
-        );
-      }
-      
-      return NextResponse.json(
-        { error: `Sticker rendering failed: ${errorMsg}. Please contact support if this persists.` },
-        { status: 500 }
-      );
-    }
+      },
+    });
 
     await db.collection("sticker_generations").insertOne({
       shopId,
@@ -1008,7 +847,8 @@ export async function POST(req: NextRequest) {
       console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
     }
 
-    return new NextResponse(new Uint8Array(image), {
+    const imageBuffer = image as Buffer;
+    return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         "Content-Type": "image/png",
         "Content-Disposition": `inline; filename="sticker-${shopId}-${Date.now()}.png"`,
@@ -1016,9 +856,8 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("[Sticker Generate] Error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: `Failed to generate sticker image: ${errorMessage}` },
+      { error: "Failed to generate sticker image" },
       { status: 500 }
     );
   }
