@@ -359,10 +359,19 @@ function generateStickerHtml(
 <head>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+    html, body {
       width: ${dimensions.width}px;
       height: ${dimensions.height}px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    body {
       font-family: Arial, Helvetica, sans-serif;
+    }
+    #sticker-canvas {
+      width: ${dimensions.width}px;
+      height: ${dimensions.height}px;
       background: ${backgroundColor};
       color: #000000;
       display: flex;
@@ -370,6 +379,8 @@ function generateStickerHtml(
       align-items: center;
       justify-content: center;
       padding: ${padding}px;
+      position: relative;
+      overflow: hidden;
     }
     .header {
       text-align: center;
@@ -465,32 +476,34 @@ function generateStickerHtml(
   </style>
 </head>
 <body>
-  <div class="header">
-    ${config.logo ? `<img src="${config.logo}" class="logo" alt="Shop Logo" />` : ""}
-  </div>
-  
-  <div class="contact">
-    ${config.phone ? `<div class="phone">${config.phone}</div>` : ""}
-    ${config.tagline ? `<div class="tagline">${config.tagline}</div>` : ""}
-    ${config.taglineLine2 ? `<div class="tagline-line2">${config.taglineLine2}</div>` : ""}
-  </div>
-  
-  ${qrDataUrl ? `
-  <div class="bottom-section">
-    <div class="qr-code"><img src="${qrDataUrl}" alt="Scan to Schedule" /></div>
-    <div class="service-info">
+  <div id="sticker-canvas">
+    <div class="header">
+      ${config.logo ? `<img src="${config.logo}" class="logo" alt="Shop Logo" />` : ""}
+    </div>
+    
+    <div class="contact">
+      ${config.phone ? `<div class="phone">${config.phone}</div>` : ""}
+      ${config.tagline ? `<div class="tagline">${config.tagline}</div>` : ""}
+      ${config.taglineLine2 ? `<div class="tagline-line2">${config.taglineLine2}</div>` : ""}
+    </div>
+    
+    ${qrDataUrl ? `
+    <div class="bottom-section">
+      <div class="qr-code"><img src="${qrDataUrl}" alt="Scan to Schedule" /></div>
+      <div class="service-info">
+        <div class="service-label">${config.serviceLabel || "Next Oil Service"}</div>
+        ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
+        ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
+      </div>
+    </div>
+    ` : `
+    <div class="service-centered">
       <div class="service-label">${config.serviceLabel || "Next Oil Service"}</div>
       ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
       ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
     </div>
+    `}
   </div>
-  ` : `
-  <div class="service-centered">
-    <div class="service-label">${config.serviceLabel || "Next Oil Service"}</div>
-    ${formattedDate ? `<div class="service-date">${formattedDate}</div>` : ""}
-    ${formattedMileage ? `<div class="service-mileage">${formattedMileage} ${distanceUnit}</div>` : ""}
-  </div>
-  `}
 </body>
 </html>
   `;
