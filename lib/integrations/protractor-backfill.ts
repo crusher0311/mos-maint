@@ -10,8 +10,8 @@ import { createIngestionService } from "@/lib/normalized-ingestion";
 import pLimit from "p-limit";
 
 const YEARS_TO_BACKFILL = 5;
-const MAX_CHUNKS_PER_RUN = 50;
-const MAX_WALL_CLOCK_MS = 1200000; // 20 minutes max
+const MAX_CHUNKS_PER_RUN = 100;
+const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
 
 async function fetchInvoicesForDateRange(
   shopId: number,
@@ -290,10 +290,18 @@ async function backfillShopChunk(
   });
 
   if (vehicleIdsToFetch.length > 0) {
-    console.log(`[Backfill] Shop ${shopId}: Fetching ${vehicleIdsToFetch.length} vehicles...`);
+    console.log(`[Backfill] Shop ${shopId}: Fetching ${vehicleIdsToFetch.length} vehicles in parallel...`);
     
-    for (const serviceItemId of vehicleIdsToFetch) {
-      const vehicleData = await getOrFetchVehicle(db, shopId, serviceItemId, rateLimiter);
+    const vehicleResults = await Promise.all(
+      vehicleIdsToFetch.map(serviceItemId => 
+        rateLimiter(async () => {
+          const vehicleData = await getOrFetchVehicle(db, shopId, serviceItemId, rateLimiter);
+          return { serviceItemId, vehicleData };
+        })
+      )
+    );
+    
+    for (const { serviceItemId, vehicleData } of vehicleResults) {
       if (vehicleData) {
         vehicleCache.set(serviceItemId, vehicleData);
         vehiclesFetched++;
@@ -314,32 +322,40 @@ async function backfillShopChunk(
     delete (entry as any)._serviceItemId;
   }
 
+  const bulkOps: any[] = [];
+  const existingJobsFilters = allJobEntries.map(entry => ({
+    shopId: entry.shopId,
+    workOrderId: entry.workOrderId,
+    servicePackageId: entry.servicePackageId,
+  }));
+  
+  const existingJobs = await db.collection("job_index").find({
+    $or: existingJobsFilters.length > 0 ? existingJobsFilters : [{ _id: null }]
+  }).toArray();
+  
+  const existingJobMap = new Map<string, string>();
+  for (const job of existingJobs) {
+    const key = `${job.shopId}:${job.workOrderId}:${job.servicePackageId}`;
+    existingJobMap.set(key, job.contentHash);
+  }
+  
   for (const entry of allJobEntries) {
     const contentHash = computeJobHash(entry);
-    const filter = { 
-      shopId: entry.shopId, 
-      workOrderId: entry.workOrderId, 
-      servicePackageId: entry.servicePackageId 
-    };
+    const key = `${entry.shopId}:${entry.workOrderId}:${entry.servicePackageId}`;
     
-    const existing = await db.collection("job_index").findOne(filter);
-    
-    if (existing && existing.contentHash === contentHash) {
+    if (existingJobMap.get(key) === contentHash) {
       skippedUnchanged++;
       continue;
     }
     
-    await db.collection("job_index").updateOne(
-      filter,
-      { $set: { ...entry, contentHash, sourceSystem: "protractor" } },
-      { upsert: true }
-    );
-    jobsIndexed++;
-  }
-
-  if (jobsIndexed > 0) {
-    await updatePartCrossReferences(allJobEntries);
-  }
+    bulkOps.push({
+      updateOne: {
+        filter: { 
+          shopId: entry.shopId, 
+          workOrderId: entry.workOrderId, 
+          servicePackageId: entry.servicePackageId 
+        },
+        update: { $set: { ...entry, contentHash, sourceSystem:
 
   let normalizedCount = 0;
   try {
