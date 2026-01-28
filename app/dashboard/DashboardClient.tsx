@@ -750,7 +750,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // Prioritize by highest RO# (most recent) and in-progress status
     if (data.rows?.length > 0) {
       const vehiclesWithData = data.rows.map((row: any) => {
-        const mileageRaw = row.displayMileage || row.mileage;
+        const mileageRaw = row.displayMiles || row.vehicle?.miles || row.mileage;
         const mileage = typeof mileageRaw === 'number' ? mileageRaw :
                        typeof mileageRaw === 'string' ? parseInt(mileageRaw.replace(/,/g, ''), 10) || null : null;
         const roRaw = row.displayRO || row.roNumber || row.ro || '';
