@@ -164,8 +164,10 @@ async function backfillShopChunk(
   
   if (progress?.currentChunkEnd && progress?.logicVersion === 4) {
     chunkEnd = new Date(progress.currentChunkEnd);
+    console.log(`[Backfill] Shop ${shopId}: Resuming from ${chunkEnd.toISOString().split('T')[0]} (logicVersion=${progress.logicVersion})`);
   } else {
     chunkEnd = new Date(today);
+    console.log(`[Backfill] Shop ${shopId}: Starting fresh (logicVersion=${progress?.logicVersion || 'none'})`);
     await db.collection("backfill_progress").updateOne(
       { shopId },
       { 
@@ -378,6 +380,8 @@ async function backfillShopChunk(
 
   const nextChunkEnd = chunkStart;
   const isComplete = nextChunkEnd <= oldestDate;
+
+  console.log(`[Backfill] Shop ${shopId}: Advancing currentChunkEnd from ${chunkEnd.toISOString().split('T')[0]} to ${nextChunkEnd.toISOString().split('T')[0]}`);
 
   await db.collection("backfill_progress").updateOne(
     { shopId },
