@@ -771,10 +771,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         return b.roNumber - a.roNumber; // Highest RO# first
       });
       
-      const vehiclesToPrefetch = vehiclesWithData.slice(0, 15);
+      const vehiclesToPrefetch = vehiclesWithData.slice(0, 50);
       
       if (vehiclesToPrefetch.length > 0) {
-        queueMultiplePrefetch(vehiclesToPrefetch, 15);
+        queueMultiplePrefetch(vehiclesToPrefetch, 50);
       }
     }
   }, [data.rows]);
