@@ -6,6 +6,7 @@ import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, C
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { ReactNode } from "react";
+import { queueMultiplePrefetch } from "@/lib/plan-prefetch";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -742,22 +743,27 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // Always fetch fresh data on mount to ensure SSR and client are in sync
     // This prevents stale data from showing after browser refresh
     loadData(1, "", false);
-    
+  }, []);
+
+  useEffect(() => {
+    // Automatically prefetch plan data for visible vehicles when dashboard loads
     if (data.rows?.length > 0) {
-      const vinsToPrefeetch = data.rows
-        .slice(0, 10)
-        .map((r: any) => r.displayVin || r.vin)
-        .filter((v: string) => v && v.length === 17);
+      const vehiclesToPrefetch = data.rows.slice(0, 15).map((row: any) => {
+        const mileageRaw = row.displayMileage || row.mileage;
+        const mileage = typeof mileageRaw === 'number' ? mileageRaw :
+                       typeof mileageRaw === 'string' ? parseInt(mileageRaw.replace(/,/g, ''), 10) || null : null;
+        return {
+          vin: row.displayVin || row.vin,
+          mileage,
+          inProgress: row.displayStatus === 'in-progress' || row.status === 'in-progress',
+        };
+      }).filter((v: any) => v.vin && v.vin.length === 17);
       
-      if (vinsToPrefeetch.length > 0) {
-        fetch("/api/plan-prefetch/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ vins: vinsToPrefeetch }),
-        }).catch(() => {});
+      if (vehiclesToPrefetch.length > 0) {
+        queueMultiplePrefetch(vehiclesToPrefetch, 15);
       }
     }
-  }, []);
+  }, [data.rows]);
 
   useEffect(() => {
     let lastUpdate = Date.now();
