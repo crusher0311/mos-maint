@@ -37,15 +37,33 @@ export async function POST(req: NextRequest) {
         .project({ shopId: 1, name: 1 })
         .toArray();
       
-      const backfillProgress = await db.collection("backfill_progress")
-        .find({ completed: true })
-        .project({ shopId: 1 })
+      const allBackfillProgress = await db.collection("backfill_progress")
+        .find({})
         .toArray();
       
-      const completedShopIds = new Set(backfillProgress.map((b: any) => b.shopId));
-      const incompleteShops = protractorShops.filter((s: any) => !completedShopIds.has(s.shopId));
+      const fiveYearsAgo = new Date();
+      fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+      fiveYearsAgo.setMonth(fiveYearsAgo.getMonth() + 1);
       
-      console.log(`[Platform Admin] Found ${incompleteShops.length} shops with incomplete backfills`);
+      const actuallyCompleteShopIds = new Set<number>();
+      for (const progress of allBackfillProgress) {
+        if (progress.completed && progress.currentChunkEnd) {
+          const chunkEnd = new Date(progress.currentChunkEnd);
+          if (chunkEnd <= fiveYearsAgo) {
+            actuallyCompleteShopIds.add(progress.shopId);
+          } else {
+            console.log(`[Platform Admin] Shop ${progress.shopId} marked complete but only at ${chunkEnd.toISOString().split('T')[0]} - will resume`);
+            await db.collection("backfill_progress").updateOne(
+              { shopId: progress.shopId },
+              { $set: { completed: false } }
+            );
+          }
+        }
+      }
+      
+      const incompleteShops = protractorShops.filter((s: any) => !actuallyCompleteShopIds.has(s.shopId));
+      
+      console.log(`[Platform Admin] Found ${incompleteShops.length} shops with incomplete backfills (${actuallyCompleteShopIds.size} truly complete)`);
       
       const resumedShopIds: number[] = [];
       for (const shop of incompleteShops) {
