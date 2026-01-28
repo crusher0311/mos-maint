@@ -134,8 +134,9 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 - Cache miss path builds plan from all sources and stores assembled buckets to `cached_plans` MongoDB collection with 4-hour TTL
 - Cached plan data includes: buckets, vehicle info (year/make/model/engine), currentMiles, mpdBlended, customerName, latestRoNumber, distanceUnit, soonMiles, soonDays
 - Added `?refresh=1` query parameter support for force cache bypass when needed
-- Created centralized `lib/plan-builder.ts` for plan data prefetching with unified cache management
-- Prefetch system warms individual API caches via `plan_prefetch_cache` collection - works alongside full plan cache
+- Created `/api/plan-build` endpoint for background plan building - builds complete maintenance plans and caches them in MongoDB
+- Dashboard prefetch now calls `/api/plan-build` to build full plans (not just warm individual API caches) for instant first-visit loads
+- Prefetch system processes top 15 vehicles from dashboard with 2 concurrent requests and 300ms delays to avoid overwhelming external APIs
 - Added `isPlanPrefetched()` check to skip redundant prefetch calls for already-cached plans
 - Enhanced plan prefetch system to require mileage - skips prefetch for vehicles without mileage (maintenance plans are mileage-dependent)
 
