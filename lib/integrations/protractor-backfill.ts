@@ -430,7 +430,10 @@ export async function runProtractorBackfill(shopId: number): Promise<{
     { 
       $set: { 
         lastAttemptedAt: new Date(),
+        lastActivityAt: new Date(),
         inProgress: true,
+        lastError: null,
+        lastErrorAt: null,
       } 
     },
     { upsert: true }
@@ -450,6 +453,11 @@ export async function runProtractorBackfill(shopId: number): Promise<{
       totalJobsIndexed += result.jobsIndexed;
 
       console.log(`[Backfill] Shop ${shopId} chunk ${chunksProcessed}: ${result.message}`);
+      
+      await db.collection("backfill_progress").updateOne(
+        { shopId },
+        { $set: { lastActivityAt: new Date() } }
+      );
 
       if (result.complete) {
         complete = true;

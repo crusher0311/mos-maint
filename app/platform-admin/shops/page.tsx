@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle } from "lucide-react";
 
 interface ShopBilling {
   plan: string;
@@ -41,10 +41,15 @@ interface IntegrationDetails {
 interface BackfillStatus {
   completed: boolean;
   inProgress: boolean;
+  status: "completed" | "active" | "stale" | "error" | "pending";
+  isStale?: boolean;
   totalJobsIndexed: number;
   processedCount: number;
   currentChunkDate: string | null;
   lastAttemptedAt: string | null;
+  lastActivityAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
   source?: "protractor" | "tekmetric";
 }
 
@@ -568,18 +573,28 @@ export default function PlatformShopsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     {shop.backfill ? (
-                      shop.backfill.completed ? (
+                      shop.backfill.status === "completed" ? (
                         <div className="flex items-center justify-center gap-1" title={`Completed: ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
                           <span className="text-xs text-green-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
-                      ) : shop.backfill.inProgress ? (
-                        <div className="flex items-center justify-center gap-1" title={`Running: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'}`}>
+                      ) : shop.backfill.status === "active" ? (
+                        <div className="flex items-center justify-center gap-1" title={`Active: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'}. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleTimeString() : 'unknown'}`}>
                           <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                           <span className="text-xs text-blue-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
+                      ) : shop.backfill.status === "stale" ? (
+                        <div className="flex items-center justify-center gap-1" title={`Stale (no activity in 5+ min): ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleString() : 'unknown'}`}>
+                          <AlertCircle className="w-4 h-4 text-orange-500" />
+                          <span className="text-xs text-orange-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      ) : shop.backfill.status === "error" ? (
+                        <div className="flex items-center justify-center gap-1" title={`Error: ${shop.backfill.lastError || 'Unknown error'}. Last run: ${shop.backfill.lastErrorAt ? new Date(shop.backfill.lastErrorAt).toLocaleString() : 'unknown'}`}>
+                          <XCircle className="w-4 h-4 text-red-500" />
+                          <span className="text-xs text-red-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1" title={`Stopped: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last run: ${shop.backfill.lastAttemptedAt ? new Date(shop.backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
+                        <div className="flex items-center justify-center gap-1" title={`Pending: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last run: ${shop.backfill.lastAttemptedAt ? new Date(shop.backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
                           <Pause className="w-4 h-4 text-amber-500" />
                           <span className="text-xs text-amber-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
@@ -848,18 +863,28 @@ export default function PlatformShopsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     {shop.backfill ? (
-                      shop.backfill.completed ? (
+                      shop.backfill.status === "completed" ? (
                         <div className="flex items-center justify-center gap-1 text-green-600" title={`Completed: ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
                           <CheckCircle2 className="w-4 h-4" />
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
-                      ) : shop.backfill.inProgress ? (
-                        <div className="flex items-center justify-center gap-1 text-blue-600" title={`Running: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'}`}>
+                      ) : shop.backfill.status === "active" ? (
+                        <div className="flex items-center justify-center gap-1 text-blue-600" title={`Active: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'}. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleTimeString() : 'unknown'}`}>
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>
+                      ) : shop.backfill.status === "stale" ? (
+                        <div className="flex items-center justify-center gap-1 text-orange-600" title={`Stale (no activity in 5+ min): ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleString() : 'unknown'}`}>
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
+                      ) : shop.backfill.status === "error" ? (
+                        <div className="flex items-center justify-center gap-1 text-red-600" title={`Error: ${shop.backfill.lastError || 'Unknown error'}. Last run: ${shop.backfill.lastErrorAt ? new Date(shop.backfill.lastErrorAt).toLocaleString() : 'unknown'}`}>
+                          <XCircle className="w-4 h-4" />
+                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
+                        </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-1 text-amber-600" title={`Stopped: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last run: ${shop.backfill.lastAttemptedAt ? new Date(shop.backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
+                        <div className="flex items-center justify-center gap-1 text-amber-600" title={`Pending: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last run: ${shop.backfill.lastAttemptedAt ? new Date(shop.backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
                           <Pause className="w-4 h-4" />
                           <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
                         </div>

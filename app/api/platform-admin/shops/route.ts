@@ -152,27 +152,44 @@ export async function GET() {
         stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
         stickerConfig: shop.stickerConfig || {},
         enabledFeatures: shop.enabledFeatures || {},
-        backfill: (hasProtractor || hasTekmetric) ? {
-          completed: hasProtractor 
-            ? (backfill?.completed || false) 
-            : (tekmetricBackfill?.completed === true),
-          inProgress: hasProtractor
-            ? (backfill?.inProgress === true)
-            : (tekmetricBackfill?.inProgress === true),
-          totalJobsIndexed: hasProtractor 
-            ? (jobIndexCount || backfill?.totalJobsIndexed || 0) 
-            : (jobIndexCount || tekmetricBackfill?.totalJobsIndexed || 0),
-          currentChunkDate: hasProtractor 
-            ? (backfill?.currentChunkEnd || backfill?.currentChunkStart || null)
-            : (tekmetricBackfill?.currentChunkEnd || tekmetricBackfill?.currentChunkStart || null),
-          source: hasProtractor ? "protractor" : "tekmetric",
-          lastAttemptedAt: hasProtractor 
-            ? (backfill?.lastAttemptedAt || backfill?.lastRunAt || null)
-            : (tekmetricBackfill?.lastAttemptedAt || tekmetricBackfill?.lastRunAt || null),
-          processedCount: hasProtractor
-            ? (backfill?.processedCount || 0)
-            : (tekmetricBackfill?.processedCount || 0),
-        } : null,
+        backfill: (hasProtractor || hasTekmetric) ? (() => {
+          const bf = hasProtractor ? backfill : tekmetricBackfill;
+          const completed = bf?.completed || false;
+          const inProgress = bf?.inProgress === true;
+          const lastActivityAt = bf?.lastActivityAt || bf?.lastAttemptedAt || null;
+          const lastError = bf?.lastError || null;
+          const lastErrorAt = bf?.lastErrorAt || null;
+          
+          const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+          const isStale = inProgress && lastActivityAt && 
+            (Date.now() - new Date(lastActivityAt).getTime() > STALE_THRESHOLD_MS);
+          
+          let status: "completed" | "active" | "stale" | "error" | "pending" = "pending";
+          if (completed) {
+            status = "completed";
+          } else if (lastError && lastErrorAt) {
+            status = "error";
+          } else if (isStale) {
+            status = "stale";
+          } else if (inProgress) {
+            status = "active";
+          }
+          
+          return {
+            completed,
+            inProgress,
+            status,
+            isStale,
+            totalJobsIndexed: jobIndexCount || bf?.totalJobsIndexed || 0,
+            currentChunkDate: bf?.currentChunkEnd || bf?.currentChunkStart || null,
+            source: hasProtractor ? "protractor" : "tekmetric",
+            lastAttemptedAt: bf?.lastAttemptedAt || bf?.lastRunAt || null,
+            lastActivityAt,
+            lastError,
+            lastErrorAt,
+            processedCount: bf?.processedCount || 0,
+          };
+        })() : null,
         integrationDetails: {
           protractor: shop.protractor?.configured ? {
             configuredAt: shop.protractor.configuredAt,
