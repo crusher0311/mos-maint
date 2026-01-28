@@ -800,6 +800,8 @@ export async function POST(req: NextRequest) {
     console.log("[Sticker Generate] Rendering with dimensions:", { renderWidth, renderHeight, outputWidth, outputHeight, scaleUp });
     console.log("[Sticker Generate] HTML length:", html.length);
     console.log("[Sticker Generate] HTML contains #sticker-canvas:", html.includes('id="sticker-canvas"'));
+    console.log("[Sticker Generate] HTML first 500 chars:", html.substring(0, 500));
+    console.log("[Sticker Generate] HTML last 500 chars:", html.substring(html.length - 500));
     console.log("[Sticker Generate] CHROMIUM_PATH:", process.env.CHROMIUM_PATH || "not set");
     
     const image = await nodeHtmlToImage({
