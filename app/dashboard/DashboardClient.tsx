@@ -747,17 +747,31 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   useEffect(() => {
     // Automatically prefetch plan data for visible vehicles when dashboard loads
+    // Prioritize by highest RO# (most recent) and in-progress status
     if (data.rows?.length > 0) {
-      const vehiclesToPrefetch = data.rows.slice(0, 15).map((row: any) => {
+      const vehiclesWithData = data.rows.map((row: any) => {
         const mileageRaw = row.displayMileage || row.mileage;
         const mileage = typeof mileageRaw === 'number' ? mileageRaw :
                        typeof mileageRaw === 'string' ? parseInt(mileageRaw.replace(/,/g, ''), 10) || null : null;
+        const roRaw = row.displayRO || row.roNumber || row.ro || '';
+        const roNumber = typeof roRaw === 'number' ? roRaw :
+                        typeof roRaw === 'string' ? parseInt(roRaw.replace(/\D/g, ''), 10) || 0 : 0;
         return {
           vin: row.displayVin || row.vin,
           mileage,
           inProgress: row.displayStatus === 'in-progress' || row.status === 'in-progress',
+          roNumber,
         };
       }).filter((v: any) => v.vin && v.vin.length === 17);
+      
+      // Sort by: in-progress first, then by highest RO# (most recent)
+      vehiclesWithData.sort((a: any, b: any) => {
+        if (a.inProgress && !b.inProgress) return -1;
+        if (!a.inProgress && b.inProgress) return 1;
+        return b.roNumber - a.roNumber; // Highest RO# first
+      });
+      
+      const vehiclesToPrefetch = vehiclesWithData.slice(0, 15);
       
       if (vehiclesToPrefetch.length > 0) {
         queueMultiplePrefetch(vehiclesToPrefetch, 15);
