@@ -468,7 +468,7 @@ export async function runProtractorBackfill(shopId: number): Promise<{
       await new Promise(r => setTimeout(r, 100));
     }
 
-    console.log(`[Backfill] Shop ${shopId}: Completed ${chunksProcessed} chunks, ${totalJobsIndexed} jobs indexed, complete: ${complete}`);
+    console.log(`[Backfill] Shop ${shopId}: Run finished - ${chunksProcessed} chunks, ${totalJobsIndexed} jobs indexed, complete: ${complete}`);
     
     await db.collection("backfill_progress").updateOne(
       { shopId },
@@ -476,12 +476,15 @@ export async function runProtractorBackfill(shopId: number): Promise<{
     );
     
     if (!complete) {
-      console.log(`[Backfill] Shop ${shopId}: Not complete yet, auto-continuing after short delay...`);
-      setTimeout(() => {
-        runProtractorBackfill(shopId).catch(err => {
-          console.error(`[Backfill] Shop ${shopId}: Auto-continue failed:`, err.message);
-        });
-      }, 2000);
+      console.log(`[Backfill] Shop ${shopId}: Not complete, starting next run immediately`);
+      try {
+        const nextResult = await runProtractorBackfill(shopId);
+        console.log(`[Backfill] Shop ${shopId}: Next run result:`, nextResult.complete ? 'COMPLETE' : `${nextResult.chunksProcessed} more chunks`);
+      } catch (err: any) {
+        console.error(`[Backfill] Shop ${shopId}: Next run failed:`, err.message);
+      }
+    } else {
+      console.log(`[Backfill] Shop ${shopId}: FULLY COMPLETE!`);
     }
     
     return { chunksProcessed, totalJobsIndexed, complete };
