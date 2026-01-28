@@ -434,6 +434,7 @@ export async function runProtractorBackfill(shopId: number): Promise<{
         inProgress: true,
         lastError: null,
         lastErrorAt: null,
+        retryCount: 0,
       } 
     },
     { upsert: true }
@@ -474,9 +475,22 @@ export async function runProtractorBackfill(shopId: number): Promise<{
       { $set: { inProgress: false, lastCompletedRunAt: new Date() } }
     );
     
+    if (!complete) {
+      console.log(`[Backfill] Shop ${shopId}: Not complete yet, auto-continuing after short delay...`);
+      setTimeout(() => {
+        runProtractorBackfill(shopId).catch(err => {
+          console.error(`[Backfill] Shop ${shopId}: Auto-continue failed:`, err.message);
+        });
+      }, 2000);
+    }
+    
     return { chunksProcessed, totalJobsIndexed, complete };
   } catch (err: any) {
     console.error(`[Backfill] Shop ${shopId}: Error during backfill:`, err.message);
+    
+    const progress = await db.collection("backfill_progress").findOne({ shopId });
+    const retryCount = (progress?.retryCount || 0) + 1;
+    const MAX_RETRIES = 5;
     
     await db.collection("backfill_progress").updateOne(
       { shopId },
@@ -485,9 +499,22 @@ export async function runProtractorBackfill(shopId: number): Promise<{
           inProgress: false, 
           lastError: err.message,
           lastErrorAt: new Date(),
+          retryCount,
         } 
       }
     );
+    
+    if (retryCount <= MAX_RETRIES) {
+      const backoffMs = Math.min(30000, 5000 * retryCount);
+      console.log(`[Backfill] Shop ${shopId}: Auto-retry ${retryCount}/${MAX_RETRIES} in ${backoffMs/1000}s...`);
+      setTimeout(() => {
+        runProtractorBackfill(shopId).catch(retryErr => {
+          console.error(`[Backfill] Shop ${shopId}: Retry failed:`, retryErr.message);
+        });
+      }, backoffMs);
+    } else {
+      console.error(`[Backfill] Shop ${shopId}: Max retries (${MAX_RETRIES}) exceeded, giving up`);
+    }
     
     return { chunksProcessed, totalJobsIndexed, complete: false, error: err.message };
   }
