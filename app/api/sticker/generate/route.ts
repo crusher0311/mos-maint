@@ -21,68 +21,70 @@ async function renderHtmlToImage(
 ): Promise<Buffer> {
   let browser = null;
   let chromePath: string | undefined;
-  let chromiumArgs: string[];
+  let chromiumArgs: string[] = [
+    "--no-sandbox", 
+    "--disable-setuid-sandbox", 
+    "--disable-gpu", 
+    "--disable-dev-shm-usage",
+    "--disable-software-rasterizer",
+    "--single-process",
+    "--no-zygote",
+  ];
   
-  // Try @sparticuz/chromium first (for serverless like Render)
-  try {
-    const chromium = await import("@sparticuz/chromium");
-    chromePath = await chromium.default.executablePath();
-    chromiumArgs = chromium.default.args;
-    console.log("[Sticker] Using @sparticuz/chromium at:", chromePath);
-  } catch (e) {
-    console.log("[Sticker] @sparticuz/chromium not available, trying local paths");
-    chromiumArgs = [
-      "--no-sandbox", 
-      "--disable-setuid-sandbox", 
-      "--disable-gpu", 
-      "--disable-dev-shm-usage",
-      "--disable-software-rasterizer",
-      "--single-process",
-      "--no-zygote",
+  // Check environment variable overrides first
+  if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
+    chromePath = process.env.CHROMIUM_PATH;
+    console.log("[Sticker] Using Chrome from CHROMIUM_PATH:", chromePath);
+  } else if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    chromePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    console.log("[Sticker] Using Chrome from PUPPETEER_EXECUTABLE_PATH:", chromePath);
+  }
+  
+  // Try local paths first (for Replit/NixOS)
+  if (!chromePath) {
+    try {
+      const glob = require("glob");
+      const nixMatches = glob.sync("/nix/store/*-chromium-*/bin/chromium");
+      if (nixMatches.length > 0 && existsSync(nixMatches[0])) {
+        chromePath = nixMatches[0];
+        console.log("[Sticker] Using Nix Chromium at:", chromePath);
+      }
+    } catch {
+      // glob not available
+    }
+  }
+  
+  // Try standard Linux paths
+  if (!chromePath) {
+    const fixedPaths = [
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable", 
+      "/usr/bin/chromium-browser",
+      "/usr/bin/chromium",
     ];
+    for (const path of fixedPaths) {
+      if (existsSync(path)) {
+        chromePath = path;
+        console.log("[Sticker] Using system Chrome at:", chromePath);
+        break;
+      }
+    }
   }
   
-  // Fallback to local Chrome paths
+  // Fallback to @sparticuz/chromium (for Render/Vercel/Lambda)
   if (!chromePath) {
-    if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
-      chromePath = process.env.CHROMIUM_PATH;
-    } else if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-      chromePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    } else {
-      // Try glob for nix paths
-      try {
-        const glob = require("glob");
-        const nixMatches = glob.sync("/nix/store/*-chromium-*/bin/chromium");
-        if (nixMatches.length > 0 && existsSync(nixMatches[0])) {
-          chromePath = nixMatches[0];
-        }
-      } catch {
-        // glob not available
-      }
-    }
-    
-    if (!chromePath) {
-      const fixedPaths = [
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable", 
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-      ];
-      for (const path of fixedPaths) {
-        if (existsSync(path)) {
-          chromePath = path;
-          break;
-        }
-      }
-    }
-    
-    if (chromePath) {
-      console.log("[Sticker] Using local Chrome at:", chromePath);
+    try {
+      const chromium = await import("@sparticuz/chromium");
+      chromePath = await chromium.default.executablePath();
+      chromiumArgs = chromium.default.args;
+      console.log("[Sticker] Using @sparticuz/chromium at:", chromePath);
+    } catch (e) {
+      console.log("[Sticker] @sparticuz/chromium not available");
     }
   }
   
   if (!chromePath) {
-    throw new Error("Chrome/Chromium executable not found. Please ensure @sparticuz/chromium is installed or set CHROMIUM_PATH environment variable.");
+    throw new Error("Chrome/Chromium executable not found. Please ensure Chromium is installed or set CHROMIUM_PATH environment variable.");
   }
   
   try {
