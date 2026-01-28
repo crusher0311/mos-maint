@@ -126,6 +126,11 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 
 ## Recent Changes
 
+**January 28, 2026:**
+- Enhanced plan prefetch system to require mileage - skips prefetch for vehicles without mileage (maintenance plans are mileage-dependent)
+- Added auto-refresh mechanism that re-triggers prefetch 15 minutes before 4-hour TTL expires
+- Updated prefetch API to accept and log mileage parameter for better debugging
+
 **January 27, 2026:**
 - Added `shop_media` MongoDB collection for storing logos and QR codes
 - Logo uploads now stored as base64 in MongoDB (works on Render without Replit object storage)
