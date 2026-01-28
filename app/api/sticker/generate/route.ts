@@ -3,25 +3,83 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
+import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { existsSync } from "fs";
-import puppeteer from "puppeteer-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Render HTML to PNG using puppeteer-core with @sparticuz/chromium
-async function renderHtmlToImage(
-  html: string,
-  selector: string,
-  width: number,
-  height: number,
-  deviceScaleFactor: number
-): Promise<Buffer> {
-  let browser = null;
-  let chromePath: string | undefined;
-  let chromiumArgs: string[] = [
+// Get Chrome executable path - prioritize local paths, fallback to @sparticuz/chromium
+async function getChromePath(): Promise<string | undefined> {
+  // Check environment variable overrides first
+  if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
+    console.log("[Sticker] Using Chrome from CHROMIUM_PATH:", process.env.CHROMIUM_PATH);
+    return process.env.CHROMIUM_PATH;
+  }
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    console.log("[Sticker] Using Chrome from PUPPETEER_EXECUTABLE_PATH:", process.env.PUPPETEER_EXECUTABLE_PATH);
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  
+  // Try local paths first (for Replit/NixOS)
+  try {
+    const glob = require("glob");
+    const nixMatches = glob.sync("/nix/store/*-chromium-*/bin/chromium");
+    if (nixMatches.length > 0 && existsSync(nixMatches[0])) {
+      console.log("[Sticker] Using Nix Chromium at:", nixMatches[0]);
+      return nixMatches[0];
+    }
+  } catch {
+    // glob not available
+  }
+  
+  // Try standard Linux paths
+  const fixedPaths = [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable", 
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+  ];
+  for (const path of fixedPaths) {
+    if (existsSync(path)) {
+      console.log("[Sticker] Using system Chrome at:", path);
+      return path;
+    }
+  }
+  
+  // Fallback to @sparticuz/chromium (for Render/Vercel/Lambda)
+  try {
+    const chromium = await import("@sparticuz/chromium");
+    const execPath = await chromium.default.executablePath();
+    if (execPath) {
+      console.log("[Sticker] Using @sparticuz/chromium at:", execPath);
+      return execPath;
+    }
+  } catch (e) {
+    console.log("[Sticker] @sparticuz/chromium not available");
+  }
+  
+  console.log("[Sticker] Chrome not found, letting Puppeteer try default detection");
+  return undefined;
+}
+
+// Get chromium args - use @sparticuz/chromium args on serverless, standard args locally
+async function getChromiumArgs(): Promise<string[]> {
+  // Check if we're using @sparticuz/chromium
+  try {
+    const chromium = await import("@sparticuz/chromium");
+    // Only use sparticuz args if we're actually using its executable
+    const execPath = await chromium.default.executablePath();
+    if (execPath && existsSync(execPath)) {
+      return chromium.default.args;
+    }
+  } catch {
+    // Not using sparticuz
+  }
+  
+  return [
     "--no-sandbox", 
     "--disable-setuid-sandbox", 
     "--disable-gpu", 
@@ -30,97 +88,6 @@ async function renderHtmlToImage(
     "--single-process",
     "--no-zygote",
   ];
-  
-  // Check environment variable overrides first
-  if (process.env.CHROMIUM_PATH && existsSync(process.env.CHROMIUM_PATH)) {
-    chromePath = process.env.CHROMIUM_PATH;
-    console.log("[Sticker] Using Chrome from CHROMIUM_PATH:", chromePath);
-  } else if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-    chromePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    console.log("[Sticker] Using Chrome from PUPPETEER_EXECUTABLE_PATH:", chromePath);
-  }
-  
-  // Try local paths first (for Replit/NixOS)
-  if (!chromePath) {
-    try {
-      const glob = require("glob");
-      const nixMatches = glob.sync("/nix/store/*-chromium-*/bin/chromium");
-      if (nixMatches.length > 0 && existsSync(nixMatches[0])) {
-        chromePath = nixMatches[0];
-        console.log("[Sticker] Using Nix Chromium at:", chromePath);
-      }
-    } catch {
-      // glob not available
-    }
-  }
-  
-  // Try standard Linux paths
-  if (!chromePath) {
-    const fixedPaths = [
-      "/usr/bin/google-chrome",
-      "/usr/bin/google-chrome-stable", 
-      "/usr/bin/chromium-browser",
-      "/usr/bin/chromium",
-    ];
-    for (const path of fixedPaths) {
-      if (existsSync(path)) {
-        chromePath = path;
-        console.log("[Sticker] Using system Chrome at:", chromePath);
-        break;
-      }
-    }
-  }
-  
-  // Fallback to @sparticuz/chromium (for Render/Vercel/Lambda)
-  if (!chromePath) {
-    try {
-      const chromium = await import("@sparticuz/chromium");
-      chromePath = await chromium.default.executablePath();
-      chromiumArgs = chromium.default.args;
-      console.log("[Sticker] Using @sparticuz/chromium at:", chromePath);
-    } catch (e) {
-      console.log("[Sticker] @sparticuz/chromium not available");
-    }
-  }
-  
-  if (!chromePath) {
-    throw new Error("Chrome/Chromium executable not found. Please ensure Chromium is installed or set CHROMIUM_PATH environment variable.");
-  }
-  
-  try {
-    console.log("[Sticker] Launching browser...");
-    browser = await puppeteer.launch({
-      executablePath: chromePath,
-      headless: true,
-      args: chromiumArgs,
-      defaultViewport: {
-        width,
-        height,
-        deviceScaleFactor,
-      },
-    });
-    
-    console.log("[Sticker] Creating page...");
-    const page = await browser.newPage();
-    
-    console.log("[Sticker] Setting content...");
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 20000 });
-    
-    console.log("[Sticker] Taking screenshot...");
-    const element = await page.$(selector);
-    if (!element) {
-      throw new Error(`Selector "${selector}" not found in HTML`);
-    }
-    
-    const screenshot = await element.screenshot({ type: "png" });
-    console.log("[Sticker] Screenshot complete");
-    
-    return screenshot as Buffer;
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
-  }
 }
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
@@ -951,6 +918,9 @@ export async function POST(req: NextRequest) {
     
     let image: Buffer;
     try {
+      const chromePath = await getChromePath();
+      const chromeArgs = await getChromiumArgs();
+      console.log("[Sticker Generate] Using Chrome path:", chromePath || "default");
       console.log("[Sticker Generate] Starting image generation...");
       
       // Wrap in timeout to prevent infinite hangs (30 second limit)
@@ -958,15 +928,26 @@ export async function POST(req: NextRequest) {
         setTimeout(() => reject(new Error("Sticker generation timed out after 30 seconds")), 30000);
       });
       
-      const renderPromise = renderHtmlToImage(
+      const renderPromise = nodeHtmlToImage({
         html,
-        "#sticker-canvas",
-        renderWidth,
-        renderHeight,
-        scaleUp
-      );
+        type: "png",
+        transparent: false,
+        selector: "#sticker-canvas",
+        puppeteerArgs: {
+          executablePath: chromePath,
+          headless: true,
+          timeout: 25000,
+          args: chromeArgs,
+          defaultViewport: {
+            width: renderWidth,
+            height: renderHeight,
+            deviceScaleFactor: scaleUp,
+          },
+        },
+      });
       
-      image = await Promise.race([renderPromise, timeoutPromise]);
+      const result = await Promise.race([renderPromise, timeoutPromise]);
+      image = result as Buffer;
       console.log("[Sticker Generate] Image generation completed successfully");
     } catch (puppeteerError) {
       console.error("[Sticker Generate] Puppeteer/Chromium error:", puppeteerError);
