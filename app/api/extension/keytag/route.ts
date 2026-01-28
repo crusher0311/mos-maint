@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import nodeHtmlToImage from "node-html-to-image";
+import { getBrowser } from "@/lib/browser-pool";
 import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
 
 export const runtime = "nodejs";
@@ -407,35 +407,89 @@ export async function POST(req: NextRequest) {
 
     let html: string;
     if (config.designerLayout) {
+      console.log("[Extension Keytag] Using designer layout");
       html = generateDesignerHtml(config.designerLayout, body);
     } else {
+      console.log("[Extension Keytag] Using legacy layout (no designer layout found)");
       html = generateLegacyHtml(config, body);
     }
 
-    const image = await nodeHtmlToImage({
-      html,
-      type: "png",
-      transparent: false,
-      encoding: "base64",
-      puppeteerArgs: {
-        executablePath: process.env.CHROMIUM_PATH || undefined,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-      },
-    }) as string;
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    
+    try {
+      await page.setViewport({
+        width: DYMO_30252.renderWidth,
+        height: DYMO_30252.renderHeight,
+        deviceScaleFactor: 2,
+      });
+      
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      
+      await page.evaluate(() => {
+        return new Promise<void>((resolve) => {
+          if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => {
+              setTimeout(resolve, 150);
+            });
+          } else {
+            setTimeout(resolve, 300);
+          }
+        });
+      });
+      
+      const element = await page.$('.canvas');
+      if (!element) {
+        const elementAlt = await page.$('.keytag');
+        if (!elementAlt) {
+          throw new Error('Canvas/keytag element not found');
+        }
+        const imageBuffer = await elementAlt.screenshot({
+          type: 'png',
+          omitBackground: false,
+        });
+        const buffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer);
+        const base64 = buffer.toString('base64');
+        
+        return NextResponse.json(
+          {
+            success: true,
+            image: `data:image/png;base64,${base64}`,
+            size: "dymo30252",
+            dimensions: {
+              width: "3.45in",
+              height: "1.11in",
+            },
+            roNumber: body.roNumber,
+          },
+          { headers: corsHeaders }
+        );
+      }
+      
+      const imageBuffer = await element.screenshot({
+        type: 'png',
+        omitBackground: false,
+      });
+      
+      const buffer = Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer);
+      const base64 = buffer.toString('base64');
 
-    return NextResponse.json(
-      {
-        success: true,
-        image: `data:image/png;base64,${image}`,
-        size: "dymo30252",
-        dimensions: {
-          width: "3.45in",
-          height: "1.11in",
+      return NextResponse.json(
+        {
+          success: true,
+          image: `data:image/png;base64,${base64}`,
+          size: "dymo30252",
+          dimensions: {
+            width: "3.45in",
+            height: "1.11in",
+          },
+          roNumber: body.roNumber,
         },
-        roNumber: body.roNumber,
-      },
-      { headers: corsHeaders }
-    );
+        { headers: corsHeaders }
+      );
+    } finally {
+      await page.close();
+    }
   } catch (error) {
     console.error("Error generating keytag:", error);
     return NextResponse.json(
