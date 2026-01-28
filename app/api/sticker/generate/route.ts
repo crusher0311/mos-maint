@@ -48,9 +48,23 @@ const storage = new Storage({
   projectId: "",
 });
 
-async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
+async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: string): Promise<string | null> {
   try {
-    if (logoObjectPath) {
+    // First, try MongoDB shop_media collection (works on Render)
+    if (shopId) {
+      const db = await getDb();
+      const shopMedia = await db.collection("shop_media").findOne({ 
+        shopId, 
+        type: "logo" 
+      });
+      if (shopMedia?.dataUri) {
+        console.log("[Sticker Generate] Using logo from MongoDB shop_media");
+        return shopMedia.dataUri;
+      }
+    }
+    
+    // Try Replit Object Storage (only works on Replit, not Render)
+    if (logoObjectPath && !process.env.RENDER_EXTERNAL_URL) {
       const pathParts = logoObjectPath.split("/").filter(Boolean);
       if (pathParts.length >= 2) {
         const bucketName = pathParts[0];
@@ -68,6 +82,7 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Prom
       }
     }
     
+    // Fallback to URL fetch
     if (logoUrl && logoUrl.startsWith("http")) {
       const response = await fetch(logoUrl);
       if (response.ok) {
@@ -704,8 +719,8 @@ export async function POST(req: NextRequest) {
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
     let logoDataUrl: string | null = null;
-    if (config.logo || config.logoObjectPath) {
-      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath);
+    if (config.logo || config.logoObjectPath || shopId) {
+      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath, shopId);
     }
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
 
