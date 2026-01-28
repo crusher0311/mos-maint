@@ -73,16 +73,23 @@ function processNextItem() {
 
   activeRequests++;
   
-  fetch(`/api/plan-prefetch?vin=${encodeURIComponent(vin)}&mileage=${mileage}`, {
+  fetch(`/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}`, {
     method: "POST",
     credentials: "include",
   })
-    .then((res) => {
+    .then(async (res) => {
       if (res.ok) {
+        const data = await res.json();
         prefetchTimestamps.set(vin, Date.now());
         prefetchMileages.set(vin, mileage);
         PREFETCHED_VINS.add(vin);
-        console.log(`[Prefetch] Cached plan data for ${vin} at ${mileage} miles`);
+        if (data.built) {
+          console.log(`[Prefetch] Built full plan for ${vin} at ${mileage} miles in ${data.duration}ms`);
+        } else if (data.cached) {
+          console.log(`[Prefetch] Plan already cached for ${vin}`);
+        } else if (data.skipped) {
+          console.log(`[Prefetch] Skipped ${vin}: ${data.reason}`);
+        }
       }
     })
     .catch((err) => {
