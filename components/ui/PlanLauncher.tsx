@@ -21,6 +21,7 @@ interface Vehicle {
   displayVehicle: string;
   dviDone?: boolean;
   displayStatus?: string;
+  displayMileage?: number | string | null;
 }
 
 interface RecentPlan {
@@ -28,6 +29,7 @@ interface RecentPlan {
   customerName: string;
   vehicle: string;
   accessedAt: number;
+  mileage?: number | null;
 }
 
 const RECENT_PLANS_KEY = "mos-recent-plans";
@@ -69,6 +71,8 @@ export function PlanLauncher() {
 
         const vehiclesToPrefetch = vehicles.map((v: Vehicle) => ({
           vin: v.displayVin,
+          mileage: typeof v.displayMileage === 'number' ? v.displayMileage : 
+                   typeof v.displayMileage === 'string' ? parseInt(v.displayMileage.replace(/,/g, ''), 10) || null : null,
           inProgress: !v.dviDone,
         }));
         queueMultiplePrefetch(vehiclesToPrefetch, 10);
@@ -132,11 +136,15 @@ export function PlanLauncher() {
   }, [searchQuery, allVehicles]);
 
   const addToRecent = (vehicle: Vehicle) => {
+    const mileage = typeof vehicle.displayMileage === 'number' ? vehicle.displayMileage : 
+                   typeof vehicle.displayMileage === 'string' ? parseInt(vehicle.displayMileage.replace(/,/g, ''), 10) || null : null;
+    
     const newRecent: RecentPlan = {
       vin: vehicle.displayVin,
       customerName: vehicle.displayName || "Unknown Customer",
       vehicle: vehicle.displayVehicle || "Unknown Vehicle",
       accessedAt: Date.now(),
+      mileage,
     };
 
     const filtered = recentPlans.filter((p) => p.vin !== vehicle.displayVin);
@@ -165,9 +173,11 @@ export function PlanLauncher() {
     router.push(`/dashboard/vehicles/${vin}/plan`);
   };
 
-  const handleVehicleHover = (vin: string) => {
-    if (!isPrefetched(vin)) {
-      queuePrefetch(vin, "high");
+  const handleVehicleHover = (vehicle: Vehicle) => {
+    if (!isPrefetched(vehicle.displayVin)) {
+      const mileage = typeof vehicle.displayMileage === 'number' ? vehicle.displayMileage : 
+                     typeof vehicle.displayMileage === 'string' ? parseInt(vehicle.displayMileage.replace(/,/g, ''), 10) || null : null;
+      queuePrefetch(vehicle.displayVin, mileage, "high");
     }
   };
 
@@ -221,7 +231,7 @@ export function PlanLauncher() {
                   <button
                     key={vehicle.displayVin}
                     onClick={() => navigateToPlan(vehicle)}
-                    onMouseEnter={() => handleVehicleHover(vehicle.displayVin)}
+                    onMouseEnter={() => handleVehicleHover(vehicle)}
                     className="w-full flex items-start gap-3 p-2 rounded-lg hover:bg-blue-50 transition-colors text-left group"
                   >
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -258,7 +268,12 @@ export function PlanLauncher() {
                   <button
                     key={plan.vin}
                     onClick={() => navigateToPlan(plan)}
-                    onMouseEnter={() => handleVehicleHover(plan.vin)}
+                    onMouseEnter={() => handleVehicleHover({ 
+                      displayVin: plan.vin, 
+                      displayName: plan.customerName, 
+                      displayVehicle: plan.vehicle,
+                      displayMileage: plan.mileage 
+                    })}
                     className="w-full flex items-start gap-3 p-2 rounded-lg hover:bg-blue-50 transition-colors text-left group"
                   >
                     <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">

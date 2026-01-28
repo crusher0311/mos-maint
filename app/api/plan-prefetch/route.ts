@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
 
     const shopId = Number(session.shopId);
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
+    const mileageParam = req.nextUrl.searchParams.get("mileage");
+    const mileage = mileageParam ? parseInt(mileageParam, 10) : null;
     
     if (!vin || vin.length !== 17) {
       return NextResponse.json(
@@ -35,6 +37,16 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    
+    if (!mileage || mileage <= 0) {
+      console.log(`[Prefetch] Skipping ${vin} - no valid mileage provided`);
+      return NextResponse.json(
+        { ok: true, vin, skipped: true, reason: "No mileage provided" },
+        { status: 200 }
+      );
+    }
+    
+    console.log(`[Prefetch] Starting prefetch for ${vin} at ${mileage} miles`);
 
     const db = await getDb();
     const results: Record<string, string> = {};
@@ -181,7 +193,7 @@ export async function POST(req: NextRequest) {
     await Promise.allSettled(prefetchPromises);
 
     const duration = Date.now() - startTime;
-    console.log(`[Prefetch] VIN ${vin} completed in ${duration}ms:`, results);
+    console.log(`[Prefetch] VIN ${vin} at ${mileage} miles completed in ${duration}ms:`, results);
 
     return NextResponse.json({
       ok: true,
