@@ -702,7 +702,7 @@ export async function POST(req: NextRequest) {
 
     let logoDataUrl: string | null = null;
     if (config.logo || config.logoObjectPath || shopId) {
-      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath, shopId);
+      logoDataUrl = await fetchLogoAsBase64(config.logo || "", config.logoObjectPath, String(shopId));
     }
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
 
@@ -790,7 +790,7 @@ export async function POST(req: NextRequest) {
     if (designerLayout && designerLayout.elements) {
       // Debug: Log element details
       console.log(`[Generate API] Layout canvas: ${designerLayout.canvasWidth}x${designerLayout.canvasHeight}`);
-      designerLayout.elements.forEach(el => {
+      designerLayout.elements.forEach((el: DesignerElement) => {
         if (el.visible && el.type !== 'logo' && el.type !== 'qrCode') {
           console.log(`[Generate API] Element ${el.type}: fontSize=${el.fontSize}px, width=${el.width}px, height=${el.height}px`);
         }
