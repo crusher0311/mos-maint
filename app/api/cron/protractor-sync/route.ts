@@ -271,9 +271,10 @@ export async function GET(req: NextRequest) {
 
     // Fire-and-forget plan pre-generation for synced vehicles
     if (syncedVinsPerShop.length > 0 && CRON_SECRET) {
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : 'http://localhost:5000';
+      // Determine base URL for internal requests
+      const baseUrl = process.env.RENDER_EXTERNAL_URL 
+        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+        || `http://localhost:${process.env.PORT || 5000}`;
       
       for (const { shopId, vins } of syncedVinsPerShop) {
         fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
