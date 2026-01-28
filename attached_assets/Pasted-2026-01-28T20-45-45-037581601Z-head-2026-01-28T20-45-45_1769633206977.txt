@@ -1,0 +1,300 @@
+2026-01-28T20:45:45.037581601Z </head>
+2026-01-28T20:45:45.037583891Z <body>
+2026-01-28T20:45:45.037586101Z <div id="header"><h1>Server Error</h1></div>
+2026-01-28T20:45:45.037588421Z <div id="content">
+2026-01-28T20:45:45.037590602Z  <div class="content-container"><fieldset>
+2026-01-28T20:45:45.037592702Z   <h2>404 - File or directory not found.</h2>
+2026-01-28T20:45:45.037595411Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-28T20:45:45.037597582Z  </fieldset></div>
+2026-01-28T20:45:45.037599702Z </div>
+2026-01-28T20:45:45.037601822Z </body>
+2026-01-28T20:45:45.037603932Z </html>
+2026-01-28T20:45:45.037606232Z 
+2026-01-28T20:45:45.037609882Z [Protractor] Trying GET /ServicePackageTemplate/c8f3a84e-8f0d-44ae-a0af-a72838bea95f...
+2026-01-28T20:45:45.159815215Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-28T20:44:09.102Z)
+2026-01-28T20:45:45.180735162Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:45:45.180751102Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/Read/109bc5aa-bafa-4347-8774-35eb3d3687dc
+2026-01-28T20:45:45.180754502Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:45:45.180757592Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:45:45.239783918Z [Protractor] GET /ServicePackageTemplate/Read/109bc5aa-bafa-4347-8774-35eb3d3687dc: ok=false
+2026-01-28T20:45:45.239809739Z [Protractor] GET /ServicePackageTemplate/Read/109bc5aa-bafa-4347-8774-35eb3d3687dc error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-28T20:45:45.239813609Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-28T20:45:45.239816119Z <head>
+2026-01-28T20:45:45.239819229Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-28T20:45:45.239822459Z <title>404 - File or directory not found.</title>
+2026-01-28T20:45:45.239825169Z <style type="text/css">
+2026-01-28T20:45:45.239827349Z <!--
+2026-01-28T20:45:45.239830239Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-28T20:45:45.239832459Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-28T20:45:45.239834679Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-28T20:45:45.239836749Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-28T20:45:45.239839219Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-28T20:45:45.2398579Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-28T20:45:45.23986123Z background-color:#555555;}
+2026-01-28T20:45:45.23986341Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-28T20:45:45.23986559Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-28T20:45:45.23986778Z -->
+2026-01-28T20:45:45.23987001Z </style>
+2026-01-28T20:45:45.23987217Z </head>
+2026-01-28T20:45:45.23987437Z <body>
+2026-01-28T20:45:45.23987954Z <div id="header"><h1>Server Error</h1></div>
+2026-01-28T20:45:45.23988186Z <div id="content">
+2026-01-28T20:45:45.239884Z  <div class="content-container"><fieldset>
+2026-01-28T20:45:45.23988614Z   <h2>404 - File or directory not found.</h2>
+2026-01-28T20:45:45.23988826Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-28T20:45:45.23989041Z  </fieldset></div>
+2026-01-28T20:45:45.23989255Z </div>
+2026-01-28T20:45:45.23989467Z </body>
+2026-01-28T20:45:45.2398968Z </html>
+2026-01-28T20:45:45.23989877Z 
+2026-01-28T20:45:45.23991364Z [Protractor] Trying GET /ServicePackageTemplate/109bc5aa-bafa-4347-8774-35eb3d3687dc...
+2026-01-28T20:46:25.484191606Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:25.484194706Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:25.541871822Z [Protractor] GET /ServicePackageTemplate/34e752a6-a88a-44d8-96dd-39a221d5da3e: ok=true
+2026-01-28T20:46:25.541892063Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:25.685057413Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:25.685078934Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/f91e96f8-48ce-462b-b0ff-7dd0e67dbd40
+2026-01-28T20:46:25.685084124Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:25.685088604Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:25.767053056Z [Protractor] GET /ServicePackageTemplate/f91e96f8-48ce-462b-b0ff-7dd0e67dbd40: ok=true
+2026-01-28T20:46:25.767081647Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:25.885835939Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:25.88585908Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/3a8acff2-aa0b-4811-8b61-ca35bd4f38d7
+2026-01-28T20:46:25.88586949Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:25.88587276Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:25.993335397Z [Protractor] GET /ServicePackageTemplate/3a8acff2-aa0b-4811-8b61-ca35bd4f38d7: ok=true
+2026-01-28T20:46:25.993364277Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:26.085821234Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:26.085855475Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackage/DeferredWorks
+2026-01-28T20:46:26.085860545Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:26.085864055Z [Protractor Debug] ConnId hash: ef3e1ab6, Auth hash: 11db1e84
+2026-01-28T20:46:26.235254987Z [Plan Debug] Protractor service history entries: 0
+2026-01-28T20:46:26.235284327Z [Plan Debug] Total shop service history entries (Protractor + Tekmetric): 0
+2026-01-28T20:46:26.285644146Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:26.285678397Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/12fd2c9d-fc85-43df-a03d-1403f525f172
+2026-01-28T20:46:26.285683787Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:26.285688257Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:26.296681088Z [DataOne Cache] MISS for squish 1N6AD0ERKN, fetching from API...
+2026-01-28T20:46:26.346738523Z [Protractor] GET /ServicePackageTemplate/12fd2c9d-fc85-43df-a03d-1403f525f172: ok=true
+2026-01-28T20:46:26.346769823Z [Protractor] Got template detail with 3 lines
+2026-01-28T20:46:26.485945925Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:26.485981146Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/c8f3a84e-8f0d-44ae-a0af-a72838bea95f
+2026-01-28T20:46:26.485986066Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:26.485990376Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:26.550610254Z [Protractor] GET /ServicePackageTemplate/c8f3a84e-8f0d-44ae-a0af-a72838bea95f: ok=true
+2026-01-28T20:46:26.550630655Z [Protractor] Got template detail with 5 lines
+2026-01-28T20:46:26.686924515Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:26.687720566Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/109bc5aa-bafa-4347-8774-35eb3d3687dc
+2026-01-28T20:46:26.687736597Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:26.687740037Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:26.771217522Z [Protractor] GET /ServicePackageTemplate/109bc5aa-bafa-4347-8774-35eb3d3687dc: ok=true
+2026-01-28T20:46:26.771249252Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:26.885390707Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:26.885421167Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/239fe471-8e08-40d0-9f84-31c559ff6bac
+2026-01-28T20:46:26.885431758Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:26.885435198Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:26.947297785Z [Protractor] GET /ServicePackageTemplate/239fe471-8e08-40d0-9f84-31c559ff6bac: ok=true
+2026-01-28T20:46:26.947323266Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:27.086974915Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:27.087005925Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/1c6057d3-20a8-4357-97bf-116a19f20338
+2026-01-28T20:46:27.087009825Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:27.087012836Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:27.149802087Z [Protractor] GET /ServicePackageTemplate/1c6057d3-20a8-4357-97bf-116a19f20338: ok=true
+2026-01-28T20:46:27.149847127Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:27.285384256Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:27.285403377Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/26ebb8d4-d3ca-49cc-867e-c4aa6b3f31a9
+2026-01-28T20:46:27.285407127Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:27.285410417Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:27.368422555Z [Protractor] GET /ServicePackageTemplate/26ebb8d4-d3ca-49cc-867e-c4aa6b3f31a9: ok=true
+2026-01-28T20:46:27.368453285Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:26Z clientIP="65.184.50.72" requestID="c600aecb-7a5f-41fa" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:27Z clientIP="152.117.99.75" requestID="0002dfc0-64c7-48e5" responseTimeMS=714 responseBytes=3570 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:27.486024011Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:27.486051051Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/863991bf-c032-40ce-ba41-bfe0f5dec729
+2026-01-28T20:46:27.486054811Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:27.486058281Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:27.547024756Z [Protractor] GET /ServicePackageTemplate/863991bf-c032-40ce-ba41-bfe0f5dec729: ok=true
+2026-01-28T20:46:27.547047436Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:27.686219928Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:27.686247539Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/11237392-b9e1-409a-a8ac-cf4ece4f69a1
+2026-01-28T20:46:27.686251569Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:27.686255019Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:27.747310085Z [Protractor] GET /ServicePackageTemplate/11237392-b9e1-409a-a8ac-cf4ece4f69a1: ok=true
+2026-01-28T20:46:27.747340245Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:27.886541138Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:27.886568738Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/520527c6-410a-47eb-9d5e-544446c18ea3
+2026-01-28T20:46:27.886577738Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:27.886581838Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:27.972129534Z [Protractor] GET /ServicePackageTemplate/520527c6-410a-47eb-9d5e-544446c18ea3: ok=true
+2026-01-28T20:46:27.972160884Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:28.086502112Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:28.086533092Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/b6a39aa0-62d7-4dd7-af2b-c04ffb837864
+2026-01-28T20:46:28.086564713Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:28.086571543Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:28.185641777Z [Protractor] GET /ServicePackageTemplate/b6a39aa0-62d7-4dd7-af2b-c04ffb837864: ok=true
+2026-01-28T20:46:28.185794599Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:28.286498306Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:28.286526577Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/33cec54f-ff55-49c0-96b3-aa217a590d39
+2026-01-28T20:46:28.286529827Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:28.286533227Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:28.347781976Z [Protractor] GET /ServicePackageTemplate/33cec54f-ff55-49c0-96b3-aa217a590d39: ok=true
+2026-01-28T20:46:28.347891447Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:27Z clientIP="65.184.50.72" requestID="24c670e8-4979-45fe" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:27Z clientIP="72.198.61.82" requestID="154afc23-7162-4ddf" responseTimeMS=180 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-28T20:46:28Z clientIP="65.184.50.72" requestID="ff930b1d-afa2-492b" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:28.486276688Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:28.486311369Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/d87c51e5-2460-4cb3-8627-0af9d878a51c
+2026-01-28T20:46:28.486329839Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:28.486333929Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:28.554675812Z [Protractor] GET /ServicePackageTemplate/d87c51e5-2460-4cb3-8627-0af9d878a51c: ok=true
+2026-01-28T20:46:28.554723222Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:28.686195752Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:28.686224562Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/44960fdb-ac07-4baf-84e1-423e1afe9dae
+2026-01-28T20:46:28.686228092Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:28.686231752Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:28.747048585Z [Protractor] GET /ServicePackageTemplate/44960fdb-ac07-4baf-84e1-423e1afe9dae: ok=true
+2026-01-28T20:46:28.747080275Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:28.886554562Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:28.886578372Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/e04b9511-4b5d-4462-a2f0-cf0885999492
+2026-01-28T20:46:28.886581612Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:28.886584542Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:28.96750017Z [Protractor] GET /ServicePackageTemplate/e04b9511-4b5d-4462-a2f0-cf0885999492: ok=true
+2026-01-28T20:46:28.96753616Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:29.087016463Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:29.087049314Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/b3a7edb5-7e81-4e64-8216-3ec1edea73a0
+2026-01-28T20:46:29.087067204Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:29.087070824Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:29.16179091Z [Protractor] GET /ServicePackageTemplate/b3a7edb5-7e81-4e64-8216-3ec1edea73a0: ok=true
+2026-01-28T20:46:29.161832731Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:29.286160815Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:29.286186646Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/ba4faaec-55cb-4e44-9ed5-f9a61ea834f4
+2026-01-28T20:46:29.286192416Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:29.286197336Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:29.345990333Z [Protractor] GET /ServicePackageTemplate/ba4faaec-55cb-4e44-9ed5-f9a61ea834f4: ok=true
+2026-01-28T20:46:29.346022914Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:29.486569556Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:29.486607457Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/faecd317-60e6-4583-9bf3-b53bef7ba7cf
+2026-01-28T20:46:29.486612397Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:29.486616967Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:28Z clientIP="72.198.61.82" requestID="4aa8d4f6-76be-4cf6" responseTimeMS=179 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-28T20:46:29.54817217Z [Protractor] GET /ServicePackageTemplate/faecd317-60e6-4583-9bf3-b53bef7ba7cf: ok=true
+2026-01-28T20:46:29.54820352Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:29.687040638Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:29.687120559Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/61e042dd-3d86-4062-b6b8-5d8a6e347eef
+2026-01-28T20:46:29.687126169Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:29.687130429Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:29.744302718Z [Protractor] GET /ServicePackageTemplate/61e042dd-3d86-4062-b6b8-5d8a6e347eef: ok=true
+2026-01-28T20:46:29.744338549Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:29.886989522Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:29.887013152Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/7a5fc740-cebb-498e-b5eb-97d6a1394f62
+2026-01-28T20:46:29.887026203Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:29.887029623Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:29.948030607Z [Protractor] GET /ServicePackageTemplate/7a5fc740-cebb-498e-b5eb-97d6a1394f62: ok=true
+2026-01-28T20:46:29.948053698Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:30.086217315Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:30.086238566Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/581bedbc-d71f-4128-b731-6381ec56e11a
+2026-01-28T20:46:30.086242156Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:30.086244926Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:29Z clientIP="65.184.50.72" requestID="77bfd4ac-de59-4d22" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:30.165135443Z [Protractor] GET /ServicePackageTemplate/581bedbc-d71f-4128-b731-6381ec56e11a: ok=true
+2026-01-28T20:46:30.165159994Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:30.286772828Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:30.286811489Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/71139c0e-4c12-49b1-8571-1a7bf5d97956
+2026-01-28T20:46:30.286816099Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:30.286819229Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:30.354164007Z [Protractor] GET /ServicePackageTemplate/71139c0e-4c12-49b1-8571-1a7bf5d97956: ok=true
+2026-01-28T20:46:30.354185267Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:30.487783258Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:30.487804488Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/9f182016-5c0f-4df5-970c-d288e77cd608
+2026-01-28T20:46:30.487808618Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:30.487812408Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:30.548799253Z [Protractor] GET /ServicePackageTemplate/9f182016-5c0f-4df5-970c-d288e77cd608: ok=true
+2026-01-28T20:46:30.548815693Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:30.68763001Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:30.687657211Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/1039b5bb-c674-4b63-ac1c-88dbb60db7b5
+2026-01-28T20:46:30.687661551Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:30.687664751Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:30Z clientIP="65.184.50.72" requestID="3fc8fcfd-d88c-4d7f" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:30.750154898Z [Protractor] GET /ServicePackageTemplate/1039b5bb-c674-4b63-ac1c-88dbb60db7b5: ok=true
+2026-01-28T20:46:30.750187878Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:30.887660486Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:30.887721767Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/9f13e735-8214-4437-afc6-476bae00d963
+2026-01-28T20:46:30.887728436Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:30.887731567Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:30.948021851Z [Protractor] GET /ServicePackageTemplate/9f13e735-8214-4437-afc6-476bae00d963: ok=true
+2026-01-28T20:46:30.948044661Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:31.087852983Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:31.087871533Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/d4245d21-463d-4ba9-966f-e921eaee7f15
+2026-01-28T20:46:31.087875763Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:31.087885253Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:31.151053571Z [Protractor] GET /ServicePackageTemplate/d4245d21-463d-4ba9-966f-e921eaee7f15: ok=true
+2026-01-28T20:46:31.151084211Z [Protractor] Got template detail with 4 lines
+2026-01-28T20:46:31.289282749Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:31.289311309Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/fa0c673d-6b94-4bc6-afbd-d2468fb4f5e6
+2026-01-28T20:46:31.289315199Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:31.289318639Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:31.349055966Z [Protractor] GET /ServicePackageTemplate/fa0c673d-6b94-4bc6-afbd-d2468fb4f5e6: ok=true
+2026-01-28T20:46:31.349080636Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:31.487911674Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:31.487942024Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/43d27714-3862-419e-a8c3-6707475d5c40
+2026-01-28T20:46:31.487946054Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:31.487949274Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:31.559657526Z [Protractor] GET /ServicePackageTemplate/43d27714-3862-419e-a8c3-6707475d5c40: ok=true
+2026-01-28T20:46:31.559679047Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:31.688207713Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:31.688230153Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/8a4970f5-b8d4-425f-9a89-ee82be46acc3
+2026-01-28T20:46:31.688249983Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:31.688256923Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:31.74664895Z [Protractor] GET /ServicePackageTemplate/8a4970f5-b8d4-425f-9a89-ee82be46acc3: ok=true
+2026-01-28T20:46:31.746681531Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:31.88841718Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:31.888445931Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/4a8eb594-64f1-4eb0-87d7-5d233b915a42
+2026-01-28T20:46:31.888458651Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:31.888462431Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:31.948316559Z [Protractor] GET /ServicePackageTemplate/4a8eb594-64f1-4eb0-87d7-5d233b915a42: ok=true
+2026-01-28T20:46:31.94834719Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:32.088500516Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:32.088528677Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/fc500ac2-4da5-4b12-a73b-d98b571ab498
+2026-01-28T20:46:32.088550997Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:32.088554577Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:32.148377925Z [Protractor] GET /ServicePackageTemplate/fc500ac2-4da5-4b12-a73b-d98b571ab498: ok=true
+2026-01-28T20:46:32.148406065Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:32.288182766Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:32.288208067Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/b7f1e191-e257-47b3-9914-868c9209a613
+2026-01-28T20:46:32.288220037Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:32.288223357Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:32.348938038Z [Protractor] GET /ServicePackageTemplate/b7f1e191-e257-47b3-9914-868c9209a613: ok=true
+2026-01-28T20:46:32.348965388Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:32.489082504Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:32.489120885Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/4e577801-c4f4-4261-8304-fb0cd3450211
+2026-01-28T20:46:32.489128495Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:32.489243037Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:31Z clientIP="65.184.50.72" requestID="289cbaee-0681-45f9" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:32.650519113Z [Protractor] GET /ServicePackageTemplate/4e577801-c4f4-4261-8304-fb0cd3450211: ok=true
+2026-01-28T20:46:32.650544334Z [Protractor] Got template detail with 2 lines
+2026-01-28T20:46:32.689393404Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:32.689420114Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/ebdc9333-ac42-4360-982e-8ab3ca2f1cf4
+2026-01-28T20:46:32.689424874Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:32.689428944Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T20:46:32.77910846Z [Protractor] GET /ServicePackageTemplate/ebdc9333-ac42-4360-982e-8ab3ca2f1cf4: ok=true
+2026-01-28T20:46:32.77913817Z [Protractor] Got template detail with 1 lines
+2026-01-28T20:46:32.889378948Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:32.889411659Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/d5ab36d8-ccdb-41cb-8385-63e1f3236435
+2026-01-28T20:46:32.889414519Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:32.889417869Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-28T20:46:33.089216551Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:33.089241451Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/6c3e7b0a-0329-43d9-9fe1-e066799fe308
+2026-01-28T20:46:33.089244451Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:33.089247291Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-28T20:46:33.289215505Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:33.289259096Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/65e6766e-1a92-422b-a1d2-7b07090f4a1f
+2026-01-28T20:46:33.289292896Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:33.289297276Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-28T20:46:32Z clientIP="65.184.50.72" requestID="ef21d939-6d3c-4ebc" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:33.49057577Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T20:46:33.490663781Z [Protractor Debug] GET /IntegrationServices/2.0/ServicePackageTemplate/02229d9a-1874-4745-a2f3-27ca7e44debf
+2026-01-28T20:46:33.492096172Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T20:46:33.492112812Z [Protractor Debug] ConnId hash: bdb21784, Auth hash: 3731ac27
+2026-01-28T20:46:33Z clientIP="65.184.50.72" requestID="30f28e9b-f98f-4fb8" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T20:46:33.5669323Z [Protractor] GET /ServicePackageTemplate/02229d9a-1874-4745-a2f3-27ca7e44debf: ok=true
+2026-01-28T20:46:33.566971101Z [Protractor] Got template detail with 2 lines
