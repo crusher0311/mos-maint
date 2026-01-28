@@ -797,6 +797,11 @@ export async function POST(req: NextRequest) {
     // Render at canvas size, then scale up the image for pixel-perfect matching
     const scaleUp = outputWidth / renderWidth;
     
+    console.log("[Sticker Generate] Rendering with dimensions:", { renderWidth, renderHeight, outputWidth, outputHeight, scaleUp });
+    console.log("[Sticker Generate] HTML length:", html.length);
+    console.log("[Sticker Generate] HTML contains #sticker-canvas:", html.includes('id="sticker-canvas"'));
+    console.log("[Sticker Generate] CHROMIUM_PATH:", process.env.CHROMIUM_PATH || "not set");
+    
     const image = await nodeHtmlToImage({
       html,
       type: "png",
