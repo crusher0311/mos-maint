@@ -1,30 +1,99 @@
 import { Db } from "mongodb";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
+const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
+
+export interface TriagedItemCache {
+  key: string;
+  serviceKey: string;
+  title: string;
+  category?: string;
+  intervalMiles?: number | null;
+  intervalMonths?: number | null;
+  last?: { miles?: number | null; date?: string | null; source?: string };
+  dueAtMiles?: number | null;
+  dueAtDate?: string | null;
+  milesToGo?: number | null;
+  daysToGo?: number | null;
+  bump?: "red" | "yellow" | null;
+  source?: "oem" | "dvi" | "protractor";
+  dviSource?: "autoflow" | "autovitals";
+  reason?: string;
+  usingShopInterval?: boolean;
+  protractorDeferredId?: string;
+  matchedDeferred?: { id: string; title: string };
+}
+
+export interface CachedPlanData {
+  buckets: {
+    overdue: TriagedItemCache[];
+    dueSoon: TriagedItemCache[];
+    upcoming: TriagedItemCache[];
+  };
+  vehicle: {
+    year?: number | null;
+    make?: string | null;
+    model?: string | null;
+    engine?: string | null;
+  };
+  currentMiles: number | null;
+  mpdBlended: number | null;
+  customerName: string | null;
+  latestRoNumber: string | null;
+  distanceUnit: "miles" | "kilometers";
+  soonMiles: number;
+  soonDays: number;
+  showInspectItems: boolean;
+}
 
 export interface CachedPlan {
   vin: string;
   shopId: number;
-  plan: any;
+  mileage: number | null;
+  plan: CachedPlanData;
   createdAt: Date;
   expiresAt: Date;
 }
 
-export async function getCachedPlan(db: Db, vin: string, shopId: number): Promise<CachedPlan | null> {
+export async function getCachedPlan(
+  db: Db, 
+  vin: string, 
+  shopId: number, 
+  currentMiles?: number | null
+): Promise<CachedPlan | null> {
   const cached = await db.collection("cached_plans").findOne({
     vin: vin.toUpperCase(),
     shopId,
     expiresAt: { $gt: new Date() },
-  });
-  return cached as CachedPlan | null;
+  }) as CachedPlan | null;
+  
+  if (!cached) return null;
+  
+  // If mileage provided, check if cache is still valid (within tolerance)
+  if (currentMiles != null && cached.mileage != null) {
+    const mileageDiff = Math.abs(currentMiles - cached.mileage);
+    if (mileageDiff > MILEAGE_TOLERANCE) {
+      console.log(`[PlanCache] Cache stale: mileage changed ${cached.mileage} -> ${currentMiles} (diff: ${mileageDiff})`);
+      return null;
+    }
+  }
+  
+  return cached;
 }
 
-export async function setCachedPlan(db: Db, vin: string, shopId: number, plan: any): Promise<void> {
+export async function setCachedPlan(
+  db: Db, 
+  vin: string, 
+  shopId: number, 
+  mileage: number | null,
+  plan: CachedPlanData
+): Promise<void> {
   const now = new Date();
   await db.collection("cached_plans").updateOne(
     { vin: vin.toUpperCase(), shopId },
     {
       $set: {
+        mileage,
         plan,
         createdAt: now,
         expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
@@ -32,6 +101,7 @@ export async function setCachedPlan(db: Db, vin: string, shopId: number, plan: a
     },
     { upsert: true }
   );
+  console.log(`[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL 4h`);
 }
 
 export async function invalidateCachedPlan(db: Db, vin: string, shopId: number): Promise<void> {

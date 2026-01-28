@@ -27,7 +27,7 @@ import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
-import { getCachedPlan, setCachedPlan } from "@/lib/plan-cache";
+import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
 import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
@@ -829,19 +829,21 @@ function triage({
 }
 
 /* ---------------- Page ---------------- */
-type PageProps = { params: Promise<{ vin: string }> };
+type PageProps = { params: Promise<{ vin: string }>; searchParams?: Promise<{ refresh?: string }> };
 
-export default function VehiclePlanPage({ params }: PageProps) {
+export default function VehiclePlanPage({ params, searchParams }: PageProps) {
   return (
     <Suspense fallback={<PlanLoading />}>
-      <PlanContent params={params} />
+      <PlanContent params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function PlanContent({ params }: PageProps) {
+async function PlanContent({ params, searchParams }: PageProps) {
   const session = await requireSession();
   const db = await getDb();
+  const resolvedSearchParams = await searchParams;
+  const forceRefresh = resolvedSearchParams?.refresh === "1";
   const shopId = Number(session.shopId);
 
   const { vin: vinParam } = await params;
@@ -897,6 +899,17 @@ async function PlanContent({ params }: PageProps) {
     { shopId, vin },
     { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1 } }
   );
+
+  // Early mileage check and cache lookup (skip cache if force refresh)
+  const earlyMiles = await getLatestMilesForVin(db, vin);
+  const cachedPlan = forceRefresh ? null : await getCachedPlan(db, vin, shopId, earlyMiles);
+  const useCachedData = cachedPlan !== null;
+  
+  if (useCachedData) {
+    console.log(`[Plan] Cache HIT for ${vin} - will use cached buckets`);
+  } else {
+    console.log(`[Plan] Cache MISS for ${vin}${forceRefresh ? " (force refresh)" : ""} - building from sources`);
+  }
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
   // This matches the detail page logic exactly
@@ -1065,51 +1078,93 @@ async function PlanContent({ params }: PageProps) {
   
   console.log(`[Plan Debug] Latest RO number: ${latestRoNumber}, total ROs: ${ros.length}, sources checked: Protractor/Tekmetric/AutoFlow`);
 
-  // PARALLEL CONFIG RESOLUTION - fetch all configs at once
+  // PARALLEL CONFIG RESOLUTION AND LOCAL DATA - always needed for rendering
   const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
   const CARFAX_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days  
   const PROTRACTOR_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
-
-  const [autoCfg, carfaxCfg, protractorCfg, autoVitalsCfg] = await Promise.all([
-    resolveAutoflowConfig(shopId),
-    resolveCarfaxConfig(shopId),
-    resolveProtractorConfig(shopId),
-    resolveAutoVitalsConfig(shopId)
-  ]);
-
-  // PARALLEL DATA FETCHING - fetch external data and local queries simultaneously
   const vinUpper = vin.toUpperCase();
-  const [dvi, carfax, protractorVehicleResult, avInspectionResult, protractorCompletedWOs, tekmetricCompletedWOs, shopBranding] = await Promise.all([
-    latestRoNumber && autoCfg.configured
-      ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
-      : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
-    carfaxCfg.configured
-      ? fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL)
-      : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
-    protractorCfg.configured
-      ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL)
-      : Promise.resolve({ ok: false } as { ok: false }),
-    autoVitalsCfg.configured
-      ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL)
-      : Promise.resolve({ ok: false } as { ok: false }),
-    db.collection("protractor_work_orders").find({
-      shopId,
-      $or: [
-        { vin: vinUpper },
-        { "data.VIN": vinUpper },
-        { "ServiceItem.VIN": vinUpper }
-      ]
-    }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
-    db.collection("tekmetric_work_orders").find({
-      shopId: Number(shopId),
-      vin: vinUpper
-    }).sort({ completedDate: -1 }).limit(50).toArray(),
-    db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
-  ]);
 
-  // Protractor Deferred Work (depends on vehicle ID from previous call)
+  // Declare variables for API results - will be populated conditionally
+  let dvi: any = { ok: false };
+  let carfax: any = { ok: false };
+  let protractorVehicleResult: any = { ok: false };
+  let avInspectionResult: any = { ok: false };
+  let protractorCompletedWOs: any[] = [];
+  let tekmetricCompletedWOs: any[] = [];
+  let shopBranding: any = null;
+  let autoCfg: any = { configured: false };
+  let carfaxCfg: any = { configured: false };
+  let protractorCfg: any = { configured: false };
+  let autoVitalsCfg: any = { configured: false };
+
+  // CACHE HIT: Only fetch cheap local data needed for UI (shop branding, config status)
+  if (useCachedData) {
+    console.log(`[Plan] Cache HIT - skipping expensive external API calls`);
+    const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg, localShopBranding] = await Promise.all([
+      resolveAutoflowConfig(shopId),
+      resolveCarfaxConfig(shopId),
+      resolveProtractorConfig(shopId),
+      resolveAutoVitalsConfig(shopId),
+      db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
+    ]);
+    autoCfg = localAutoCfg;
+    carfaxCfg = localCarfaxCfg;
+    protractorCfg = localProtractorCfg;
+    autoVitalsCfg = localAutoVitalsCfg;
+    shopBranding = localShopBranding;
+  } else {
+    // CACHE MISS: Full parallel data fetching - external APIs + local queries
+    console.log(`[Plan] Cache MISS - fetching all external data`);
+    const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg] = await Promise.all([
+      resolveAutoflowConfig(shopId),
+      resolveCarfaxConfig(shopId),
+      resolveProtractorConfig(shopId),
+      resolveAutoVitalsConfig(shopId)
+    ]);
+    autoCfg = localAutoCfg;
+    carfaxCfg = localCarfaxCfg;
+    protractorCfg = localProtractorCfg;
+    autoVitalsCfg = localAutoVitalsCfg;
+
+    const [localDvi, localCarfax, localProtractorVehicleResult, localAvInspectionResult, localProtractorCompletedWOs, localTekmetricCompletedWOs, localShopBranding] = await Promise.all([
+      latestRoNumber && autoCfg.configured
+        ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
+        : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
+      carfaxCfg.configured
+        ? fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL)
+        : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
+      protractorCfg.configured
+        ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL)
+        : Promise.resolve({ ok: false } as { ok: false }),
+      autoVitalsCfg.configured
+        ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL)
+        : Promise.resolve({ ok: false } as { ok: false }),
+      db.collection("protractor_work_orders").find({
+        shopId,
+        $or: [
+          { vin: vinUpper },
+          { "data.VIN": vinUpper },
+          { "ServiceItem.VIN": vinUpper }
+        ]
+      }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
+      db.collection("tekmetric_work_orders").find({
+        shopId: Number(shopId),
+        vin: vinUpper
+      }).sort({ completedDate: -1 }).limit(50).toArray(),
+      db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
+    ]);
+    dvi = localDvi;
+    carfax = localCarfax;
+    protractorVehicleResult = localProtractorVehicleResult;
+    avInspectionResult = localAvInspectionResult;
+    protractorCompletedWOs = localProtractorCompletedWOs;
+    tekmetricCompletedWOs = localTekmetricCompletedWOs;
+    shopBranding = localShopBranding;
+  }
+
+  // Protractor Deferred Work (depends on vehicle ID from previous call) - skip on cache hit
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
-  if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
+  if (!useCachedData && protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
     const deferredResult = await fetchProtractorDeferredWork(
       shopId,
       vin,
@@ -1121,8 +1176,9 @@ async function PlanContent({ params }: PageProps) {
     }
   }
 
-  // Extract service history from Protractor completed work orders
+  // Extract service history from completed work orders - only on cache miss
   const shopServiceHistory: ShopServiceHistory[] = [];
+  if (!useCachedData) {
   for (const wo of protractorCompletedWOs) {
     const mileage = wo.Odometer ?? wo.OutUsage ?? wo.data?.Odometer ?? null;
     const dateStr = wo.Header?.LastModifiedTime ?? wo.Header?.CreationTime ?? wo.data?.Header?.LastModifiedTime ?? null;
@@ -1159,12 +1215,13 @@ async function PlanContent({ params }: PageProps) {
     }
   }
   console.log(`[Plan Debug] Total shop service history entries (Protractor + Tekmetric): ${shopServiceHistory.length}`);
+  }
 
   const shopLogo: string | null = shopBranding?.branding?.logo || null;
 
-  // Miles/day (same “today miles” guard as detail page)
-  let mpdBlended: number | null = null;
-  if ((carfax as any).ok && Array.isArray((carfax as any).serviceRecords)) {
+  // Miles/day - use cached value on cache hit, calculate on cache miss
+  let mpdBlended: number | null = useCachedData ? (cachedPlan?.plan?.mpdBlended ?? null) : null;
+  if (!useCachedData && (carfax as any).ok && Array.isArray((carfax as any).serviceRecords)) {
     const recs = (carfax as any).serviceRecords
       .map((r: any) => ({ date: parseCarfaxDate(r?.date ?? null), miles: typeof r?.odometer === "number" ? r.odometer : null }))
       .filter((r: any) => r.date && typeof r.miles === "number") as { date: Date; miles: number }[];
@@ -1190,18 +1247,30 @@ async function PlanContent({ params }: PageProps) {
     mpdBlended = fromToday != null && fromTwo != null ? (fromToday + fromTwo) / 2 : fromTwo ?? fromToday ?? null;
   }
 
-  // PARALLEL: Get current miles and OEM schedule at the same time
-  const [currentMiles, oemData] = await Promise.all([
-    getLatestMilesForVin(db, vin),
-    getMaintenanceScheduleCached(vin)
-  ]);
-  console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
+  // Get current miles and OEM schedule - skip OEM fetch on cache hit
+  let currentMiles: number | null;
+  let oemData: any = { source: 'cache', count: 0, items: [], vehicle: null };
+  
+  if (useCachedData) {
+    // On cache hit, use cached current miles (already validated in cache lookup)
+    currentMiles = cachedPlan?.plan?.currentMiles ?? null;
+    console.log(`[Plan] Using cached currentMiles: ${currentMiles}`);
+  } else {
+    // On cache miss, fetch both current miles and OEM schedule
+    const [fetchedMiles, fetchedOemData] = await Promise.all([
+      getLatestMilesForVin(db, vin),
+      getMaintenanceScheduleCached(vin)
+    ]);
+    currentMiles = fetchedMiles;
+    oemData = fetchedOemData;
+    console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
+  }
 
-  // Vehicle info fallback: prefer vehicles collection, fall back to VIN decode from OEM
-  const vehicleYear = vehicle?.year ?? oemData.vehicle?.year;
-  const vehicleMake = vehicle?.make ?? oemData.vehicle?.make;
-  const vehicleModel = vehicle?.model ?? oemData.vehicle?.model;
-  const vehicleEngine = oemData.vehicle?.engine; // Only from VIN decode
+  // Vehicle info fallback: prefer vehicles collection, fall back to VIN decode from OEM (or cached values)
+  const vehicleYear = useCachedData ? cachedPlan?.plan?.vehicle?.year : (vehicle?.year ?? oemData.vehicle?.year);
+  const vehicleMake = useCachedData ? cachedPlan?.plan?.vehicle?.make : (vehicle?.make ?? oemData.vehicle?.make);
+  const vehicleModel = useCachedData ? cachedPlan?.plan?.vehicle?.model : (vehicle?.model ?? oemData.vehicle?.model);
+  const vehicleEngine = useCachedData ? cachedPlan?.plan?.vehicle?.engine : oemData.vehicle?.engine;
 
   // Build normalized inputs
 
@@ -1275,35 +1344,59 @@ async function PlanContent({ params }: PageProps) {
     declinedAt: d.declinedAt,
   }));
 
-  const rawBuckets = triage({
-    oemItems,
-    carfaxRecords,
-    shopServiceHistory,
-    currentMiles,
-    dviFindings,
-    protractorDeferredWork,
-    declinedServices,
-    soonMiles,
-    soonDays,
-    milesPerDay: mpdBlended,
-    shopIntervals,
-    vehicleYear: vehicle?.year ?? null,
-  });
-
   // Filter out "Inspect" or "Check" items if preference is off
   const isInspectItemFilter = (item: TriagedItem) => {
     const title = item.title?.toLowerCase() || "";
     return title.includes("inspect") || title.startsWith("check ");
   };
-  
-  const buckets = showInspectItems ? rawBuckets : {
-    overdue: rawBuckets.overdue.filter(i => !isInspectItemFilter(i)),
-    dueSoon: rawBuckets.dueSoon.filter(i => !isInspectItemFilter(i)),
-    upcoming: rawBuckets.upcoming.filter(i => !isInspectItemFilter(i)),
-  };
 
-  console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
-  console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
+  // Use cached buckets if available, otherwise build from triage
+  let buckets: Buckets;
+  if (useCachedData && cachedPlan) {
+    console.log(`[Plan] Using cached buckets for ${vin}`);
+    const cached = cachedPlan.plan;
+    
+    // Convert cached items back to TriagedItem format (dates stored as ISO strings)
+    const convertCacheItem = (item: TriagedItemCache): TriagedItem => ({
+      ...item,
+      last: item.last ? {
+        miles: item.last.miles,
+        date: item.last.date ? new Date(item.last.date) : null,
+        source: item.last.source as "carfax" | "protractor" | "shop" | undefined,
+      } : undefined,
+      dueAtDate: item.dueAtDate ? new Date(item.dueAtDate) : null,
+    });
+    
+    buckets = {
+      overdue: cached.buckets.overdue.map(convertCacheItem),
+      dueSoon: cached.buckets.dueSoon.map(convertCacheItem),
+      upcoming: cached.buckets.upcoming.map(convertCacheItem),
+    };
+  } else {
+    const rawBuckets = triage({
+      oemItems,
+      carfaxRecords,
+      shopServiceHistory,
+      currentMiles,
+      dviFindings,
+      protractorDeferredWork,
+      declinedServices,
+      soonMiles,
+      soonDays,
+      milesPerDay: mpdBlended,
+      shopIntervals,
+      vehicleYear: vehicle?.year ?? null,
+    });
+
+    buckets = showInspectItems ? rawBuckets : {
+      overdue: rawBuckets.overdue.filter(i => !isInspectItemFilter(i)),
+      dueSoon: rawBuckets.dueSoon.filter(i => !isInspectItemFilter(i)),
+      upcoming: rawBuckets.upcoming.filter(i => !isInspectItemFilter(i)),
+    };
+
+    console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
+    console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
+  }
 
   // Separate overdue items into non-deferred and deferred
   const overdueNonDeferred = buckets.overdue.filter(t => t.source !== "protractor");
@@ -1315,6 +1408,60 @@ async function PlanContent({ params }: PageProps) {
     soon: buckets.dueSoon.length,
     upcoming: buckets.upcoming.length,
   };
+
+  // Cache the assembled plan for future requests (non-blocking)
+  if (!useCachedData && currentMiles != null) {
+    const cacheItem = (item: TriagedItem): TriagedItemCache => ({
+      key: item.key,
+      serviceKey: item.serviceKey,
+      title: item.title,
+      category: item.category,
+      intervalMiles: item.intervalMiles,
+      intervalMonths: item.intervalMonths,
+      last: item.last ? {
+        miles: item.last.miles,
+        date: item.last.date?.toISOString() ?? null,
+        source: item.last.source,
+      } : undefined,
+      dueAtMiles: item.dueAtMiles,
+      dueAtDate: item.dueAtDate?.toISOString() ?? null,
+      milesToGo: item.milesToGo,
+      daysToGo: item.daysToGo,
+      bump: item.bump,
+      source: item.source,
+      dviSource: item.dviSource,
+      reason: item.reason,
+      usingShopInterval: item.usingShopInterval,
+      protractorDeferredId: item.protractorDeferredId,
+      matchedDeferred: item.matchedDeferred,
+    });
+    
+    const planData: CachedPlanData = {
+      buckets: {
+        overdue: buckets.overdue.map(cacheItem),
+        dueSoon: buckets.dueSoon.map(cacheItem),
+        upcoming: buckets.upcoming.map(cacheItem),
+      },
+      vehicle: {
+        year: vehicleYear ?? null,
+        make: vehicleMake ?? null,
+        model: vehicleModel ?? null,
+        engine: vehicleEngine ?? null,
+      },
+      currentMiles,
+      mpdBlended,
+      customerName,
+      latestRoNumber,
+      distanceUnit,
+      soonMiles,
+      soonDays,
+      showInspectItems,
+    };
+    
+    setCachedPlan(db, vin, shopId, currentMiles, planData).catch(err => {
+      console.error(`[Plan] Failed to cache plan for ${vin}:`, err);
+    });
+  }
 
   return (
     <PlanTrialGate vin={vin}>

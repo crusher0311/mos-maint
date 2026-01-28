@@ -127,13 +127,16 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 ## Recent Changes
 
 **January 28, 2026:**
+- Implemented full plan caching in `lib/plan-cache.ts` - caches assembled plan buckets (overdue, dueSoon, upcoming) for instant subsequent loads
+- Plan cache includes mileage tolerance (500 miles) - cache invalidated if mileage changes significantly
+- Added cache hit path in plan page that returns immediately with cached data, skipping all expensive API calls
+- Cache miss path builds plan from sources (DataOne, Carfax, Protractor, AutoFlow, AutoVitals) and stores to cache
+- Cached plan data includes: buckets, vehicle info, currentMiles, mpdBlended, customerName, latestRoNumber, distanceUnit, soonMiles, soonDays
 - Created centralized `lib/plan-builder.ts` for plan data prefetching with unified cache management
 - Refactored prefetch API to use plan builder, reducing code duplication and improving maintainability
 - Prefetch system now caches to `plan_prefetch_cache` MongoDB collection with 4-hour TTL
 - Added `isPlanPrefetched()` check to skip redundant prefetch calls for already-cached plans
 - Enhanced plan prefetch system to require mileage - skips prefetch for vehicles without mileage (maintenance plans are mileage-dependent)
-- Added auto-refresh mechanism that re-triggers prefetch 15 minutes before 4-hour TTL expires
-- Updated prefetch API to accept and log mileage parameter for better debugging
 
 **January 27, 2026:**
 - Added `shop_media` MongoDB collection for storing logos and QR codes
