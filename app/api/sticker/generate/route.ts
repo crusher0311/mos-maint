@@ -869,8 +869,6 @@ export async function POST(req: NextRequest) {
       );
       console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
     }
-
-    const imageBuffer = image as Buffer;
     return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         "Content-Type": "image/png",

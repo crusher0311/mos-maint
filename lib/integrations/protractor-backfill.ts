@@ -355,7 +355,17 @@ async function backfillShopChunk(
           workOrderId: entry.workOrderId, 
           servicePackageId: entry.servicePackageId 
         },
-        update: { $set: { ...entry, contentHash, sourceSystem:
+        update: { $set: { ...entry, contentHash, sourceSystem: "protractor" } },
+        upsert: true
+      }
+    });
+  }
+
+  if (bulkOps.length > 0) {
+    const bulkResult = await db.collection("job_index").bulkWrite(bulkOps, { ordered: false });
+    jobsIndexed = bulkResult.upsertedCount + bulkResult.modifiedCount;
+    console.log(`[Backfill] Shop ${shopId}: Bulk wrote ${jobsIndexed} jobs (${bulkResult.upsertedCount} new, ${bulkResult.modifiedCount} updated, ${skippedUnchanged} skipped)`);
+  }
 
   let normalizedCount = 0;
   try {
