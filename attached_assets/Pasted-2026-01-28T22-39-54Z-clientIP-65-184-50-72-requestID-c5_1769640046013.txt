@@ -1,0 +1,125 @@
+2026-01-28T22:39:54Z clientIP="65.184.50.72" requestID="c518572b-606f-44c8" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T22:39:56Z clientIP="65.184.50.72" requestID="3b13950e-4ff5-4596" responseTimeMS=66 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T22:39:56.042258646Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/0df5b7f2-7f99-4067-baac-b050210763b8
+2026-01-28T22:39:56.042262106Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:56.042265466Z [Protractor Debug] ConnId hash: ef3e1ab6, Auth hash: 11db1e84
+2026-01-28T22:39:56.242811071Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:56.242852222Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/35a242f7-1020-4aa7-9319-c59e94283dc5
+2026-01-28T22:39:56.242859582Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:56.242862942Z [Protractor Debug] ConnId hash: 004a6a27, Auth hash: b6f58dad
+2026-01-28T22:39:56.442538866Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:56.442559227Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/3e57e398-cf35-4518-aeac-045b8ec0174e
+2026-01-28T22:39:56.442565537Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:56.442567927Z [Protractor Debug] ConnId hash: 004a6a27, Auth hash: b6f58dad
+2026-01-28T22:39:56.643177183Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:56.643200934Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/c3f4382c-1c5c-48e2-9317-a54dc36d76ff
+2026-01-28T22:39:56.643220124Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:56.643224444Z [Protractor Debug] ConnId hash: 004a6a27, Auth hash: b6f58dad
+2026-01-28T22:39:56.844177589Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:56.84420039Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/9b00d0ec-b20e-48f9-b321-c239ddbf0e96
+2026-01-28T22:39:56.84420333Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:56.84420616Z [Protractor Debug] ConnId hash: 004a6a27, Auth hash: b6f58dad
+2026-01-28T22:39:57Z clientIP="65.184.50.72" requestID="889ac8fc-120d-4938" responseTimeMS=64 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T22:39:57.045079472Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:57.045104733Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/39fff40e-f1ab-4d26-b96a-120fcc85cec9
+2026-01-28T22:39:57.045106973Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:57.045109283Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T22:39:57.245257659Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:57.245283279Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/bb767c32-b811-4916-babe-88b239591991
+2026-01-28T22:39:57.245285909Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:57.245288459Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T22:39:57.445632169Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:57.44565588Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/d07ee60b-d075-4aa1-be5f-3bb5c7f13ec0
+2026-01-28T22:39:57.44565889Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:57.4456685Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T22:39:57.645883568Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:57.645903858Z [Protractor Debug] GET /IntegrationServices/2.0/WorkOrder/8fc59066-88a8-4b5e-9ee9-720e890769c4
+2026-01-28T22:39:57.645906958Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:57.645935769Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T22:39:57.846133505Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:57.846151166Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/cbb4492d-e53b-490d-994b-715c2e0cc8c0
+2026-01-28T22:39:57.846153466Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:57.846161376Z [Protractor Debug] ConnId hash: b7f195b0, Auth hash: 43c7de82
+2026-01-28T22:39:58.047066089Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:58.04709729Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/d1e6b0e1-f8c0-4ae3-82bd-fb2384508e57
+2026-01-28T22:39:58.04710522Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:58.04710815Z [Protractor Debug] ConnId hash: b7f195b0, Auth hash: 43c7de82
+2026-01-28T22:39:58.246452917Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:58.246480667Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/7fb11f88-df7a-49ba-9737-c645157819ae
+2026-01-28T22:39:58.246484247Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:58.246487168Z [Protractor Debug] ConnId hash: b7f195b0, Auth hash: 43c7de82
+2026-01-28T22:39:58.446746916Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:58.446771946Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/c9b0345b-22bc-4906-8702-c2e0ebae4f8c
+2026-01-28T22:39:58.446775826Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:58.446779736Z [Protractor Debug] ConnId hash: 802b5e13, Auth hash: 0d191eda
+2026-01-28T22:39:58Z clientIP="65.184.50.72" requestID="a5d06fb1-eba1-4b9d" responseTimeMS=65 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T22:39:58.64687713Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:58.646906081Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/8bd1725a-6641-488f-ba05-a33a199e23c9
+2026-01-28T22:39:58.646910061Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:58.646914711Z [Protractor Debug] ConnId hash: ac1cb367, Auth hash: 7c036ede
+2026-01-28T22:39:58.84679933Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:58.846813941Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/825f6e99-6494-4764-b885-94adfb6a9a8e
+2026-01-28T22:39:58.846816631Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:58.846819801Z [Protractor Debug] ConnId hash: ac1cb367, Auth hash: 7c036ede
+2026-01-28T22:39:59.046402873Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:59.046423923Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/2c65db69-8dda-4fc4-a86e-ea8b6226a94d
+2026-01-28T22:39:59.046426723Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:59.046437254Z [Protractor Debug] ConnId hash: ac1cb367, Auth hash: 7c036ede
+2026-01-28T22:39:59.247159813Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:59.247175563Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/6cd3a9e1-2d48-4f27-84b0-5bdc527807a8
+2026-01-28T22:39:59.247177743Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:59.247180333Z [Protractor Debug] ConnId hash: b7f195b0, Auth hash: 43c7de82
+2026-01-28T22:39:59.447945274Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:59.447969274Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/413f1555-114a-4cf0-8394-c1e34ab2d7c9
+2026-01-28T22:39:59.447978284Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:59.447981415Z [Protractor Debug] ConnId hash: ef3e1ab6, Auth hash: 11db1e84
+2026-01-28T22:39:59Z clientIP="65.184.50.72" requestID="ba3636f3-2ca3-449f" responseTimeMS=65 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T22:39:59.648059188Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:59.648086379Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/629560c6-3a19-4327-83ca-21cb3eee93f2
+2026-01-28T22:39:59.648090879Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:59.648094949Z [Protractor Debug] ConnId hash: 6121fee5, Auth hash: 42d5452a
+2026-01-28T22:39:59.847676901Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:39:59.847696231Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/974a6ecc-1b06-42bb-8cf3-0d1900edbf2b
+2026-01-28T22:39:59.847698501Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:39:59.847701121Z [Protractor Debug] ConnId hash: 6121fee5, Auth hash: 42d5452a
+2026-01-28T22:40:00.047809246Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:00.047831726Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/73fcff78-b3bb-4b74-9272-16b24831c8d1
+2026-01-28T22:40:00.047876358Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:00.047879688Z [Protractor Debug] ConnId hash: 6121fee5, Auth hash: 42d5452a
+2026-01-28T22:40:00.247529231Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:00.247554002Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/624d1dd6-a33b-4abe-a587-2b25bbbb1a07
+2026-01-28T22:40:00.247559602Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:00.247562572Z [Protractor Debug] ConnId hash: ac1cb367, Auth hash: 7c036ede
+2026-01-28T22:40:00.447936813Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:00.447953643Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/69c180e9-5205-4583-b497-cfd217e0c4c3
+2026-01-28T22:40:00.447961623Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:00.447966864Z [Protractor Debug] ConnId hash: b7f195b0, Auth hash: 43c7de82
+2026-01-28T22:40:00.647960595Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:00.647978636Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/5aa9650c-eab8-42a6-9546-e23b91853f7c
+2026-01-28T22:40:00.647981516Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:00.647984166Z [Protractor Debug] ConnId hash: ac1cb367, Auth hash: 7c036ede
+2026-01-28T22:40:00Z clientIP="65.184.50.72" requestID="4b2c044a-ee31-4435" responseTimeMS=65 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-28T22:40:00.84808406Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:00.848108011Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/bfed5e83-f1f2-43cd-8723-51b999c2a587
+2026-01-28T22:40:00.848133581Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:00.848143172Z [Protractor Debug] ConnId hash: 004a6a27, Auth hash: b6f58dad
+2026-01-28T22:40:01.047794395Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:01.047827786Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/5734a598-5722-4e21-8a9c-bfae342b748e
+2026-01-28T22:40:01.047831636Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:01.047876387Z [Protractor Debug] ConnId hash: 6121fee5, Auth hash: 42d5452a
+2026-01-28T22:40:01.247639413Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:01.247667694Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/e77c8f5d-f765-45a6-90c2-d1f06cc8ebba
+2026-01-28T22:40:01.247670684Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:01.247673454Z [Protractor Debug] ConnId hash: 6121fee5, Auth hash: 42d5452a
+2026-01-28T22:40:01.447886711Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:01.447923132Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/406b69c7-cad8-40cd-8021-af4492fd545a
+2026-01-28T22:40:01.447925572Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:01.447927862Z [Protractor Debug] ConnId hash: ef3e1ab6, Auth hash: 11db1e84
+2026-01-28T22:40:01.64819264Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:01.648216151Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/dac34b21-471e-4e07-b6c7-d743f3f68a3b
+2026-01-28T22:40:01.648218971Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:01.648222191Z [Protractor Debug] ConnId hash: ef3e1ab6, Auth hash: 11db1e84
+2026-01-28T22:40:01.849005962Z [Protractor Debug] Node: v22.16.0, Env: Render
+2026-01-28T22:40:01.849033862Z [Protractor Debug] GET /IntegrationServices/2.0/Invoice/29df25e9-2655-48f4-8d04-3c5f3ea76be9
+2026-01-28T22:40:01.849037352Z [Protractor Debug] Headers: connectionid, apikey, authentication, Accept, Content-Type
+2026-01-28T22:40:01.849041052Z [Protractor Debug] ConnId hash: ef3e1ab6, Auth hash: 11db1e84
