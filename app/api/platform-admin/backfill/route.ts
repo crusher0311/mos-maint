@@ -65,24 +65,32 @@ export async function POST(req: NextRequest) {
       
       console.log(`[Platform Admin] Found ${incompleteShops.length} shops with incomplete backfills (${actuallyCompleteShopIds.size} truly complete)`);
       
+      const MAX_PARALLEL_SHOPS = 20;
       const resumedShopIds: number[] = [];
+      
+      await Promise.all(
+        incompleteShops.map(shop => 
+          db.collection("backfill_progress").updateOne(
+            { shopId: shop.shopId },
+            { $set: { inProgress: false } }
+          )
+        )
+      );
+      
       for (const shop of incompleteShops) {
-        await db.collection("backfill_progress").updateOne(
-          { shopId: shop.shopId },
-          { $set: { inProgress: false } }
-        );
-        
+        resumedShopIds.push(shop.shopId);
         runProtractorBackfill(shop.shopId).catch(err => {
           console.error(`[Platform Admin] Backfill error for shop ${shop.shopId}:`, err.message);
         });
-        
-        resumedShopIds.push(shop.shopId);
       }
+      
+      console.log(`[Platform Admin] Started ${resumedShopIds.length} parallel backfills (max ${MAX_PARALLEL_SHOPS} concurrent per API key isolation)`);
       
       return NextResponse.json({
         ok: true,
-        message: `Resumed backfill for ${resumedShopIds.length} shops`,
-        shopIds: resumedShopIds
+        message: `Resumed backfill for ${resumedShopIds.length} shops in parallel`,
+        shopIds: resumedShopIds,
+        parallelLimit: MAX_PARALLEL_SHOPS
       });
     }
     
