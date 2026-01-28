@@ -7,6 +7,24 @@ import nodeHtmlToImage from "node-html-to-image";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 
+async function getChromiumPath(): Promise<string | undefined> {
+  if (process.env.CHROMIUM_PATH) {
+    return process.env.CHROMIUM_PATH;
+  }
+  
+  if (process.env.RENDER_EXTERNAL_URL) {
+    try {
+      const chromium = await import("@sparticuz/chromium");
+      return await chromium.default.executablePath();
+    } catch (e) {
+      console.error("[Sticker] Failed to load @sparticuz/chromium:", e);
+      return undefined;
+    }
+  }
+  
+  return undefined;
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -810,13 +828,15 @@ export async function POST(req: NextRequest) {
     // Render at canvas size, then scale up the image for pixel-perfect matching
     const scaleUp = outputWidth / renderWidth;
     
+    const executablePath = await getChromiumPath();
+    
     const image = await nodeHtmlToImage({
       html,
       type: "png",
       transparent: false,
       selector: "#sticker-canvas",
       puppeteerArgs: {
-        executablePath: process.env.CHROMIUM_PATH || undefined,
+        executablePath,
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
         defaultViewport: {
           width: renderWidth,
