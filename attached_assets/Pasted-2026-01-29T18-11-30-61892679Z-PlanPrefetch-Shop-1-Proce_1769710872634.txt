@@ -1,0 +1,50 @@
+2026-01-29T18:11:30.61892679Z [PlanPrefetch] Shop 1: Processing 0 vehicles
+2026-01-29T18:11:32.207483639Z [PlanPrefetch] Shop 25: Processing 0 vehicles
+2026-01-29T18:11:32.428128395Z [PlanPrefetch] Shop 28: Processing 15 vehicles
+2026-01-29T18:11:41.887503901Z [PlanPrefetch] Shop 29: Processing 0 vehicles
+2026-01-29T18:11:42.113781372Z [PlanPrefetch] Shop 32: Processing 0 vehicles
+2026-01-29T18:11:43.397835797Z [PlanPrefetch] Shop 35: Processing 0 vehicles
+2026-01-29T18:11:43.621764218Z [PlanPrefetch] Shop 36: Processing 0 vehicles
+2026-01-29T18:11:43.843850531Z [PlanPrefetch] Shop 37: Processing 0 vehicles
+2026-01-29T18:11:46.290344166Z [PlanPrefetch] Shop 50: Processing 0 vehicles
+2026-01-29T18:11:50.218589599Z [PlanPrefetch] Shop 51: Processing 0 vehicles
+2026-01-29T18:11:50.430657173Z [PlanPrefetch] Shop 54: Processing 0 vehicles
+2026-01-29T18:11:50.629908855Z [PlanPrefetch] Shop 57: Processing 0 vehicles
+2026-01-29T18:11:50.8477809Z [PlanPrefetch] Shop 63: Processing 0 vehicles
+2026-01-29T18:11:51.064163465Z [PlanPrefetch] Shop 66: Processing 0 vehicles
+2026-01-29T18:11:51.467723991Z [PlanPrefetch] Shop 67: Processing 0 vehicles
+2026-01-29T18:11:51.96885958Z [PlanPrefetch] Shop 68: Processing 0 vehicles
+2026-01-29T18:11:52.393123582Z [PlanPrefetch] Shop 69: Processing 0 vehicles
+2026-01-29T18:11:52.814236591Z [PlanPrefetch] Shop 70: Processing 0 vehicles
+2026-01-29T18:11:53.290854606Z [PlanPrefetch] Shop 71: Processing 1 vehicles
+2026-01-29T18:11:54.325209704Z [PlanPrefetch] Shop 72: Processing 14 vehicles
+2026-01-29T18:12:01.419368885Z [PlanPrefetch] Cycle 3 complete: 0 new, 0 cached (31s)
+2026-01-29T18:12:40.398136001Z [4/4] Starting Plan Prefetch Worker...
+2026-01-29T18:12:40.399643098Z - Plan Prefetch Worker (every 30m)
+2026-01-29T18:12:43.534444351Z [PlanPrefetch] Script loaded
+2026-01-29T18:12:43.534467212Z [PlanPrefetch] Worker starting...
+2026-01-29T18:12:43.534470592Z [PlanPrefetch] Will run every 30 minutes
+2026-01-29T18:12:43.534473792Z [PlanPrefetch] Waiting 120s for server warmup...
+2026-01-29T18:14:43.741125568Z [PlanPrefetch] Found 20 configured shops
+2026-01-29T18:14:43.931068007Z [PlanPrefetch] Shop 1: Processing 0 vehicles
+2026-01-29T18:14:45.51974298Z [PlanPrefetch] Shop 25: Processing 0 vehicles
+2026-01-29T18:14:45.724914322Z [PlanPrefetch] Shop 28: Processing 15 vehicles
+2026-01-29T18:14:55.19099453Z [PlanPrefetch] Shop 29: Processing 0 vehicles
+2026-01-29T18:14:55.397703119Z [PlanPrefetch] Shop 32: Processing 0 vehicles
+2026-01-29T18:14:56.694318579Z [PlanPrefetch] Shop 35: Processing 0 vehicles
+2026-01-29T18:14:56.901812153Z [PlanPrefetch] Shop 36: Processing 0 vehicles
+2026-01-29T18:14:57.106992516Z [PlanPrefetch] Shop 37: Processing 0 vehicles
+2026-01-29T18:14:59.549130964Z [PlanPrefetch] Shop 50: Processing 0 vehicles
+2026-01-29T18:15:03.629084076Z [PlanPrefetch] Shop 51: Processing 0 vehicles
+2026-01-29T18:15:03.826496609Z [PlanPrefetch] Shop 54: Processing 0 vehicles
+2026-01-29T18:15:04.016766483Z [PlanPrefetch] Shop 57: Processing 0 vehicles
+2026-01-29T18:15:04.220745164Z [PlanPrefetch] Shop 63: Processing 0 vehicles
+2026-01-29T18:15:04.423138726Z [PlanPrefetch] Shop 66: Processing 0 vehicles
+2026-01-29T18:15:04.827710267Z [PlanPrefetch] Shop 67: Processing 0 vehicles
+2026-01-29T18:15:05.327500887Z [PlanPrefetch] Shop 68: Processing 0 vehicles
+2026-01-29T18:15:05.740098381Z [PlanPrefetch] Shop 69: Processing 0 vehicles
+2026-01-29T18:15:06.16130758Z [PlanPrefetch] Shop 70: Processing 0 vehicles
+2026-01-29T18:15:06.629723687Z [PlanPrefetch] Shop 71: Processing 1 vehicles
+2026-01-29T18:15:07.649327165Z [PlanPrefetch] Shop 72: Processing 14 vehicles
+2026-01-29T18:15:14.704760925Z [PlanPrefetch] Cycle 1 complete: 0 new, 0 cached (31s)
+2026-01-29T18:20:31.987287658Z [Cron] Triggered plan pre-generation for 1 Protractor shops
