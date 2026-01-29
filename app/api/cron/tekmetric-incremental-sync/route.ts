@@ -56,23 +56,23 @@ export async function GET(req: NextRequest) {
         
         let triggeredCount = 0;
         for (const shop of tekmetricShops) {
-          // Use tekmetric.shopId as primary identifier
-          const shopId = shop.tekmetric?.shopId || shop.shopId;
-          if (!shopId) continue;
+          // Use internal shop.shopId (NOT tekmetric.shopId) since work orders are stored with internal ID
+          const internalShopId = shop.shopId;
+          const tekmetricShopId = shop.tekmetric?.shopId;
+          if (!internalShopId) continue;
           
           // Get top 50 vehicles by most recent work order (dashboard order)
-          // Tekmetric work orders are stored in tekmetric_work_orders collection
-          // Field is updatedDate (not updatedAt), with fetchedAt as fallback
+          // Tekmetric work orders are stored with internal shopId (not tekmetric shopId)
           
           // Debug: count work orders for this shop
           const woCount = await db.collection("tekmetric_work_orders").countDocuments({
-            shopId: { $in: [shopId, String(shopId), Number(shopId)] }
+            shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] }
           });
-          console.log(`[Cron] Shop ${shopId}: Found ${woCount} work orders in tekmetric_work_orders`);
+          console.log(`[Cron] Shop ${internalShopId} (tek: ${tekmetricShopId}): Found ${woCount} work orders in tekmetric_work_orders`);
           
           const recentVehicles = await db.collection("tekmetric_work_orders")
             .aggregate([
-              { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
+              { $match: { shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] } } },
               { $sort: { fetchedAt: -1 } },
               { $group: { _id: "$vin", lastUpdated: { $first: "$fetchedAt" } } },
               { $sort: { lastUpdated: -1 } },
@@ -80,13 +80,13 @@ export async function GET(req: NextRequest) {
             ])
             .toArray();
           
-          console.log(`[Cron] Shop ${shopId}: Aggregated ${recentVehicles.length} unique VINs`);
+          console.log(`[Cron] Shop ${internalShopId}: Aggregated ${recentVehicles.length} unique VINs`);
           
           const vins = recentVehicles
             .map((v: any) => v._id as string)
             .filter((v: string) => v && typeof v === 'string' && v.length === 17);
           
-          console.log(`[Cron] Shop ${shopId}: ${vins.length} valid VINs after filter`);
+          console.log(`[Cron] Shop ${internalShopId}: ${vins.length} valid VINs after filter`);
           
           if (vins.length > 0) {
             triggeredCount++;
@@ -96,8 +96,8 @@ export async function GET(req: NextRequest) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${CRON_SECRET}`,
               },
-              body: JSON.stringify({ shopId, vins }),
-            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${shopId}:`, err.message));
+              body: JSON.stringify({ shopId: internalShopId, vins }),
+            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${internalShopId}:`, err.message));
           }
         }
         console.log(`[Cron] Triggered plan pre-generation for ${triggeredCount}/${tekmetricShops.length} Tekmetric shops with vehicles`);
