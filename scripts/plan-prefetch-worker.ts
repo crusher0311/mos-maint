@@ -8,6 +8,7 @@ const PREFETCH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const STARTUP_DELAY_MS = 2 * 60 * 1000; // Wait 2 minutes for server warmup
 const MAX_VEHICLES_PER_SHOP = 15;
 const DELAY_BETWEEN_VEHICLES = 500;
+const INTERNAL_SECRET = process.env.INTERNAL_WORKER_SECRET || "mos-prefetch-worker-2024";
 
 function getApiUrl(): string {
   const port = process.env.PORT || 5000;
@@ -48,28 +49,34 @@ async function runPrefetchCycle(): Promise<void> {
   let cycleSkipped = 0;
 
   try {
-    // Get all configured shops
-    const shopsRes = await fetch(`${BASE_URL}/api/platform-admin/shops`, {
-      headers: { 'Content-Type': 'application/json' }
+    // Get all configured shops via internal endpoint (no auth required)
+    const shopsRes = await fetch(`${BASE_URL}/api/internal/prefetch-shops`, {
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-internal-secret': INTERNAL_SECRET
+      }
     });
     
     if (!shopsRes.ok) {
-      console.log("[PlanPrefetch] Could not fetch shops list");
+      console.log(`[PlanPrefetch] Could not fetch shops list: ${shopsRes.status}`);
       return;
     }
 
     const shopsData = await shopsRes.json();
-    const shops = shopsData.shops?.filter((s: any) => 
-      s.protractor?.configured || s.tekmetric?.configured
-    ) || [];
+    const shops = shopsData.shops || [];
+    
+    console.log(`[PlanPrefetch] Found ${shops.length} configured shops`);
 
     for (const shop of shops) {
       const shopId = shop.shopId;
 
-      // Get recent vehicles for this shop via dashboard API
+      // Get recent vehicles for this shop via internal endpoint
       try {
-        const dashRes = await fetch(`${BASE_URL}/api/dashboard?shopId=${shopId}&limit=50`, {
-          headers: { 'Content-Type': 'application/json' }
+        const dashRes = await fetch(`${BASE_URL}/api/internal/prefetch-vehicles?shopId=${shopId}&limit=50`, {
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-internal-secret': INTERNAL_SECRET
+          }
         });
 
         if (!dashRes.ok) continue;
