@@ -892,8 +892,6 @@ async function PlanContent({ params, searchParams }: PageProps) {
       .filter(Boolean);
   }
   
-  // All available canned jobs for fallback when no mapped jobs exist
-  const allCannedJobsList = Object.values(cannedJobsById);
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
@@ -1659,7 +1657,6 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           workOrderId={latestRoNumber ?? undefined}
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
-                          allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
@@ -1818,7 +1815,6 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           workOrderId={latestRoNumber ?? undefined}
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
-                          allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
@@ -1895,7 +1891,6 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           workOrderId={latestRoNumber ?? undefined}
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
-                          allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
@@ -2026,7 +2021,6 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           workOrderId={latestRoNumber ?? undefined}
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
-                          allCannedJobs={allCannedJobsList}
                           integration={activeIntegration ?? "protractor"}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}

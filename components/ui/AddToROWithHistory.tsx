@@ -125,7 +125,6 @@ type Props = {
   workOrderId?: string;
   repairOrderId?: string | number;
   cannedJobOptions?: CannedJobOption[];
-  allCannedJobs?: CannedJobOption[]; // Fallback when no mapped options
   integration?: IntegrationType;
   protractorDeferredId?: string;
   matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
@@ -143,7 +142,6 @@ export function AddToROWithHistory({
   workOrderId,
   repairOrderId,
   cannedJobOptions = [],
-  allCannedJobs = [],
   integration = "protractor",
   protractorDeferredId,
   matchedDeferred,
@@ -582,15 +580,15 @@ export function AddToROWithHistory({
       )}
       </div>
       
-      {/* Add Canned Job button - show mapped jobs or fallback to all canned jobs */}
-      {(cannedJobOptions.length > 0 || allCannedJobs.length > 0) && (
+      {/* Add Canned Job button - only show when service-specific mappings exist */}
+      {cannedJobOptions.length > 0 && (
         <AddToROButton
           vin={vin}
           serviceKey={serviceKey || serviceTitle}
-          cannedJobOptions={cannedJobOptions.length > 0 ? cannedJobOptions : allCannedJobs}
+          cannedJobOptions={cannedJobOptions}
           workOrderId={workOrderId}
           repairOrderId={repairOrderId}
-          buttonLabel={cannedJobOptions.length > 0 ? "Canned" : "Jobs"}
+          buttonLabel="Canned"
           integration={integration}
         />
       )}
