@@ -1,0 +1,99 @@
+2026-01-29T18:31:45.544832223Z Production URL: https://mos-maintenance-mvp-main.onrender.com
+2026-01-29T18:31:45.544866544Z 
+2026-01-29T18:31:45.545052197Z [1/3] Starting Next.js server...
+2026-01-29T18:31:46.265929364Z   ▲ Next.js 14.2.5
+2026-01-29T18:31:46.266142879Z   - Local:        http://localhost:10000
+2026-01-29T18:31:46.266160989Z   - Network:      http://0.0.0.0:10000
+2026-01-29T18:31:46.266279591Z 
+2026-01-29T18:31:46.266422194Z  ✓ Starting...
+2026-01-29T18:31:46.508749068Z  ✓ Ready in 438ms
+2026-01-29T18:31:48.550569995Z [Startup] Waiting for server... (attempt 1/30)
+2026-01-29T18:31:48.585390237Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:31:48.586101961Z [2/3] Starting Tekmetric Sync Worker...
+2026-01-29T18:31:48.587518519Z [3/4] Starting Protractor Sync Worker...
+2026-01-29T18:31:48.588990659Z [4/4] Starting Plan Prefetch Worker...
+2026-01-29T18:31:48.590939978Z 
+2026-01-29T18:31:48.590954929Z ============================================================
+2026-01-29T18:31:48.590958369Z All services started!
+2026-01-29T18:31:48.590961889Z - Next.js server on port 10000
+2026-01-29T18:31:48.590964589Z - Tekmetric Sync Worker (every 60s)
+2026-01-29T18:31:48.590967089Z - Protractor Sync Worker (every 60s)
+2026-01-29T18:31:48.590969459Z - Plan Prefetch Worker (every 30m)
+2026-01-29T18:31:48.590971699Z ============================================================
+2026-01-29T18:31:49.599797504Z ==> Your service is live 🎉
+2026-01-29T18:31:50.365405808Z ==> 
+2026-01-29T18:31:51.29712679Z ==> ///////////////////////////////////////////////////////////
+2026-01-29T18:31:51.348630337Z ==> 
+2026-01-29T18:31:51.392055023Z ==> Available at your primary URL https://mos.tools + 2 more domains
+2026-01-29T18:31:51.43859419Z ==> 
+2026-01-29T18:31:51.727929975Z Tekmetric Incremental Sync Worker started
+2026-01-29T18:31:51.727948496Z Base sync interval: 60 seconds
+2026-01-29T18:31:51.728006547Z Max retries: 3
+2026-01-29T18:31:51.728013537Z API URL: http://localhost:10000/api/cron/tekmetric-incremental-sync
+2026-01-29T18:31:51.728016167Z 
+2026-01-29T18:31:51.7460462Z [PlanPrefetch] Script loaded
+2026-01-29T18:31:51.746164103Z [PlanPrefetch] Worker starting...
+2026-01-29T18:31:51.746172063Z [PlanPrefetch] Will run every 30 minutes
+2026-01-29T18:31:51.746178523Z [PlanPrefetch] Waiting 120s for server warmup...
+2026-01-29T18:31:51.770487103Z Protractor Sync Worker started
+2026-01-29T18:31:51.770517333Z Base sync interval: 10 seconds
+2026-01-29T18:31:51.770527844Z Max retries: 3
+2026-01-29T18:31:51.770534964Z API URL: http://localhost:10000/api/cron/protractor-sync
+2026-01-29T18:31:51.770584075Z 
+2026-01-29T18:31:52.375584152Z ==> ///////////////////////////////////////////////////////////
+2026-01-29T18:31:52.626404822Z [Startup] Waiting for server... (attempt 2/30)
+2026-01-29T18:31:52.632042206Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:31:53Z clientIP="35.230.74.10" requestID="9f409670-d880-49ba" responseTimeMS=23 responseBytes=7443 userAgent="Go-http-client/2.0"
+2026-01-29T18:31:56.634368341Z [Startup] Waiting for server... (attempt 3/30)
+2026-01-29T18:31:56.641163918Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:00.643971403Z [Startup] Waiting for server... (attempt 4/30)
+2026-01-29T18:32:00.650683398Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:01.773380973Z [2026-01-29T18:32:01.772Z] Running Protractor sync...
+2026-01-29T18:32:03.711263336Z [Protractor] Fetched work orders page: skip=0, got 70, total so far: 70
+2026-01-29T18:32:03.711609663Z [Cron] Shop 25 - WorkflowStage counts: {
+2026-01-29T18:32:03.711615463Z   WorkCompleted: 11,
+2026-01-29T18:32:03.711618153Z   WorkAuthorized: 1,
+2026-01-29T18:32:03.711620293Z   EstimateCompleted: 1,
+2026-01-29T18:32:03.711622893Z   InspectionInProgress: 35,
+2026-01-29T18:32:03.711640053Z   Unassigned: 17,
+2026-01-29T18:32:03.711642424Z   ScheduledWork: 5
+2026-01-29T18:32:03.711644604Z }
+2026-01-29T18:32:04.652995024Z [Startup] Waiting for server... (attempt 5/30)
+2026-01-29T18:32:04.65778876Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:06.734898009Z [2026-01-29T18:32:06.734Z] Running Tekmetric sync...
+2026-01-29T18:32:08.333433383Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:37.556Z)
+2026-01-29T18:32:08.637549652Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:37.923Z)
+2026-01-29T18:32:08.658061905Z [Startup] Waiting for server... (attempt 6/30)
+2026-01-29T18:32:08.663583646Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:09.073861454Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:30:38.563Z)
+2026-01-29T18:32:09.462847253Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 2 ROs (updated since 2026-01-29T18:30:39.646Z)
+2026-01-29T18:32:09.881337787Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:30:39.177Z)
+2026-01-29T18:32:11.419013594Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:40.984Z)
+2026-01-29T18:32:11.870648606Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:30:41.394Z)
+2026-01-29T18:32:12.221965086Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:41.787Z)
+2026-01-29T18:32:12.350456165Z [Cron] Tekmetric incremental sync completed in 5320ms: 5 synced, 0 removed, 5/5 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T18:32:12.358966437Z [2026-01-29T18:32:06.734Z] Sync complete: 5 synced, 8 shops, 5320ms
+2026-01-29T18:32:12.665326421Z [Startup] Waiting for server... (attempt 7/30)
+2026-01-29T18:32:12.669496265Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:09.396206797Z [Cron] Protractor sync normalized: shop 50, WOs: 0/0/54, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:32:10.259671067Z [Protractor] Fetched work orders page: skip=0, got 70, total so far: 70
+2026-01-29T18:32:10.259761388Z [Cron] Shop 51 - WorkflowStage counts: {
+2026-01-29T18:32:10.259768938Z   WorkCompleted: 8,
+2026-01-29T18:32:10.259773828Z   InspectionInProgress: 23,
+2026-01-29T18:32:10.259800179Z   Unassigned: 21,
+2026-01-29T18:32:10.259802789Z   ScheduledWork: 18
+2026-01-29T18:32:10.259805259Z }
+2026-01-29T18:32:11.894330414Z [2026-01-29T18:32:11.894Z] Running Tekmetric sync...
+2026-01-29T18:32:13.489428419Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:38.399Z)
+2026-01-29T18:32:12Z clientIP="72.198.61.82" requestID="86885b8a-be54-4a31" responseTimeMS=23 responseBytes=3119 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:13.803955703Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:38.704Z)
+2026-01-29T18:32:14.128853955Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:39.339Z)
+2026-01-29T18:32:14.536097998Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:39.924Z)
+2026-01-29T18:32:14.935848131Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:31:40.139Z)
+2026-01-29T18:32:16.47889437Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:41.486Z)
+2026-01-29T18:32:16.881317669Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:31:42.125Z)
+2026-01-29T18:32:17.275910523Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:42.286Z)
+2026-01-29T18:32:17.408323177Z [Cron] Tekmetric incremental sync completed in 5258ms: 2 synced, 0 removed, 2/2 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T18:32:17.409837063Z [2026-01-29T18:32:11.894Z] Sync complete: 2 synced, 8 shops, 5258ms
+2026-01-29T18:32:16.672188548Z [Startup] Waiting for server... (attempt 8/30)
+2026-01-29T18:32:16.678338852Z [Startup] Server is ready! (status: 200)

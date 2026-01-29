@@ -15,17 +15,25 @@ console.log('');
 function waitForServer(url, maxAttempts = 30) {
   return new Promise((resolve, reject) => {
     let attempts = 0;
+    let resolved = false;
+    
     const check = () => {
+      if (resolved) return;
       attempts++;
       console.log(`[Startup] Waiting for server... (attempt ${attempts}/${maxAttempts})`);
       
       const req = http.get(url, (res) => {
+        if (resolved) return;
+        resolved = true;
         console.log(`[Startup] Server is ready! (status: ${res.statusCode})`);
+        res.resume(); // Consume response to free up memory
         resolve();
       });
       
       req.on('error', () => {
+        if (resolved) return;
         if (attempts >= maxAttempts) {
+          resolved = true;
           reject(new Error('Server failed to start'));
         } else {
           setTimeout(check, 2000);
@@ -33,8 +41,10 @@ function waitForServer(url, maxAttempts = 30) {
       });
       
       req.setTimeout(2000, () => {
+        if (resolved) return;
         req.destroy();
         if (attempts >= maxAttempts) {
+          resolved = true;
           reject(new Error('Server timeout'));
         } else {
           setTimeout(check, 2000);
