@@ -1,0 +1,50 @@
+2026-01-29T18:55:20.80523324Z [Protractor] Fetched work orders page: skip=0, got 28, total so far: 28
+2026-01-29T18:55:46.50699861Z [Cron] Protractor sync normalized: shop 70, WOs: 0/0/24, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:55:47.289851093Z [Protractor] Fetched work orders page: skip=0, got 36, total so far: 36
+2026-01-29T18:55:53.707481979Z [Cron] Protractor sync normalized: shop 25, WOs: 0/0/62, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:55:54.247046918Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T18:55:58.583419782Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:55:59.107730881Z [Protractor] Fetched work orders page: skip=0, got 65, total so far: 65
+2026-01-29T18:56:55.035529169Z [InternalAPI] Shop 1: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:56:56.665146178Z [InternalAPI] Shop 25: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:56:56.866364317Z [InternalAPI] Shop 28: Found 0 Protractor, 0 Tekmetric, 39 cached, returning 39
+2026-01-29T18:56:58.187867061Z [Cron] Protractor sync normalized: shop 29, WOs: 0/1/56, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:56:59.003306323Z [Protractor] Fetched work orders page: skip=0, got 75, total so far: 75
+2026-01-29T18:57:06.426129404Z [InternalAPI] Shop 29: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:06.654365009Z [InternalAPI] Shop 32: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:08.006881364Z [InternalAPI] Shop 35: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:08.239111053Z [InternalAPI] Shop 36: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:08.464180371Z [InternalAPI] Shop 37: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:11.017658154Z [InternalAPI] Shop 50: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:15.165856543Z [InternalAPI] Shop 51: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:15.391532852Z [InternalAPI] Shop 54: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:15.602930299Z [InternalAPI] Shop 57: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:15.829628506Z [InternalAPI] Shop 63: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:16.052671357Z [InternalAPI] Shop 66: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:16.479453312Z [InternalAPI] Shop 67: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:17.007986759Z [InternalAPI] Shop 68: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:17.442013658Z [InternalAPI] Shop 69: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:17.879717695Z [InternalAPI] Shop 70: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:57:18.384983303Z [InternalAPI] Shop 71: Found 0 Protractor, 0 Tekmetric, 1 cached, returning 1
+2026-01-29T18:57:19.448155608Z [InternalAPI] Shop 72: Found 0 Protractor, 0 Tekmetric, 16 cached, returning 16
+2026-01-29T18:57:48.37671186Z [Cron] Protractor sync normalized: shop 35, WOs: 0/0/57, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:57:49.191441497Z [Protractor] Fetched work orders page: skip=0, got 62, total so far: 62
+2026-01-29T18:58:48.990868107Z [Cron] Protractor sync normalized: shop 50, WOs: 1/0/56, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:58:49.819271775Z [Protractor] Fetched work orders page: skip=0, got 71, total so far: 71
+2026-01-29T18:59:40.907981911Z [Cron] Protractor sync normalized: shop 51, WOs: 0/2/53, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:59:41.555319771Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T18:59:46.242098184Z [Cron] Protractor sync normalized: shop 66, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:59:46.578168061Z [Protractor] Fetched work orders page: skip=0, got 33, total so far: 33
+2026-01-29T19:00:08.337744925Z [Cron] Protractor sync normalized: shop 67, WOs: 0/0/28, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:00:09.583523875Z [Protractor] Fetched work orders page: skip=0, got 79, total so far: 79
+2026-01-29T19:00:11.942680451Z [Protractor] Fetched work orders page: skip=0, got 70, total so far: 70
+2026-01-29T19:01:17.76386062Z [Cron] Protractor sync normalized: shop 68, WOs: 0/0/53, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:01:18.759604723Z [Protractor] Fetched work orders page: skip=0, got 29, total so far: 29
+2026-01-29T19:01:28.174827435Z [Cron] Protractor sync normalized: shop 25, WOs: 0/0/62, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:01:28.649256385Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T19:01:33.507975483Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:01:34.150289609Z [Protractor] Fetched work orders page: skip=0, got 64, total so far: 64
+2026-01-29T19:01:39.177180698Z [Cron] Protractor sync normalized: shop 69, WOs: 0/0/24, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:01:40.095348515Z [Protractor] Fetched work orders page: skip=0, got 28, total so far: 28
+2026-01-29T19:02:05.717244654Z [Cron] Protractor sync normalized: shop 70, WOs: 0/0/24, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:02:06.870347028Z [Protractor] Fetched work orders page: skip=0, got 35, total so far: 35
