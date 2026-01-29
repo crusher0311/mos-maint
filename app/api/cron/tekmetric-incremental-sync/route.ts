@@ -63,6 +63,13 @@ export async function GET(req: NextRequest) {
           // Get top 50 vehicles by most recent work order (dashboard order)
           // Tekmetric work orders are stored in tekmetric_work_orders collection
           // Field is updatedDate (not updatedAt), with fetchedAt as fallback
+          
+          // Debug: count work orders for this shop
+          const woCount = await db.collection("tekmetric_work_orders").countDocuments({
+            shopId: { $in: [shopId, String(shopId), Number(shopId)] }
+          });
+          console.log(`[Cron] Shop ${shopId}: Found ${woCount} work orders in tekmetric_work_orders`);
+          
           const recentVehicles = await db.collection("tekmetric_work_orders")
             .aggregate([
               { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
@@ -73,9 +80,13 @@ export async function GET(req: NextRequest) {
             ])
             .toArray();
           
+          console.log(`[Cron] Shop ${shopId}: Aggregated ${recentVehicles.length} unique VINs`);
+          
           const vins = recentVehicles
             .map((v: any) => v._id as string)
             .filter((v: string) => v && typeof v === 'string' && v.length === 17);
+          
+          console.log(`[Cron] Shop ${shopId}: ${vins.length} valid VINs after filter`);
           
           if (vins.length > 0) {
             triggeredCount++;
