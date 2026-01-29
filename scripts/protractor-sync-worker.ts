@@ -84,7 +84,8 @@ async function runSync(): Promise<void> {
       const data = JSON.parse(text);
       
       if (res.ok) {
-        console.log(`[${timestamp}] Sync complete:`, JSON.stringify(data, null, 2));
+        const s = data.summary;
+        console.log(`[${timestamp}] Sync complete: ${s?.totalSynced || 0} synced, ${s?.totalShops || 0} shops, ${data.duration}`);
         consecutiveFailures = 0;
         success = true;
         successfulSyncs++;
