@@ -887,10 +887,19 @@ async function PlanContent({ params, searchParams }: PageProps) {
   
   function getCannedJobOptionsForService(serviceKey: string) {
     const ids = cannedJobMappings[serviceKey] || [];
-    return ids
+    const result = ids
       .map(id => cannedJobsById[id])
       .filter(Boolean);
+    // Debug: log mapping lookup
+    if (ids.length > 0 || Object.keys(cannedJobMappings).length > 0) {
+      console.log(`[CannedJobs] serviceKey="${serviceKey}" -> mappedIds=[${ids.join(",")}] -> found=${result.length} jobs`);
+    }
+    return result;
   }
+  
+  // Debug: log available mappings and canned jobs
+  console.log(`[CannedJobs] Shop ${shopId} mappings:`, Object.keys(cannedJobMappings));
+  console.log(`[CannedJobs] Shop ${shopId} cannedJobsById count:`, Object.keys(cannedJobsById).length);
   
 
   const vehicle = await db.collection("vehicles").findOne(
