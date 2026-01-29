@@ -270,21 +270,26 @@ export async function GET(req: NextRequest) {
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
+    console.log(`[Cron] Starting Protractor pregeneration, CRON_SECRET set: ${!!CRON_SECRET}`);
     if (CRON_SECRET) {
       try {
         const baseUrl = process.env.RENDER_EXTERNAL_URL 
           || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
           || `http://localhost:${process.env.PORT || 5000}`;
         
-        // Get all Protractor shops - they have protractor.connectionId or protractor.apiKey
+        console.log(`[Cron] Protractor pregeneration baseUrl: ${baseUrl}`);
+        
+        // Get all Protractor shops - use same query as sync to include legacy field names
         const protractorShops = await db.collection("shops")
           .find({ 
             $or: [
-              { "protractor.connectionId": { $exists: true, $ne: null } },
-              { "protractor.apiKey": { $exists: true, $ne: null } }
+              { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
+              { "protractorApiKey": { $exists: true, $nin: [null, ""] } },
+              { "protractor.connectionId": { $exists: true, $nin: [null, ""] } },
+              { "protractorConnectionId": { $exists: true, $nin: [null, ""] } }
             ]
           })
-          .project({ _id: 0, shopId: 1, protractor: 1 })
+          .project({ _id: 0, shopId: 1, protractor: 1, protractorApiKey: 1, protractorConnectionId: 1 })
           .toArray();
         
         console.log(`[Cron] Found ${protractorShops.length} Protractor shops for pregeneration`);
