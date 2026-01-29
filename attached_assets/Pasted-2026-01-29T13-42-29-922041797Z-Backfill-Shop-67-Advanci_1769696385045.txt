@@ -1,0 +1,100 @@
+2026-01-29T13:42:29.922041797Z [Backfill] Shop 67: Advancing currentChunkEnd from 2022-11-29 to 2022-10-15
+2026-01-29T13:42:29.941562044Z [Backfill] Shop 67 chunk 1: 2022-10-15 to 2022-11-29: 2057 jobs, 0 vehicles fetched, 331 normalized, 45d chunk
+2026-01-29T13:42:29.990656729Z [Backfill] Shop 67 chunk 1: 2022-10-15 to 2022-11-29: 2057 jobs, 0 vehicles fetched, 378 normalized, 45d chunk
+2026-01-29T13:42:30.110270383Z [Backfill] Shop 67: Wall clock limit reached after 1 chunks
+2026-01-29T13:42:30.110320894Z [Backfill] Shop 67: Run finished - 1 chunks, 2057 jobs indexed, complete: false
+2026-01-29T13:42:30.160361738Z [Backfill] Shop 67: Wall clock limit reached after 1 chunks
+2026-01-29T13:42:30.160428519Z [Backfill] Shop 67: Run finished - 1 chunks, 2057 jobs indexed, complete: false
+2026-01-29T13:42:30.177694362Z [Backfill] Shop 67: Not complete, starting next run immediately
+2026-01-29T13:42:30.228300446Z [Backfill] Shop 67: Not complete, starting next run immediately
+2026-01-29T13:42:30.245541758Z [Backfill] Starting inline backfill for shop 67
+2026-01-29T13:42:30.295927378Z [Backfill] Starting inline backfill for shop 67
+2026-01-29T13:42:30.573199162Z [Backfill] Shop 67: Resuming from 2022-10-15 (logicVersion=4)
+2026-01-29T13:42:30.573216882Z [Backfill] Shop 67: 2022-08-31 to 2022-10-15 (45 days)
+2026-01-29T13:42:30.62550179Z [Backfill] Shop 67: Resuming from 2022-10-15 (logicVersion=4)
+2026-01-29T13:42:30.627820746Z [Backfill] Shop 67: 2022-08-31 to 2022-10-15 (45 days)
+2026-01-29T13:42:58.628898268Z [Backfill] Shop 67: 871 invoices
+2026-01-29T13:42:59.416325528Z [Backfill] Shop 67: 871 invoices
+2026-01-29T13:43:52.931686666Z [Backfill] Shop 72: 891 jobs, 0 unique vehicles to fetch
+2026-01-29T13:45:14.147461407Z [Backfill] Shop 71: Normalized 0 WOs
+2026-01-29T13:45:14.147479287Z [Backfill] Shop 71: Advancing currentChunkEnd from 2024-01-23 to 2023-12-24
+2026-01-29T13:45:14.213208352Z [Backfill] Shop 71 chunk 1: 2023-12-24 to 2024-01-23: 0 jobs, 0 vehicles fetched, 0 normalized, 30d chunk
+2026-01-29T13:45:14.378304519Z [Backfill] Shop 71: Wall clock limit reached after 1 chunks
+2026-01-29T13:45:14.37833236Z [Backfill] Shop 71: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-01-29T13:45:14.443432522Z [Backfill] Shop 71: Not complete, starting next run immediately
+2026-01-29T13:45:14.508919282Z [Backfill] Starting inline backfill for shop 71
+2026-01-29T13:45:14.7621919Z [Backfill] Shop 71: Resuming from 2023-12-24 (logicVersion=4)
+2026-01-29T13:45:14.76222953Z [Backfill] Shop 71: 2023-11-09 to 2023-12-24 (45 days)
+2026-01-29T13:45:45.690375983Z [Backfill] Shop 71: 1001 invoices
+2026-01-29T13:45:49.322646499Z [Backfill] Shop 72: Normalized 0 WOs
+2026-01-29T13:45:49.322674229Z [Backfill] Shop 72: Advancing currentChunkEnd from 2023-02-27 to 2023-01-28
+2026-01-29T13:45:49.390254301Z [Backfill] Shop 72 chunk 1: 2023-01-28 to 2023-02-27: 0 jobs, 0 vehicles fetched, 0 normalized, 30d chunk
+2026-01-29T13:45:49.558069392Z [Backfill] Shop 72: Wall clock limit reached after 1 chunks
+2026-01-29T13:45:49.558095043Z [Backfill] Shop 72: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-01-29T13:45:49.625692965Z [Backfill] Shop 72: Not complete, starting next run immediately
+2026-01-29T13:45:49.693218355Z [Backfill] Starting inline backfill for shop 72
+2026-01-29T13:45:49.890873419Z [Backfill] Shop 72: Resuming from 2023-01-28 (logicVersion=4)
+2026-01-29T13:45:49.890890919Z [Backfill] Shop 72: 2022-12-14 to 2023-01-28 (45 days)
+2026-01-29T13:46:13.990944894Z [Backfill] Shop 67: Normalized 0 WOs
+2026-01-29T13:46:13.990966305Z [Backfill] Shop 67: Advancing currentChunkEnd from 2022-11-29 to 2022-10-15
+2026-01-29T13:46:14.056332522Z [Backfill] Shop 67 chunk 1: 2022-10-15 to 2022-11-29: 0 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+2026-01-29T13:46:14.221899899Z [Backfill] Shop 67: Wall clock limit reached after 1 chunks
+2026-01-29T13:46:14.222067562Z [Backfill] Shop 67: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-01-29T13:46:14.289926599Z [Backfill] Shop 67: Not complete, starting next run immediately
+2026-01-29T13:46:14.355615534Z [Backfill] Starting inline backfill for shop 67
+2026-01-29T13:46:14.547751008Z [Backfill] Shop 67: Resuming from 2022-10-15 (logicVersion=4)
+2026-01-29T13:46:14.547761498Z [Backfill] Shop 67: 2022-08-31 to 2022-10-15 (45 days)
+2026-01-29T13:46:23.468305528Z [Backfill] Shop 72: 893 invoices
+2026-01-29T13:46:41.040144063Z [Backfill] Shop 68: 1601 jobs, 0 unique vehicles to fetch
+2026-01-29T13:46:49.075514082Z [Backfill] Shop 67: 871 invoices
+2026-01-29T13:50:09.818403244Z [Backfill] Shop 72: Normalized 214 WOs
+2026-01-29T13:50:09.819540357Z [Backfill] Shop 72: Advancing currentChunkEnd from 2023-01-28 to 2022-12-14
+2026-01-29T13:50:09.819551517Z [Backfill] Shop 72: Normalized 679 WOs
+2026-01-29T13:50:09.819554668Z [Backfill] Shop 72: Advancing currentChunkEnd from 2023-01-28 to 2022-12-14
+2026-01-29T13:50:09.884520712Z [Backfill] Shop 72 chunk 1: 2022-12-14 to 2023-01-28: 0 jobs, 0 vehicles fetched, 214 normalized, 45d chunk
+2026-01-29T13:50:09.885395839Z [Backfill] Shop 72 chunk 1: 2022-12-14 to 2023-01-28: 891 jobs, 0 vehicles fetched, 679 normalized, 45d chunk
+2026-01-29T13:50:10.051456554Z [Backfill] Shop 72: Wall clock limit reached after 1 chunks
+2026-01-29T13:50:10.051485864Z [Backfill] Shop 72: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-01-29T13:50:10.051904973Z [Backfill] Shop 72: Wall clock limit reached after 1 chunks
+2026-01-29T13:50:10.051917993Z [Backfill] Shop 72: Run finished - 1 chunks, 891 jobs indexed, complete: false
+2026-01-29T13:50:10.117410508Z [Backfill] Shop 72: Not complete, starting next run immediately
+2026-01-29T13:50:10.118599292Z [Backfill] Shop 72: Not complete, starting next run immediately
+2026-01-29T13:50:10.183237699Z [Backfill] Starting inline backfill for shop 72
+2026-01-29T13:50:10.185383693Z [Backfill] Starting inline backfill for shop 72
+2026-01-29T13:50:10.37553674Z [Backfill] Shop 72: Resuming from 2022-12-14 (logicVersion=4)
+2026-01-29T13:50:10.375556241Z [Backfill] Shop 72: 2022-11-14 to 2022-12-14 (30 days)
+2026-01-29T13:50:10.509953249Z [Backfill] Shop 72: Resuming from 2022-12-14 (logicVersion=4)
+2026-01-29T13:50:10.50997367Z [Backfill] Shop 72: 2022-11-14 to 2022-12-14 (30 days)
+2026-01-29T13:50:15.708932055Z [Backfill] Shop 68: Normalized 0 WOs
+2026-01-29T13:50:15.708958515Z [Backfill] Shop 68: Advancing currentChunkEnd from 2021-09-20 to 2021-08-06
+2026-01-29T13:50:15.774824338Z [Backfill] Shop 68 chunk 1: 2021-08-06 to 2021-09-20: 0 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+2026-01-29T13:50:15.941534945Z [Backfill] Shop 68: Wall clock limit reached after 1 chunks
+2026-01-29T13:50:15.941552875Z [Backfill] Shop 68: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-01-29T13:50:16.007656933Z [Backfill] Shop 68: Not complete, starting next run immediately
+2026-01-29T13:50:16.074721749Z [Backfill] Starting inline backfill for shop 68
+2026-01-29T13:50:16.270710634Z [Backfill] Shop 68: Resuming from 2021-08-06 (logicVersion=4)
+2026-01-29T13:50:16.271341727Z [Backfill] Shop 68: 2021-06-22 to 2021-08-06 (45 days)
+2026-01-29T13:50:44.200763344Z [Backfill] Shop 72: 609 invoices
+2026-01-29T13:50:45.187531965Z [Backfill] Shop 72: 609 invoices
+2026-01-29T13:50:51.127417158Z [Backfill] Shop 68: 553 invoices
+2026-01-29T14:14:37.720735991Z [Backfill] Shop 68: 1501 jobs, 0 unique vehicles to fetch
+2026-01-29T14:14:39.195282853Z [Backfill] Shop 68: 1501 jobs, 0 unique vehicles to fetch
+2026-01-29T14:14:39.740589433Z [Backfill] Shop 68: Bulk wrote 1501 jobs (1501 new, 0 updated, 0 skipped)
+2026-01-29T14:19:07.554430786Z [Backfill] Shop 68: Normalized 198 WOs
+2026-01-29T14:19:07.554463727Z [Backfill] Shop 68: Advancing currentChunkEnd from 2021-08-06 to 2021-06-22
+2026-01-29T14:19:07.556870135Z [Backfill] Shop 68: Normalized 355 WOs
+2026-01-29T14:19:07.556884335Z [Backfill] Shop 68: Advancing currentChunkEnd from 2021-08-06 to 2021-06-22
+2026-01-29T14:19:07.618575098Z [Backfill] Shop 68 chunk 1: 2021-06-22 to 2021-08-06: 0 jobs, 0 vehicles fetched, 198 normalized, 45d chunk
+2026-01-29T14:19:07.620483976Z [Backfill] Shop 68 chunk 1: 2021-06-22 to 2021-08-06: 1501 jobs, 0 vehicles fetched, 355 normalized, 45d chunk
+2026-01-29T14:19:07.783215913Z [Backfill] Shop 68: Wall clock limit reached after 1 chunks
+2026-01-29T14:19:07.783242774Z [Backfill] Shop 68: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-01-29T14:19:07.784697583Z [Backfill] Shop 68: Wall clock limit reached after 1 chunks
+2026-01-29T14:19:07.784711093Z [Backfill] Shop 68: Run finished - 1 chunks, 1501 jobs indexed, complete: false
+2026-01-29T14:19:07.84760177Z [Backfill] Shop 68: Not complete, starting next run immediately
+2026-01-29T14:19:07.848318344Z [Backfill] Shop 68: Not complete, starting next run immediately
+2026-01-29T14:19:07.911443016Z [Backfill] Starting inline backfill for shop 68
+2026-01-29T14:19:07.912123039Z [Backfill] Starting inline backfill for shop 68
+2026-01-29T14:19:08.159906903Z [Backfill] Shop 68: Resuming from 2021-06-22 (logicVersion=4)
+2026-01-29T14:19:08.159931063Z [Backfill] Shop 68: 2021-05-08 to 2021-06-22 (45 days)
+2026-01-29T14:19:08.160560125Z [Backfill] Shop 68: Resuming from 2021-06-22 (logicVersion=4)
+2026-01-29T14:19:08.160571306Z [Backfill] Shop 68: 2021-05-08 to 2021-06-22 (45 days)

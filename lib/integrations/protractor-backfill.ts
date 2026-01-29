@@ -429,8 +429,9 @@ export async function runProtractorBackfill(shopId: number): Promise<{
   let totalJobsIndexed = 0;
   let complete = false;
 
-  await db.collection("backfill_progress").updateOne(
-    { shopId },
+  // Atomic lock acquisition - prevent duplicate instances
+  const lockResult = await db.collection("backfill_progress").findOneAndUpdate(
+    { shopId, inProgress: { $ne: true } },  // Only claim if not already in progress
     { 
       $set: { 
         lastAttemptedAt: new Date(),
@@ -441,8 +442,14 @@ export async function runProtractorBackfill(shopId: number): Promise<{
         retryCount: 0,
       } 
     },
-    { upsert: true }
+    { upsert: true, returnDocument: 'after' }
   );
+
+  if (!lockResult) {
+    // Another instance is already running for this shop
+    console.log(`[Backfill] Shop ${shopId}: Skipping - another instance already in progress`);
+    return { chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: 'Already in progress' };
+  }
 
   console.log(`[Backfill] Starting inline backfill for shop ${shopId}`);
 
