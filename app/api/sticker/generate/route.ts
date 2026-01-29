@@ -35,8 +35,10 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopI
     // First, try MongoDB shop_media collection (works on Render)
     if (shopId) {
       const db = await getDb();
+      const numericShopId = Number(shopId);
+      // Query with both string and number to handle legacy data
       const shopMedia = await db.collection("shop_media").findOne({ 
-        shopId, 
+        $or: [{ shopId: numericShopId }, { shopId: shopId }],
         type: "logo" 
       });
       if (shopMedia?.dataUri) {
