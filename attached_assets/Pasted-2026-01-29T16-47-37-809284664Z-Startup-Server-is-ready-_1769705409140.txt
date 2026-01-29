@@ -1,0 +1,138 @@
+2026-01-29T16:47:37.809284664Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:47:39.29462398Z [Shutdown] Received SIGTERM, stopping all processes...
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="a7fe86aa-84c5-426e" responseTimeMS=242 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="d2d5b226-1219-4ac8" responseTimeMS=261 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="ce99a405-4293-4965" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="91c2a9d4-8d68-48ad" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="5e3a6973-2240-4fe1" responseTimeMS=205 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="8d8ba2ae-a641-4218" responseTimeMS=64 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="555fd07f-fb10-4dd7" responseTimeMS=197 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="5a0302a4-f8d4-4744" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="cf3363d6-fd97-4704" responseTimeMS=235 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="f330101c-791b-414d" responseTimeMS=53 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="a0f655ce-bf01-45a3" responseTimeMS=197 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41Z clientIP="72.198.61.82" requestID="88817fe7-729f-4412" responseTimeMS=199 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:47:41.810346695Z [Startup] Waiting for server... (attempt 17/30)
+2026-01-29T16:47:41.816043599Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:47:43.756879951Z [Cron] Protractor sync normalized: shop 25, WOs: 0/0/62, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:47:44.332140005Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T16:47:44.33243157Z [Cron] Shop 28 - WorkflowStage counts: {
+2026-01-29T16:47:44.33244091Z   InspectionInProgress: 1,
+2026-01-29T16:47:44.332445Z   WorkAuthorized: 1,
+2026-01-29T16:47:44.33244807Z   EstimateCompleted: 1,
+2026-01-29T16:47:44.33245098Z   Unassigned: 2
+2026-01-29T16:47:44.33245414Z }
+2026-01-29T16:47:45.818657845Z [Startup] Waiting for server... (attempt 18/30)
+2026-01-29T16:47:45.827629894Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:47:48.765566754Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:47:49.25579074Z [Protractor] Fetched work orders page: skip=0, got 64, total so far: 64
+2026-01-29T16:47:49.256004533Z [Cron] Shop 29 - WorkflowStage counts: {
+2026-01-29T16:47:49.256011423Z   WorkCompleted: 12,
+2026-01-29T16:47:49.256015683Z   InspectionInProgress: 26,
+2026-01-29T16:47:49.256018713Z   WorkAuthorized: 3,
+2026-01-29T16:47:49.256041234Z   Unassigned: 14,
+2026-01-29T16:47:49.256045464Z   EstimateCompleted: 2,
+2026-01-29T16:47:49.256048424Z   ScheduledWork: 7
+2026-01-29T16:47:49.256051454Z }
+2026-01-29T16:47:49.829785813Z [Startup] Waiting for server... (attempt 19/30)
+2026-01-29T16:47:49.863210766Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:47:53.862317765Z [Startup] Waiting for server... (attempt 20/30)
+2026-01-29T16:47:53.868414895Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:47:57.870294829Z [Startup] Waiting for server... (attempt 21/30)
+2026-01-29T16:47:57.875240471Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:01.811629131Z [2026-01-29T16:48:01.811Z] Running Tekmetric sync...
+2026-01-29T16:48:01.877317879Z [Startup] Waiting for server... (attempt 22/30)
+2026-01-29T16:48:01.882318222Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:03.377659601Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:46:28.355Z)
+2026-01-29T16:48:03.75317905Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:46:28.459Z)
+2026-01-29T16:48:04.191867704Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T16:46:28.692Z)
+2026-01-29T16:48:04.545153222Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:46:29.087Z)
+2026-01-29T16:48:04.984887343Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:46:29.529Z)
+2026-01-29T16:48:05.884352919Z [Startup] Waiting for server... (attempt 23/30)
+2026-01-29T16:48:05.889448274Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:06.321803022Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 1 ROs (updated since 2026-01-29T16:46:30.884Z)
+2026-01-29T16:48:06.745815471Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:46:31.282Z)
+2026-01-29T16:48:07.138604689Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:46:31.678Z)
+2026-01-29T16:48:07.269800539Z [Cron] Tekmetric incremental sync completed in 5189ms: 2 synced, 0 removed, 2/2 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T16:48:07.272000386Z [2026-01-29T16:48:01.811Z] Sync complete: 2 synced, 8 shops, 5189ms
+2026-01-29T16:48:09.894570378Z [Startup] Waiting for server... (attempt 24/30)
+2026-01-29T16:48:09.898048737Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:12Z clientIP="72.198.61.82" requestID="0bd4da36-6ca9-469c" responseTimeMS=24 responseBytes=3120 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:13.900885212Z [Startup] Waiting for server... (attempt 25/30)
+2026-01-29T16:48:13.905245685Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:17.90569672Z [Startup] Waiting for server... (attempt 26/30)
+2026-01-29T16:48:17.910288907Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:20Z clientIP="152.117.99.75" requestID="95d130c9-b0cb-4dd1" responseTimeMS=198 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:48:20Z clientIP="152.117.99.75" requestID="9d484a1b-a31f-4b40" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:48:20Z clientIP="152.117.99.75" requestID="13fe57d1-9124-4d85" responseTimeMS=197 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:48:20Z clientIP="152.117.99.75" requestID="1c11addc-c612-4381" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:48:20Z clientIP="152.117.99.75" requestID="809b49bd-deef-4255" responseTimeMS=202 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:48:21.911332881Z [Startup] Waiting for server... (attempt 27/30)
+2026-01-29T16:48:21.915938248Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:25.917309327Z [Startup] Waiting for server... (attempt 28/30)
+2026-01-29T16:48:25.922755408Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:29.925936797Z [Startup] Waiting for server... (attempt 29/30)
+2026-01-29T16:48:29.930997991Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:33.933259375Z [Startup] Waiting for server... (attempt 30/30)
+2026-01-29T16:48:33.937350213Z [Startup] Server is ready! (status: 200)
+2026-01-29T16:48:40Z clientIP="72.198.61.82" requestID="366416f8-2155-47fb" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="8cfb1485-83ab-4a90" responseTimeMS=197 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="cf92dbc4-50bd-489a" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="65500b2b-77c3-493e" responseTimeMS=203 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="018f62a4-941e-4e88" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="a3bf0736-68a1-4296" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="a1685249-d7ef-47b6" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="7360eb6b-d735-46e5" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="3df450d7-7c97-433d" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="c870bc87-ad17-43fc" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="b04010db-7c2d-4ada" responseTimeMS=200 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41Z clientIP="72.198.61.82" requestID="bc332912-a7c3-40e2" responseTimeMS=194 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:48:41.845467048Z [PlanPrefetch] Found 12 configured shops
+2026-01-29T16:48:43.625382711Z [Cron] Protractor sync normalized: shop 29, WOs: 0/0/56, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:48:44.426673267Z [Protractor] Fetched work orders page: skip=0, got 74, total so far: 74
+2026-01-29T16:48:44.427071384Z [Cron] Shop 35 - WorkflowStage counts: {
+2026-01-29T16:48:44.427089244Z   Unassigned: 20,
+2026-01-29T16:48:44.427093164Z   WorkCompleted: 11,
+2026-01-29T16:48:44.427098044Z   InspectionInProgress: 22,
+2026-01-29T16:48:44.427101715Z   EstimateCompleted: 4,
+2026-01-29T16:48:44.427105524Z   WorkAuthorized: 13,
+2026-01-29T16:48:44.427131865Z   ScheduledWork: 4
+2026-01-29T16:48:44.427136855Z }
+2026-01-29T16:49:12Z clientIP="72.198.61.82" requestID="bf595824-9e14-4399" responseTimeMS=16 responseBytes=3120 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:07.329470574Z [2026-01-29T16:49:07.329Z] Running Tekmetric sync...
+2026-01-29T16:49:08.837331035Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:33.444Z)
+2026-01-29T16:49:09.197758521Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:33.820Z)
+2026-01-29T16:49:09.607098744Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:34.465Z)
+2026-01-29T16:49:09.994767165Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:34.611Z)
+2026-01-29T16:49:10.426690995Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:35.050Z)
+2026-01-29T16:49:11.789478903Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 1 ROs (updated since 2026-01-29T16:47:36.585Z)
+2026-01-29T16:49:12.185445603Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:36.811Z)
+2026-01-29T16:49:12.577268773Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:47:37.204Z)
+2026-01-29T16:49:20Z clientIP="152.117.99.75" requestID="ceb8bb94-f672-4440" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:49:20Z clientIP="152.117.99.75" requestID="6867f87c-1b44-4a11" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:49:20Z clientIP="152.117.99.75" requestID="84f7f0dd-3efd-4892" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:49:20Z clientIP="152.117.99.75" requestID="13020cd5-1190-4474" responseTimeMS=198 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:49:20Z clientIP="152.117.99.75" requestID="4956f826-1cef-4770" responseTimeMS=193 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:49:25.016292259Z [Cron] Tekmetric incremental sync completed in 17423ms: 1 synced, 0 removed, 1/1 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T16:49:25.018806101Z [2026-01-29T16:49:07.329Z] Sync complete: 1 synced, 8 shops, 17423ms
+2026-01-29T16:49:33.195504813Z [Cron] Protractor sync normalized: shop 35, WOs: 0/0/56, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:49:33.984811618Z [Protractor] Fetched work orders page: skip=0, got 64, total so far: 64
+2026-01-29T16:49:33.985212005Z [Cron] Shop 50 - WorkflowStage counts: {
+2026-01-29T16:49:33.985274276Z   WorkAuthorized: 8,
+2026-01-29T16:49:33.985279016Z   WorkCompleted: 15,
+2026-01-29T16:49:33.985283236Z   InspectionInProgress: 15,
+2026-01-29T16:49:33.985287116Z   Unassigned: 16,
+2026-01-29T16:49:33.985290906Z   ScheduledWork: 10
+2026-01-29T16:49:33.985295606Z }
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="997a7e98-584b-47f7" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="0389f913-e80b-4746" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="17c3da95-a482-4650" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="cbdada6a-48ec-4a05" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="866616ca-096b-4945" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="0ccaceff-a548-4ee1" responseTimeMS=5 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="6f636ee9-a78f-4de8" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="596d1e08-8a66-4e81" responseTimeMS=203 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="66251349-0d6f-4bed" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="76ea6085-b7ce-452b" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="3a2af2c8-0b88-4f74" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:49:41Z clientIP="72.198.61.82" requestID="0492a907-c621-4264" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
