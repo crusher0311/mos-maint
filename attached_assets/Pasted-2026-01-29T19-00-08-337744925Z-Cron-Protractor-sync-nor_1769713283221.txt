@@ -1,0 +1,50 @@
+2026-01-29T19:00:08.337744925Z [Cron] Protractor sync normalized: shop 67, WOs: 0/0/28, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T19:00:09.583523875Z [Protractor] Fetched work orders page: skip=0, got 79, total so far: 79
+2026-01-29T19:00:09.58378705Z [Cron] Shop 68 - WorkflowStage counts: {
+2026-01-29T19:00:09.58380114Z   Unassigned: 34,
+2026-01-29T19:00:09.58380684Z   InspectionInProgress: 30,
+2026-01-29T19:00:09.58381157Z   WorkCompleted: 9,
+2026-01-29T19:00:09.58381579Z   EstimateCompleted: 3,
+2026-01-29T19:00:09.58382031Z   WorkAuthorized: 3
+2026-01-29T19:00:09.583824871Z }
+2026-01-29T19:00:11.942680451Z [Protractor] Fetched work orders page: skip=0, got 70, total so far: 70
+2026-01-29T19:00:11.942701651Z [Cron] Shop 25 - WorkflowStage counts: {
+2026-01-29T19:00:11.942719161Z   WorkCompleted: 11,
+2026-01-29T19:00:11.942722231Z   WorkAuthorized: 1,
+2026-01-29T19:00:11.942724821Z   EstimateCompleted: 1,
+2026-01-29T19:00:11.942727981Z   InspectionInProgress: 35,
+2026-01-29T19:00:11.942730901Z   Unassigned: 18,
+2026-01-29T19:00:11.942733312Z   ScheduledWork: 4
+2026-01-29T19:00:11.942735721Z }
+2026-01-29T19:00:12Z clientIP="72.198.61.82" requestID="74db0458-47c2-4475" responseTimeMS=15 responseBytes=3117 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:20Z clientIP="152.117.99.75" requestID="9869ac0b-11aa-4495" responseTimeMS=199 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:00:20Z clientIP="152.117.99.75" requestID="b005f465-e07c-4b4e" responseTimeMS=173 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:00:20Z clientIP="152.117.99.75" requestID="e4f3f4a6-28cb-4f34" responseTimeMS=197 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:00:20Z clientIP="152.117.99.75" requestID="0e464b32-84cb-4cc7" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:00:20Z clientIP="152.117.99.75" requestID="649dbafa-de4a-4034" responseTimeMS=175 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:00:34.392496886Z [2026-01-29T19:00:34.392Z] Running Tekmetric sync...
+2026-01-29T19:00:35.871093975Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:58:46.982Z)
+2026-01-29T19:00:36.215675939Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:58:47.359Z)
+2026-01-29T19:00:36.644008403Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 3 ROs (updated since 2026-01-29T18:58:48.214Z)
+2026-01-29T19:00:37.082394471Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:58:48.153Z)
+2026-01-29T19:00:37.500854273Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 2 ROs (updated since 2026-01-29T18:59:01.401Z)
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="58e59547-6ecc-4a2a" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="df81ab62-9342-4515" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="cc52d174-34de-4745" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="c1b69655-c8c6-4bab" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="0c2da4d8-fb4f-4c89" responseTimeMS=188 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="7290056e-a6ac-4b75" responseTimeMS=202 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="2cdd5b49-4815-4fa6" responseTimeMS=170 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="c7c59a41-cd0f-4ff6" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="aee5f7e9-e6be-4c60" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="c4dc8154-468d-4166" responseTimeMS=2 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="9161835c-86fe-44ed" responseTimeMS=172 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="7cc3a514-890d-45d9" responseTimeMS=193 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:41Z clientIP="72.198.61.82" requestID="05089cda-105d-4118" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:00:50.939700088Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:59:02.741Z)
+2026-01-29T19:00:51.326987707Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:59:03.142Z)
+2026-01-29T19:00:51.736440194Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:59:03.688Z)
+2026-01-29T19:00:51.872043636Z [Cron] Tekmetric incremental sync completed in 17221ms: 5 synced, 0 removed, 4/4 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T19:00:51.938925406Z [Cron] Found 8 Tekmetric shops for pregeneration
+2026-01-29T19:00:52.468103182Z [Cron] Triggered plan pre-generation for 0/8 Tekmetric shops with vehicles
+2026-01-29T19:00:52.4706764Z [2026-01-29T19:00:34.392Z] Sync complete: 5 synced, 8 shops, 17221ms
