@@ -1,0 +1,100 @@
+2026-01-29T21:22:34Z clientIP="74.220.48.6" requestID="92b4009c-b4fe-4e5d" responseTimeMS=300512 responseBytes=29 userAgent="node"
+2026-01-29T21:22:35Z clientIP="74.220.48.6" requestID="9e1e9f90-2396-456c" responseTimeMS=300638 responseBytes=29 userAgent="node"
+2026-01-29T21:22:35Z clientIP="74.220.48.6" requestID="e65781dc-bb01-4b93" responseTimeMS=300512 responseBytes=29 userAgent="node"
+2026-01-29T21:22:35.493304549Z [DataOne Cache] HIT but missing vehicle info for squish SALZL2FXNH, re-fetching...
+2026-01-29T21:22:35.493317279Z [DataOne Cache] EXPIRED for squish SALZL2FXNH, fetching from API...
+2026-01-29T21:22:35.496473065Z [DataOne Cache] HIT but missing vehicle info for squish 2GNAXVEVJ6, re-fetching...
+2026-01-29T21:22:35.496486216Z [DataOne Cache] EXPIRED for squish 2GNAXVEVJ6, fetching from API...
+2026-01-29T21:22:35.49810765Z [DataOne Cache] HIT but missing vehicle info for squish JTHCK26285, re-fetching...
+2026-01-29T21:22:35.49812243Z [DataOne Cache] EXPIRED for squish JTHCK26285, fetching from API...
+2026-01-29T21:22:35.499327718Z [DataOne Cache] HIT but missing vehicle info for squish WVGEP9BPFD, re-fetching...
+2026-01-29T21:22:35.499339398Z [DataOne Cache] EXPIRED for squish WVGEP9BPFD, fetching from API...
+2026-01-29T21:22:35.502679748Z [DataOne Cache] HIT but missing vehicle info for squish 5TDYZ3DCKS, re-fetching...
+2026-01-29T21:22:35.502708058Z [DataOne Cache] EXPIRED for squish 5TDYZ3DCKS, fetching from API...
+2026-01-29T21:22:35.807216324Z [DataOne Cache] HIT for squish 1FD7X2A6ME, cached at 2026-01-28T22:11:16.832Z
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="c943478f-dfee-46a5" responseTimeMS=235551 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="345e31ba-4c5f-4d7f" responseTimeMS=72960 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="68594f53-660a-489a" responseTimeMS=236138 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="8ed0cf4a-8139-4e3c" responseTimeMS=14591 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="a7fedb0d-88d0-4d18" responseTimeMS=157980 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="3b2a06db-40f4-4456" responseTimeMS=235345 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="7a28e9e8-2dbf-4b32" responseTimeMS=80062 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="4ccc9855-308a-42d0" responseTimeMS=14227 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="faf72155-0ec7-47e7" responseTimeMS=235468 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="a5a8a532-e662-437e" responseTimeMS=79925 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="93a8ef08-e6d4-4cf4" responseTimeMS=157428 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="b1a519b6-6437-4ff5" responseTimeMS=158255 responseBytes=223158 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="e2898a72-a4f6-4bbc" responseTimeMS=235086 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="01fe0756-a8bf-46e0" responseTimeMS=80617 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="f84b2b2e-65e8-4d39" responseTimeMS=236026 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="9fb9f160-d0b5-4201" responseTimeMS=13988 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="320398a6-a9f5-462a" responseTimeMS=14098 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="cee61a63-eb51-4640" responseTimeMS=235223 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="a7e74d06-2acc-4998" responseTimeMS=80764 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="de679d30-f171-402e" responseTimeMS=13820 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="1d10237d-4abc-40fb" responseTimeMS=80485 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="daa480a1-f4ca-46a8" responseTimeMS=157840 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="f9eff989-15be-4304" responseTimeMS=80895 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="e00713cf-eca7-48b8" responseTimeMS=80207 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="61df8a39-d3c7-4143" responseTimeMS=14364 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="58361c34-5560-4bf3" responseTimeMS=157535 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="c87d806e-1945-4ffe" responseTimeMS=14492 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36.117561236Z [DataOne Cache] HIT for squish 2HGFG3A5CH, cached at 2026-01-28T22:12:27.098Z
+2026-01-29T21:22:36.120348127Z [DataOne Cache] HIT but missing vehicle info for squish 1C4RJFBGEC, re-fetching...
+2026-01-29T21:22:36.120371457Z [DataOne Cache] EXPIRED for squish 1C4RJFBGEC, fetching from API...
+2026-01-29T21:22:36.12326904Z [DataOne Cache] HIT but missing vehicle info for squish 1N4AL3APEN, re-fetching...
+2026-01-29T21:22:36.123285271Z [DataOne Cache] EXPIRED for squish 1N4AL3APEN, fetching from API...
+2026-01-29T21:22:36.12524585Z [DataOne Cache] HIT but missing vehicle info for squish 1C6SRFJTMN, re-fetching...
+2026-01-29T21:22:36.12525991Z [DataOne Cache] EXPIRED for squish 1C6SRFJTMN, fetching from API...
+2026-01-29T21:22:36.172062964Z [DataOne Cache] HIT for squish 1FT8W3DTJE, cached at 2026-01-28T22:19:46.881Z
+2026-01-29T21:22:36.41118853Z [Shutdown] Received SIGTERM, stopping all processes...
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="c219aa18-0017-4f1e" responseTimeMS=72959 responseBytes=223158 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="e3da36b1-5aef-4895" responseTimeMS=157306 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="d89c9ef2-9b50-417a" responseTimeMS=13746 responseBytes=29 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="a9b97bc1-3676-42a7" responseTimeMS=80346 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="b793241a-c28b-47b1" responseTimeMS=235895 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="0d6d9ff2-21de-4512" responseTimeMS=158125 responseBytes=120 userAgent="node"
+2026-01-29T21:22:36Z clientIP="74.220.48.6" requestID="32ba6f8f-1271-4dc3" responseTimeMS=157696 responseBytes=29 userAgent="node"
+2026-01-29T21:22:37Z clientIP="72.198.61.82" requestID="4c556aa4-66c4-4104" responseTimeMS=24 responseBytes=3124 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; Trident/7.0; rv:11.0) like Gecko"
+2026-01-29T21:22:39.372205038Z [Cron] Protractor sync normalized: shop 25, WOs: 0/0/64, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T21:22:39.910143241Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T21:22:39.910749665Z [Cron] Shop 28 - WorkflowStage counts: {
+2026-01-29T21:22:39.910763375Z   InspectionInProgress: 1,
+2026-01-29T21:22:39.910767985Z   WorkAuthorized: 1,
+2026-01-29T21:22:39.910771425Z   EstimateCompleted: 1,
+2026-01-29T21:22:39.910775045Z   Unassigned: 2
+2026-01-29T21:22:39.910778746Z }
+2026-01-29T21:22:40Z clientIP="72.198.61.82" requestID="ddd399e7-5dc6-47f9" responseTimeMS=1405 responseBytes=125325 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:40.086265246Z [Protractor] Using enriched cache with 566 items for shop 29
+2026-01-29T21:22:40.513823948Z [PlanCache] HIT: JF2GTACC1JH293574 cached 0m ago, 123457 miles
+2026-01-29T21:22:40.513844418Z [Plan] Cache HIT for JF2GTACC1JH293574 - will use cached buckets
+2026-01-29T21:22:40.642761027Z [Plan Debug] Found Protractor RO: 45962, Customer: Matt Gear, Integration: protractor
+2026-01-29T21:22:40.642797248Z [Plan Debug] Latest RO number: 45962, total ROs: 0, sources checked: Protractor/Tekmetric/AutoFlow
+2026-01-29T21:22:40.642855389Z [Plan] Cache HIT - skipping expensive external API calls
+2026-01-29T21:22:40.810416886Z [Plan] Using cached currentMiles: 123457
+2026-01-29T21:22:40.811031719Z [Plan Debug] VIN: JF2GTACC1JH293574
+2026-01-29T21:22:40.81104395Z [Plan Debug] Current Miles: 123457
+2026-01-29T21:22:40.81104909Z [Plan Debug] OEM Items count: 0
+2026-01-29T21:22:40.81105289Z [Plan Debug] CARFAX Records count: 0
+2026-01-29T21:22:40.81105688Z [Plan Debug] DVI Findings count: 0
+2026-01-29T21:22:40.81106113Z [Plan Debug] Protractor deferred work count: 14
+2026-01-29T21:22:40.81106566Z [Plan] Using cached buckets for JF2GTACC1JH293574
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="dd141e91-2b16-45a4" responseTimeMS=6 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="23a149a6-5b75-4e8b" responseTimeMS=189 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="627b3080-c07a-47ed" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="52984d28-6430-4c91" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="e0af8146-4e0c-4eea" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="0d9f9024-53e7-4e45" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="c88a8d9e-df25-405f" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:41Z clientIP="72.198.61.82" requestID="42e74fa3-20aa-4f7f" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:22:43.765376136Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T21:22:44.126901509Z [Protractor] Fetched work orders page: skip=0, got 62, total so far: 62
+2026-01-29T21:22:44.127136774Z [Cron] Shop 29 - WorkflowStage counts: {
+2026-01-29T21:22:44.127142924Z   WorkCompleted: 14,
+2026-01-29T21:22:44.127146974Z   InspectionInProgress: 27,
+2026-01-29T21:22:44.127150864Z   WorkAuthorized: 3,
+2026-01-29T21:22:44.127154494Z   Unassigned: 12,
+2026-01-29T21:22:44.127158054Z   EstimateCompleted: 2,
+2026-01-29T21:22:44.127161504Z   ScheduledWork: 4
+2026-01-29T21:22:44.127165084Z }
+2026-01-29T21:22:48Z clientIP="152.117.99.75" requestID="5934d2d6-d413-4795" responseTimeMS=785 responseBytes=3932 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
