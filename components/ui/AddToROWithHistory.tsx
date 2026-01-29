@@ -582,15 +582,15 @@ export function AddToROWithHistory({
       )}
       </div>
       
-      {/* Add Canned Job button - only show if there are mapped canned jobs for this service */}
-      {cannedJobOptions.length > 0 && (
+      {/* Add Canned Job button - show mapped jobs or fallback to all canned jobs */}
+      {(cannedJobOptions.length > 0 || allCannedJobs.length > 0) && (
         <AddToROButton
           vin={vin}
           serviceKey={serviceKey || serviceTitle}
-          cannedJobOptions={cannedJobOptions}
+          cannedJobOptions={cannedJobOptions.length > 0 ? cannedJobOptions : allCannedJobs}
           workOrderId={workOrderId}
           repairOrderId={repairOrderId}
-          buttonLabel="Canned"
+          buttonLabel={cannedJobOptions.length > 0 ? "Canned" : "Jobs"}
           integration={integration}
         />
       )}

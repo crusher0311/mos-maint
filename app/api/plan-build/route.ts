@@ -352,12 +352,14 @@ export async function POST(req: NextRequest) {
     }
 
     let protractorVehicleId: string | null = null;
-    if (!customerName && protractorCfg.configured) {
+    if (protractorCfg.configured) {
       try {
         const vehicleResult = await fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
         if ((vehicleResult as any).ok && (vehicleResult as any).vehicle) {
           const v = (vehicleResult as any).vehicle;
-          customerName = v.CustomerName || [v.FirstName, v.LastName].filter(Boolean).join(" ") || null;
+          if (!customerName) {
+            customerName = v.CustomerName || [v.FirstName, v.LastName].filter(Boolean).join(" ") || null;
+          }
           protractorVehicleId = v.ID || null;
         }
       } catch (err) {
