@@ -61,24 +61,36 @@ export async function getCachedPlan(
   shopId: number, 
   currentMiles?: number | null
 ): Promise<CachedPlan | null> {
-  const cached = await db.collection("cached_plans").findOne({
+  // First check if any entry exists (regardless of expiry)
+  const anyEntry = await db.collection("cached_plans").findOne({
     vin: vin.toUpperCase(),
     shopId,
-    expiresAt: { $gt: new Date() },
   }) as CachedPlan | null;
   
-  if (!cached) return null;
+  if (!anyEntry) {
+    console.log(`[PlanCache] MISS: No cache entry for ${vin}`);
+    return null;
+  }
+  
+  // Check if expired
+  if (anyEntry.expiresAt <= new Date()) {
+    const ageMinutes = Math.round((Date.now() - anyEntry.expiresAt.getTime()) / 60000);
+    console.log(`[PlanCache] MISS: Expired ${ageMinutes}m ago for ${vin}`);
+    return null;
+  }
   
   // If mileage provided, check if cache is still valid (within tolerance)
-  if (currentMiles != null && cached.mileage != null) {
-    const mileageDiff = Math.abs(currentMiles - cached.mileage);
+  if (currentMiles != null && anyEntry.mileage != null) {
+    const mileageDiff = Math.abs(currentMiles - anyEntry.mileage);
     if (mileageDiff > MILEAGE_TOLERANCE) {
-      console.log(`[PlanCache] Cache stale: mileage changed ${cached.mileage} -> ${currentMiles} (diff: ${mileageDiff})`);
+      console.log(`[PlanCache] MISS: Mileage changed ${anyEntry.mileage} -> ${currentMiles} (diff: ${mileageDiff}) for ${vin}`);
       return null;
     }
   }
   
-  return cached;
+  const ageMinutes = Math.round((Date.now() - anyEntry.createdAt.getTime()) / 60000);
+  console.log(`[PlanCache] HIT: ${vin} cached ${ageMinutes}m ago, ${anyEntry.mileage} miles`);
+  return anyEntry;
 }
 
 export async function setCachedPlan(

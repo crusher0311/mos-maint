@@ -1,0 +1,400 @@
+2026-01-29T14:34:47.52395681Z   ScheduledWork: 3
+2026-01-29T14:34:47.52395893Z }
+2026-01-29T14:35:02Z clientIP="162.212.202.163" requestID="2ea876d6-d734-46c2" responseTimeMS=5 responseBytes=345 userAgent=""
+2026-01-29T14:35:02.650016854Z [Cron] Protractor sync normalized: shop 69, WOs: 0/1/24, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T14:35:02.975522371Z [Protractor] Fetched work orders page: skip=0, got 28, total so far: 28
+2026-01-29T14:35:02.975567312Z [Cron] Shop 70 - WorkflowStage counts: {
+2026-01-29T14:35:02.975573783Z   InspectionInProgress: 7,
+2026-01-29T14:35:02.975578793Z   Unassigned: 15,
+2026-01-29T14:35:02.975583283Z   WorkAuthorized: 1,
+2026-01-29T14:35:02.975587653Z   WorkCompleted: 1,
+2026-01-29T14:35:02.975591953Z   ScheduledWork: 4
+2026-01-29T14:35:02.975596613Z }
+2026-01-29T14:35:09.413447843Z [2026-01-29T14:35:09.412Z] Running Tekmetric sync...
+2026-01-29T14:35:10.891981999Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:33:37.011Z)
+2026-01-29T14:35:11.288591762Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:33:26.094Z)
+2026-01-29T14:35:11.695445092Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:33:26.734Z)
+2026-01-29T14:35:12Z clientIP="72.198.61.82" requestID="0c161bf9-d3de-4ffa" responseTimeMS=23 responseBytes=3119 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:35:12.060769956Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:33:26.917Z)
+2026-01-29T14:35:12.501512621Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:33:27.474Z)
+2026-01-29T14:35:14.208833393Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 1 ROs (updated since 2026-01-29T14:33:38.468Z)
+2026-01-29T14:35:14.571719406Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:33:39.073Z)
+2026-01-29T14:35:14.978745681Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:33:39.293Z)
+2026-01-29T14:35:15.110958372Z [Cron] Tekmetric incremental sync completed in 5435ms: 3 synced, 0 removed, 5/5 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T14:35:15.113220368Z [2026-01-29T14:35:09.412Z] Sync complete: {
+2026-01-29T14:35:15.113237268Z   "ok": true,
+2026-01-29T14:35:15.113242628Z   "duration": "5435ms",
+2026-01-29T14:35:15.113247359Z   "summary": {
+2026-01-29T14:35:15.113252159Z     "totalShops": 8,
+2026-01-29T14:35:15.113255859Z     "totalSynced": 3,
+2026-01-29T14:35:15.113258599Z     "totalRemoved": 0,
+2026-01-29T14:35:15.113261329Z     "fromCache": {
+2026-01-29T14:35:15.113264499Z       "vehicles": 5,
+2026-01-29T14:35:15.113268039Z       "customers": 5
+2026-01-29T14:35:15.113270839Z     },
+2026-01-29T14:35:15.113273629Z     "pagesQueued": 0,
+2026-01-29T14:35:15.11327648Z     "errors": 0,
+2026-01-29T14:35:15.113279309Z     "skipped": 0
+2026-01-29T14:35:15.11328217Z   },
+2026-01-29T14:35:15.11328685Z   "shops": [
+2026-01-29T14:35:15.11329146Z     {
+2026-01-29T14:35:15.1132959Z       "shopId": 1,
+2026-01-29T14:35:15.11330096Z       "tekmetricShopId": 14956,
+2026-01-29T14:35:15.11330567Z       "synced": 0,
+2026-01-29T14:35:15.113308961Z       "removed": 0,
+2026-01-29T14:35:15.11331183Z       "fromCache": {
+2026-01-29T14:35:15.113314751Z         "vehicles": 0,
+2026-01-29T14:35:15.113330811Z         "customers": 0
+2026-01-29T14:35:15.113333091Z       },
+2026-01-29T14:35:15.113334911Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113336681Z       "terminalSwept": false
+2026-01-29T14:35:15.113338461Z     },
+2026-01-29T14:35:15.113340191Z     {
+2026-01-29T14:35:15.113341931Z       "shopId": 28,
+2026-01-29T14:35:15.113343602Z       "tekmetricShopId": 14956,
+2026-01-29T14:35:15.113345371Z       "synced": 0,
+2026-01-29T14:35:15.113347002Z       "removed": 0,
+2026-01-29T14:35:15.113348731Z       "fromCache": {
+2026-01-29T14:35:15.113350372Z         "vehicles": 0,
+2026-01-29T14:35:15.113352052Z         "customers": 0
+2026-01-29T14:35:15.113353812Z       },
+2026-01-29T14:35:15.113355552Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113357272Z       "terminalSwept": false
+2026-01-29T14:35:15.113358992Z     },
+2026-01-29T14:35:15.113360632Z     {
+2026-01-29T14:35:15.113362632Z       "shopId": 32,
+2026-01-29T14:35:15.113364342Z       "tekmetricShopId": 469,
+2026-01-29T14:35:15.113366062Z       "synced": 2,
+2026-01-29T14:35:15.113387003Z       "removed": 0,
+2026-01-29T14:35:15.113390153Z       "fromCache": {
+2026-01-29T14:35:15.113396223Z         "vehicles": 2,
+2026-01-29T14:35:15.113398433Z         "customers": 2
+2026-01-29T14:35:15.113400113Z       },
+2026-01-29T14:35:15.113401843Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113403613Z       "terminalSwept": false
+2026-01-29T14:35:15.113405313Z     },
+2026-01-29T14:35:15.113407043Z     {
+2026-01-29T14:35:15.113408803Z       "shopId": 36,
+2026-01-29T14:35:15.113410553Z       "tekmetricShopId": 470,
+2026-01-29T14:35:15.113412184Z       "synced": 0,
+2026-01-29T14:35:15.113413824Z       "removed": 0,
+2026-01-29T14:35:15.113415453Z       "fromCache": {
+2026-01-29T14:35:15.113417064Z         "vehicles": 0,
+2026-01-29T14:35:15.113418944Z         "customers": 0
+2026-01-29T14:35:15.113420604Z       },
+2026-01-29T14:35:15.113422254Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113423914Z       "terminalSwept": false
+2026-01-29T14:35:15.113425564Z     },
+2026-01-29T14:35:15.113427234Z     {
+2026-01-29T14:35:15.113428854Z       "shopId": 37,
+2026-01-29T14:35:15.113430464Z       "tekmetricShopId": 471,
+2026-01-29T14:35:15.113432124Z       "synced": 1,
+2026-01-29T14:35:15.113433764Z       "removed": 0,
+2026-01-29T14:35:15.113435694Z       "fromCache": {
+2026-01-29T14:35:15.113437344Z         "vehicles": 2,
+2026-01-29T14:35:15.113439194Z         "customers": 2
+2026-01-29T14:35:15.113440874Z       },
+2026-01-29T14:35:15.113442554Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113444234Z       "terminalSwept": false
+2026-01-29T14:35:15.113445934Z     },
+2026-01-29T14:35:15.113447574Z     {
+2026-01-29T14:35:15.113449225Z       "shopId": 54,
+2026-01-29T14:35:15.113450845Z       "tekmetricShopId": 275,
+2026-01-29T14:35:15.113452495Z       "synced": 0,
+2026-01-29T14:35:15.113454105Z       "removed": 0,
+2026-01-29T14:35:15.113455735Z       "fromCache": {
+2026-01-29T14:35:15.113457365Z         "vehicles": 1,
+2026-01-29T14:35:15.113460115Z         "customers": 1
+2026-01-29T14:35:15.113463285Z       },
+2026-01-29T14:35:15.113465995Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113468715Z       "terminalSwept": false
+2026-01-29T14:35:15.113471295Z     },
+2026-01-29T14:35:15.113474075Z     {
+2026-01-29T14:35:15.113476745Z       "shopId": 57,
+2026-01-29T14:35:15.113479535Z       "tekmetricShopId": 11803,
+2026-01-29T14:35:15.113483046Z       "synced": 0,
+2026-01-29T14:35:15.113490836Z       "removed": 0,
+2026-01-29T14:35:15.113492626Z       "fromCache": {
+2026-01-29T14:35:15.113494326Z         "vehicles": 0,
+2026-01-29T14:35:15.113496006Z         "customers": 0
+2026-01-29T14:35:15.113497686Z       },
+2026-01-29T14:35:15.113499356Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113500996Z       "terminalSwept": false
+2026-01-29T14:35:15.113502646Z     },
+2026-01-29T14:35:15.113504296Z     {
+2026-01-29T14:35:15.113505936Z       "shopId": 63,
+2026-01-29T14:35:15.113507616Z       "tekmetricShopId": 14245,
+2026-01-29T14:35:15.113509286Z       "synced": 0,
+2026-01-29T14:35:15.113510976Z       "removed": 0,
+2026-01-29T14:35:15.113512606Z       "fromCache": {
+2026-01-29T14:35:15.113514286Z         "vehicles": 0,
+2026-01-29T14:35:15.113515916Z         "customers": 0
+2026-01-29T14:35:15.113517567Z       },
+2026-01-29T14:35:15.113519187Z       "pagesQueued": 0,
+2026-01-29T14:35:15.113520876Z       "terminalSwept": false
+2026-01-29T14:35:15.113522557Z     }
+2026-01-29T14:35:15.113524187Z   ]
+2026-01-29T14:35:15.113525887Z }
+2026-01-29T14:35:20Z clientIP="152.117.99.75" requestID="321652dc-f796-457e" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T14:35:20Z clientIP="152.117.99.75" requestID="7d488c23-48e1-4de5" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T14:35:20Z clientIP="152.117.99.75" requestID="a4c50750-9316-4fa4" responseTimeMS=197 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T14:35:20Z clientIP="152.117.99.75" requestID="cd3a527e-964d-4bba" responseTimeMS=206 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T14:35:20Z clientIP="152.117.99.75" requestID="492a6996-09db-417c" responseTimeMS=203 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T14:35:22.892168588Z [Cron] Protractor sync normalized: shop 70, WOs: 0/0/25, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T14:35:23.72211002Z [Protractor] Fetched work orders page: skip=0, got 37, total so far: 37
+2026-01-29T14:35:23.722300986Z [Cron] Shop 71 - WorkflowStage counts: {
+2026-01-29T14:35:23.722309016Z   WorkCompleted: 7,
+2026-01-29T14:35:23.722312096Z   Unassigned: 21,
+2026-01-29T14:35:23.722315826Z   InspectionInProgress: 5,
+2026-01-29T14:35:23.722318656Z   ScheduledWork: 4
+2026-01-29T14:35:23.722321626Z }
+2026-01-29T14:41:38.095885028Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:38.294995049Z [Protractor] GET /ServicePackageTemplate/a9fef3e8-d3a8-4639-8737-a42bf48b0509: ok=true
+2026-01-29T14:41:38.29501557Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:38Z clientIP="72.198.61.82" requestID="fca2ab4c-6bd4-4e93" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:38.509110625Z [Protractor] GET /ServicePackageTemplate/c9011af8-7a2d-45d6-83ef-c57c5b947339: ok=true
+2026-01-29T14:41:38.509139946Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:38.693154798Z [Protractor] GET /ServicePackageTemplate/35e91ec0-b35b-4031-88a6-eefa18991984: ok=true
+2026-01-29T14:41:38.693186659Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:38.894132973Z [Protractor] GET /ServicePackageTemplate/b088368e-b782-4f2b-80a7-0a62221f47d7: ok=true
+2026-01-29T14:41:38.894162794Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:39.096458537Z [Protractor] GET /ServicePackageTemplate/231c4e21-a136-42ae-ab34-eed36e029e8e: ok=true
+2026-01-29T14:41:39.096484858Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:39.292259642Z [Protractor] GET /ServicePackageTemplate/576b46b4-a39c-4153-9089-7a65e98cc912: ok=true
+2026-01-29T14:41:39.292284892Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:39.492346331Z [Protractor] GET /ServicePackageTemplate/541cc010-dc64-4dc4-844e-e8c1494b85ff: ok=true
+2026-01-29T14:41:39.492400582Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:38Z clientIP="72.198.61.82" requestID="4274b640-5176-4e18" responseTimeMS=203 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:39.69212105Z [Protractor] GET /ServicePackageTemplate/2543efa3-4800-45a1-a1a5-5bfdf6247632: ok=true
+2026-01-29T14:41:39.692152101Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:39.908610625Z [Protractor] GET /ServicePackageTemplate/bdc24c1d-21bc-4bbc-bc0c-fe7e78cd9be4: ok=true
+2026-01-29T14:41:39.908641217Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:40.097341655Z [Protractor] GET /ServicePackageTemplate/d8e1c4a4-783f-4f45-9119-da4f17cfe2ed: ok=true
+2026-01-29T14:41:40.097422887Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:40.293528031Z [Protractor] GET /ServicePackageTemplate/1d28e589-8384-4131-8532-e9437bd550fd: ok=true
+2026-01-29T14:41:40.293550401Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:40.494473924Z [Protractor] GET /ServicePackageTemplate/394d6dfe-e9c4-4981-a22c-5532a51e1de3: ok=true
+2026-01-29T14:41:40.494505365Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:40.690701401Z [Protractor] GET /ServicePackageTemplate/02229d9a-1874-4745-a2f3-27ca7e44debf: ok=true
+2026-01-29T14:41:40.690726292Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:40.89319234Z [Protractor] GET /ServicePackageTemplate/26e4e9e4-6a70-42bf-a4e6-312db8836d7f: ok=true
+2026-01-29T14:41:40.893238411Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:41.100571341Z [Protractor] GET /ServicePackageTemplate/d6ca5967-440f-4d4d-81d2-4ae7b69b5d06: ok=true
+2026-01-29T14:41:41.100596831Z [Protractor] Got template detail with 0 lines
+2026-01-29T14:41:41.307334693Z [Protractor] GET /ServicePackageTemplate/06ca0046-9835-43dc-b829-3d258b5cbdc9: ok=true
+2026-01-29T14:41:41.307354484Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:41.538027241Z [Protractor] GET /ServicePackageTemplate/f1e0c145-3130-464f-ab0d-beedc1aae56e: ok=true
+2026-01-29T14:41:41.538045161Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="f7d153da-94d1-44ce" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="b42bdc49-cfa7-47f9" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="0c20a9f0-13a2-43c9" responseTimeMS=204 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:40Z clientIP="72.198.61.82" requestID="806302d3-3422-4582" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:41.737574984Z [Protractor] GET /ServicePackageTemplate/b6405cce-c380-417d-9405-a138ad3d4b90: ok=true
+2026-01-29T14:41:41.737600785Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="fa5f7cf7-2cac-492f" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="17a9c6c0-366f-46ac" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="ed041378-d5d1-45f5" responseTimeMS=264 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:41.936146689Z [Protractor] GET /ServicePackageTemplate/2d57978b-36df-4ed5-b97c-900b504af5f8: ok=true
+2026-01-29T14:41:41.93617298Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:42.174958741Z [Protractor] GET /ServicePackageTemplate/36181c87-d504-42fc-90e1-534be0b9b45f: ok=true
+2026-01-29T14:41:42.175163337Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:42.339628702Z [Protractor] GET /ServicePackageTemplate/82e81189-d257-4160-88b9-03a8432125b5: ok=true
+2026-01-29T14:41:42.339656032Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:42.540315298Z [Protractor] GET /ServicePackageTemplate/5c813765-4578-4436-b384-769edcf48cdb: ok=true
+2026-01-29T14:41:42.540347169Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:42.754073074Z [Protractor] GET /ServicePackageTemplate/21863522-6b9f-45f7-bfa9-fedb0471524b: ok=true
+2026-01-29T14:41:42.754114515Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:41Z clientIP="72.198.61.82" requestID="87070cd6-5ff2-4a59" responseTimeMS=263 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T14:41:42.941465184Z [Protractor] GET /ServicePackageTemplate/376006ed-6550-45ca-ade5-f39f9a0fe9cd: ok=true
+2026-01-29T14:41:42.941497285Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:43.142366207Z [Protractor] GET /ServicePackageTemplate/163d5fbe-b4b6-49e8-80f5-8d1ae5f30f0c: ok=true
+2026-01-29T14:41:43.142431028Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:43.340695625Z [Protractor] GET /ServicePackageTemplate/68a76511-633b-4a39-bc73-7c3dacaf6256: ok=true
+2026-01-29T14:41:43.340717595Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:43.546958823Z [Protractor] GET /ServicePackageTemplate/8584c6f6-90a8-4454-b649-58a4b781420b: ok=true
+2026-01-29T14:41:43.546988144Z [Protractor] Got template detail with 1 lines
+2026-01-29T14:41:44.237705777Z [2026-01-29T14:41:44.237Z] Running Tekmetric sync...
+2026-01-29T14:41:44.544493284Z [Protractor] GET /ServicePackageTemplate/c8751f31-800a-495f-8700-5948eecfca5e: ok=true
+2026-01-29T14:41:44.544524084Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:44.760207466Z [Protractor] GET /ServicePackageTemplate/d30d7575-527d-4c7a-b0b6-a671a5cc867d: ok=true
+2026-01-29T14:41:44.760239327Z [Protractor] Got template detail with 2 lines
+2026-01-29T14:41:45.738630652Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:40:10.032Z)
+2026-01-29T14:41:45.831817037Z [Protractor] Trying GET /ServicePackageTemplate/Read/4913f2f2-63b5-46f0-9967-4a29c42692c9...
+2026-01-29T14:41:45.832783135Z [Protractor] Trying GET /ServicePackageTemplate/Read/075d9f97-faf0-460d-a076-63b18d761c3d...
+2026-01-29T14:41:45.83363651Z [Protractor] Trying GET /ServicePackageTemplate/Read/3714c1a2-32da-496d-ab4e-d55ae8714350...
+2026-01-29T14:41:45.834408992Z [Protractor] Trying GET /ServicePackageTemplate/Read/455fe768-6f53-4e12-a6be-bdcb3d0062bb...
+2026-01-29T14:41:45.835204455Z [Protractor] Trying GET /ServicePackageTemplate/Read/21b7a44b-fbcf-4294-a4b0-203058945493...
+2026-01-29T14:41:45.867173884Z [Protractor] Trying GET /ServicePackageTemplate/Read/a07a5307-c56d-474f-9713-bb2fbf6d8a59...
+2026-01-29T14:41:45.868106901Z [Protractor] Trying GET /ServicePackageTemplate/Read/3039d561-f95b-4707-97a2-67aa6609fe02...
+2026-01-29T14:41:45.880702146Z [Protractor] Trying GET /ServicePackageTemplate/Read/a03eac56-877a-4f2e-a3b4-d70451eabee7...
+2026-01-29T14:41:45.894744584Z [Protractor] Trying GET /ServicePackageTemplate/Read/6731271c-05ee-4025-946d-619cff88556a...
+2026-01-29T14:41:45.895514316Z [Protractor] Trying GET /ServicePackageTemplate/Read/9ede3f2c-4156-4e93-8e0b-2abca4ee0a89...
+2026-01-29T14:41:45.896057852Z [Protractor] Trying GET /ServicePackageTemplate/Read/8f15fac6-0f76-4dc0-a45b-bd0e02b663a4...
+2026-01-29T14:41:45.89804485Z [Protractor] Trying GET /ServicePackageTemplate/Read/87e013e7-b433-418b-8900-7f6d7f797142...
+2026-01-29T14:41:45.900892243Z [Protractor] Trying GET /ServicePackageTemplate/Read/bfae4872-0aa0-4ed5-b2e2-542ea40611c3...
+2026-01-29T14:41:45.929195424Z [Protractor] Trying GET /ServicePackageTemplate/Read/08f8422a-ff4a-4f8c-843f-2f5b0e19ffa4...
+2026-01-29T14:41:45.933235271Z [Protractor] Trying GET /ServicePackageTemplate/Read/d6a73442-b21c-481d-9764-97e16787b51d...
+2026-01-29T14:41:45.947159746Z [Protractor] Trying GET /ServicePackageTemplate/Read/25f93f2b-d9b6-4001-a5f6-d19195ee4b56...
+2026-01-29T14:41:45.957558337Z [Protractor] Trying GET /ServicePackageTemplate/Read/524605fd-2645-454d-a9e1-1f11c9a4dbee...
+2026-01-29T14:41:45.958413872Z [Protractor] Trying GET /ServicePackageTemplate/Read/50ce63bb-8c7f-4d0f-8c55-ae48fec7f556...
+2026-01-29T14:41:45.959097152Z [Protractor] Trying GET /ServicePackageTemplate/Read/1cf1ff09-c637-458e-89ab-0dd847861e94...
+2026-01-29T14:41:45.961690988Z [Protractor] Trying GET /ServicePackageTemplate/Read/4b8fe146-1247-4891-85d5-aae379c3bbe1...
+2026-01-29T14:41:45.966616711Z [Protractor] Trying GET /ServicePackageTemplate/Read/aa0aab75-28a3-422e-9a89-9e1a69283f94...
+2026-01-29T14:41:45.988491146Z [Protractor] Trying GET /ServicePackageTemplate/Read/ef107716-130a-408e-8c29-3946209d7752...
+2026-01-29T14:41:45.996053005Z [Protractor] Trying GET /ServicePackageTemplate/Read/6639c5ae-e272-4419-a5bc-c5bac5cd3b2c...
+2026-01-29T14:41:46.013573904Z [Protractor] Trying GET /ServicePackageTemplate/Read/35d03816-192f-46e0-a523-a96205b35111...
+2026-01-29T14:41:46.020208486Z [Protractor] Trying GET /ServicePackageTemplate/Read/251218b5-88f4-475e-9c0c-f5926e02009f...
+2026-01-29T14:41:46.020966669Z [Protractor] Trying GET /ServicePackageTemplate/Read/01e484c9-83d1-4d62-bb81-78af6e805cb8...
+2026-01-29T14:41:46.021635708Z [Protractor] Trying GET /ServicePackageTemplate/Read/b40fffe5-b532-4e8b-b8b6-bdecc503e20f...
+2026-01-29T14:41:46.025337615Z [Protractor] Trying GET /ServicePackageTemplate/Read/799a75ba-c284-4e51-9640-a48c0d9b7e2a...
+2026-01-29T14:41:46.032701429Z [Protractor] Trying GET /ServicePackageTemplate/Read/2816a5d9-d597-4385-9a3a-222a3191a1df...
+2026-01-29T14:41:46.047660643Z [Protractor] Trying GET /ServicePackageTemplate/Read/03b7b692-75ab-48a7-ac5e-008c5800da4c...
+2026-01-29T14:41:46.058817197Z [Protractor] Trying GET /ServicePackageTemplate/Read/a28f4603-80fe-48a7-83b5-fe193e09c260...
+2026-01-29T14:41:46.079866968Z [Protractor] Trying GET /ServicePackageTemplate/Read/0da9b3d4-93ba-48ca-b139-864f6a70b9f7...
+2026-01-29T14:41:46.082504915Z [Protractor] Trying GET /ServicePackageTemplate/Read/70abec93-966d-4c13-92bb-6e53fca54b47...
+2026-01-29T14:41:46.083430532Z [Protractor] Trying GET /ServicePackageTemplate/Read/09ce2f54-b4bc-42fa-8aaf-780e2e9222d0...
+2026-01-29T14:41:46.083940767Z [Protractor] Trying GET /ServicePackageTemplate/Read/097115ae-fe1b-4a93-8fc9-bbfc1af9df0a...
+2026-01-29T14:41:46.088965372Z [Protractor] Trying GET /ServicePackageTemplate/Read/6a513409-95ad-492f-ab6d-aa6c8e29b31e...
+2026-01-29T14:41:46.098612893Z [Protractor] Trying GET /ServicePackageTemplate/Read/d8a78ff9-dd5c-49cb-8d1f-fcf8fbfc3441...
+2026-01-29T14:41:46.106245424Z [Protractor] Trying GET /ServicePackageTemplate/Read/5c8c65e0-2c97-441d-9937-9f44a1827ce9...
+2026-01-29T14:41:46.121504437Z [Protractor] Trying GET /ServicePackageTemplate/Read/07754d49-4ec5-4a11-94e6-407e7015aa62...
+2026-01-29T14:41:46.147315897Z [Protractor] Trying GET /ServicePackageTemplate/Read/d13d4d75-d794-46e2-be2d-8393e045f0cc...
+2026-01-29T14:41:46.147829501Z [Protractor] Trying GET /ServicePackageTemplate/Read/f390789f-2851-4347-9bdd-263407352efd...
+2026-01-29T14:41:46.148277005Z [Protractor] Trying GET /ServicePackageTemplate/Read/a07760ba-e3d5-4c50-95db-f79625988d1b...
+2026-01-29T14:41:46.148743188Z [Protractor] Trying GET /ServicePackageTemplate/Read/9999bd8d-f4f2-4176-8c08-f3df03323a1d...
+2026-01-29T14:41:46.152476336Z [Protractor] Trying GET /ServicePackageTemplate/Read/3df4c1a6-363d-4535-baab-d36fc2213a26...
+2026-01-29T14:41:46.164742103Z [Protractor] Trying GET /ServicePackageTemplate/Read/3f0b10b0-2351-454d-aa40-4cf7b7cba613...
+2026-01-29T14:41:46.165128454Z [Protractor] Trying GET /ServicePackageTemplate/Read/fbdcc310-27f5-4dda-834c-9feab29067c2...
+2026-01-29T14:41:46.182783766Z [Protractor] Trying GET /ServicePackageTemplate/Read/36c4fc9f-0a28-4ec5-b1d2-f29a40521e6f...
+2026-01-29T14:41:46.183879128Z [Protractor] Trying GET /ServicePackageTemplate/Read/a23ee169-b4ff-4d4c-8742-8d387c884501...
+2026-01-29T14:41:46.195040362Z [Protractor] Trying GET /ServicePackageTemplate/Read/eb60f951-b77e-475e-8154-0b1a87ca19aa...
+2026-01-29T14:41:46.347601621Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:40:10.396Z)
+2026-01-29T14:41:46.499252704Z [Protractor] Trying GET /ServicePackageTemplate/Read/c5421632-90b4-4166-8b8e-fa71fe867b96...
+2026-01-29T14:41:46.576575879Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T14:40:11.007Z)
+2026-01-29T14:41:46.915926981Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T14:41:46.916031774Z [Cron] Shop 28 - WorkflowStage counts: {
+2026-01-29T14:41:46.916037124Z   InspectionInProgress: 1,
+2026-01-29T14:41:46.916040194Z   WorkAuthorized: 1,
+2026-01-29T14:41:46.916042314Z   EstimateCompleted: 1,
+2026-01-29T14:41:46.916044544Z   Unassigned: 2
+2026-01-29T14:41:46.916046784Z }
+2026-01-29T14:41:46.943982495Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 1 ROs (updated since 2026-01-29T14:40:11.671Z)
+2026-01-29T14:41:47.342087913Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:40:11.970Z)
+2026-01-29T14:41:49.07215737Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:40:13.531Z)
+2026-01-29T14:41:49.407521707Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:40:13.726Z)
+2026-01-29T14:41:49.806768127Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:40:14.114Z)
+2026-01-29T14:41:49.93981946Z [Cron] Tekmetric incremental sync completed in 5435ms: 4 synced, 0 removed, 6/6 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T14:41:49.941581081Z [2026-01-29T14:41:44.237Z] Sync complete: {
+2026-01-29T14:41:49.941604402Z   "ok": true,
+2026-01-29T14:41:49.941614662Z   "duration": "5435ms",
+2026-01-29T14:41:49.941618722Z   "summary": {
+2026-01-29T14:41:49.941625113Z     "totalShops": 8,
+2026-01-29T14:41:49.941631223Z     "totalSynced": 4,
+2026-01-29T14:41:49.941637223Z     "totalRemoved": 0,
+2026-01-29T14:41:49.941673734Z     "fromCache": {
+2026-01-29T14:41:49.941676914Z       "vehicles": 6,
+2026-01-29T14:41:49.941679064Z       "customers": 6
+2026-01-29T14:41:49.941681184Z     },
+2026-01-29T14:41:49.941683364Z     "pagesQueued": 0,
+2026-01-29T14:41:49.941685454Z     "errors": 0,
+2026-01-29T14:41:49.941687575Z     "skipped": 0
+2026-01-29T14:41:49.941689735Z   },
+2026-01-29T14:41:49.941691955Z   "shops": [
+2026-01-29T14:41:49.941694605Z     {
+2026-01-29T14:41:49.941696735Z       "shopId": 1,
+2026-01-29T14:41:49.941699685Z       "tekmetricShopId": 14956,
+2026-01-29T14:41:49.941701865Z       "synced": 0,
+2026-01-29T14:41:49.941703965Z       "removed": 0,
+2026-01-29T14:41:49.941706125Z       "fromCache": {
+2026-01-29T14:41:49.941708215Z         "vehicles": 0,
+2026-01-29T14:41:49.941710595Z         "customers": 0
+2026-01-29T14:41:49.941712655Z       },
+2026-01-29T14:41:49.941714735Z       "pagesQueued": 0,
+2026-01-29T14:41:49.941717265Z       "terminalSwept": false
+2026-01-29T14:41:49.941719385Z     },
+2026-01-29T14:41:49.941721476Z     {
+2026-01-29T14:41:49.941723605Z       "shopId": 28,
+2026-01-29T14:41:49.941725956Z       "tekmetricShopId": 14956,
+2026-01-29T14:41:49.941728036Z       "synced": 0,
+2026-01-29T14:41:49.941730176Z       "removed": 0,
+2026-01-29T14:41:49.941732236Z       "fromCache": {
+2026-01-29T14:41:49.941734396Z         "vehicles": 0,
+2026-01-29T14:41:49.941736546Z         "customers": 0
+2026-01-29T14:41:49.941738696Z       },
+2026-01-29T14:41:49.941740786Z       "pagesQueued": 0,
+2026-01-29T14:41:49.941743276Z       "terminalSwept": false
+2026-01-29T14:41:49.941745436Z     },
+2026-01-29T14:41:49.941747556Z     {
+2026-01-29T14:41:49.941749696Z       "shopId": 32,
+2026-01-29T14:41:49.941751786Z       "tekmetricShopId": 469,
+2026-01-29T14:41:49.941753856Z       "synced": 1,
+2026-01-29T14:41:49.941755897Z       "removed": 0,
+2026-01-29T14:41:49.941757977Z       "fromCache": {
+2026-01-29T14:41:49.941760037Z         "vehicles": 1,
+2026-01-29T14:41:49.941762117Z         "customers": 1
+2026-01-29T14:41:49.941764197Z       },
+2026-01-29T14:41:49.941766257Z       "pagesQueued": 0,
+2026-01-29T14:41:49.941768337Z       "terminalSwept": false
+2026-01-29T14:41:49.941770417Z     },
+2026-01-29T14:41:49.941772487Z     {
+2026-01-29T14:41:49.941774577Z       "shopId": 36,
+2026-01-29T14:41:49.941776617Z       "tekmetricShopId": 470,
+2026-01-29T14:41:49.941781267Z       "synced": 0,
+2026-01-29T14:41:49.941783377Z       "removed": 0,
+2026-01-29T14:41:49.941785437Z       "fromCache": {
+2026-01-29T14:41:49.941787537Z         "vehicles": 1,
+2026-01-29T14:41:49.941789598Z         "customers": 1
+2026-01-29T14:41:49.941791647Z       },
+2026-01-29T14:41:49.941793807Z       "pagesQueued": 0,
+2026-01-29T14:41:49.941795928Z       "terminalSwept": false
+2026-01-29T14:41:49.941798028Z     },
+2026-01-29T14:41:49.941800078Z     {
+2026-01-29T14:41:49.941802138Z       "shopId": 37,
+2026-01-29T14:41:49.941816198Z       "tekmetricShopId": 471,
+2026-01-29T14:41:49.941819478Z       "synced": 1,
+2026-01-29T14:41:49.941821578Z       "removed": 0,
+2026-01-29T14:41:49.941824908Z       "fromCache": {
+2026-01-29T14:41:49.941827159Z         "vehicles": 2,
+2026-01-29T14:41:49.941829348Z         "customers": 2
+2026-01-29T14:41:49.941831499Z       },
+2026-01-29T14:41:49.941833609Z       "pagesQueued": 0,
+2026-01-29T14:41:49.941835799Z       "terminalSwept": false
+2026-01-29T14:41:49.941837959Z     },
+2026-01-29T14:41:49.941839969Z     {
+2026-01-29T14:41:49.941847039Z       "shopId": 54,
+2026-01-29T14:41:49.941849219Z       "tekmetricShopId": 275,
+2026-01-29T14:41:49.941851269Z       "synced": 2,
+2026-01-29T14:41:49.941853449Z       "removed": 0,
+2026-01-29T14:41:49.941855599Z       "fromCache": {
+2026-01-29T14:41:49.94185778Z         "vehicles": 2,
+2026-01-29T14:41:49.94185988Z         "customers": 2
+2026-01-29T14:41:49.94186202Z       },
+2026-01-29T14:41:49.94186422Z       "pagesQueued": 0,
+2026-01-29T14:41:49.9418663Z       "terminalSwept": false
+2026-01-29T14:41:49.94186859Z     },
+2026-01-29T14:41:49.94187065Z     {
+2026-01-29T14:41:49.94187298Z       "shopId": 57,
+2026-01-29T14:41:49.94187513Z       "tekmetricShopId": 11803,
+2026-01-29T14:41:49.94187724Z       "synced": 0,
+2026-01-29T14:41:49.94187936Z       "removed": 0,
+2026-01-29T14:41:49.94188152Z       "fromCache": {
+2026-01-29T14:41:49.94188357Z         "vehicles": 0,
+2026-01-29T14:41:49.94188566Z         "customers": 0
+2026-01-29T14:41:49.94188777Z       },
+2026-01-29T14:41:49.94188985Z       "pagesQueued": 0,
+2026-01-29T14:41:49.94189195Z       "terminalSwept": false
+2026-01-29T14:41:49.94189403Z     },
+2026-01-29T14:41:49.94189609Z     {
+2026-01-29T14:41:49.941898161Z       "shopId": 63,
+2026-01-29T14:41:49.941900261Z       "tekmetricShopId": 14245,
+2026-01-29T14:41:49.941902311Z       "synced": 0,
+2026-01-29T14:41:49.941904371Z       "removed": 0,
+2026-01-29T14:41:49.941906521Z       "fromCache": {
+2026-01-29T14:41:49.941908591Z         "vehicles": 0,
+2026-01-29T14:41:49.941910611Z         "customers": 0
+2026-01-29T14:41:49.941913761Z       },
+2026-01-29T14:41:49.941915921Z       "pagesQueued": 0,
+2026-01-29T14:41:49.941918091Z       "terminalSwept": false
+2026-01-29T14:41:49.941920231Z     }
+2026-01-29T14:41:49.941922311Z   ]
+2026-01-29T14:41:49.941924421Z }
