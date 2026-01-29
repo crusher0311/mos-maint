@@ -1,0 +1,180 @@
+2026-01-29T20:33:15.749146638Z [Cron] Shop 275: Found 0 work orders in tekmetric_work_orders
+2026-01-29T20:33:15.805761447Z [Cron] Shop 275: Aggregated 0 unique VINs
+2026-01-29T20:33:15.805782347Z [Cron] Shop 275: 0 valid VINs after filter
+2026-01-29T20:33:15.861581438Z [Cron] Shop 11803: Found 0 work orders in tekmetric_work_orders
+2026-01-29T20:33:15.917642544Z [Cron] Shop 11803: Aggregated 0 unique VINs
+2026-01-29T20:33:15.918309789Z [Cron] Shop 11803: 0 valid VINs after filter
+2026-01-29T20:33:15.973508486Z [Cron] Shop 14245: Found 0 work orders in tekmetric_work_orders
+2026-01-29T20:33:16.02942298Z [Cron] Shop 14245: Aggregated 0 unique VINs
+2026-01-29T20:33:16.0294402Z [Cron] Shop 14245: 0 valid VINs after filter
+2026-01-29T20:33:16.02944618Z [Cron] Triggered plan pre-generation for 0/8 Tekmetric shops with vehicles
+2026-01-29T20:33:16.031042205Z [2026-01-29T20:32:55.801Z] Sync complete: 3 synced, 8 shops, 19048ms
+2026-01-29T20:33:20Z clientIP="152.117.99.75" requestID="b9f9c3c0-e3ae-42fc" responseTimeMS=172 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:33:20Z clientIP="152.117.99.75" requestID="d05480e7-1841-471c" responseTimeMS=67 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:33:20Z clientIP="152.117.99.75" requestID="24914b84-7625-4dce" responseTimeMS=172 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:33:20Z clientIP="152.117.99.75" requestID="1f800b56-bc01-49f3" responseTimeMS=178 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:33:20Z clientIP="152.117.99.75" requestID="ae2df295-d6b7-493e" responseTimeMS=186 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:33:20.455096864Z [Shutdown] Received SIGTERM, stopping all processes...
+2026-01-29T20:33:26Z clientIP="152.117.99.75" requestID="9479aaa7-b3f9-4384" responseTimeMS=692 responseBytes=4202 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-29T20:33:26.643291745Z [Cron] Protractor sync normalized: shop 25, WOs: 0/0/62, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T20:33:27.201470508Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T20:33:27.205621097Z [Cron] Shop 28 - WorkflowStage counts: {
+2026-01-29T20:33:27.205644568Z   InspectionInProgress: 1,
+2026-01-29T20:33:27.205650168Z   WorkAuthorized: 1,
+2026-01-29T20:33:27.205654418Z   EstimateCompleted: 1,
+2026-01-29T20:33:27.205658588Z   Unassigned: 2
+2026-01-29T20:33:27.205662418Z }
+2026-01-29T20:33:31.543105564Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T20:33:32.13413221Z [Protractor] Fetched work orders page: skip=0, got 61, total so far: 61
+2026-01-29T20:33:32.134375878Z [Cron] Shop 29 - WorkflowStage counts: {
+2026-01-29T20:33:32.134383998Z   WorkCompleted: 13,
+2026-01-29T20:33:32.134469721Z   InspectionInProgress: 27,
+2026-01-29T20:33:32.134477441Z   WorkAuthorized: 3,
+2026-01-29T20:33:32.134481531Z   Unassigned: 12,
+2026-01-29T20:33:32.134529043Z   EstimateCompleted: 2,
+2026-01-29T20:33:32.134533313Z   ScheduledWork: 4
+2026-01-29T20:33:32.134537753Z }
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="bdee9d97-bb47-4a65" responseTimeMS=173 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="49216d16-29fb-4a29" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="31c89d7f-6593-405e" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="5ed858fa-bfef-4e6b" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="038bd349-5c07-4881" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="fa0b9a81-6c26-44ba" responseTimeMS=5 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="a3c12788-14f7-48d2" responseTimeMS=5 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="f2717957-1a07-47a8" responseTimeMS=60 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="aa35a303-6f46-4498" responseTimeMS=179 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="21954ce3-d6a8-4a3b" responseTimeMS=181 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="def11397-6fbc-4627" responseTimeMS=5 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="9df2657c-5fd3-40e4" responseTimeMS=229 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:41Z clientIP="72.198.61.82" requestID="1d1fbdfa-1a36-4132" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:33:56Z clientIP="152.117.99.75" requestID="b5c136b5-c62d-4a3a" responseTimeMS=718 responseBytes=4202 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-29T20:33:58.549715191Z [2026-01-29T20:33:58.549Z] Running Tekmetric sync...
+2026-01-29T20:33:59.904624398Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:27.187Z)
+2026-01-29T20:34:00.286715144Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:27.547Z)
+2026-01-29T20:34:00.698810425Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:27.930Z)
+2026-01-29T20:34:01.100746039Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:28.339Z)
+2026-01-29T20:34:01.563308592Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 2 ROs (updated since 2026-01-29T20:32:29.187Z)
+2026-01-29T20:34:10.928734439Z [DataOne Cache] Stored 0 items for squish WP0AF2A7HL, expires 2026-02-05T20:32:57.749Z
+2026-01-29T20:34:12Z clientIP="72.198.61.82" requestID="39a7851d-eeed-4f0c" responseTimeMS=19 responseBytes=3120 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:13Z clientIP="35.92.47.96" requestID="3cfe86b6-3bf4-435c" responseTimeMS=203 responseBytes=277 userAgent="axios/1.5.0"
+2026-01-29T20:34:16.742606022Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:45.016Z)
+2026-01-29T20:34:16.961897155Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:30.914Z)
+2026-01-29T20:34:17.392645286Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T20:32:31.324Z)
+2026-01-29T20:34:17.523227155Z [Cron] Tekmetric incremental sync completed in 18737ms: 2 synced, 0 removed, 2/2 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T20:34:17.586583029Z [Cron] Found 8 Tekmetric shops for pregeneration
+2026-01-29T20:34:17.649434958Z [Cron] Shop 1 (tek: 14956): Found 104 work orders in tekmetric_work_orders
+2026-01-29T20:34:17.716209508Z [Cron] Shop 1: Aggregated 50 unique VINs
+2026-01-29T20:34:17.716240709Z [Cron] Shop 1: 50 valid VINs after filter
+2026-01-29T20:34:17.78014217Z [Cron] Shop 28 (tek: 14956): Found 104 work orders in tekmetric_work_orders
+2026-01-29T20:34:17.845139536Z [Cron] Shop 28: Aggregated 50 unique VINs
+2026-01-29T20:34:17.845167597Z [Cron] Shop 28: 50 valid VINs after filter
+2026-01-29T20:34:17.908699936Z [Cron] Shop 32 (tek: 469): Found 1353 work orders in tekmetric_work_orders
+2026-01-29T20:34:17.955523665Z [DataOne Cache] HIT for squish 2FMHK6DTDB, cached at 2026-01-28T22:07:53.693Z
+2026-01-29T20:34:17.962084709Z [DataOne Cache] HIT for squish 1FMCU0F7KU, cached at 2026-01-29T14:48:46.910Z
+2026-01-29T20:34:18.012087767Z [DataOne Cache] HIT for squish 1J4NF1FBBD, cached at 2026-01-28T22:11:53.638Z
+2026-01-29T20:34:18.026464245Z [DataOne Cache] HIT for squish SADCK2FXKA, cached at 2026-01-28T22:11:36.770Z
+2026-01-29T20:34:18.092836823Z [Cron] Shop 32: Aggregated 50 unique VINs
+2026-01-29T20:34:18.092864964Z [Cron] Shop 32: 50 valid VINs after filter
+2026-01-29T20:34:18.15016881Z [DataOne Cache] HIT for squish 2FMHK6DTDB, cached at 2026-01-28T22:07:53.693Z
+2026-01-29T20:34:18.156737014Z [DataOne Cache] HIT for squish 1FMCU0F7KU, cached at 2026-01-29T14:48:46.910Z
+2026-01-29T20:34:18.216694123Z [DataOne Cache] HIT for squish 1G6DP5E3D0, cached at 2026-01-28T22:20:55.461Z
+2026-01-29T20:34:18.279869641Z [DataOne Cache] HIT for squish SADCK2FXKA, cached at 2026-01-28T22:11:36.770Z
+2026-01-29T20:34:18.282286846Z [DataOne Cache] HIT for squish 1G6DP5E3D0, cached at 2026-01-28T22:20:55.461Z
+2026-01-29T20:34:18.320459146Z [Cron] Shop 36 (tek: 470): Found 1574 work orders in tekmetric_work_orders
+2026-01-29T20:34:18.377517574Z [DataOne Cache] HIT for squish 1GKFK6387J, cached at 2026-01-28T12:41:34.864Z
+2026-01-29T20:34:18.389995913Z [DataOne Cache] HIT for squish 1FTEW1C5JK, cached at 2026-01-28T22:19:14.564Z
+2026-01-29T20:34:18.403358989Z [DataOne Cache] HIT for squish 1FTEX1CMBF, cached at 2026-01-28T21:35:30.643Z
+2026-01-29T20:34:18.440826056Z [DataOne Cache] MISS for squish WDDUG8FBFA, fetching from API...
+2026-01-29T20:34:18.481657749Z [DataOne Cache] MISS for squish 1HGCM6647A, fetching from API...
+2026-01-29T20:34:18.485180868Z [Cron] Shop 36: Aggregated 50 unique VINs
+2026-01-29T20:34:18.485196699Z [Cron] Shop 36: 50 valid VINs after filter
+2026-01-29T20:34:18.488164231Z [DataOne Cache] HIT for squish KM8SRDHFEU, cached at 2026-01-28T22:18:38.349Z
+2026-01-29T20:34:18.499824155Z [DataOne Cache] MISS for squish ZARFAMBNM7, fetching from API...
+2026-01-29T20:34:18.529970094Z [DataOne Cache] MISS for squish JHLRD7895C, fetching from API...
+2026-01-29T20:34:18.545038213Z [DataOne Cache] HIT for squish WP0AF2A7HL, cached at 2026-01-29T20:32:57.749Z
+2026-01-29T20:34:18.546144088Z [DataOne Cache] MISS for squish JHMZC5F1LC, fetching from API...
+2026-01-29T20:34:18.583950506Z [DataOne Cache] HIT for squish 1J4NF1FBBD, cached at 2026-01-28T22:11:53.638Z
+2026-01-29T20:34:18.600913594Z [Cron] Shop 37 (tek: 471): Found 1431 work orders in tekmetric_work_orders
+2026-01-29T20:34:18.694876662Z [Cron] Shop 37: Aggregated 50 unique VINs
+2026-01-29T20:34:18.694920194Z [Cron] Shop 37: 50 valid VINs after filter
+2026-01-29T20:34:18.748295677Z [DataOne Cache] MISS for squish 19XFC1F3GE, fetching from API...
+2026-01-29T20:34:18.749711591Z [DataOne Cache] MISS for squish 4S4BRCGCD3, fetching from API...
+2026-01-29T20:34:18.752013562Z [DataOne Cache] MISS for squish 1G1ZT5284F, fetching from API...
+2026-01-29T20:34:18.754753958Z [DataOne Cache] MISS for squish 4JGDF6EEFA, fetching from API...
+2026-01-29T20:34:18.809421961Z [Cron] Shop 54 (tek: 275): Found 794 work orders in tekmetric_work_orders
+2026-01-29T20:34:18.878535945Z [Cron] Shop 54: Aggregated 50 unique VINs
+2026-01-29T20:34:18.878571066Z [Cron] Shop 54: 50 valid VINs after filter
+2026-01-29T20:34:18.939249616Z [Cron] Shop 57 (tek: 11803): Found 221 work orders in tekmetric_work_orders
+2026-01-29T20:34:18.96889487Z [DataOne Cache] MISS for squish 1GNSKSKDNR, fetching from API...
+2026-01-29T20:34:18.970104098Z [DataOne Cache] MISS for squish JN8AY2NEH9, fetching from API...
+2026-01-29T20:34:18.974769573Z [DataOne Cache] MISS for squish JTEEW21A70, fetching from API...
+2026-01-29T20:34:18.974780584Z [DataOne Cache] MISS for squish 1V2NR2CAJC, fetching from API...
+2026-01-29T20:34:18.975495886Z [DataOne Cache] MISS for squish 5GAEVAKWJJ, fetching from API...
+2026-01-29T20:34:19.020173298Z [Cron] Shop 57: Aggregated 50 unique VINs
+2026-01-29T20:34:19.020193009Z [Cron] Shop 57: 50 valid VINs after filter
+2026-01-29T20:34:19.084733089Z [Cron] Shop 63 (tek: 14245): Found 1339 work orders in tekmetric_work_orders
+2026-01-29T20:34:19.092270104Z [DataOne Cache] MISS for squish WA1BNAFYJ2, fetching from API...
+2026-01-29T20:34:19.102961557Z [DataOne Cache] MISS for squish 2GTEK19T31, fetching from API...
+2026-01-29T20:34:19.10495135Z [DataOne Cache] MISS for squish 2GNAXVEVJ6, fetching from API...
+2026-01-29T20:34:19.106234919Z [DataOne Cache] MISS for squish WVGEP9BPFD, fetching from API...
+2026-01-29T20:34:19.110657827Z [DataOne Cache] MISS for squish 3TYSX5ENLT, fetching from API...
+2026-01-29T20:34:19.172570477Z [Cron] Shop 63: Aggregated 50 unique VINs
+2026-01-29T20:34:19.172599978Z [Cron] Shop 63: 50 valid VINs after filter
+2026-01-29T20:34:19.173891628Z [Cron] Triggered plan pre-generation for 8/8 Tekmetric shops with vehicles
+2026-01-29T20:34:19.177368976Z [2026-01-29T20:33:58.549Z] Sync complete: 2 synced, 8 shops, 18737ms
+2026-01-29T20:34:19.177825Z [DataOne Cache] HIT for squish 1FTEX1CMBF, cached at 2026-01-28T21:35:30.643Z
+2026-01-29T20:34:19.17847507Z [DataOne Cache] HIT for squish 1FTEW1C5JK, cached at 2026-01-28T22:19:14.564Z
+2026-01-29T20:34:19.184195499Z [DataOne Cache] HIT for squish 1GKFK6387J, cached at 2026-01-28T12:41:34.864Z
+2026-01-29T20:34:19.214355228Z [DataOne Cache] HIT for squish KM8SRDHFEU, cached at 2026-01-28T22:18:38.349Z
+2026-01-29T20:34:19.235320242Z [DataOne Cache] MISS for squish WDDUG8FBFA, fetching from API...
+2026-01-29T20:34:19.30009727Z [DataOne Cache] MISS for squish JN1AZ4EHHM, fetching from API...
+2026-01-29T20:34:19.301883906Z [DataOne Cache] MISS for squish NM0LS6ANDT, fetching from API...
+2026-01-29T20:34:19.305963853Z [DataOne Cache] MISS for squish 1FTEW1EGFF, fetching from API...
+2026-01-29T20:34:19.312154606Z [DataOne Cache] MISS for squish 1GNERHKWKJ, fetching from API...
+2026-01-29T20:34:19.334208373Z [DataOne Cache] EXPIRED for squish 5TFRV5418X, fetching from API...
+2026-01-29T20:34:19.413544165Z [DataOne Cache] MISS for squish 1FT8W3BTBE, fetching from API...
+2026-01-29T20:34:19.414738002Z [DataOne Cache] MISS for squish WAUENAF4HN, fetching from API...
+2026-01-29T20:34:19.415607679Z [DataOne Cache] MISS for squish 1GNSKTKLPR, fetching from API...
+2026-01-29T20:34:19.416753265Z [DataOne Cache] MISS for squish KL4CJGSBFB, fetching from API...
+2026-01-29T20:34:19.420223193Z [DataOne Cache] HIT for squish 3GCUYEEDMG, cached at 2026-01-29T20:14:00.464Z
+2026-01-29T20:34:19.421879525Z [DataOne Cache] MISS for squish 5N1AR1NBCC, fetching from API...
+2026-01-29T20:34:20Z clientIP="152.117.99.75" requestID="288c9e90-5561-4e23" responseTimeMS=199 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:34:20Z clientIP="152.117.99.75" requestID="b3af1ccf-aaad-4132" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:34:20Z clientIP="152.117.99.75" requestID="768901a8-f17f-414c" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:34:20Z clientIP="152.117.99.75" requestID="5edd5314-38fb-40ec" responseTimeMS=197 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:34:20Z clientIP="152.117.99.75" requestID="e59a65ee-5fd5-4439" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T20:34:24.9861706Z [PlanPrefetch] Found 20 configured shops
+2026-01-29T20:34:25.194130969Z [InternalAPI] Shop 1: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T20:34:25.196153612Z [PlanPrefetch] Shop 1: Processing 0 vehicles
+2026-01-29T20:34:27.084672286Z [InternalAPI] Shop 25: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T20:34:27.087045609Z [PlanPrefetch] Shop 25: Processing 0 vehicles
+2026-01-29T20:34:27.311605777Z [InternalAPI] Shop 28: Found 0 Protractor, 0 Tekmetric, 39 cached, returning 39
+2026-01-29T20:34:27.313627769Z [PlanPrefetch] Shop 28: Processing 15 vehicles
+2026-01-29T20:34:26Z clientIP="152.117.99.75" requestID="24e27c1b-26f0-42cf" responseTimeMS=765 responseBytes=4202 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
+2026-01-29T20:34:29.007482467Z [Cron] Protractor sync normalized: shop 29, WOs: 0/0/54, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T20:34:29.850271337Z [Protractor] Fetched work orders page: skip=0, got 76, total so far: 76
+2026-01-29T20:34:29.85133518Z [Cron] Shop 35 - WorkflowStage counts: {
+2026-01-29T20:34:29.851349841Z   Unassigned: 20,
+2026-01-29T20:34:29.851354521Z   WorkCompleted: 14,
+2026-01-29T20:34:29.851359231Z   InspectionInProgress: 23,
+2026-01-29T20:34:29.851364231Z   EstimateCompleted: 4,
+2026-01-29T20:34:29.851368661Z   WorkAuthorized: 12,
+2026-01-29T20:34:29.851372941Z   ScheduledWork: 3
+2026-01-29T20:34:29.851377252Z }
+2026-01-29T20:34:36.905186176Z [InternalAPI] Shop 29: Found 0 Protractor, 0 Tekmetric, 29 cached, returning 29
+2026-01-29T20:34:36.906860388Z [PlanPrefetch] Shop 29: Processing 15 vehicles
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="130b8d89-f19a-4d33" responseTimeMS=5 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="40effdd1-2c33-4250" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="5bc0f741-286d-4911" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="770591e0-a21c-435e" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="e61906a3-9b08-42ff" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="733514c4-d000-44b1" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="47ccda52-54b5-4572" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="85fb60ab-aa3b-46fa" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="f1a2c609-9322-4462" responseTimeMS=196 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="de7000b1-ea48-4292" responseTimeMS=189 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="adb7f158-07d9-4bd3" responseTimeMS=191 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="03cd1444-a290-4292" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:41Z clientIP="72.198.61.82" requestID="d13f6a8e-cbc7-476e" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T20:34:44.686468624Z [InternalAPI] Shop 32: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T20:34:44.688086175Z [PlanPrefetch] Shop 32: Processing 0 vehicles
