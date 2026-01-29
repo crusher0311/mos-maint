@@ -269,24 +269,49 @@ export async function GET(req: NextRequest) {
     const duration = Date.now() - startTime;
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
 
-    // Fire-and-forget plan pre-generation for synced vehicles
-    if (syncedVinsPerShop.length > 0 && CRON_SECRET) {
-      // Determine base URL for internal requests
+    // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
+    if (CRON_SECRET) {
       const baseUrl = process.env.RENDER_EXTERNAL_URL 
         || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
         || `http://localhost:${process.env.PORT || 5000}`;
       
-      for (const { shopId, vins } of syncedVinsPerShop) {
-        fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${CRON_SECRET}`,
-          },
-          body: JSON.stringify({ shopId, vins: vins.slice(0, 50) }),
-        }).catch(err => console.log(`[Cron] Plan pregenerate fire-and-forget failed for shop ${shopId}:`, err.message));
+      // Get all Protractor shops and their dashboard vehicles
+      const protractorShops = await db.collection("shops")
+        .find({ "protractor.apiKey": { $exists: true, $ne: null } })
+        .project({ _id: 0, shopId: 1 })
+        .toArray();
+      
+      for (const shop of protractorShops) {
+        const shopId = shop.shopId;
+        if (!shopId) continue;
+        
+        // Get top 50 vehicles by most recent work order (dashboard order)
+        const recentVehicles = await db.collection("work_orders")
+          .aggregate([
+            { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
+            { $sort: { updatedAt: -1 } },
+            { $group: { _id: "$vin", lastUpdated: { $first: "$updatedAt" } } },
+            { $sort: { lastUpdated: -1 } },
+            { $limit: 50 },
+          ])
+          .toArray();
+        
+        const vins = recentVehicles
+          .map(v => v._id)
+          .filter(v => v && typeof v === 'string' && v.length === 17);
+        
+        if (vins.length > 0) {
+          fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${CRON_SECRET}`,
+            },
+            body: JSON.stringify({ shopId, vins }),
+          }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${shopId}:`, err.message));
+        }
       }
-      console.log(`[Cron] Triggered plan pre-generation for ${syncedVinsPerShop.length} shops`);
+      console.log(`[Cron] Triggered plan pre-generation for ${protractorShops.length} Protractor shops`);
     }
 
     return NextResponse.json({

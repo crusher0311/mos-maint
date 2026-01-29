@@ -127,6 +127,7 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 ## Recent Changes
 
 **January 29, 2026:**
+- Pregenerate now queries ALL dashboard-visible vehicles (top 50 by recent activity), not just recently synced ones
 - Increased plan pregeneration from 10 to 50 VINs per shop (matches dashboard page size)
 - Added batch parallelism (5 concurrent VINs) to pregenerate endpoint for faster processing
 - Fixed prefetch worker production deployment by moving tsx from devDependencies to dependencies
