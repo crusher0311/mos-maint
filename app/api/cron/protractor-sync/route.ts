@@ -303,6 +303,13 @@ export async function GET(req: NextRequest) {
           if (!shopId) continue;
           
           // Get top 50 vehicles by most recent work order (dashboard order)
+          
+          // Debug: count work orders for this shop
+          const woCount = await freshDb.collection("work_orders").countDocuments({
+            shopId: { $in: [shopId, String(shopId), Number(shopId)] }
+          });
+          console.log(`[Cron] Protractor Shop ${shopId}: Found ${woCount} work orders`);
+          
           const recentVehicles = await freshDb.collection("work_orders")
             .aggregate([
               { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
@@ -313,9 +320,13 @@ export async function GET(req: NextRequest) {
             ])
             .toArray();
           
+          console.log(`[Cron] Protractor Shop ${shopId}: Aggregated ${recentVehicles.length} unique VINs`);
+          
           const vins = recentVehicles
             .map(v => v._id)
             .filter(v => v && typeof v === 'string' && v.length === 17);
+          
+          console.log(`[Cron] Protractor Shop ${shopId}: ${vins.length} valid VINs after filter`);
           
           if (vins.length > 0) {
             triggeredCount++;
