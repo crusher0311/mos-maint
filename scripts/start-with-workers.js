@@ -82,7 +82,7 @@ async function main() {
     console.error('[Tekmetric Worker] Failed to start:', err);
   });
 
-  console.log('[3/3] Starting Protractor Sync Worker...');
+  console.log('[3/4] Starting Protractor Sync Worker...');
   const protractorWorker = spawn('npx', ['tsx', 'scripts/protractor-sync-worker.ts'], {
     stdio: 'inherit',
     env: workerEnv
@@ -92,12 +92,23 @@ async function main() {
     console.error('[Protractor Worker] Failed to start:', err);
   });
 
+  console.log('[4/4] Starting Plan Prefetch Worker...');
+  const planPrefetchWorker = spawn('npx', ['tsx', 'scripts/plan-prefetch-worker.ts'], {
+    stdio: 'inherit',
+    env: workerEnv
+  });
+
+  planPrefetchWorker.on('error', (err) => {
+    console.error('[Plan Prefetch Worker] Failed to start:', err);
+  });
+
   console.log('');
   console.log('='.repeat(60));
   console.log('All services started!');
   console.log('- Next.js server on port ' + PORT);
-  console.log('- Tekmetric Sync Worker (every 10s)');
+  console.log('- Tekmetric Sync Worker (every 60s)');
   console.log('- Protractor Sync Worker (every 60s)');
+  console.log('- Plan Prefetch Worker (every 30m)');
   console.log('='.repeat(60));
 
   process.on('SIGTERM', () => {
@@ -105,6 +116,7 @@ async function main() {
     nextServer.kill('SIGTERM');
     tekmetricWorker.kill('SIGTERM');
     protractorWorker.kill('SIGTERM');
+    planPrefetchWorker.kill('SIGTERM');
     process.exit(0);
   });
 
@@ -113,6 +125,7 @@ async function main() {
     nextServer.kill('SIGINT');
     tekmetricWorker.kill('SIGINT');
     protractorWorker.kill('SIGINT');
+    planPrefetchWorker.kill('SIGINT');
     process.exit(0);
   });
 }
