@@ -61,7 +61,8 @@ export async function GET(req: NextRequest) {
           if (!shopId) continue;
           
           // Get top 50 vehicles by most recent work order (dashboard order)
-          const recentVehicles = await db.collection("work_orders")
+          // Tekmetric work orders are stored in tekmetric_work_orders collection
+          const recentVehicles = await db.collection("tekmetric_work_orders")
             .aggregate([
               { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
               { $sort: { updatedAt: -1 } },
