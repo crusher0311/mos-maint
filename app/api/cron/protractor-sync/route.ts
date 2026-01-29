@@ -303,14 +303,15 @@ export async function GET(req: NextRequest) {
           if (!shopId) continue;
           
           // Get top 50 vehicles by most recent work order (dashboard order)
+          // Protractor work orders are stored in protractor_work_orders collection
           
           // Debug: count work orders for this shop
-          const woCount = await freshDb.collection("work_orders").countDocuments({
+          const woCount = await freshDb.collection("protractor_work_orders").countDocuments({
             shopId: { $in: [shopId, String(shopId), Number(shopId)] }
           });
-          console.log(`[Cron] Protractor Shop ${shopId}: Found ${woCount} work orders`);
+          console.log(`[Cron] Protractor Shop ${shopId}: Found ${woCount} work orders in protractor_work_orders`);
           
-          const recentVehicles = await freshDb.collection("work_orders")
+          const recentVehicles = await freshDb.collection("protractor_work_orders")
             .aggregate([
               { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
               { $sort: { updatedAt: -1 } },
