@@ -297,48 +297,44 @@ export async function GET(req: NextRequest) {
         
         console.log(`[Cron] Found ${protractorShops.length} Protractor shops for pregeneration`);
         
+        const INTERNAL_SECRET = process.env.INTERNAL_WORKER_SECRET || "mos-prefetch-worker-2024";
+        
         let triggeredCount = 0;
         for (const shop of protractorShops) {
           const shopId = shop.shopId;
           if (!shopId) continue;
           
-          // Get top 50 vehicles by most recent work order (dashboard order)
-          // Protractor work orders are stored in protractor_work_orders collection
-          
-          // Debug: count work orders for this shop
-          const woCount = await freshDb.collection("protractor_work_orders").countDocuments({
-            shopId: { $in: [shopId, String(shopId), Number(shopId)] }
-          });
-          console.log(`[Cron] Protractor Shop ${shopId}: Found ${woCount} work orders in protractor_work_orders`);
-          
-          const recentVehicles = await freshDb.collection("protractor_work_orders")
-            .aggregate([
-              { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
-              { $sort: { updatedAt: -1 } },
-              { $group: { _id: "$vin", lastUpdated: { $first: "$updatedAt" } } },
-              { $sort: { lastUpdated: -1 } },
-              { $limit: 50 },
-            ])
-            .toArray();
-          
-          console.log(`[Cron] Protractor Shop ${shopId}: Aggregated ${recentVehicles.length} unique VINs`);
-          
-          const vins = recentVehicles
-            .map(v => v._id)
-            .filter(v => v && typeof v === 'string' && v.length === 17);
-          
-          console.log(`[Cron] Protractor Shop ${shopId}: ${vins.length} valid VINs after filter`);
-          
-          if (vins.length > 0) {
-            triggeredCount++;
-            fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${CRON_SECRET}`,
-              },
-              body: JSON.stringify({ shopId, vins }),
-            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${shopId}:`, err.message));
+          try {
+            // Use the internal prefetch-vehicles endpoint (handles vehicle priority + mileage filtering)
+            const vehiclesRes = await fetch(`${baseUrl}/api/internal/prefetch-vehicles?shopId=${shopId}&limit=50`, {
+              headers: { 'x-internal-secret': INTERNAL_SECRET }
+            });
+            
+            if (!vehiclesRes.ok) {
+              console.log(`[Cron] Protractor Shop ${shopId}: Failed to fetch vehicles (${vehiclesRes.status})`);
+              continue;
+            }
+            
+            const { rows } = await vehiclesRes.json();
+            const vins = (rows || [])
+              .map((v: any) => v.vin)
+              .filter((v: string) => v && v.length === 17);
+            
+            console.log(`[Cron] Protractor Shop ${shopId}: ${vins.length} VINs for pregeneration`);
+            
+            if (vins.length > 0) {
+              triggeredCount++;
+              fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${CRON_SECRET}`,
+                },
+                body: JSON.stringify({ shopId, vins }),
+              }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${shopId}:`, err.message));
+            }
+          } catch (shopErr: any) {
+            console.log(`[Cron] Protractor Shop ${shopId} pregenerate error:`, shopErr.message);
           }
         }
         console.log(`[Cron] Triggered plan pre-generation for ${triggeredCount}/${protractorShops.length} Protractor shops with vehicles`);

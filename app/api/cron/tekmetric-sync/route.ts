@@ -365,65 +365,45 @@ export async function GET(req: NextRequest) {
         
         console.log(`[Cron] Found ${tekmetricShops.length} Tekmetric shops for pregeneration`);
         
+        const INTERNAL_SECRET = process.env.INTERNAL_WORKER_SECRET || "mos-prefetch-worker-2024";
+        
         let triggeredCount = 0;
         for (const shop of tekmetricShops) {
-          // Use internal shopId for queries (work orders are stored with internal ID)
           const internalShopId = shop.shopId;
           const tekShopId = shop.tekmetric?.shopId;
           if (!internalShopId) continue;
           
-          // First: Get active vehicles (currently in shop) - highest priority
-          const activeVehicles = await db.collection("tekmetric_work_orders")
-            .aggregate([
-              { 
-                $match: { 
-                  shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] },
-                  status: { $nin: TERMINAL_STATUSES }
-                } 
-              },
-              { $sort: { updatedDate: -1 } },
-              { $group: { _id: "$vin", lastUpdated: { $first: "$updatedDate" }, isActive: { $first: { $literal: true } } } },
-            ])
-            .toArray();
-          
-          const activeVins = new Set(activeVehicles.map(v => v._id).filter(v => v && typeof v === 'string' && v.length === 17));
-          
-          // Then: Fill remaining slots with recently updated vehicles
-          const remainingSlots = 50 - activeVins.size;
-          let recentVins: string[] = [];
-          
-          if (remainingSlots > 0) {
-            const recentVehicles = await db.collection("tekmetric_work_orders")
-              .aggregate([
-                { $match: { shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] } } },
-                { $sort: { updatedDate: -1 } },
-                { $group: { _id: "$vin", lastUpdated: { $first: "$updatedDate" } } },
-                { $sort: { lastUpdated: -1 } },
-                { $limit: 50 + activeVins.size },
-              ])
-              .toArray();
+          try {
+            // Use the internal prefetch-vehicles endpoint (handles active vehicle priority)
+            const vehiclesRes = await fetch(`${baseUrl}/api/internal/prefetch-vehicles?shopId=${internalShopId}&limit=50`, {
+              headers: { 'x-internal-secret': INTERNAL_SECRET }
+            });
             
-            recentVins = recentVehicles
-              .map(v => v._id)
-              .filter(v => v && typeof v === 'string' && v.length === 17 && !activeVins.has(v))
-              .slice(0, remainingSlots);
-          }
-          
-          // Combine: active first, then recent
-          const vins = [...activeVins, ...recentVins];
-          
-          console.log(`[Cron] Shop ${internalShopId} (tek: ${tekShopId}): ${activeVins.size} active + ${recentVins.length} recent = ${vins.length} VINs for pregeneration`);
-          
-          if (vins.length > 0) {
-            triggeredCount++;
-            fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${CRON_SECRET}`,
-              },
-              body: JSON.stringify({ shopId: internalShopId, vins }),
-            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${internalShopId}:`, err.message));
+            if (!vehiclesRes.ok) {
+              console.log(`[Cron] Shop ${internalShopId}: Failed to fetch vehicles (${vehiclesRes.status})`);
+              continue;
+            }
+            
+            const { rows } = await vehiclesRes.json();
+            const vins = (rows || [])
+              .map((v: any) => v.vin)
+              .filter((v: string) => v && v.length === 17);
+            
+            console.log(`[Cron] Shop ${internalShopId} (tek: ${tekShopId}): ${vins.length} VINs for pregeneration`);
+            
+            if (vins.length > 0) {
+              triggeredCount++;
+              fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${CRON_SECRET}`,
+                },
+                body: JSON.stringify({ shopId: internalShopId, vins }),
+              }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${internalShopId}:`, err.message));
+            }
+          } catch (shopErr: any) {
+            console.log(`[Cron] Shop ${internalShopId} pregenerate error:`, shopErr.message);
           }
         }
         console.log(`[Cron] Triggered plan pre-generation for ${triggeredCount}/${tekmetricShops.length} Tekmetric shops with vehicles`);

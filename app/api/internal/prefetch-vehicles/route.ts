@@ -59,15 +59,19 @@ export async function GET(req: Request) {
       { $limit: limit }
     ]).toArray();
     
-    // Get vehicles from Tekmetric work orders
-    const tekmetricVehicles = await db.collection("tekmetric_work_orders").aggregate([
+    // Get vehicles from Tekmetric work orders - prioritize active (in-shop) vehicles
+    const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
+    
+    // First: Active vehicles (currently in shop)
+    const tekmetricActiveVehicles = await db.collection("tekmetric_work_orders").aggregate([
       { 
         $match: { 
           shopId: shopIdMatch,
-          vin: { $exists: true, $type: "string", $ne: "" }
+          vin: { $exists: true, $type: "string", $ne: "" },
+          status: { $nin: TERMINAL_STATUSES }
         } 
       },
-      { $sort: { fetchedAt: -1 } },
+      { $sort: { updatedDate: -1 } },
       {
         $group: {
           _id: "$vin",
@@ -75,13 +79,46 @@ export async function GET(req: Request) {
           year: { $first: "$vehicleYear" },
           make: { $first: "$vehicleMake" },
           model: { $first: "$vehicleModel" },
-          updatedAt: { $first: "$fetchedAt" }
+          updatedAt: { $first: "$updatedDate" },
+          isActive: { $first: { $literal: true } }
         }
       },
       { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
       { $sort: { updatedAt: -1 } },
       { $limit: limit }
     ]).toArray();
+    
+    const activeVins = new Set(tekmetricActiveVehicles.map(v => v._id));
+    
+    // Then: Recent vehicles (to fill remaining slots)
+    const tekmetricRecentVehicles = await db.collection("tekmetric_work_orders").aggregate([
+      { 
+        $match: { 
+          shopId: shopIdMatch,
+          vin: { $exists: true, $type: "string", $ne: "" }
+        } 
+      },
+      { $sort: { updatedDate: -1 } },
+      {
+        $group: {
+          _id: "$vin",
+          mileage: { $first: "$mileageIn" },
+          year: { $first: "$vehicleYear" },
+          make: { $first: "$vehicleMake" },
+          model: { $first: "$vehicleModel" },
+          updatedAt: { $first: "$updatedDate" }
+        }
+      },
+      { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
+      { $sort: { updatedAt: -1 } },
+      { $limit: limit * 2 }
+    ]).toArray();
+    
+    // Combine: active first, then recent (deduped)
+    const tekmetricVehicles = [
+      ...tekmetricActiveVehicles,
+      ...tekmetricRecentVehicles.filter(v => !activeVins.has(v._id))
+    ].slice(0, limit);
 
     // Combine and dedupe by VIN
     const vinMap = new Map<string, any>();
