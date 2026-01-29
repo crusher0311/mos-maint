@@ -1,0 +1,199 @@
+2026-01-29T16:39:19.576082825Z   WorkAuthorized: 13,
+2026-01-29T16:39:19.576088355Z   ScheduledWork: 4
+2026-01-29T16:39:19.576093825Z }
+2026-01-29T16:39:20Z clientIP="152.117.99.75" requestID="b93b89c7-fe19-43be" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:39:20Z clientIP="152.117.99.75" requestID="c72072f6-abe5-4b89" responseTimeMS=189 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:39:20Z clientIP="152.117.99.75" requestID="759e387a-d3df-4bc9" responseTimeMS=194 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:39:20Z clientIP="152.117.99.75" requestID="080d134b-e517-4a98" responseTimeMS=665 responseBytes=4741 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:39:20Z clientIP="152.117.99.75" requestID="46bad18c-8f1a-4289" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:39:20Z clientIP="152.117.99.75" requestID="3547797b-df25-4da4" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:39:21.393875229Z [Cron] Protractor sync normalized: shop 71, WOs: 0/2/34, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:39:22.242544705Z [Protractor] Fetched work orders page: skip=0, got 63, total so far: 63
+2026-01-29T16:39:22.242566625Z [Cron] Shop 72 - WorkflowStage counts: {
+2026-01-29T16:39:22.242572225Z   InspectionInProgress: 19,
+2026-01-29T16:39:22.242577176Z   Unassigned: 32,
+2026-01-29T16:39:22.242581756Z   WorkAuthorized: 7,
+2026-01-29T16:39:22.242586086Z   WorkCompleted: 1,
+2026-01-29T16:39:22.242590426Z   ScheduledWork: 4
+2026-01-29T16:39:22.242594836Z }
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="e7a97d9c-801a-4090" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="8a17206f-31f5-45d2" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="3126fd2a-8a67-4de1" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="50f4ab83-eaf4-4859" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="c8668621-3f25-49e5" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="d1d0a589-6f8b-4bd1" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="0c86bbc9-4a29-4ac6" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="ae1b2f83-3b47-4d68" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="33c64972-473b-4c04" responseTimeMS=537 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="69a06b3f-c4de-43f1" responseTimeMS=191 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="24bee0aa-2eb8-4d98" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:41Z clientIP="72.198.61.82" requestID="6e329b81-4524-4435" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:39:59.286645834Z [2026-01-29T16:39:59.286Z] Running Tekmetric sync...
+2026-01-29T16:40:00.78059424Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:38:13.314Z)
+2026-01-29T16:40:01.112084655Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:38:13.682Z)
+2026-01-29T16:40:01.563150085Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T16:38:14.454Z)
+2026-01-29T16:40:01.937058585Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 1 ROs (updated since 2026-01-29T16:38:27.039Z)
+2026-01-29T16:40:02.370477146Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:38:15.074Z)
+2026-01-29T16:40:12Z clientIP="72.198.61.82" requestID="c5b53e8c-84dd-44a0" responseTimeMS=17 responseBytes=3119 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:40:19Z clientIP="74.220.48.6" requestID="64c5f00a-7f20-462a" responseTimeMS=1871 responseBytes=479 userAgent="node"
+2026-01-29T16:40:19Z clientIP="74.220.48.6" requestID="9f303b03-9e9c-40d6" responseTimeMS=1830 responseBytes=488 userAgent="node"
+2026-01-29T16:40:20Z clientIP="152.117.99.75" requestID="4fc6e2f7-c7c1-44b8" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:40:20Z clientIP="74.220.48.6" requestID="ec9a6eb2-d245-46b5" responseTimeMS=2414 responseBytes=560 userAgent="node"
+2026-01-29T16:40:20Z clientIP="152.117.99.75" requestID="e0b9bb33-795f-4b0f" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:40:20Z clientIP="74.220.48.6" requestID="2be8fcb3-47eb-4edf" responseTimeMS=2543 responseBytes=593 userAgent="node"
+2026-01-29T16:40:20Z clientIP="74.220.48.6" requestID="614e8447-1adc-4b52" responseTimeMS=2431 responseBytes=562 userAgent="node"
+2026-01-29T16:40:20Z clientIP="74.220.48.6" requestID="bf779e03-ecba-4b3e" responseTimeMS=2673 responseBytes=556 userAgent="node"
+2026-01-29T16:40:20Z clientIP="152.117.99.75" requestID="09dd4a60-b2a6-4213" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:40:20Z clientIP="74.220.48.6" requestID="f3a29f45-28c8-4630" responseTimeMS=2725 responseBytes=583 userAgent="node"
+2026-01-29T16:40:20Z clientIP="74.220.48.6" requestID="c149f1d7-956f-4f84" responseTimeMS=2726 responseBytes=591 userAgent="node"
+2026-01-29T16:40:20Z clientIP="152.117.99.75" requestID="8da82b05-1124-4fa8" responseTimeMS=204 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:40:20Z clientIP="152.117.99.75" requestID="16bc7893-0fa3-41be" responseTimeMS=199 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T16:40:21Z clientIP="74.220.48.6" requestID="a8790f20-0008-41a3" responseTimeMS=3372 responseBytes=602 userAgent="node"
+2026-01-29T16:40:12.605247874Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:38:28.618Z)
+2026-01-29T16:40:13.147914675Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:38:28.789Z)
+2026-01-29T16:40:13.399965433Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T16:38:29.163Z)
+2026-01-29T16:40:13.53118807Z [Cron] Tekmetric incremental sync completed in 13986ms: 2 synced, 0 removed, 2/2 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T16:40:13.533843026Z [2026-01-29T16:39:59.286Z] Sync complete: 2 synced, 8 shops, 13986ms
+2026-01-29T16:40:17.664522715Z [Cron] Protractor sync normalized: shop 72, WOs: 1/0/55, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:40:17.665143417Z [Cron] Protractor sync completed in 489990ms: [
+2026-01-29T16:40:17.665158968Z   { shopId: 25, synced: 71, removed: 0, vehiclesUpdated: 63 },
+2026-01-29T16:40:17.665174678Z   { shopId: 28, synced: 5, removed: 0, vehiclesUpdated: 5 },
+2026-01-29T16:40:17.665179788Z   { shopId: 29, synced: 65, removed: 0, vehiclesUpdated: 57 },
+2026-01-29T16:40:17.665187218Z   { shopId: 35, synced: 74, removed: 0, vehiclesUpdated: 56 },
+2026-01-29T16:40:17.665191709Z   { shopId: 50, synced: 64, removed: 1, vehiclesUpdated: 57 },
+2026-01-29T16:40:17.665196138Z   { shopId: 51, synced: 77, removed: 0, vehiclesUpdated: 58 },
+2026-01-29T16:40:17.665199889Z   { shopId: 66, synced: 5, removed: 0, vehiclesUpdated: 5 },
+2026-01-29T16:40:17.665203649Z   { shopId: 67, synced: 35, removed: 0, vehiclesUpdated: 29 },
+2026-01-29T16:40:17.665207639Z   { shopId: 68, synced: 78, removed: 0, vehiclesUpdated: 53 },
+2026-01-29T16:40:17.665211569Z   { shopId: 69, synced: 32, removed: 0, vehiclesUpdated: 26 },
+2026-01-29T16:40:17.665215299Z   { shopId: 70, synced: 30, removed: 0, vehiclesUpdated: 26 },
+2026-01-29T16:40:17.665218939Z   { shopId: 71, synced: 38, removed: 0, vehiclesUpdated: 36 },
+2026-01-29T16:40:17.665222589Z   { shopId: 72, synced: 63, removed: 0, vehiclesUpdated: 56 }
+2026-01-29T16:40:17.665226679Z ]
+2026-01-29T16:40:17.667037937Z [Cron] Triggered plan pre-generation for 13 shops
+2026-01-29T16:40:18.129065595Z [DataOne Cache] HIT for squish 1GKFK6387J, cached at 2026-01-28T12:41:34.864Z
+2026-01-29T16:40:18.13360483Z [DataOne Cache] HIT for squish 1C6RD6GPCS, cached at 2026-01-28T12:41:35.102Z
+2026-01-29T16:40:18.193649613Z [DataOne Cache] HIT for squish 1N4AZ0CPDC, cached at 2026-01-28T12:41:34.929Z
+2026-01-29T16:40:18.256115505Z [DataOne Cache] HIT for squish 3TMKU72N5M, cached at 2026-01-28T12:41:34.842Z
+2026-01-29T16:40:18.26062536Z [DataOne Cache] HIT for squish 1GCVKRECGZ, cached at 2026-01-28T12:41:34.799Z
+2026-01-29T16:40:18.318319093Z [DataOne Cache] HIT for squish 1GKFK6387J, cached at 2026-01-28T12:41:34.864Z
+2026-01-29T16:40:18.345699004Z [DataOne Cache] HIT for squish WVWNL73C9E, cached at 2026-01-28T12:41:34.901Z
+2026-01-29T16:40:18.381066322Z [DataOne Cache] HIT for squish 2C3CDXCTEH, cached at 2026-01-28T12:41:34.960Z
+2026-01-29T16:40:18.396500564Z [DataOne Cache] HIT for squish 5TFMC5DBRX, cached at 2026-01-28T12:41:34.994Z
+2026-01-29T16:40:18.443122957Z [DataOne Cache] HIT for squish 5J6YH2H7BL, cached at 2026-01-28T12:41:35.012Z
+2026-01-29T16:40:18.45097276Z [DataOne Cache] HIT for squish 1LNHM81W3Y, cached at 2026-01-28T12:41:35.420Z
+2026-01-29T16:40:18.51470328Z [DataOne Cache] HIT for squish SALGS2TFFA, cached at 2026-01-28T12:41:34.783Z
+2026-01-29T16:40:18.54634595Z [DataOne Cache] HIT for squish WAUMV94E8N, cached at 2026-01-28T12:41:34.731Z
+2026-01-29T16:40:18.609710612Z [DataOne Cache] HIT for squish 5UXZV4C5CL, cached at 2026-01-28T12:43:08.682Z
+2026-01-29T16:40:18.6321418Z [DataOne Cache] HIT for squish 2C4RDGAGCR, cached at 2026-01-28T12:43:07.837Z
+2026-01-29T16:40:18.644588319Z [DataOne Cache] HIT for squish 1N4AZ1CPJC, cached at 2026-01-28T12:43:08.193Z
+2026-01-29T16:40:18.676616687Z [DataOne Cache] HIT for squish 1FMRU18WWL, cached at 2026-01-28T12:43:07.393Z
+2026-01-29T16:40:18.695559803Z [DataOne Cache] HIT for squish 5UXZV4C5CL, cached at 2026-01-28T12:43:08.682Z
+2026-01-29T16:40:18.709901542Z [DataOne Cache] HIT for squish 5NPD74LFKH, cached at 2026-01-28T12:43:07.978Z
+2026-01-29T16:40:18.742275727Z [DataOne Cache] HIT for squish 2T3ZF4DVCW, cached at 2026-01-28T12:43:07.316Z
+2026-01-29T16:40:18.772234212Z [DataOne Cache] HIT for squish 1VWGT7A3HC, cached at 2026-01-28T12:43:07.901Z
+2026-01-29T16:40:18.803973214Z [DataOne Cache] HIT for squish SAJWA4GBEL, cached at 2026-01-28T12:43:07.680Z
+2026-01-29T16:40:18.822811047Z [DataOne Cache] HIT but missing vehicle info for squish 1FCMU69KYZ, re-fetching...
+2026-01-29T16:40:18.822834308Z [DataOne Cache] EXPIRED for squish 1FCMU69KYZ, fetching from API...
+2026-01-29T16:40:18.873896303Z [DataOne Cache] HIT for squish 5UXTR9C5JL, cached at 2026-01-28T12:43:08.352Z
+2026-01-29T16:40:18.939645724Z [DataOne Cache] HIT for squish 1G6YV34A45, cached at 2026-01-28T12:44:45.821Z
+2026-01-29T16:40:18.949868978Z [DataOne Cache] HIT for squish KMHCT4AEFU, cached at 2026-01-28T12:44:39.455Z
+2026-01-29T16:40:18.97108398Z [DataOne Cache] HIT for squish 2T3YL4DVDW, cached at 2026-01-28T12:44:43.999Z
+2026-01-29T16:40:18.998832939Z [DataOne Cache] HIT for squish 1GNEVHKWMJ, cached at 2026-01-28T12:44:39.772Z
+2026-01-29T16:40:19.00894341Z [DataOne Cache] HIT for squish 1G6YV34A45, cached at 2026-01-28T12:44:45.821Z
+2026-01-29T16:40:19.035609586Z [DataOne Cache] HIT for squish JM1GJ1W6E1, cached at 2026-01-28T12:44:39.259Z
+2026-01-29T16:40:19.070871402Z [DataOne Cache] HIT for squish 1N4BL4DVRN, cached at 2026-01-28T12:43:08.107Z
+2026-01-29T16:40:19.073805023Z [DataOne Cache] HIT for squish 1G1ZD5STNF, cached at 2026-01-28T12:44:40.291Z
+2026-01-29T16:40:19.106029965Z [DataOne Cache] HIT for squish JF1SG6563H, cached at 2026-01-28T12:44:40.297Z
+2026-01-29T16:40:19.129999135Z [DataOne Cache] HIT for squish 2C4RDGCGCR, cached at 2026-01-28T12:44:41.545Z
+2026-01-29T16:40:19.19157922Z [DataOne Cache] HIT for squish 1C6RR6FGKS, cached at 2026-01-24T22:59:18.397Z
+2026-01-29T16:40:19.203445107Z [DataOne Cache] HIT for squish 1N6AD0CWFN, cached at 2026-01-28T12:46:25.843Z
+2026-01-29T16:40:19.228394088Z [DataOne Cache] HIT for squish JTEDC3EHD2, cached at 2026-01-28T12:46:25.538Z
+2026-01-29T16:40:19.25439811Z [DataOne Cache] HIT for squish 1C6RR6FGKS, cached at 2026-01-24T22:59:18.397Z
+2026-01-29T16:40:19.267627776Z [DataOne Cache] HIT for squish 1GAZGNFGH1, cached at 2026-01-28T12:46:25.557Z
+2026-01-29T16:40:19.29273674Z [DataOne Cache] HIT for squish 1G1115SLEU, cached at 2026-01-28T12:46:25.565Z
+2026-01-29T16:40:19.302976294Z [DataOne Cache] HIT for squish WDBNG70J4A, cached at 2026-01-28T12:44:40.190Z
+2026-01-29T16:40:19.316548077Z [DataOne Cache] HIT for squish 1GAHG39G11, cached at 2026-01-28T12:46:25.756Z
+2026-01-29T16:40:19.357058932Z [DataOne Cache] HIT for squish 5XXGN4A7EG, cached at 2026-01-28T12:46:25.726Z
+2026-01-29T16:40:19.36845182Z [DataOne Cache] HIT for squish 4T1BE32K3U, cached at 2026-01-28T12:44:42.055Z
+2026-01-29T16:40:19.434213241Z [DataOne Cache] HIT for squish 3C4PDCABJT, cached at 2026-01-28T16:30:41.684Z
+2026-01-29T16:40:19.443095137Z [DataOne Cache] HIT for squish 3GYFK66N6G, cached at 2026-01-28T12:49:05.581Z
+2026-01-29T16:40:19.44375425Z [DataOne Cache] HIT for squish KMHDH4AHFU, cached at 2026-01-28T12:44:39.448Z
+2026-01-29T16:40:19.471890807Z [DataOne Cache] HIT for squish 2HKRM4H7DH, cached at 2026-01-28T12:49:05.660Z
+2026-01-29T16:40:19.498894291Z [DataOne Cache] HIT for squish NMTKHMBXJR, cached at 2026-01-28T12:49:05.568Z
+2026-01-29T16:40:19.505250653Z [DataOne Cache] HIT for squish 3C4PDCABJT, cached at 2026-01-28T16:30:41.684Z
+2026-01-29T16:40:19.510496673Z [DataOne Cache] HIT for squish SAJWA1CBCL, cached at 2026-01-28T12:51:31.614Z
+2026-01-29T16:40:19.556808499Z [DataOne Cache] HIT for squish 5YFS4MCEMP, cached at 2026-01-28T12:46:25.541Z
+2026-01-29T16:40:19.564578551Z [DataOne Cache] HIT for squish 1G4PS5SKD4, cached at 2026-01-28T12:49:05.641Z
+2026-01-29T16:40:19.567201446Z [Plan Pregenerate] Processed 5 VINs for shop 28 in 1817ms
+2026-01-29T16:40:19.574363885Z [DataOne Cache] HIT for squish 3VW1K7AJDM, cached at 2026-01-28T12:46:25.927Z
+2026-01-29T16:40:19.606819852Z [DataOne Cache] HIT for squish 1N4AL2APBN, cached at 2026-01-28T12:49:05.557Z
+2026-01-29T16:40:19.618930115Z [DataOne Cache] HIT for squish 1GKS2JKJFR, cached at 2026-01-28T12:46:25.554Z
+2026-01-29T16:40:19.630389864Z [Plan Pregenerate] Processed 5 VINs for shop 66 in 1844ms
+2026-01-29T16:40:19.639356961Z [DataOne Cache] HIT for squish 1C6RR7PMJS, cached at 2026-01-28T12:51:49.671Z
+2026-01-29T16:40:19.644812914Z [DataOne Cache] HIT for squish 3GCPWBEHLG, cached at 2026-01-28T12:46:25.530Z
+2026-01-29T16:40:19.678789583Z [DataOne Cache] HIT for squish JF2SKAJCLH, cached at 2026-01-28T12:51:49.665Z
+2026-01-29T16:40:19.691890777Z [DataOne Cache] HIT for squish 1FAFP444WF, cached at 2026-01-28T12:51:49.725Z
+2026-01-29T16:40:19.697454003Z [DataOne Cache] HIT for squish 1FT8W3CTBE, cached at 2026-01-28T12:55:28.478Z
+2026-01-29T16:40:19.726692653Z [DataOne Cache] HIT for squish JTENU5JRM5, cached at 2026-01-28T12:51:49.635Z
+2026-01-29T16:40:19.744354381Z [DataOne Cache] HIT for squish 1FTYR14D8P, cached at 2026-01-28T12:49:05.616Z
+2026-01-29T16:40:19.758117808Z [DataOne Cache] HIT for squish JNKAY01E8M, cached at 2026-01-28T12:49:05.617Z
+2026-01-29T16:40:19.763091922Z [DataOne Cache] HIT but missing vehicle info for squish 1FCMU69KYZ, re-fetching...
+2026-01-29T16:40:19.763103942Z [DataOne Cache] EXPIRED for squish 1FCMU69KYZ, fetching from API...
+2026-01-29T16:40:19.825172907Z [DataOne Cache] HIT for squish 2B3KA43G7H, cached at 2026-01-28T12:56:28.568Z
+2026-01-29T16:40:19.828098358Z [DataOne Cache] HIT for squish 1GCHK39D7E, cached at 2026-01-28T12:56:28.918Z
+2026-01-29T16:40:19.839731531Z [DataOne Cache] HIT but missing vehicle info for squish 4XAWH90DE2, re-fetching...
+2026-01-29T16:40:19.839756251Z [DataOne Cache] EXPIRED for squish 4XAWH90DE2, fetching from API...
+2026-01-29T16:40:19.853744443Z [DataOne Cache] HIT for squish 1FTFW1ETDF, cached at 2026-01-28T13:06:37.861Z
+2026-01-29T16:40:19.885679829Z [DataOne Cache] HIT for squish JN8DR09Y3W, cached at 2026-01-28T12:56:28.856Z
+2026-01-29T16:40:19.891052361Z [DataOne Cache] HIT for squish 1GNDT13S82, cached at 2026-01-28T12:51:55.016Z
+2026-01-29T16:40:19.903265476Z [DataOne Cache] HIT for squish 1C4NJPBBFD, cached at 2026-01-28T12:52:07.688Z
+2026-01-29T16:40:19.956422175Z [DataOne Cache] HIT for squish JHMCN3645C, cached at 2026-01-28T13:01:50.156Z
+2026-01-29T16:40:19.96047415Z [DataOne Cache] HIT for squish 1G1PG5SBF7, cached at 2026-01-28T13:01:50.344Z
+2026-01-29T16:40:19.965982434Z [Cron] Protractor sync normalized: shop 35, WOs: 0/1/55, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T16:40:19.999307229Z [DataOne Cache] HIT for squish 1GCUYDEDKZ, cached at 2026-01-28T13:12:06.835Z
+2026-01-29T16:40:20.017117661Z [DataOne Cache] HIT for squish 1FT8W3CTBE, cached at 2026-01-28T12:55:28.478Z
+2026-01-29T16:40:20.023927403Z [DataOne Cache] HIT for squish 1JCCE87ACT, cached at 2026-01-28T12:56:28.907Z
+2026-01-29T16:40:20.041147242Z [DataOne Cache] HIT for squish 1C4BJWDGGL, cached at 2026-01-28T12:56:18.518Z
+2026-01-29T16:40:20.059160728Z [DataOne Cache] HIT for squish 1GKS2FKDMR, cached at 2026-01-28T12:49:05.468Z
+2026-01-29T16:40:20.082070906Z [DataOne Cache] HIT for squish 1FTSW21P5E, cached at 2026-01-28T13:08:03.766Z
+2026-01-29T16:40:20.090816818Z [DataOne Cache] HIT for squish 1N4AZ0CPFC, cached at 2026-01-28T13:08:03.884Z
+2026-01-29T16:40:20.098964559Z [DataOne Cache] HIT for squish 5NPE24AFHH, cached at 2026-01-28T12:51:55.018Z
+2026-01-29T16:40:20.13113737Z [DataOne Cache] HIT for squish 3GCPWCEDLG, cached at 2026-01-28T18:22:20.473Z
+2026-01-29T16:40:20.149028563Z [DataOne Cache] HIT for squish 5FNRL1803B, cached at 2026-01-28T13:01:50.489Z
+2026-01-29T16:40:20.150030504Z [DataOne Cache] HIT for squish JTHBF1D2E5, cached at 2026-01-28T13:01:56.727Z
+2026-01-29T16:40:20.158783096Z [Plan Pregenerate] Processed 9 VINs for shop 35 in 2400ms
+2026-01-29T16:40:20.172748527Z [DataOne Cache] HIT for squish 3GCEK13M7G, cached at 2026-01-28T13:01:55.643Z
+2026-01-29T16:40:20.198106467Z [Plan Pregenerate] Processed 9 VINs for shop 69 in 2408ms
+2026-01-29T16:40:20.210890663Z [DataOne Cache] HIT for squish JT6HT00WX0, cached at 2026-01-28T13:13:10.717Z
+2026-01-29T16:40:20.222874443Z [DataOne Cache] HIT for squish 2G61M5S3J9, cached at 2026-01-28T12:56:28.814Z
+2026-01-29T16:40:20.279072216Z [DataOne Cache] HIT for squish WBAKE3C5CE, cached at 2026-01-28T13:08:03.870Z
+2026-01-29T16:40:20.279410893Z [Plan Pregenerate] Processed 10 VINs for shop 25 in 2526ms
+2026-01-29T16:40:20.28359572Z [DataOne Cache] HIT for squish 5N1AL0MMGC, cached at 2026-01-28T13:08:15.578Z
+2026-01-29T16:40:20.298376608Z [DataOne Cache] HIT for squish 3C6UR5CLJG, cached at 2026-01-28T13:08:03.813Z
+2026-01-29T16:40:20.356156194Z [DataOne Cache] HIT for squish 2C3CCABGCH, cached at 2026-01-28T13:01:57.242Z
+2026-01-29T16:40:20.409939706Z [DataOne Cache] HIT for squish 5UXJU4C0N9, cached at 2026-01-28T13:13:10.685Z
+2026-01-29T16:40:20.41158442Z [DataOne Cache] HIT for squish 5XYPG4A3HG, cached at 2026-01-28T23:06:25.015Z
+2026-01-29T16:40:20.415972972Z [Plan Pregenerate] Processed 8 VINs for shop 50 in 2661ms
+2026-01-29T16:40:20.420437994Z [DataOne Cache] HIT but missing vehicle info for squish 1GBCS10AN2, re-fetching...
+2026-01-29T16:40:20.420460375Z [DataOne Cache] EXPIRED for squish 1GBCS10AN2, fetching from API...
+2026-01-29T16:40:20.472794647Z [Plan Pregenerate] Processed 10 VINs for shop 51 in 2690ms
+2026-01-29T16:40:20.477781381Z [Plan Pregenerate] Processed 10 VINs for shop 67 in 2693ms
+2026-01-29T16:40:20.610723544Z [DataOne Cache] HIT for squish 1FMDU34EVU, cached at 2026-01-28T12:56:28.626Z
+2026-01-29T16:40:20.680226274Z [DataOne Cache] HIT for squish 1C4RJFLGHC, cached at 2026-01-28T13:01:57.897Z
+2026-01-29T16:40:20.786076872Z [Protractor] Fetched work orders page: skip=0, got 64, total so far: 64
+2026-01-29T16:40:20.786367528Z [Cron] Shop 50 - WorkflowStage counts: {
+2026-01-29T16:40:20.786380378Z   WorkAuthorized: 8,
+2026-01-29T16:40:20.786398839Z   WorkCompleted: 16,
+2026-01-29T16:40:20.786403069Z   InspectionInProgress: 15,
+2026-01-29T16:40:20.786406069Z   Unassigned: 15,
+2026-01-29T16:40:20.786422119Z   ScheduledWork: 10
+2026-01-29T16:40:20.786424849Z }
+2026-01-29T16:40:20.812669347Z [DataOne Cache] HIT for squish 1GCPYBEHLZ, cached at 2026-01-28T13:08:20.764Z
+2026-01-29T16:40:20.943867533Z [DataOne Cache] HIT for squish 1C4BJWEGFL, cached at 2026-01-28T13:13:31.616Z
+2026-01-29T16:40:21.072975877Z [DataOne Cache] HIT for squish 5NTJA4DESH, cached at 2026-01-28T13:04:44.031Z
+2026-01-29T16:40:21.140412954Z [Plan Pregenerate] Processed 10 VINs for shop 70 in 3349ms
+2026-01-29T16:40:26.929552757Z [DataOne Cache] Stored 0 items for squish 1FCMU69KYZ, expires 2026-02-05T16:40:18.595Z
+2026-01-29T16:40:27.061756255Z [DataOne Cache] HIT for squish WDBEB31ESC, cached at 2026-01-28T12:43:38.310Z
+2026-01-29T16:40:27.127820013Z [DataOne Cache] HIT but missing vehicle info for squish W1XV0BEML3, re-fetching...
+2026-01-29T16:40:27.127859644Z [DataOne Cache] EXPIRED for squish W1XV0BEML3, fetching from API...
