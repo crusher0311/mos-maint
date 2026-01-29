@@ -5,13 +5,14 @@ import type {
   NormalizedVehicle,
   NormalizedWorkOrder,
   CannedJob,
+  DeclinedService,
   WorkOrderQuery,
   BackfillOptions,
   BackfillResult,
 } from '@/lib/integrations/core/types';
 import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection } from './client';
-import { transformVehicle, transformWorkOrder, transformCannedJob } from './transform';
-import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob } from './types';
+import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
+import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './types';
 
 export class ProtractorAdapter implements IIntegrationAdapter {
   provider = 'protractor' as const;
@@ -209,6 +210,28 @@ export class ProtractorAdapter implements IIntegrationAdapter {
     }
 
     return { ok: true, data: allJobs };
+  }
+
+  async getDeclinedServices(shopId: number, vehicleId: string): Promise<Result<DeclinedService[]>> {
+    const config = await resolveProtractorConfig(shopId);
+    if (!config.configured) {
+      return { ok: false, error: 'Protractor not configured for this shop' };
+    }
+
+    const result = await protractorFetch<{ ItemCollection?: ProtractorDeferredWork[] }>(
+      `/DeferredWork/ServiceItem/${vehicleId}`,
+      config,
+      {},
+      0,
+      shopId
+    );
+
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'Failed to fetch deferred work' };
+    }
+
+    const items = result.data?.ItemCollection || [];
+    return { ok: true, data: items.map(transformDeferredWork) };
   }
 
   async runBackfill(shopId: number, options?: BackfillOptions): Promise<BackfillResult> {

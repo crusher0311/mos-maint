@@ -100,6 +100,18 @@ export interface CannedJob {
   sourceSystem: SourceSystem;
 }
 
+export interface DeclinedService {
+  id: string;
+  serviceItemId?: string;
+  title: string;
+  description?: string;
+  declinedAt?: Date;
+  reason?: string;
+  estimatedCost?: number;
+  sourceId: string;
+  sourceSystem: SourceSystem;
+}
+
 export interface WorkOrderQuery {
   status?: string[];
   stages?: string[];
@@ -147,6 +159,7 @@ export interface IIntegrationAdapter {
   getWorkOrders(shopId: number, options?: WorkOrderQuery): Promise<Result<NormalizedWorkOrder[]>>;
   
   getCannedJobs(shopId: number): Promise<Result<CannedJob[]>>;
+  getDeclinedServices?(shopId: number, vehicleId: string): Promise<Result<DeclinedService[]>>;
   
   runBackfill?(shopId: number, options?: BackfillOptions): Promise<BackfillResult>;
   runIncrementalSync?(shopId: number): Promise<SyncResult>;

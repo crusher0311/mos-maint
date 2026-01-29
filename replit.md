@@ -127,6 +127,11 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 ## Recent Changes
 
 **January 29, 2026:**
+- Added platform-agnostic `DeclinedService` normalized type to core integration types
+- Added `getDeclinedServices(shopId, vehicleId)` method to `IIntegrationAdapter` interface and `IntegrationFacade`
+- Implemented Protractor `getDeclinedServices` with `transformDeferredWork` transformer
+- Fixed deferred work bug: plan-build now always fetches Protractor vehicle ID (not just when customer name is missing)
+- Canned jobs UI now shows "Jobs" button with all available canned jobs as fallback when no service-specific mappings exist
 - Pregenerate now queries ALL dashboard-visible vehicles (top 50 by recent activity), not just recently synced ones
 - Increased plan pregeneration from 10 to 50 VINs per shop (matches dashboard page size)
 - Added batch parallelism (5 concurrent VINs) to pregenerate endpoint for faster processing

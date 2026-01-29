@@ -6,6 +6,7 @@ import type {
   NormalizedVehicle,
   NormalizedWorkOrder,
   CannedJob,
+  DeclinedService,
   WorkOrderQuery,
   BackfillOptions,
   BackfillResult,
@@ -110,6 +111,17 @@ export class IntegrationFacade {
       return { ok: false, error: 'No integration configured for this shop' };
     }
     return adapter.getCannedJobs(shopId);
+  }
+  
+  async getDeclinedServices(shopId: number, vehicleId: string): Promise<Result<DeclinedService[]>> {
+    const adapter = await integrationRegistry.getConfiguredAdapter(shopId);
+    if (!adapter) {
+      return { ok: false, error: 'No integration configured for this shop' };
+    }
+    if (!adapter.getDeclinedServices) {
+      return { ok: true, data: [] }; // Return empty if not supported
+    }
+    return adapter.getDeclinedServices(shopId, vehicleId);
   }
   
   async runBackfill(shopId: number, options?: BackfillOptions): Promise<BackfillResult> {

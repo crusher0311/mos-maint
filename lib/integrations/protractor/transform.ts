@@ -5,6 +5,7 @@ import type {
   NormalizedServiceJob,
   NormalizedLineItem,
   CannedJob,
+  DeclinedService,
 } from '@/lib/integrations/core/types';
 import type { 
   ProtractorVehicle, 
@@ -13,6 +14,7 @@ import type {
   ProtractorServicePackage,
   ProtractorServicePackageLine,
   ProtractorCannedJob,
+  ProtractorDeferredWork,
 } from './types';
 
 export function transformVehicle(raw: ProtractorVehicle): NormalizedVehicle {
@@ -137,6 +139,20 @@ export function transformCannedJob(raw: ProtractorCannedJob): CannedJob {
     description: raw.Description,
     chapter: raw.Chapter,
     lines,
+    sourceSystem: 'protractor',
+  };
+}
+
+export function transformDeferredWork(raw: ProtractorDeferredWork): DeclinedService {
+  return {
+    id: raw.ID,
+    serviceItemId: raw.ServiceItemID,
+    title: raw.Title || '',
+    description: raw.Description,
+    declinedAt: raw.CreatedDate ? new Date(raw.CreatedDate) : undefined,
+    reason: raw.Reason,
+    estimatedCost: raw.EstimatedCost,
+    sourceId: raw.ID,
     sourceSystem: 'protractor',
   };
 }
