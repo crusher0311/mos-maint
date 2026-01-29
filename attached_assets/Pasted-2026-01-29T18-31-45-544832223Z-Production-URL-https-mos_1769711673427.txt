@@ -1,0 +1,280 @@
+2026-01-29T18:31:45.544832223Z Production URL: https://mos-maintenance-mvp-main.onrender.com
+2026-01-29T18:31:45.544866544Z 
+2026-01-29T18:31:45.545052197Z [1/3] Starting Next.js server...
+2026-01-29T18:31:46.265929364Z   ▲ Next.js 14.2.5
+2026-01-29T18:31:46.266142879Z   - Local:        http://localhost:10000
+2026-01-29T18:31:46.266160989Z   - Network:      http://0.0.0.0:10000
+2026-01-29T18:31:46.266279591Z 
+2026-01-29T18:31:46.266422194Z  ✓ Starting...
+2026-01-29T18:31:46.508749068Z  ✓ Ready in 438ms
+2026-01-29T18:31:48.550569995Z [Startup] Waiting for server... (attempt 1/30)
+2026-01-29T18:31:48.585390237Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:31:48.586101961Z [2/3] Starting Tekmetric Sync Worker...
+2026-01-29T18:31:48.587518519Z [3/4] Starting Protractor Sync Worker...
+2026-01-29T18:31:48.588990659Z [4/4] Starting Plan Prefetch Worker...
+2026-01-29T18:31:48.590939978Z 
+2026-01-29T18:31:48.590954929Z ============================================================
+2026-01-29T18:31:48.590958369Z All services started!
+2026-01-29T18:31:48.590961889Z - Next.js server on port 10000
+2026-01-29T18:31:48.590964589Z - Tekmetric Sync Worker (every 60s)
+2026-01-29T18:31:48.590967089Z - Protractor Sync Worker (every 60s)
+2026-01-29T18:31:48.590969459Z - Plan Prefetch Worker (every 30m)
+2026-01-29T18:31:48.590971699Z ============================================================
+2026-01-29T18:31:49.599797504Z ==> Your service is live 🎉
+2026-01-29T18:31:50.365405808Z ==> 
+2026-01-29T18:31:51.29712679Z ==> ///////////////////////////////////////////////////////////
+2026-01-29T18:31:51.348630337Z ==> 
+2026-01-29T18:31:51.392055023Z ==> Available at your primary URL https://mos.tools + 2 more domains
+2026-01-29T18:31:51.43859419Z ==> 
+2026-01-29T18:31:51.727929975Z Tekmetric Incremental Sync Worker started
+2026-01-29T18:31:51.727948496Z Base sync interval: 60 seconds
+2026-01-29T18:31:51.728006547Z Max retries: 3
+2026-01-29T18:31:51.728013537Z API URL: http://localhost:10000/api/cron/tekmetric-incremental-sync
+2026-01-29T18:31:51.728016167Z 
+2026-01-29T18:31:51.7460462Z [PlanPrefetch] Script loaded
+2026-01-29T18:31:51.746164103Z [PlanPrefetch] Worker starting...
+2026-01-29T18:31:51.746172063Z [PlanPrefetch] Will run every 30 minutes
+2026-01-29T18:31:51.746178523Z [PlanPrefetch] Waiting 120s for server warmup...
+2026-01-29T18:31:51.770487103Z Protractor Sync Worker started
+2026-01-29T18:31:51.770517333Z Base sync interval: 10 seconds
+2026-01-29T18:31:51.770527844Z Max retries: 3
+2026-01-29T18:31:51.770534964Z API URL: http://localhost:10000/api/cron/protractor-sync
+2026-01-29T18:31:51.770584075Z 
+2026-01-29T18:31:52.375584152Z ==> ///////////////////////////////////////////////////////////
+2026-01-29T18:31:52.626404822Z [Startup] Waiting for server... (attempt 2/30)
+2026-01-29T18:31:52.632042206Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:31:53Z clientIP="35.230.74.10" requestID="9f409670-d880-49ba" responseTimeMS=23 responseBytes=7443 userAgent="Go-http-client/2.0"
+2026-01-29T18:31:56.634368341Z [Startup] Waiting for server... (attempt 3/30)
+2026-01-29T18:31:56.641163918Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:00.643971403Z [Startup] Waiting for server... (attempt 4/30)
+2026-01-29T18:32:00.650683398Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:01.773380973Z [2026-01-29T18:32:01.772Z] Running Protractor sync...
+2026-01-29T18:32:03.711263336Z [Protractor] Fetched work orders page: skip=0, got 70, total so far: 70
+2026-01-29T18:32:03.711609663Z [Cron] Shop 25 - WorkflowStage counts: {
+2026-01-29T18:32:03.711615463Z   WorkCompleted: 11,
+2026-01-29T18:32:03.711618153Z   WorkAuthorized: 1,
+2026-01-29T18:32:03.711620293Z   EstimateCompleted: 1,
+2026-01-29T18:32:03.711622893Z   InspectionInProgress: 35,
+2026-01-29T18:32:03.711640053Z   Unassigned: 17,
+2026-01-29T18:32:03.711642424Z   ScheduledWork: 5
+2026-01-29T18:32:03.711644604Z }
+2026-01-29T18:32:04.652995024Z [Startup] Waiting for server... (attempt 5/30)
+2026-01-29T18:32:04.65778876Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:06.734898009Z [2026-01-29T18:32:06.734Z] Running Tekmetric sync...
+2026-01-29T18:32:08.333433383Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:37.556Z)
+2026-01-29T18:32:08.637549652Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:37.923Z)
+2026-01-29T18:32:08.658061905Z [Startup] Waiting for server... (attempt 6/30)
+2026-01-29T18:32:08.663583646Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:09.073861454Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:30:38.563Z)
+2026-01-29T18:32:09.462847253Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 2 ROs (updated since 2026-01-29T18:30:39.646Z)
+2026-01-29T18:32:09.881337787Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:30:39.177Z)
+2026-01-29T18:32:11.419013594Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:40.984Z)
+2026-01-29T18:32:11.870648606Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:30:41.394Z)
+2026-01-29T18:32:12.221965086Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:30:41.787Z)
+2026-01-29T18:32:12.350456165Z [Cron] Tekmetric incremental sync completed in 5320ms: 5 synced, 0 removed, 5/5 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T18:32:12.358966437Z [2026-01-29T18:32:06.734Z] Sync complete: 5 synced, 8 shops, 5320ms
+2026-01-29T18:32:12.665326421Z [Startup] Waiting for server... (attempt 7/30)
+2026-01-29T18:32:12.669496265Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:09.396206797Z [Cron] Protractor sync normalized: shop 50, WOs: 0/0/54, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:32:10.259671067Z [Protractor] Fetched work orders page: skip=0, got 70, total so far: 70
+2026-01-29T18:32:10.259761388Z [Cron] Shop 51 - WorkflowStage counts: {
+2026-01-29T18:32:10.259768938Z   WorkCompleted: 8,
+2026-01-29T18:32:10.259773828Z   InspectionInProgress: 23,
+2026-01-29T18:32:10.259800179Z   Unassigned: 21,
+2026-01-29T18:32:10.259802789Z   ScheduledWork: 18
+2026-01-29T18:32:10.259805259Z }
+2026-01-29T18:32:11.894330414Z [2026-01-29T18:32:11.894Z] Running Tekmetric sync...
+2026-01-29T18:32:13.489428419Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:38.399Z)
+2026-01-29T18:32:12Z clientIP="72.198.61.82" requestID="86885b8a-be54-4a31" responseTimeMS=23 responseBytes=3119 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:13.803955703Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:38.704Z)
+2026-01-29T18:32:14.128853955Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:39.339Z)
+2026-01-29T18:32:14.536097998Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:39.924Z)
+2026-01-29T18:32:14.935848131Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:31:40.139Z)
+2026-01-29T18:32:16.47889437Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:41.486Z)
+2026-01-29T18:32:16.881317669Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:31:42.125Z)
+2026-01-29T18:32:17.275910523Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:42.286Z)
+2026-01-29T18:32:17.408323177Z [Cron] Tekmetric incremental sync completed in 5258ms: 2 synced, 0 removed, 2/2 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T18:32:17.409837063Z [2026-01-29T18:32:11.894Z] Sync complete: 2 synced, 8 shops, 5258ms
+2026-01-29T18:32:16.672188548Z [Startup] Waiting for server... (attempt 8/30)
+2026-01-29T18:32:16.678338852Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:20Z clientIP="152.117.99.75" requestID="9b64cfdb-bd36-4bfb" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:32:20.679370153Z [Startup] Waiting for server... (attempt 9/30)
+2026-01-29T18:32:20.684438835Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:20Z clientIP="152.117.99.75" requestID="5bc822af-4d40-4a4c" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:32:20Z clientIP="152.117.99.75" requestID="27b295e0-75e9-4056" responseTimeMS=197 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:32:20Z clientIP="152.117.99.75" requestID="65009839-001a-4008" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:32:20Z clientIP="152.117.99.75" requestID="366e8a70-57d8-442f" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:32:24.686346193Z [Startup] Waiting for server... (attempt 10/30)
+2026-01-29T18:32:24.69213636Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:28.692437286Z [Startup] Waiting for server... (attempt 11/30)
+2026-01-29T18:32:28.696653711Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:32.697292093Z [Startup] Waiting for server... (attempt 12/30)
+2026-01-29T18:32:32.701539699Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:36.705778155Z [Startup] Waiting for server... (attempt 13/30)
+2026-01-29T18:32:36.710787425Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:40.711578362Z [Startup] Waiting for server... (attempt 14/30)
+2026-01-29T18:32:40.715516941Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="0f5abf61-66e9-4f51" responseTimeMS=7 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="ddd0d3d5-2d64-45dd" responseTimeMS=4 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="9d1272b5-e911-4552" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="44df576b-8570-4353" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="7854a57a-0a00-4310" responseTimeMS=196 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="fec7d9d7-79e0-4a2a" responseTimeMS=174 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="bd9e70af-4c57-484b" responseTimeMS=171 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="ccafd0d6-5efb-45d0" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="b7f8213b-7ce9-42bb" responseTimeMS=6 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="d41eb099-5807-4424" responseTimeMS=497 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="ddfb71d1-cda1-4e0d" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="21dfc68b-1d41-4edc" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:41Z clientIP="72.198.61.82" requestID="b1176f57-42cb-457c" responseTimeMS=180 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:32:44.717825438Z [Startup] Waiting for server... (attempt 15/30)
+2026-01-29T18:32:44.721684096Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:47.132716387Z [Shutdown] Received SIGTERM, stopping all processes...
+2026-01-29T18:32:48.723961022Z [Startup] Waiting for server... (attempt 16/30)
+2026-01-29T18:32:48.727265439Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:52.729370172Z [Startup] Waiting for server... (attempt 17/30)
+2026-01-29T18:32:52.733969994Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:54.984707698Z [Cron] Protractor sync normalized: shop 25, WOs: 0/0/62, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:32:55.565714427Z [Protractor] Fetched work orders page: skip=0, got 5, total so far: 5
+2026-01-29T18:32:55.565930711Z [Cron] Shop 28 - WorkflowStage counts: {
+2026-01-29T18:32:55.565952302Z   InspectionInProgress: 1,
+2026-01-29T18:32:55.565955892Z   WorkAuthorized: 1,
+2026-01-29T18:32:55.565958902Z   EstimateCompleted: 1,
+2026-01-29T18:32:55.565961422Z   Unassigned: 2
+2026-01-29T18:32:55.565963582Z }
+2026-01-29T18:32:56.73634256Z [Startup] Waiting for server... (attempt 18/30)
+2026-01-29T18:32:56.740182997Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:32:59.856547641Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:33:00.455066984Z [Protractor] Fetched work orders page: skip=0, got 64, total so far: 64
+2026-01-29T18:33:00.455327319Z [Cron] Shop 29 - WorkflowStage counts: {
+2026-01-29T18:33:00.455343159Z   WorkCompleted: 14,
+2026-01-29T18:33:00.455347759Z   InspectionInProgress: 27,
+2026-01-29T18:33:00.455351039Z   WorkAuthorized: 3,
+2026-01-29T18:33:00.45535422Z   Unassigned: 12,
+2026-01-29T18:33:00.455357329Z   EstimateCompleted: 2,
+2026-01-29T18:33:00.455360869Z   ScheduledWork: 6
+2026-01-29T18:33:00.45536417Z }
+2026-01-29T18:33:00.742735321Z [Startup] Waiting for server... (attempt 19/30)
+2026-01-29T18:33:00.746681521Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:04.749032551Z [Startup] Waiting for server... (attempt 20/30)
+2026-01-29T18:33:04.752536521Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:08.75434405Z [Startup] Waiting for server... (attempt 21/30)
+2026-01-29T18:33:08.758000514Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:12.417278438Z [2026-01-29T18:33:12.417Z] Running Tekmetric sync...
+2026-01-29T18:33:12.760817743Z [Startup] Waiting for server... (attempt 22/30)
+2026-01-29T18:33:12.763833644Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:13Z clientIP="72.198.61.82" requestID="bd9897df-abb8-423f" responseTimeMS=15 responseBytes=3119 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:13.838329376Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:43.554Z)
+2026-01-29T18:33:14.226571104Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:43.873Z)
+2026-01-29T18:33:14.662942964Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:44.194Z)
+2026-01-29T18:33:15.038304191Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:44.602Z)
+2026-01-29T18:33:15.473915356Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:31:45.195Z)
+2026-01-29T18:33:16.765620662Z [Startup] Waiting for server... (attempt 23/30)
+2026-01-29T18:33:16.769177574Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:17.008414004Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:31:46.544Z)
+2026-01-29T18:33:17.421712158Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 4 ROs (updated since 2026-01-29T18:31:47.141Z)
+2026-01-29T18:33:17.822851486Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:31:47.342Z)
+2026-01-29T18:33:18.192679062Z [Cron] Tekmetric incremental sync completed in 5524ms: 5 synced, 0 removed, 6/6 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T18:33:18.195081341Z [2026-01-29T18:33:12.417Z] Sync complete: 5 synced, 8 shops, 5524ms
+2026-01-29T18:33:20Z clientIP="152.117.99.75" requestID="62dd33cc-b697-4f1e" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:33:20Z clientIP="152.117.99.75" requestID="2f30a42b-cc4f-46b1" responseTimeMS=179 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:33:20.771502334Z [Startup] Waiting for server... (attempt 24/30)
+2026-01-29T18:33:20.77677074Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:20Z clientIP="152.117.99.75" requestID="0d6affd8-1e3e-444f" responseTimeMS=66 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:33:20Z clientIP="152.117.99.75" requestID="b5cd1908-3753-45a3" responseTimeMS=177 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:33:20Z clientIP="152.117.99.75" requestID="ca416438-8ea4-44c7" responseTimeMS=200 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:33:24.778576959Z [Startup] Waiting for server... (attempt 25/30)
+2026-01-29T18:33:24.784131091Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:28.785795047Z [Startup] Waiting for server... (attempt 26/30)
+2026-01-29T18:33:28.78891169Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:32.790358501Z [Startup] Waiting for server... (attempt 27/30)
+2026-01-29T18:33:32.794014555Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:36.796352504Z [Startup] Waiting for server... (attempt 28/30)
+2026-01-29T18:33:36.800860855Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:40.802371869Z [Startup] Waiting for server... (attempt 29/30)
+2026-01-29T18:33:40.807485192Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="ab6be840-5127-46ba" responseTimeMS=5 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="0aedcfa3-34d5-41f6" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="e1e5592d-2843-484e" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="47280385-b664-496a" responseTimeMS=5 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="87fbd83d-4ef3-404c" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="75f3ed17-abe3-43b7" responseTimeMS=20 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="e58cb1b8-82ff-4613" responseTimeMS=6 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="13b5931f-7156-4567" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="2723a830-93dc-45bb" responseTimeMS=189 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="786537ce-899f-4c32" responseTimeMS=199 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="7998b282-b7f5-4e07" responseTimeMS=202 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="42704a5f-e6c9-4578" responseTimeMS=531 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:41Z clientIP="72.198.61.82" requestID="8e676ec1-21cf-48c7" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:33:44.809319531Z [Startup] Waiting for server... (attempt 30/30)
+2026-01-29T18:33:44.814890724Z [Startup] Server is ready! (status: 200)
+2026-01-29T18:33:51.945899176Z [PlanPrefetch] Found 20 configured shops
+2026-01-29T18:33:52.14524585Z [InternalAPI] Shop 1: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:33:52.149404024Z [PlanPrefetch] Shop 1: Processing 0 vehicles
+2026-01-29T18:33:51Z clientIP="162.212.202.163" requestID="7d4843e5-c6ed-499a" responseTimeMS=7 responseBytes=345 userAgent=""
+2026-01-29T18:33:53.731992183Z [Cron] Protractor sync normalized: shop 29, WOs: 0/0/56, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T18:33:53.798465975Z [InternalAPI] Shop 25: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:33:53.800908574Z [PlanPrefetch] Shop 25: Processing 0 vehicles
+2026-01-29T18:33:54.01566631Z [InternalAPI] Shop 28: Found 0 Protractor, 0 Tekmetric, 39 cached, returning 39
+2026-01-29T18:33:54.017550728Z [PlanPrefetch] Shop 28: Processing 15 vehicles
+2026-01-29T18:33:54.564297046Z [Protractor] Fetched work orders page: skip=0, got 75, total so far: 75
+2026-01-29T18:33:54.56446926Z [Cron] Shop 35 - WorkflowStage counts: {
+2026-01-29T18:33:54.56447794Z   Unassigned: 20,
+2026-01-29T18:33:54.56448216Z   WorkCompleted: 12,
+2026-01-29T18:33:54.56448634Z   InspectionInProgress: 24,
+2026-01-29T18:33:54.56448988Z   EstimateCompleted: 4,
+2026-01-29T18:33:54.56449344Z   WorkAuthorized: 13,
+2026-01-29T18:33:54.5644973Z   ScheduledWork: 2
+2026-01-29T18:33:54.56450094Z }
+2026-01-29T18:34:03.621215098Z [InternalAPI] Shop 29: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:03.622864281Z [PlanPrefetch] Shop 29: Processing 0 vehicles
+2026-01-29T18:34:03.850575398Z [InternalAPI] Shop 32: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:03.851881935Z [PlanPrefetch] Shop 32: Processing 0 vehicles
+2026-01-29T18:34:05.190499349Z [InternalAPI] Shop 35: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:05.191856076Z [PlanPrefetch] Shop 35: Processing 0 vehicles
+2026-01-29T18:34:05.420942971Z [InternalAPI] Shop 36: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:05.423257288Z [PlanPrefetch] Shop 36: Processing 0 vehicles
+2026-01-29T18:34:05.648808932Z [InternalAPI] Shop 37: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:05.650251871Z [PlanPrefetch] Shop 37: Processing 0 vehicles
+2026-01-29T18:34:08.185779638Z [InternalAPI] Shop 50: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:08.187243278Z [PlanPrefetch] Shop 50: Processing 0 vehicles
+2026-01-29T18:34:12.355383545Z [InternalAPI] Shop 51: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:12.357557029Z [PlanPrefetch] Shop 51: Processing 0 vehicles
+2026-01-29T18:34:12.572650301Z [InternalAPI] Shop 54: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:12.574002878Z [PlanPrefetch] Shop 54: Processing 0 vehicles
+2026-01-29T18:34:12.776288272Z [InternalAPI] Shop 57: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:12.777849954Z [PlanPrefetch] Shop 57: Processing 0 vehicles
+2026-01-29T18:34:13.002611541Z [InternalAPI] Shop 63: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:13.004168143Z [PlanPrefetch] Shop 63: Processing 0 vehicles
+2026-01-29T18:34:13.233321829Z [InternalAPI] Shop 66: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:13.233336429Z [PlanPrefetch] Shop 66: Processing 0 vehicles
+2026-01-29T18:34:13Z clientIP="72.198.61.82" requestID="17f9cafb-10b8-44c5" responseTimeMS=18 responseBytes=3119 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T18:34:13.653640964Z [InternalAPI] Shop 67: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:13.655073823Z [PlanPrefetch] Shop 67: Processing 0 vehicles
+2026-01-29T18:34:14.179442709Z [InternalAPI] Shop 68: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:14.181128853Z [PlanPrefetch] Shop 68: Processing 0 vehicles
+2026-01-29T18:34:14.610606283Z [InternalAPI] Shop 69: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:14.611868519Z [PlanPrefetch] Shop 69: Processing 0 vehicles
+2026-01-29T18:34:15.050119716Z [InternalAPI] Shop 70: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-01-29T18:34:15.051558096Z [PlanPrefetch] Shop 70: Processing 0 vehicles
+2026-01-29T18:34:15.549631361Z [InternalAPI] Shop 71: Found 0 Protractor, 0 Tekmetric, 1 cached, returning 1
+2026-01-29T18:34:15.55107284Z [PlanPrefetch] Shop 71: Processing 1 vehicles
+2026-01-29T18:34:16.614876136Z [InternalAPI] Shop 72: Found 0 Protractor, 0 Tekmetric, 14 cached, returning 14
+2026-01-29T18:34:16.616285274Z [PlanPrefetch] Shop 72: Processing 14 vehicles
+2026-01-29T18:34:18.252414375Z [2026-01-29T18:34:18.252Z] Running Tekmetric sync...
+2026-01-29T18:34:19.755375577Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:32:43.902Z)
+2026-01-29T18:34:20.111997826Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:32:44.290Z)
+2026-01-29T18:34:20.562752856Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:32:44.726Z)
+2026-01-29T18:34:20Z clientIP="152.117.99.75" requestID="e035c3f1-02f4-4cf5" responseTimeMS=200 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:34:20Z clientIP="152.117.99.75" requestID="8f979a37-d916-4bf4" responseTimeMS=65 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:34:20Z clientIP="152.117.99.75" requestID="869ab3dc-33d8-48b2" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:34:20Z clientIP="152.117.99.75" requestID="2a55a3c9-291d-4531" responseTimeMS=199 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:34:20.905813602Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:32:45.102Z)
+2026-01-29T18:34:20Z clientIP="152.117.99.75" requestID="dedbce97-e263-4a1b" responseTimeMS=193 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T18:34:21.343934037Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T18:32:45.731Z)
+2026-01-29T18:34:22.810590786Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:32:47.249Z)
+2026-01-29T18:34:23.210443278Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 2 ROs (updated since 2026-01-29T18:32:48.132Z)
+2026-01-29T18:34:23.663315721Z [PlanPrefetch] Cycle 1 complete: 0 new, 0 cached (32s)
+2026-01-29T18:34:23.664734119Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T18:32:47.886Z)
+2026-01-29T18:34:23.793024409Z [Cron] Tekmetric incremental sync completed in 5277ms: 2 synced, 0 removed, 4/4 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T18:34:23.795066691Z [2026-01-29T18:34:18.252Z] Sync complete: 2 synced, 8 shops, 5277ms
