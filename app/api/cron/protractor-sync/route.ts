@@ -279,8 +279,11 @@ export async function GET(req: NextRequest) {
         
         console.log(`[Cron] Protractor pregeneration baseUrl: ${baseUrl}`);
         
+        // Get fresh db connection for pregeneration (original may be stale after 8+ min sync)
+        const freshDb = await getDb();
+        
         // Get all Protractor shops - use same query as sync to include legacy field names
-        const protractorShops = await db.collection("shops")
+        const protractorShops = await freshDb.collection("shops")
           .find({ 
             $or: [
               { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
@@ -300,7 +303,7 @@ export async function GET(req: NextRequest) {
           if (!shopId) continue;
           
           // Get top 50 vehicles by most recent work order (dashboard order)
-          const recentVehicles = await db.collection("work_orders")
+          const recentVehicles = await freshDb.collection("work_orders")
             .aggregate([
               { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
               { $sort: { updatedAt: -1 } },
