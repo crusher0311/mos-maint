@@ -1098,6 +1098,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   let autoVitalsCfg: any = { configured: false };
 
   // CACHE HIT: Only fetch cheap local data needed for UI (shop branding, config status)
+  // Also fetch Protractor vehicle info for deferred work (deferred work is dynamic, not cached)
   if (useCachedData) {
     console.log(`[Plan] Cache HIT - skipping expensive external API calls`);
     const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg, localShopBranding] = await Promise.all([
@@ -1112,6 +1113,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
     protractorCfg = localProtractorCfg;
     autoVitalsCfg = localAutoVitalsCfg;
     shopBranding = localShopBranding;
+    
+    // Fetch Protractor vehicle info for deferred work (needed even on cache hit)
+    if (protractorCfg.configured) {
+      protractorVehicleResult = await fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
+    }
   } else {
     // CACHE MISS: Full parallel data fetching - external APIs + local queries
     console.log(`[Plan] Cache MISS - fetching all external data`);
@@ -1162,9 +1168,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
     shopBranding = localShopBranding;
   }
 
-  // Protractor Deferred Work (depends on vehicle ID from previous call) - skip on cache hit
+  // Protractor Deferred Work (depends on vehicle ID from previous call) - always fetch (dynamic data)
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
-  if (!useCachedData && protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
+  if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
     const deferredResult = await fetchProtractorDeferredWork(
       shopId,
       vin,
