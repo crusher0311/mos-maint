@@ -2,6 +2,8 @@
 // Plan Prefetch Worker - keeps plan cache warm by prefetching recent vehicles
 // Usage: npx tsx scripts/plan-prefetch-worker.ts
 
+console.log("[PlanPrefetch] Script loaded");
+
 export {};
 
 const PREFETCH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes

@@ -101,6 +101,12 @@ async function main() {
   planPrefetchWorker.on('error', (err) => {
     console.error('[Plan Prefetch Worker] Failed to start:', err);
   });
+  
+  planPrefetchWorker.on('exit', (code, signal) => {
+    if (code !== 0 && code !== null) {
+      console.error(`[Plan Prefetch Worker] Exited with code ${code}, signal: ${signal}`);
+    }
+  });
 
   console.log('');
   console.log('='.repeat(60));

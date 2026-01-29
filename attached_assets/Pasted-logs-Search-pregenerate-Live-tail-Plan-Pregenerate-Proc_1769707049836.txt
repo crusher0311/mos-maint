@@ -1,0 +1,91 @@
+logs
+Search
+pregenerate
+
+
+Live tail
+
+
+
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 144791ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 178437ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 187819ms
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 1864ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 6630ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 7203ms
+[Plan Pregenerate] Processed 5 VINs for shop 28 in 31820ms
+[Plan Pregenerate] Processed 5 VINs for shop 66 in 32824ms
+[Plan Pregenerate] Processed 8 VINs for shop 50 in 51215ms
+[Plan Pregenerate] Processed 9 VINs for shop 35 in 57596ms
+[Plan Pregenerate] Processed 9 VINs for shop 71 in 57802ms
+[Plan Pregenerate] Processed 9 VINs for shop 69 in 58025ms
+[Plan Pregenerate] Processed 10 VINs for shop 25 in 63029ms
+[Plan Pregenerate] Processed 10 VINs for shop 68 in 63597ms
+[Plan Pregenerate] Processed 10 VINs for shop 51 in 64223ms
+[Plan Pregenerate] Processed 10 VINs for shop 67 in 65013ms
+[Plan Pregenerate] Processed 5 VINs for shop 28 in 1647ms
+[Plan Pregenerate] Processed 5 VINs for shop 66 in 1697ms
+[Plan Pregenerate] Processed 9 VINs for shop 69 in 2190ms
+[Plan Pregenerate] Processed 10 VINs for shop 25 in 2212ms
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 2242ms
+[Plan Pregenerate] Processed 9 VINs for shop 35 in 2275ms
+[Plan Pregenerate] Processed 8 VINs for shop 50 in 2426ms
+[Plan Pregenerate] Processed 10 VINs for shop 51 in 2498ms
+[Plan Pregenerate] Processed 10 VINs for shop 67 in 2549ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 11055ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 11394ms
+[Plan Pregenerate] Processed 9 VINs for shop 71 in 16153ms
+[Plan Pregenerate] Processed 10 VINs for shop 68 in 24798ms
+[Plan Pregenerate] Processed 5 VINs for shop 28 in 1748ms
+[Plan Pregenerate] Processed 5 VINs for shop 66 in 2087ms
+[Plan Pregenerate] Processed 10 VINs for shop 51 in 2438ms
+[Plan Pregenerate] Processed 10 VINs for shop 67 in 2445ms
+[Plan Pregenerate] Processed 8 VINs for shop 50 in 2578ms
+[Plan Pregenerate] Processed 9 VINs for shop 69 in 2600ms
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 2736ms
+Menu
+[Plan Pregenerate] Processed 10 VINs for shop 25 in 2799ms
+[Plan Pregenerate] Processed 9 VINs for shop 35 in 2796ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 11167ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 11216ms
+[Plan Pregenerate] Processed 9 VINs for shop 71 in 16032ms
+[Plan Pregenerate] Processed 10 VINs for shop 68 in 24567ms
+[Plan Pregenerate] Processed 5 VINs for shop 28 in 1817ms
+[Plan Pregenerate] Processed 5 VINs for shop 66 in 1844ms
+[Plan Pregenerate] Processed 9 VINs for shop 35 in 2400ms
+[Plan Pregenerate] Processed 9 VINs for shop 69 in 2408ms
+[Plan Pregenerate] Processed 10 VINs for shop 25 in 2526ms
+[Plan Pregenerate] Processed 8 VINs for shop 50 in 2661ms
+[Plan Pregenerate] Processed 10 VINs for shop 51 in 2690ms
+[Plan Pregenerate] Processed 10 VINs for shop 67 in 2693ms
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 3349ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 11740ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 11917ms
+[Plan Pregenerate] Processed 9 VINs for shop 71 in 15708ms
+[Plan Pregenerate] Processed 10 VINs for shop 68 in 24816ms
+[Plan Pregenerate] Processed 5 VINs for shop 66 in 1636ms
+[Plan Pregenerate] Processed 5 VINs for shop 28 in 1641ms
+[Plan Pregenerate] Processed 8 VINs for shop 50 in 2132ms
+[Plan Pregenerate] Processed 9 VINs for shop 69 in 2186ms
+[Plan Pregenerate] Processed 9 VINs for shop 35 in 2216ms
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 2412ms
+[Plan Pregenerate] Processed 10 VINs for shop 25 in 2584ms
+[Plan Pregenerate] Processed 10 VINs for shop 67 in 2780ms
+[Plan Pregenerate] Processed 10 VINs for shop 51 in 2858ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 11097ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 11227ms
+[Plan Pregenerate] Processed 9 VINs for shop 71 in 15378ms
+[Plan Pregenerate] Processed 10 VINs for shop 68 in 24632ms
+[Plan Pregenerate] Processed 5 VINs for shop 66 in 1660ms
+[Plan Pregenerate] Processed 5 VINs for shop 28 in 1955ms
+[Plan Pregenerate] Processed 9 VINs for shop 69 in 2191ms
+[Plan Pregenerate] Processed 8 VINs for shop 50 in 2295ms
+[Plan Pregenerate] Processed 9 VINs for shop 35 in 2484ms
+[Plan Pregenerate] Processed 10 VINs for shop 70 in 2492ms
+[Plan Pregenerate] Processed 10 VINs for shop 51 in 2565ms
+[Plan Pregenerate] Processed 10 VINs for shop 67 in 2686ms
+[Plan Pregenerate] Processed 10 VINs for shop 25 in 2699ms
+[Plan Pregenerate] Processed 10 VINs for shop 72 in 11003ms
+[Plan Pregenerate] Processed 10 VINs for shop 29 in 11250ms
+[Plan Pregenerate] Processed 9 VINs for shop 71 in 15168ms
+[Plan Pregenerate] Processed 10 VINs for shop 68 in 24697ms
