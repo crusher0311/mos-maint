@@ -14,7 +14,6 @@ export interface CommonFailure {
   description: string;
   urgency: "low" | "medium" | "high";
   typicalMileageRange: string;
-  estimatedCostRange: string;
   symptoms?: string[];
 }
 
@@ -96,7 +95,6 @@ function patternToFailure(pattern: PatternMatch, mileage: number): MatchedFailur
     description: `Based on ${pattern.occurrences} repairs performed by your shop on similar vehicles at this mileage.`,
     urgency: estimateUrgency(pattern.occurrences, pattern.avgTotal),
     typicalMileageRange: `${rangeLow} - ${rangeHigh} miles`,
-    estimatedCostRange: `$${Math.round(pattern.avgTotal * 0.8).toLocaleString()} - $${Math.round(pattern.avgTotal * 1.2).toLocaleString()}`,
     shopMatch: {
       title: pattern.jobTitle,
       avgTotal: pattern.avgTotal,
@@ -122,7 +120,6 @@ Return ONLY a JSON array with 5-8 items. Each item must have:
 - "description": Brief explanation of why this is common for this vehicle/mileage
 - "urgency": "low", "medium", or "high" based on safety/reliability impact
 - "typicalMileageRange": Range when this typically occurs (e.g., "80,000 - 100,000 miles")
-- "estimatedCostRange": Typical repair cost range (e.g., "$400 - $600")
 - "symptoms": Array of 2-3 warning signs (optional)
 
 Return ONLY the JSON array, no markdown or explanation.`;
@@ -301,7 +298,6 @@ function getDefaultFailures(mileage: number): CommonFailure[] {
       description: "Brake pads typically wear out between 30,000-70,000 miles depending on driving habits.",
       urgency: "medium",
       typicalMileageRange: "30,000 - 70,000 miles",
-      estimatedCostRange: "$150 - $300 per axle",
       symptoms: ["Squeaking when braking", "Longer stopping distance"]
     });
   }
@@ -312,7 +308,6 @@ function getDefaultFailures(mileage: number): CommonFailure[] {
       description: "Timing components require attention around 90,000-100,000 miles to prevent engine damage.",
       urgency: "high",
       typicalMileageRange: "90,000 - 100,000 miles",
-      estimatedCostRange: "$500 - $1,000",
       symptoms: ["Engine misfires", "Ticking noise from engine"]
     });
   }
@@ -323,7 +318,6 @@ function getDefaultFailures(mileage: number): CommonFailure[] {
       description: "Water pumps commonly fail between 60,000-100,000 miles.",
       urgency: "medium",
       typicalMileageRange: "60,000 - 100,000 miles",
-      estimatedCostRange: "$400 - $700",
       symptoms: ["Coolant leak", "Engine overheating"]
     });
   }

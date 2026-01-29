@@ -15,7 +15,6 @@ interface MatchedFailure {
   description: string;
   urgency: "low" | "medium" | "high";
   typicalMileageRange: string;
-  estimatedCostRange: string;
   symptoms?: string[];
   shopMatch?: ShopMatch;
   matchConfidence: number;
@@ -204,16 +203,12 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
                 </span>
               </div>
               <div className="text-left sm:text-right text-xs sm:text-sm">
-                <span className="text-gray-500 sm:block">Typical: </span>
-                <span className="font-medium text-gray-900">{failure.estimatedCostRange}</span>
+                <span className="text-gray-500 sm:block">Range: </span>
+                <span className="font-medium text-gray-900">{failure.typicalMileageRange}</span>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-gray-600 mb-2">{failure.description}</p>
-
-            <div className="text-xs text-gray-500 mb-2">
-              Range: {failure.typicalMileageRange}
-            </div>
 
             {failure.symptoms && failure.symptoms.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-3">
