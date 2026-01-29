@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
       }, { status: 200 });
     }
     
-    console.log(`[PlanBuild] Building full plan for ${vin} at ${mileage} miles`);
+    console.log(`[PlanBuild] Shop ${shopId}: Building full plan for ${vin} at ${mileage} miles`);
 
     const shopDoc = await db.collection("shops").findOne({ shopId });
     const soonMiles = shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
@@ -396,7 +396,7 @@ export async function POST(req: NextRequest) {
     await setCachedPlan(db, vin, shopId, mileage, planData);
 
     const duration = Date.now() - startTime;
-    console.log(`[PlanBuild] Built and cached plan for ${vin} in ${duration}ms`);
+    console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms`);
 
     return NextResponse.json({
       ok: true,

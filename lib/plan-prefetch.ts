@@ -1,6 +1,7 @@
 interface PrefetchItem {
   vin: string;
   mileage: number;
+  shopId: number;
   priority: "high" | "normal";
 }
 
@@ -8,6 +9,7 @@ interface VehicleForPrefetch {
   vin: string;
   mileage?: number | null;
   inProgress?: boolean;
+  shopId?: number;
 }
 
 const PREFETCH_QUEUE: PrefetchItem[] = [];
@@ -23,6 +25,7 @@ let refreshCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 const prefetchTimestamps: Map<string, number> = new Map();
 const prefetchMileages: Map<string, number> = new Map();
+const prefetchShopIds: Map<string, number> = new Map();
 
 function isPrefetchValid(vin: string): boolean {
   const timestamp = prefetchTimestamps.get(vin);
@@ -64,7 +67,7 @@ function processNextItem() {
     return;
   }
 
-  const { vin, mileage } = item;
+  const { vin, mileage, shopId } = item;
 
   if (isPrefetchValid(vin)) {
     scheduleNextProcess();
@@ -72,7 +75,7 @@ function processNextItem() {
   }
 
   activeRequests++;
-  
+
   fetch(`/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}`, {
     method: "POST",
     credentials: "include",
@@ -82,18 +85,19 @@ function processNextItem() {
         const data = await res.json();
         prefetchTimestamps.set(vin, Date.now());
         prefetchMileages.set(vin, mileage);
+        prefetchShopIds.set(vin, shopId);
         PREFETCHED_VINS.add(vin);
         if (data.built) {
-          console.log(`[Prefetch] Built full plan for ${vin} at ${mileage} miles in ${data.duration}ms`);
+          console.log(`[Prefetch] Shop ${shopId}: Built plan for ${vin} at ${mileage} mi in ${data.duration}ms`);
         } else if (data.cached) {
-          console.log(`[Prefetch] Plan already cached for ${vin}`);
+          console.log(`[Prefetch] Shop ${shopId}: Already cached ${vin}`);
         } else if (data.skipped) {
-          console.log(`[Prefetch] Skipped ${vin}: ${data.reason}`);
+          console.log(`[Prefetch] Shop ${shopId}: Skipped ${vin}: ${data.reason}`);
         }
       }
     })
     .catch((err) => {
-      console.log(`[Prefetch] Failed for ${vin}:`, err.message);
+      console.log(`[Prefetch] Shop ${shopId}: Failed ${vin}:`, err.message);
     })
     .finally(() => {
       activeRequests--;
@@ -119,10 +123,10 @@ function checkAndRefreshExpiring() {
 
   vinsToRefresh.forEach((vin) => {
     const mileage = prefetchMileages.get(vin);
-    if (mileage) {
+    const shopId = prefetchShopIds.get(vin);
+    if (mileage && shopId) {
       prefetchTimestamps.delete(vin);
-      queuePrefetch(vin, mileage, "normal");
-      console.log(`[Prefetch] Auto-refreshing ${vin} before TTL expiry`);
+      queuePrefetch(vin, mileage, shopId, "normal");
     }
   });
 }
@@ -144,13 +148,14 @@ function stopRefreshChecker() {
 
 export function queuePrefetch(
   vin: string, 
-  mileage: number | null | undefined, 
+  mileage: number | null | undefined,
+  shopId: number,
   priority: "high" | "normal" = "normal"
 ) {
   if (!vin || vin.length !== 17) return;
+  if (!shopId) return;
   
   if (!mileage || mileage <= 0) {
-    console.log(`[Prefetch] Skipping ${vin} - no mileage`);
     return;
   }
   
@@ -169,7 +174,7 @@ export function queuePrefetch(
     }
   }
 
-  const item: PrefetchItem = { vin: upperVin, mileage, priority };
+  const item: PrefetchItem = { vin: upperVin, mileage, shopId, priority };
   
   if (priority === "high") {
     PREFETCH_QUEUE.unshift(item);
@@ -183,12 +188,14 @@ export function queuePrefetch(
 
 export function queueMultiplePrefetch(
   vehicles: VehicleForPrefetch[],
+  shopId: number,
   maxCount: number = 10
 ) {
+  if (!shopId) return;
+  
   const withMileage = vehicles.filter(v => v.mileage && v.mileage > 0);
   
   if (withMileage.length === 0) {
-    console.log(`[Prefetch] No vehicles with mileage to prefetch`);
     return;
   }
 
@@ -200,18 +207,18 @@ export function queueMultiplePrefetch(
 
   const toQueue = sorted.slice(0, maxCount);
   
-  console.log(`[Prefetch] Queuing ${toQueue.length} vehicles with mileage (filtered from ${vehicles.length} total)`);
+  console.log(`[Prefetch] Shop ${shopId}: Queuing ${toQueue.length} vehicles (from ${vehicles.length} total)`);
   
   toQueue.forEach((v, index) => {
     const priority = v.inProgress ? "high" : "normal";
     setTimeout(() => {
-      queuePrefetch(v.vin, v.mileage, priority);
+      queuePrefetch(v.vin, v.mileage, shopId, priority);
     }, index * 200);
   });
 }
 
-export function triggerPrefetchOnMileageUpdate(vin: string, mileage: number) {
-  if (!vin || vin.length !== 17 || !mileage || mileage <= 0) return;
+export function triggerPrefetchOnMileageUpdate(vin: string, mileage: number, shopId: number) {
+  if (!vin || vin.length !== 17 || !mileage || mileage <= 0 || !shopId) return;
   
   const upperVin = vin.toUpperCase();
   const previousMileage = prefetchMileages.get(upperVin);
@@ -221,9 +228,7 @@ export function triggerPrefetchOnMileageUpdate(vin: string, mileage: number) {
   }
   
   prefetchTimestamps.delete(upperVin);
-  
-  console.log(`[Prefetch] Mileage update received for ${upperVin}: ${mileage} miles - triggering prefetch`);
-  queuePrefetch(upperVin, mileage, "high");
+  queuePrefetch(upperVin, mileage, shopId, "high");
 }
 
 export function isPrefetched(vin: string): boolean {
@@ -243,8 +248,8 @@ export function getPrefetchStats() {
 export function clearPrefetchCache() {
   prefetchTimestamps.clear();
   prefetchMileages.clear();
+  prefetchShopIds.clear();
   PREFETCHED_VINS.clear();
   PREFETCH_QUEUE.length = 0;
   stopRefreshChecker();
-  console.log("[Prefetch] Cache cleared");
 }

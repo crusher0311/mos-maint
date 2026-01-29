@@ -26,6 +26,7 @@ type DashboardData = {
   rows: any[];
   pagination?: PaginationInfo;
   user: any;
+  shopId?: number;
   smsType?: string;
   distanceUnit?: "miles" | "kilometers";
   enabledFeatures?: FeatureId[];
@@ -772,12 +773,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       });
       
       const vehiclesToPrefetch = vehiclesWithData.slice(0, 50);
+      const shopId = data.shopId || data.user?.shopId;
       
-      if (vehiclesToPrefetch.length > 0) {
-        queueMultiplePrefetch(vehiclesToPrefetch, 50);
+      if (vehiclesToPrefetch.length > 0 && shopId) {
+        queueMultiplePrefetch(vehiclesToPrefetch, shopId, 50);
       }
     }
-  }, [data.rows]);
+  }, [data.rows, data.shopId, data.user?.shopId]);
 
   useEffect(() => {
     let lastUpdate = Date.now();
