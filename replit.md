@@ -126,6 +126,14 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 
 ## Recent Changes
 
+**January 29, 2026:**
+- Fixed prefetch worker production deployment by moving tsx from devDependencies to dependencies
+- Created internal API endpoints (`/api/internal/prefetch-shops`, `/api/internal/prefetch-vehicles`) with secret-based auth to bypass session requirements
+- Fixed shop filtering in prefetch-shops to include both Tekmetric (tekmetric.shopId) and Protractor (protractor.apiKey) shops
+- Fixed vehicles endpoint to fallback to cached_plans collection when no work orders found
+- Fixed field name mappings for cached plans (mileage at root level, vehicle info nested in plan.vehicle)
+- Internal endpoints use secret header (x-internal-secret) for authentication instead of session cookies
+
 **January 28, 2026:**
 - Implemented full plan caching in `lib/plan-cache.ts` - caches assembled plan buckets (overdue, dueSoon, upcoming) for instant subsequent loads
 - Plan cache includes mileage tolerance (500 miles) - cache invalidated if mileage changes significantly

@@ -23,32 +23,112 @@ export async function GET(req: Request) {
   try {
     const db = await getDb();
     
-    const vehicles = await db.collection("vehicles")
-      .find({ 
-        shopId,
-        vin: { $exists: true, $ne: null },
-        mileage: { $exists: true, $gt: 0 }
-      })
-      .sort({ lastSeenAt: -1, updatedAt: -1 })
-      .limit(limit)
-      .project({
-        vin: 1,
-        mileage: 1,
-        year: 1,
-        make: 1,
-        model: 1
-      })
-      .toArray();
+    // Match both string and number versions of shopId
+    const shopIdMatch = { $in: [String(shopId), Number(shopId)] };
+    
+    // Get vehicles from Protractor work orders
+    const protractorVehicles = await db.collection("protractor_work_orders").aggregate([
+      { 
+        $match: { 
+          shopId: shopIdMatch,
+          vin: { $exists: true, $type: "string", $ne: "" }
+        } 
+      },
+      { $sort: { updatedAt: -1 } },
+      {
+        $lookup: {
+          from: "protractor_vehicles",
+          localField: "vehicleId",
+          foreignField: "vehicleId",
+          as: "vehicleData"
+        }
+      },
+      { $unwind: { path: "$vehicleData", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$vin",
+          mileage: { $first: { $ifNull: ["$vehicleData.mileage", "$mileage"] } },
+          year: { $first: "$vehicleData.year" },
+          make: { $first: "$vehicleData.make" },
+          model: { $first: "$vehicleData.model" },
+          updatedAt: { $first: "$updatedAt" }
+        }
+      },
+      { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
+      { $sort: { updatedAt: -1 } },
+      { $limit: limit }
+    ]).toArray();
+    
+    // Get vehicles from Tekmetric work orders
+    const tekmetricVehicles = await db.collection("tekmetric_work_orders").aggregate([
+      { 
+        $match: { 
+          shopId: shopIdMatch,
+          vin: { $exists: true, $type: "string", $ne: "" }
+        } 
+      },
+      { $sort: { fetchedAt: -1 } },
+      {
+        $group: {
+          _id: "$vin",
+          mileage: { $first: "$mileageIn" },
+          year: { $first: "$vehicleYear" },
+          make: { $first: "$vehicleMake" },
+          model: { $first: "$vehicleModel" },
+          updatedAt: { $first: "$fetchedAt" }
+        }
+      },
+      { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
+      { $sort: { updatedAt: -1 } },
+      { $limit: limit }
+    ]).toArray();
 
-    return NextResponse.json({ 
-      rows: vehicles.map(v => ({
-        vin: v.vin,
-        mileage: v.mileage,
-        year: v.year,
-        make: v.make,
-        model: v.model
-      }))
-    });
+    // Combine and dedupe by VIN
+    const vinMap = new Map<string, any>();
+    
+    for (const v of [...protractorVehicles, ...tekmetricVehicles]) {
+      const vin = v._id;
+      if (!vin || vin.length !== 17) continue;
+      
+      if (!vinMap.has(vin) || (v.updatedAt && vinMap.get(vin).updatedAt && v.updatedAt > vinMap.get(vin).updatedAt)) {
+        vinMap.set(vin, {
+          vin,
+          mileage: v.mileage,
+          year: v.year,
+          make: v.make,
+          model: v.model
+        });
+      }
+    }
+
+    const rows = Array.from(vinMap.values()).slice(0, limit);
+    
+    // Also try getting vehicles that were already cached in plans
+    const cachedPlans = await db.collection("cached_plans")
+      .find({ shopId: shopIdMatch })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .project({ vin: 1, mileage: 1, "plan.vehicle.year": 1, "plan.vehicle.make": 1, "plan.vehicle.model": 1 })
+      .toArray();
+    
+    // Add any vehicles from cached plans that aren't already in our list
+    for (const plan of cachedPlans) {
+      if (plan.vin && plan.vin.length === 17 && plan.mileage > 0 && !vinMap.has(plan.vin)) {
+        vinMap.set(plan.vin, {
+          vin: plan.vin,
+          mileage: plan.mileage,
+          year: plan.plan?.vehicle?.year,
+          make: plan.plan?.vehicle?.make,
+          model: plan.plan?.vehicle?.model
+        });
+      }
+    }
+    
+    const finalRows = Array.from(vinMap.values()).slice(0, limit);
+    
+    console.log(`[InternalAPI] Shop ${shopId}: Found ${protractorVehicles.length} Protractor, ${tekmetricVehicles.length} Tekmetric, ${cachedPlans.length} cached, returning ${finalRows.length}`);
+
+    return NextResponse.json({ rows: finalRows });
   } catch (error: any) {
     console.error("[InternalAPI] Error fetching vehicles:", error.message);
     return NextResponse.json({ error: "Failed to fetch vehicles" }, { status: 500 });

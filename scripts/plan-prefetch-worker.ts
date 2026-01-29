@@ -79,12 +79,17 @@ async function runPrefetchCycle(): Promise<void> {
           }
         });
 
-        if (!dashRes.ok) continue;
+        if (!dashRes.ok) {
+          console.log(`[PlanPrefetch] Shop ${shopId}: Failed to get vehicles (${dashRes.status})`);
+          continue;
+        }
 
         const dashData = await dashRes.json();
         const vehicles = (dashData.rows || [])
           .filter((r: any) => r.vin && r.vin.length === 17 && r.mileage)
           .slice(0, MAX_VEHICLES_PER_SHOP);
+        
+        console.log(`[PlanPrefetch] Shop ${shopId}: Processing ${vehicles.length} vehicles`);
 
         for (const vehicle of vehicles) {
           const vin = vehicle.vin;
@@ -120,9 +125,7 @@ async function runPrefetchCycle(): Promise<void> {
     const duration = Math.round((Date.now() - startTime) / 1000);
     totalPrefetched += cyclePrefetched;
     
-    if (cyclePrefetched > 0 || cycleSkipped > 0) {
-      console.log(`[PlanPrefetch] Cycle ${totalCycles}: ${cyclePrefetched} new, ${cycleSkipped} cached (${duration}s)`);
-    }
+    console.log(`[PlanPrefetch] Cycle ${totalCycles} complete: ${cyclePrefetched} new, ${cycleSkipped} cached (${duration}s)`);
   } catch (err: any) {
     console.error("[PlanPrefetch] Error:", err.message);
   } finally {

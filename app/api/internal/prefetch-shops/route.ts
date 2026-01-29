@@ -15,16 +15,23 @@ export async function GET(req: Request) {
   try {
     const db = await getDb();
     
+    // Match shops that have any integration configured
+    // Protractor: uses protractor.configured or protractor.apiKey
+    // Tekmetric: uses tekmetric.configured or tekmetric.shopId
     const shops = await db.collection("shops").find({
       $or: [
         { "protractor.configured": true },
-        { "tekmetric.configured": true }
+        { "protractor.apiKey": { $exists: true, $ne: null } },
+        { "tekmetric.configured": true },
+        { "tekmetric.shopId": { $exists: true, $ne: null } }
       ]
     }).project({
       shopId: 1,
       name: 1,
       "protractor.configured": 1,
-      "tekmetric.configured": 1
+      "protractor.apiKey": 1,
+      "tekmetric.configured": 1,
+      "tekmetric.shopId": 1
     }).toArray();
 
     return NextResponse.json({ shops });
