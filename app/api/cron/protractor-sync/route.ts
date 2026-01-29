@@ -283,7 +283,7 @@ export async function GET(req: NextRequest) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${CRON_SECRET}`,
           },
-          body: JSON.stringify({ shopId, vins: vins.slice(0, 10) }),
+          body: JSON.stringify({ shopId, vins: vins.slice(0, 50) }),
         }).catch(err => console.log(`[Cron] Plan pregenerate fire-and-forget failed for shop ${shopId}:`, err.message));
       }
       console.log(`[Cron] Triggered plan pre-generation for ${syncedVinsPerShop.length} shops`);

@@ -127,6 +127,8 @@ See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details includi
 ## Recent Changes
 
 **January 29, 2026:**
+- Increased plan pregeneration from 10 to 50 VINs per shop (matches dashboard page size)
+- Added batch parallelism (5 concurrent VINs) to pregenerate endpoint for faster processing
 - Fixed prefetch worker production deployment by moving tsx from devDependencies to dependencies
 - Created internal API endpoints (`/api/internal/prefetch-shops`, `/api/internal/prefetch-vehicles`) with secret-based auth to bypass session requirements
 - Fixed shop filtering in prefetch-shops to include both Tekmetric (tekmetric.shopId) and Protractor (protractor.apiKey) shops

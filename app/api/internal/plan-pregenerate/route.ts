@@ -48,27 +48,30 @@ export async function POST(req: NextRequest) {
       resolveProtractorConfig(shopId),
     ]);
 
-    const vinLimit = Math.min(vins.length, 10);
-
-    for (let i = 0; i < vinLimit; i++) {
-      const vin = String(vins[i]).toUpperCase();
-      if (vin.length !== 17) continue;
-
+    // Process up to 50 VINs per call (matches dashboard page size)
+    const vinLimit = Math.min(vins.length, 50);
+    const BATCH_SIZE = 5; // Process 5 VINs concurrently
+    
+    // Helper to process a single VIN
+    async function processVin(vin: string): Promise<void> {
+      const cleanVin = vin.toUpperCase();
+      if (cleanVin.length !== 17) return;
+      
       const vinStart = Date.now();
       const cached: string[] = [];
-
+      
       try {
         const prefetchPromises: Promise<void>[] = [];
 
         prefetchPromises.push(
-          getMaintenanceScheduleCached(vin)
+          getMaintenanceScheduleCached(cleanVin)
             .then(() => { cached.push("dataone"); })
             .catch(() => {})
         );
 
         if (carfaxCfg.configured) {
           prefetchPromises.push(
-            fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL)
+            fetchCarfaxWithCache(shopId, cleanVin, CARFAX_CACHE_TTL)
               .then(() => { cached.push("carfax"); })
               .catch(() => {})
           );
@@ -78,10 +81,10 @@ export async function POST(req: NextRequest) {
           prefetchPromises.push(
             (async () => {
               try {
-                const vehicle = await fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
+                const vehicle = await fetchProtractorVehicle(shopId, cleanVin, PROTRACTOR_CACHE_TTL);
                 cached.push("protractor_vehicle");
                 if (vehicle.ok && vehicle.vehicle?.ID) {
-                  await fetchProtractorDeferredWork(shopId, vin, vehicle.vehicle.ID, PROTRACTOR_CACHE_TTL);
+                  await fetchProtractorDeferredWork(shopId, cleanVin, vehicle.vehicle.ID, PROTRACTOR_CACHE_TTL);
                   cached.push("protractor_deferred");
                 }
               } catch {}
@@ -91,18 +94,25 @@ export async function POST(req: NextRequest) {
 
         await Promise.allSettled(prefetchPromises);
 
-        results[vin] = {
+        results[cleanVin] = {
           status: "ok",
           duration: Date.now() - vinStart,
           cached,
         };
       } catch (err: any) {
-        results[vin] = {
+        results[cleanVin] = {
           status: `error: ${err.message}`,
           duration: Date.now() - vinStart,
           cached,
         };
       }
+    }
+    
+    // Process VINs in parallel batches
+    const vinsToProcess = vins.slice(0, vinLimit).map(v => String(v));
+    for (let i = 0; i < vinsToProcess.length; i += BATCH_SIZE) {
+      const batch = vinsToProcess.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(processVin));
     }
 
     const totalDuration = Date.now() - startTime;
