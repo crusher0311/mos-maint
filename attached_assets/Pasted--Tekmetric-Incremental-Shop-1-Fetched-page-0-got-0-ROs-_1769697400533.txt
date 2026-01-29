@@ -1,0 +1,124 @@
+[Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:34:40.958Z)
+Menu
+[Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:34:41.353Z)
+[Tekmetric Incremental] Shop 32: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:34:42.167Z)
+[Tekmetric Incremental] Shop 36: Fetched page 0, got 1 ROs (updated since 2026-01-29T14:34:42.126Z)
+[Tekmetric Incremental] Shop 37: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:34:42.895Z)
+[Tekmetric Incremental] Shop 54: Fetched page 0, got 2 ROs (updated since 2026-01-29T14:34:44.402Z)
+[Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:34:44.637Z)
+[Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T14:34:45.044Z)
+[Cron] Tekmetric incremental sync completed in 5653ms: 5 synced, 0 removed, 5/5 from cache, 0 pages queued, 0 errors, 0 skipped
+[2026-01-29T14:36:15.169Z] Sync complete: {
+  "ok": true,
+  "duration": "5653ms",
+  "summary": {
+    "totalShops": 8,
+    "totalSynced": 5,
+    "totalRemoved": 0,
+    "fromCache": {
+      "vehicles": 5,
+      "customers": 5
+    },
+    "pagesQueued": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "shops": [
+    {
+      "shopId": 1,
+      "tekmetricShopId": 14956,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 28,
+      "tekmetricShopId": 14956,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 32,
+      "tekmetricShopId": 469,
+      "synced": 2,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 1,
+        "customers": 1
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 36,
+      "tekmetricShopId": 470,
+      "synced": 1,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 1,
+        "customers": 1
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 37,
+      "tekmetricShopId": 471,
+      "synced": 1,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 2,
+        "customers": 2
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 54,
+      "tekmetricShopId": 275,
+      "synced": 1,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 1,
+        "customers": 1
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 57,
+      "tekmetricShopId": 11803,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    },
+    {
+      "shopId": 63,
+      "tekmetricShopId": 14245,
+      "synced": 0,
+      "removed": 0,
+      "fromCache": {
+        "vehicles": 0,
+        "customers": 0
+      },
+      "pagesQueued": 0,
+      "terminalSwept": false
+    }
+  ]
+}
