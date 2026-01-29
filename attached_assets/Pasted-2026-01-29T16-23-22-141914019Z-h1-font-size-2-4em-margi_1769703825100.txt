@@ -1,0 +1,86 @@
+2026-01-29T16:23:22.141914019Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-29T16:23:22.141916688Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-29T16:23:22.141919268Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-29T16:23:22.141922669Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-29T16:23:22.141926089Z background-color:#555555;}
+2026-01-29T16:23:22.141928899Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-29T16:23:22.141931819Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-29T16:23:22.141934549Z -->
+2026-01-29T16:23:22.141937409Z </style>
+2026-01-29T16:23:22.141939889Z </head>
+2026-01-29T16:23:22.141942739Z <body>
+2026-01-29T16:23:22.141945169Z <div id="header"><h1>Server Error</h1></div>
+2026-01-29T16:23:22.141947819Z <div id="content">
+2026-01-29T16:23:22.141950609Z  <div class="content-container"><fieldset>
+2026-01-29T16:23:22.141953159Z   <h2>404 - File or directory not found.</h2>
+2026-01-29T16:23:22.141956209Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-29T16:23:22.141958959Z  </fieldset></div>
+2026-01-29T16:23:22.141961499Z </div>
+2026-01-29T16:23:22.141964289Z </body>
+2026-01-29T16:23:22.141966979Z </html>
+2026-01-29T16:23:22.141969349Z 
+2026-01-29T16:23:22.14197232Z [Protractor] Trying GET /ServicePackageTemplate/bfae4872-0aa0-4ed5-b2e2-542ea40611c3...
+2026-01-29T16:23:24Z clientIP="72.198.61.82" requestID="c9af6c71-93c6-4f02" responseTimeMS=202 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:23:24Z clientIP="72.198.61.82" requestID="4df406be-f288-4250" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:23:24Z clientIP="72.198.61.82" requestID="72c0eaaa-f81a-4240" responseTimeMS=196 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:23:24Z clientIP="72.198.61.82" requestID="530a8c55-1c09-452b" responseTimeMS=203 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T16:23:24.550192873Z [Protractor] GET /ServicePackageTemplate/394d6dfe-e9c4-4981-a22c-5532a51e1de3: ok=true
+2026-01-29T16:23:24.550212584Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:24.725377194Z [Protractor] GET /ServicePackageTemplate/9d6e1dc0-7467-4d84-9c69-b63e8bfdbee2: ok=true
+2026-01-29T16:23:24.725427375Z [Protractor] Got template detail with 0 lines
+2026-01-29T16:23:24.926835162Z [Protractor] GET /ServicePackageTemplate/e7ced9f9-9e38-4840-8aca-8409a8ed3846: ok=true
+2026-01-29T16:23:24.926857262Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:25.739722352Z [Protractor] GET /ServicePackageTemplate/b9d6dc1a-9c19-4b0b-8b2f-690bbaaf5348: ok=true
+2026-01-29T16:23:25.739758893Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:25.936985018Z [Protractor] GET /ServicePackageTemplate/85fcaca6-deea-401f-a4b4-ec236da24d3e: ok=true
+2026-01-29T16:23:25.937004619Z [Protractor] Got template detail with 0 lines
+2026-01-29T16:23:26.13220155Z [Protractor] GET /ServicePackageTemplate/b933a3fc-ed58-40ef-bc30-7803e43b6c69: ok=true
+2026-01-29T16:23:26.13222369Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:26.336808941Z [Protractor] GET /ServicePackageTemplate/1d28e589-8384-4131-8532-e9437bd550fd: ok=true
+2026-01-29T16:23:26.336833692Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:26.530062339Z [Protractor] GET /ServicePackageTemplate/991bed1e-1c41-4542-b6e3-c87def8df0ae: ok=true
+2026-01-29T16:23:26.530088349Z [Protractor] Got template detail with 5 lines
+2026-01-29T16:23:26.729877289Z [Protractor] GET /ServicePackageTemplate/ba693a79-2d55-42d8-a316-b39358564dd6: ok=true
+2026-01-29T16:23:26.729904969Z [Protractor] Got template detail with 4 lines
+2026-01-29T16:23:26.932618268Z [Protractor] GET /ServicePackageTemplate/605937c0-8fe3-4fdc-be04-25c05d05a957: ok=true
+2026-01-29T16:23:26.932641589Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:27.13253882Z [Protractor] GET /ServicePackageTemplate/d6e3ae30-64ef-4fce-adc6-2e94a6e0ef21: ok=true
+2026-01-29T16:23:27.1325553Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:27.334821361Z [Protractor] GET /ServicePackageTemplate/eaaa935e-7c93-479d-9200-33917f2035d0: ok=true
+2026-01-29T16:23:27.335466742Z [Protractor] Got template detail with 7 lines
+2026-01-29T16:23:27.548936564Z [Protractor] GET /ServicePackageTemplate/1c3766d1-bac7-4c51-9438-671609d2291d: ok=true
+2026-01-29T16:23:27.548963255Z [Protractor] Got template detail with 6 lines
+2026-01-29T16:23:27.75201454Z [Protractor] GET /ServicePackageTemplate/667a8489-af0c-4fae-bbad-30e39e59f1b0: ok=true
+2026-01-29T16:23:27.75203754Z [Protractor] Got template detail with 6 lines
+2026-01-29T16:23:27.934581845Z [Protractor] GET /ServicePackageTemplate/668d3897-8251-4ca7-a0e3-53e987086ceb: ok=true
+2026-01-29T16:23:27.934607026Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:28.135800838Z [Protractor] GET /ServicePackageTemplate/bcc5343b-59e1-482d-af1a-ad04719cb9d9: ok=true
+2026-01-29T16:23:28.135838339Z [Protractor] Got template detail with 3 lines
+2026-01-29T16:23:28.334063621Z [Protractor] GET /ServicePackageTemplate/e47c9129-4141-40a2-a83e-b72d88c88dec: ok=true
+2026-01-29T16:23:28.334082231Z [Protractor] Got template detail with 3 lines
+2026-01-29T16:23:28.535089512Z [Protractor] GET /ServicePackageTemplate/b6458580-5a5d-460f-b904-d053a68ff7cc: ok=true
+2026-01-29T16:23:28.535104852Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:28.733037509Z [Protractor] GET /ServicePackageTemplate/d8f4ef46-2d96-4b78-bd81-e3282332a344: ok=true
+2026-01-29T16:23:28.73305894Z [Protractor] Got template detail with 3 lines
+2026-01-29T16:23:28.93878971Z [Protractor] GET /ServicePackageTemplate/cdbc0649-d7c5-4bfb-b5ea-0b47fb1940dc: ok=true
+2026-01-29T16:23:28.938817861Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:29.13624296Z [Protractor] GET /ServicePackageTemplate/8ad68a80-14ab-4924-be15-6587b6df8ac9: ok=true
+2026-01-29T16:23:29.13626814Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:29.33495183Z [Protractor] GET /ServicePackageTemplate/a9fef3e8-d3a8-4639-8737-a42bf48b0509: ok=true
+2026-01-29T16:23:29.334968911Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:29.535134496Z [Protractor] GET /ServicePackageTemplate/b088368e-b782-4f2b-80a7-0a62221f47d7: ok=true
+2026-01-29T16:23:29.535153027Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:29.741515348Z [Protractor] GET /ServicePackageTemplate/c9011af8-7a2d-45d6-83ef-c57c5b947339: ok=true
+2026-01-29T16:23:29.741534318Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:29.967585724Z [Protractor] GET /ServicePackageTemplate/35e91ec0-b35b-4031-88a6-eefa18991984: ok=true
+2026-01-29T16:23:29.967605185Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:30.154572106Z [Protractor] GET /ServicePackageTemplate/231c4e21-a136-42ae-ab34-eed36e029e8e: ok=true
+2026-01-29T16:23:30.154593346Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:30.335630366Z [Protractor] GET /ServicePackageTemplate/576b46b4-a39c-4153-9089-7a65e98cc912: ok=true
+2026-01-29T16:23:30.335655407Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:30.534842585Z [Protractor] GET /ServicePackageTemplate/541cc010-dc64-4dc4-844e-e8c1494b85ff: ok=true
+2026-01-29T16:23:30.534859296Z [Protractor] Got template detail with 2 lines
+2026-01-29T16:23:30.736053169Z [Protractor] GET /ServicePackageTemplate/2543efa3-4800-45a1-a1a5-5bfdf6247632: ok=true
+2026-01-29T16:23:30.736074059Z [Protractor] Got template detail with 1 lines
+2026-01-29T16:23:30.936718273Z [Protractor] GET /ServicePackageTemplate/bdc24c1d-21bc-4bbc-bc0c-fe7e78cd9be4: ok=true
+2026-01-29T16:23:30.936730783Z [Protractor] Got template detail with 2 lines
