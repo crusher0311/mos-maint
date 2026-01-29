@@ -294,7 +294,12 @@ export async function POST(req: NextRequest) {
       resolveProtractorConfig(shopId),
     ]);
 
-    const oemItems: OEMItem[] = oemData.items || [];
+    const oemItems: OEMItem[] = (oemData.items || []).map((item: any) => ({
+      maintenance_id: item.maintenance_id,
+      name: item.maintenance_name || item.name,
+      miles: item.miles,
+      months: item.months,
+    }));
     const carfaxRecords = (carfaxResult as any).ok ? ((carfaxResult as any).serviceRecords || []) : [];
     
     let mpdBlended: number | null = null;

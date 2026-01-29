@@ -367,24 +367,52 @@ export async function GET(req: NextRequest) {
         
         let triggeredCount = 0;
         for (const shop of tekmetricShops) {
-          // Use tekmetric.shopId as primary identifier
-          const shopId = shop.tekmetric?.shopId || shop.shopId;
-          if (!shopId) continue;
+          // Use internal shopId for queries (work orders are stored with internal ID)
+          const internalShopId = shop.shopId;
+          const tekShopId = shop.tekmetric?.shopId;
+          if (!internalShopId) continue;
           
-          // Get top 50 vehicles by most recent work order (dashboard order)
-          const recentVehicles = await db.collection("work_orders")
+          // First: Get active vehicles (currently in shop) - highest priority
+          const activeVehicles = await db.collection("tekmetric_work_orders")
             .aggregate([
-              { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
-              { $sort: { updatedAt: -1 } },
-              { $group: { _id: "$vin", lastUpdated: { $first: "$updatedAt" } } },
-              { $sort: { lastUpdated: -1 } },
-              { $limit: 50 },
+              { 
+                $match: { 
+                  shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] },
+                  status: { $nin: TERMINAL_STATUSES }
+                } 
+              },
+              { $sort: { updatedDate: -1 } },
+              { $group: { _id: "$vin", lastUpdated: { $first: "$updatedDate" }, isActive: { $first: { $literal: true } } } },
             ])
             .toArray();
           
-          const vins = recentVehicles
-            .map(v => v._id)
-            .filter(v => v && typeof v === 'string' && v.length === 17);
+          const activeVins = new Set(activeVehicles.map(v => v._id).filter(v => v && typeof v === 'string' && v.length === 17));
+          
+          // Then: Fill remaining slots with recently updated vehicles
+          const remainingSlots = 50 - activeVins.size;
+          let recentVins: string[] = [];
+          
+          if (remainingSlots > 0) {
+            const recentVehicles = await db.collection("tekmetric_work_orders")
+              .aggregate([
+                { $match: { shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] } } },
+                { $sort: { updatedDate: -1 } },
+                { $group: { _id: "$vin", lastUpdated: { $first: "$updatedDate" } } },
+                { $sort: { lastUpdated: -1 } },
+                { $limit: 50 + activeVins.size },
+              ])
+              .toArray();
+            
+            recentVins = recentVehicles
+              .map(v => v._id)
+              .filter(v => v && typeof v === 'string' && v.length === 17 && !activeVins.has(v))
+              .slice(0, remainingSlots);
+          }
+          
+          // Combine: active first, then recent
+          const vins = [...activeVins, ...recentVins];
+          
+          console.log(`[Cron] Shop ${internalShopId} (tek: ${tekShopId}): ${activeVins.size} active + ${recentVins.length} recent = ${vins.length} VINs for pregeneration`);
           
           if (vins.length > 0) {
             triggeredCount++;
@@ -394,8 +422,8 @@ export async function GET(req: NextRequest) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${CRON_SECRET}`,
               },
-              body: JSON.stringify({ shopId, vins }),
-            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${shopId}:`, err.message));
+              body: JSON.stringify({ shopId: internalShopId, vins }),
+            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${internalShopId}:`, err.message));
           }
         }
         console.log(`[Cron] Triggered plan pre-generation for ${triggeredCount}/${tekmetricShops.length} Tekmetric shops with vehicles`);
