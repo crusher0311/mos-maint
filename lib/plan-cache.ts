@@ -24,6 +24,13 @@ export interface TriagedItemCache {
   matchedDeferred?: { id: string; title: string };
 }
 
+export interface CachedDeferredWork {
+  ID?: string;
+  ServiceItemID?: string;
+  Title?: string;
+  Description?: string;
+}
+
 export interface CachedPlanData {
   buckets: {
     overdue: TriagedItemCache[];
@@ -44,6 +51,7 @@ export interface CachedPlanData {
   soonMiles: number;
   soonDays: number;
   showInspectItems: boolean;
+  deferredWork?: CachedDeferredWork[];
 }
 
 export interface CachedPlan {

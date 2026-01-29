@@ -346,15 +346,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let protractorVehicleId: string | null = null;
     if (!customerName && protractorCfg.configured) {
       try {
         const vehicleResult = await fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
         if ((vehicleResult as any).ok && (vehicleResult as any).vehicle) {
           const v = (vehicleResult as any).vehicle;
           customerName = v.CustomerName || [v.FirstName, v.LastName].filter(Boolean).join(" ") || null;
+          protractorVehicleId = v.ID || null;
         }
       } catch (err) {
         console.log(`[PlanBuild] Protractor fetch error for ${vin}:`, err);
+      }
+    }
+    
+    // Fetch deferred work for Protractor shops
+    let deferredWork: Array<{ ID?: string; ServiceItemID?: string; Title?: string; Description?: string }> = [];
+    if (protractorCfg.configured && protractorVehicleId) {
+      try {
+        const deferredResult = await fetchProtractorDeferredWork(shopId, vin, protractorVehicleId, PROTRACTOR_CACHE_TTL);
+        if ((deferredResult as any).ok && (deferredResult as any).deferredWork) {
+          deferredWork = (deferredResult as any).deferredWork.map((dw: any) => ({
+            ID: dw.ID,
+            ServiceItemID: dw.ServiceItemID,
+            Title: dw.Title,
+            Description: dw.Description,
+          }));
+        }
+      } catch (err) {
+        console.log(`[PlanBuild] Protractor deferred work fetch error for ${vin}:`, err);
       }
     }
 
@@ -391,6 +411,7 @@ export async function POST(req: NextRequest) {
       soonMiles,
       soonDays,
       showInspectItems,
+      deferredWork: deferredWork.length > 0 ? deferredWork : undefined,
     };
 
     await setCachedPlan(db, vin, shopId, mileage, planData);

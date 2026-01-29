@@ -1168,9 +1168,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
     shopBranding = localShopBranding;
   }
 
-  // Protractor Deferred Work (depends on vehicle ID from previous call) - always fetch (dynamic data)
+  // Protractor Deferred Work - use cached on cache hit, fetch fresh on cache miss
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
-  if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
+  if (useCachedData && cachedPlan?.plan?.deferredWork) {
+    protractorDeferredWork = cachedPlan.plan.deferredWork as ProtractorDeferredWork[];
+  } else if (!useCachedData && protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
     const deferredResult = await fetchProtractorDeferredWork(
       shopId,
       vin,
