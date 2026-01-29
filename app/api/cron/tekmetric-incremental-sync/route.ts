@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/tekmetric-incremental-sync";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,62 @@ export async function GET(req: NextRequest) {
     const skipped = results.filter(r => r.skipped).length;
     
     console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms: ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped`);
+
+    // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
+    if (CRON_SECRET) {
+      try {
+        const baseUrl = process.env.RENDER_EXTERNAL_URL 
+          || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+          || `http://localhost:${process.env.PORT || 5000}`;
+        
+        const db = await getDb();
+        
+        // Get all Tekmetric shops - use tekmetric.shopId as the shop identifier
+        const tekmetricShops = await db.collection("shops")
+          .find({ "tekmetric.shopId": { $exists: true, $ne: null } })
+          .project({ _id: 0, shopId: 1, tekmetric: 1 })
+          .toArray();
+        
+        console.log(`[Cron] Found ${tekmetricShops.length} Tekmetric shops for pregeneration`);
+        
+        let triggeredCount = 0;
+        for (const shop of tekmetricShops) {
+          // Use tekmetric.shopId as primary identifier
+          const shopId = shop.tekmetric?.shopId || shop.shopId;
+          if (!shopId) continue;
+          
+          // Get top 50 vehicles by most recent work order (dashboard order)
+          const recentVehicles = await db.collection("work_orders")
+            .aggregate([
+              { $match: { shopId: { $in: [shopId, String(shopId), Number(shopId)] } } },
+              { $sort: { updatedAt: -1 } },
+              { $group: { _id: "$vin", lastUpdated: { $first: "$updatedAt" } } },
+              { $sort: { lastUpdated: -1 } },
+              { $limit: 50 },
+            ])
+            .toArray();
+          
+          const vins = recentVehicles
+            .map((v: any) => v._id as string)
+            .filter((v: string) => v && typeof v === 'string' && v.length === 17);
+          
+          if (vins.length > 0) {
+            triggeredCount++;
+            fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${CRON_SECRET}`,
+              },
+              body: JSON.stringify({ shopId, vins }),
+            }).catch(err => console.log(`[Cron] Plan pregenerate failed for shop ${shopId}:`, err.message));
+          }
+        }
+        console.log(`[Cron] Triggered plan pre-generation for ${triggeredCount}/${tekmetricShops.length} Tekmetric shops with vehicles`);
+      } catch (pregenerateErr: any) {
+        console.error(`[Cron] Tekmetric pregenerate error:`, pregenerateErr.message);
+      }
+    }
 
     return NextResponse.json({
       ok: true,
