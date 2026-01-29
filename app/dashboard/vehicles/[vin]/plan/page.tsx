@@ -1168,11 +1168,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
     shopBranding = localShopBranding;
   }
 
-  // Protractor Deferred Work - use cached on cache hit, fetch fresh on cache miss
+  // Protractor Deferred Work - always fetch fresh for Protractor shops (it's dynamic)
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
-  if (useCachedData && cachedPlan?.plan?.deferredWork) {
-    protractorDeferredWork = cachedPlan.plan.deferredWork as ProtractorDeferredWork[];
-  } else if (!useCachedData && protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
+  if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
     const deferredResult = await fetchProtractorDeferredWork(
       shopId,
       vin,
@@ -1182,6 +1180,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
     if (deferredResult.ok && deferredResult.deferredWork) {
       protractorDeferredWork = deferredResult.deferredWork;
     }
+  } else if (useCachedData && cachedPlan?.plan?.deferredWork) {
+    // Fallback to cached deferred work if Protractor fetch not available
+    protractorDeferredWork = cachedPlan.plan.deferredWork as ProtractorDeferredWork[];
   }
 
   // Extract service history from completed work orders - only on cache miss
@@ -1360,6 +1361,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Use cached buckets if available, otherwise build from triage
   let buckets: Buckets;
+  
+  // Check if cached buckets are missing deferred work that should be included
+  const cachedDeferredCount = cachedPlan?.plan?.buckets 
+    ? [...(cachedPlan.plan.buckets.overdue || []), ...(cachedPlan.plan.buckets.dueSoon || [])].filter((i: any) => i.source === "protractor").length 
+    : 0;
+  const hasDeferredMismatch = protractorDeferredWork.length > 0 && cachedDeferredCount === 0;
+  
   if (useCachedData && cachedPlan) {
     console.log(`[Plan] Using cached buckets for ${vin}`);
     const cached = cachedPlan.plan;
@@ -1380,6 +1388,44 @@ async function PlanContent({ params, searchParams }: PageProps) {
       dueSoon: cached.buckets.dueSoon.map(convertCacheItem),
       upcoming: cached.buckets.upcoming.map(convertCacheItem),
     };
+    
+    // If we have fresh deferred work that's not in cached buckets, add it now
+    if (hasDeferredMismatch) {
+      console.log(`[Plan] Adding ${protractorDeferredWork.length} deferred items to cached buckets`);
+      const existingKeys = new Set([
+        ...buckets.overdue.map(i => i.serviceKey),
+        ...buckets.dueSoon.map(i => i.serviceKey),
+        ...buckets.upcoming.map(i => i.serviceKey),
+      ]);
+      
+      for (const dw of protractorDeferredWork) {
+        const title = dw.Title || dw.ServicePackageHeader?.Title || dw.Code || dw.Description || "Deferred Service";
+        const serviceKey = toKeyFromName(title);
+        
+        // Skip if already in buckets (as OEM or other item)
+        if (existingKeys.has(serviceKey)) continue;
+        
+        const deferredItem: TriagedItem = {
+          key: `protractor_deferred_${dw.ID}`,
+          serviceKey,
+          title,
+          category: dw.Chapter || "Maintenance",
+          intervalMiles: null,
+          intervalMonths: null,
+          last: undefined,
+          dueAtMiles: null,
+          dueAtDate: null,
+          milesToGo: null,
+          daysToGo: null,
+          bump: "overdue",
+          source: "protractor",
+          reason: "Previously recommended but not performed",
+          protractorDeferredId: dw.ID,
+        };
+        buckets.overdue.push(deferredItem);
+        existingKeys.add(serviceKey);
+      }
+    }
   } else {
     const rawBuckets = triage({
       oemItems,
@@ -1418,7 +1464,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
   };
 
   // Cache the assembled plan for future requests (non-blocking)
-  if (!useCachedData && currentMiles != null) {
+  // Also re-cache if we rebuilt due to stale deferred work
+  if ((!useCachedData || hasDeferredMismatch) && currentMiles != null) {
     const cacheItem = (item: TriagedItem): TriagedItemCache => ({
       key: item.key,
       serviceKey: item.serviceKey,

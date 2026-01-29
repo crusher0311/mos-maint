@@ -1,0 +1,56 @@
+2026-01-29T21:31:02Z clientIP="72.198.61.82" requestID="9a098f0d-6c81-47ef" responseTimeMS=818 responseBytes=377 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:02.701096461Z [Plan] Cache HIT - skipping expensive external API calls
+2026-01-29T21:31:02.765315587Z [PlanBuild] Tekmetric fetch error for 1C4RDJDG6JC483163: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T21:31:02.765331948Z     at I (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T21:31:02.765334818Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T21:31:02.765337138Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:8072)
+2026-01-29T21:31:02.765340188Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T21:31:02.765342459Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T21:31:02.765344579Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T21:31:02.765347419Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T21:31:02.765350739Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T21:31:02.765352919Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T21:31:02.765355119Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T21:31:02.947768212Z [PlanCache] Cached plan for 1C4RDJDG6JC483163 at 86808 miles, TTL 4h
+2026-01-29T21:31:02.947783432Z [PlanBuild] Shop 29: Built and cached plan for 1C4RDJDG6JC483163 in 813ms
+2026-01-29T21:31:02.969913436Z [Plan] Using cached currentMiles: 123457
+2026-01-29T21:31:02.969929947Z [Plan Debug] VIN: JF2GTACC1JH293574
+2026-01-29T21:31:02.969941008Z [Plan Debug] Current Miles: 123457
+2026-01-29T21:31:02.969944008Z [Plan Debug] OEM Items count: 0
+2026-01-29T21:31:02.969946868Z [Plan Debug] CARFAX Records count: 0
+2026-01-29T21:31:02.969949218Z [Plan Debug] DVI Findings count: 0
+2026-01-29T21:31:02.969951449Z [Plan Debug] Protractor deferred work count: 14
+2026-01-29T21:31:02.969954029Z [Plan] Using cached buckets for JF2GTACC1JH293574
+2026-01-29T21:31:03Z clientIP="72.198.61.82" requestID="999770c9-be81-46fa" responseTimeMS=5 responseBytes=499 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:03Z clientIP="72.198.61.82" requestID="5a6267de-1a00-4be8" responseTimeMS=7 responseBytes=496 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:03Z clientIP="72.198.61.82" requestID="de04ee95-e7e1-435a" responseTimeMS=1373 responseBytes=81571 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:03Z clientIP="72.198.61.82" requestID="f4f86cd2-6344-4c50" responseTimeMS=406 responseBytes=357 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:03Z clientIP="72.198.61.82" requestID="86f01284-8e7c-4e37" responseTimeMS=12 responseBytes=495 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:03.570886511Z [PlanCache] MISS: No cache entry for 1GBCS10AXP2918685
+2026-01-29T21:31:03.570907972Z [PlanBuild] Shop 29: Building full plan for 1GBCS10AXP2918685 at 37650 miles
+2026-01-29T21:31:03.770092718Z [DataOne Cache] HIT but missing vehicle info for squish 1GBCS10AP2, re-fetching...
+2026-01-29T21:31:03.770110689Z [DataOne Cache] EXPIRED for squish 1GBCS10AP2, fetching from API...
+2026-01-29T21:31:06.764730678Z [Cron] Protractor sync normalized: shop 28, WOs: 0/0/5, payments: 0, inspections: 0, recommendations: 0
+2026-01-29T21:31:07.172619101Z [Protractor] Fetched work orders page: skip=0, got 61, total so far: 61
+2026-01-29T21:31:07.178611918Z [Cron] Shop 29 - WorkflowStage counts: {
+2026-01-29T21:31:07.178619829Z   WorkCompleted: 13,
+2026-01-29T21:31:07.178622619Z   InspectionInProgress: 27,
+2026-01-29T21:31:07.178624519Z   WorkAuthorized: 3,
+2026-01-29T21:31:07.178626199Z   Unassigned: 12,
+2026-01-29T21:31:07.178627859Z   EstimateCompleted: 2,
+2026-01-29T21:31:07.17862955Z   ScheduledWork: 4
+2026-01-29T21:31:07.178631279Z }
+2026-01-29T21:31:13Z clientIP="72.198.61.82" requestID="b285ac28-d922-4560" responseTimeMS=204 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:13Z clientIP="72.198.61.82" requestID="515c5e45-55f4-4a4c" responseTimeMS=176 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T21:31:14Z clientIP="72.198.61.82" requestID="495a8c9a-c760-470b" responseTimeMS=21 responseBytes=3123 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; Trident/7.0; rv:11.0) like Gecko"
+2026-01-29T21:31:16.683747886Z [2026-01-29T21:31:16.683Z] Running Tekmetric sync...
+2026-01-29T21:31:18.01900654Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T21:29:41.692Z)
+2026-01-29T21:31:18.458613403Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T21:29:42.323Z)
+2026-01-29T21:31:18.830627065Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-01-29T21:29:42.716Z)
+2026-01-29T21:31:19.24804012Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-01-29T21:29:43.163Z)
+2026-01-29T21:31:19.623155112Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-01-29T21:29:43.224Z)
+2026-01-29T21:31:20Z clientIP="152.117.99.75" requestID="130cc4d3-328c-4842" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T21:31:20Z clientIP="152.117.99.75" requestID="22dc77ae-9cd8-4310" responseTimeMS=175 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T21:31:20Z clientIP="152.117.99.75" requestID="0199150f-a90b-4b05" responseTimeMS=174 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T21:31:20Z clientIP="152.117.99.75" requestID="c981070c-0340-4c9b" responseTimeMS=175 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T21:31:20Z clientIP="152.117.99.75" requestID="fd5875e9-f719-4e49" responseTimeMS=175 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
