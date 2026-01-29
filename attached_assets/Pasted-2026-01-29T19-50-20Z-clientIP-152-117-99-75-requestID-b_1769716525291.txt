@@ -1,0 +1,300 @@
+2026-01-29T19:50:20Z clientIP="152.117.99.75" requestID="b6c3bb67-0262-4768" responseTimeMS=186 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:50:20Z clientIP="152.117.99.75" requestID="2b29f6a1-cad0-4397" responseTimeMS=179 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:50:20Z clientIP="152.117.99.75" requestID="b8d1e8a9-4a64-440a" responseTimeMS=180 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:50:20Z clientIP="152.117.99.75" requestID="44d36b45-207f-470a" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="2475faa5-8c24-4da9" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="a94b45d1-0d58-4435" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="64ea6d1c-ca33-44e6" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="ac2c04e3-0495-4f71" responseTimeMS=7 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="7c6fe062-1b1d-4692" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="06907e36-62f4-4aa6" responseTimeMS=190 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="18b51573-d7eb-464f" responseTimeMS=191 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="9584e1bf-a2b8-4d36" responseTimeMS=178 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="da9a6489-ccc7-44e4" responseTimeMS=6 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="f724f64f-7ba2-466b" responseTimeMS=12 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="f665f889-e9ab-4be8" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="9ca9ef13-b40a-4dd4" responseTimeMS=193 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:41Z clientIP="72.198.61.82" requestID="fa71a6f9-d82e-4804" responseTimeMS=177 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:50:49.604137852Z [2026-01-29T19:50:49.603Z] Running Tekmetric sync...
+2026-01-29T19:50:51.145126892Z [Tekmetric Incremental] Shop 1: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:49:15.046Z)
+2026-01-29T19:50:51.519477006Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:49:15.403Z)
+2026-01-29T19:50:52.000530767Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 1 ROs (updated since 2026-01-29T19:49:15.832Z)
+2026-01-29T19:50:52.347354337Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 3 ROs (updated since 2026-01-29T19:49:16.432Z)
+2026-01-29T19:50:52.773225955Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T19:49:16.846Z)
+2026-01-29T19:50:54.776808966Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:49:18.204Z)
+2026-01-29T19:50:55.175230271Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:49:18.559Z)
+2026-01-29T19:50:55.617823001Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:49:18.969Z)
+2026-01-29T19:50:55.745512472Z [Cron] Tekmetric incremental sync completed in 5886ms: 4 synced, 0 removed, 4/4 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T19:50:55.808695978Z [Cron] Found 8 Tekmetric shops for pregeneration
+2026-01-29T19:50:56.313888321Z [Cron] Triggered plan pre-generation for 0/8 Tekmetric shops with vehicles
+2026-01-29T19:50:56.316074978Z [2026-01-29T19:50:49.603Z] Sync complete: 4 synced, 8 shops, 5886ms
+2026-01-29T19:50:56.316090509Z [2026-01-29T19:50:49.603Z] Stats: 10/10 successful (100.0%), last duration: 6713ms
+2026-01-29T19:51:13Z clientIP="72.198.61.82" requestID="54e047ae-f0d6-49f0" responseTimeMS=19 responseBytes=3121 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:20Z clientIP="152.117.99.75" requestID="2abca76a-a3ed-46ad" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:51:20Z clientIP="152.117.99.75" requestID="9e0eb19b-9914-4d11" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:51:20Z clientIP="152.117.99.75" requestID="9847cdce-d6bf-4050" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:51:20Z clientIP="152.117.99.75" requestID="fa059e42-ecd6-46cd" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:51:20Z clientIP="152.117.99.75" requestID="34498d8e-3ea1-4e35" responseTimeMS=191 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="a8940066-60f0-4d44" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="7fbbc43f-346f-4467" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="e1ed6db3-3c4e-4ef0" responseTimeMS=2 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="574f9766-bb02-471f" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="602eddf3-bf80-4e03" responseTimeMS=174 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="4e1b4be8-7125-4b1f" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="3b7e570a-2ea2-486f" responseTimeMS=180 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="53676581-bdb1-4b9e" responseTimeMS=179 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="96c35431-7422-4cbb" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="b7c915bd-4c7c-47b9" responseTimeMS=3 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="f602436d-914b-4cd0" responseTimeMS=191 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="709f68f5-7542-4211" responseTimeMS=173 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:51:41Z clientIP="72.198.61.82" requestID="10ca707a-6ca1-445b" responseTimeMS=72 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:11.073847456Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:54:11.073852287Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:54:11.073856336Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:54:11.073861447Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:54:11.073865427Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:54:11.073883587Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:54:11.073886657Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:54:11.073889397Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:54:11.073895647Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:54:11.073897997Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:54:11.191461749Z [PlanCache] Cached plan for 1GCRABEK5NZ636572 at 65977 miles, TTL 4h
+2026-01-29T19:54:11.19147907Z [PlanBuild] Shop 29: Built and cached plan for 1GCRABEK5NZ636572 in 15696ms
+2026-01-29T19:54:11.409003143Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 1 ROs (updated since 2026-01-29T19:52:35.762Z)
+2026-01-29T19:54:11.766622535Z [PlanCache] MISS: No cache entry for 1FMJK1JT2MEA41196
+2026-01-29T19:54:11.766642386Z [PlanBuild] Shop 29: Building full plan for 1FMJK1JT2MEA41196 at 84031 miles
+2026-01-29T19:54:11.84178231Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 1 ROs (updated since 2026-01-29T19:52:35.994Z)
+2026-01-29T19:54:11.992145381Z [DataOne Cache] HIT for squish 1FMJK1JTME, cached at 2026-01-29T19:52:44.726Z
+2026-01-29T19:54:12.782790806Z [PlanBuild] Tekmetric fetch error for 1FMJK1JT2MEA41196: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:54:12.782811747Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:54:12.782815357Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:54:12.782818037Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:54:12.782821307Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:54:12.782823617Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:54:12.782826097Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:54:12.782829177Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:54:12.782832897Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:54:12.782836097Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:54:12.782838677Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:54:12.902593716Z [PlanCache] Cached plan for 1FMJK1JT2MEA41196 at 84031 miles, TTL 4h
+2026-01-29T19:54:12.902619257Z [PlanBuild] Shop 29: Built and cached plan for 1FMJK1JT2MEA41196 in 1307ms
+2026-01-29T19:54:13.350364878Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:52:37.337Z)
+2026-01-29T19:54:13.483112358Z [PlanCache] MISS: No cache entry for 2FMDK3JC0DBE11534
+2026-01-29T19:54:13.483145689Z [PlanBuild] Shop 29: Building full plan for 2FMDK3JC0DBE11534 at 108913 miles
+2026-01-29T19:54:13.533936597Z [Protractor] Using enriched cache with 566 items for shop 29
+2026-01-29T19:54:13.741059855Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 1 ROs (updated since 2026-01-29T19:52:37.736Z)
+2026-01-29T19:54:13.751484241Z [DataOne Cache] MISS for squish 2FMDK3JCDB, fetching from API...
+2026-01-29T19:54:13.965217362Z [PlanCache] HIT: 1FMJK1JT2MEA19957 cached 1m ago, 89948 miles
+2026-01-29T19:54:13.965244292Z [Plan] Cache HIT for 1FMJK1JT2MEA19957 - will use cached buckets
+2026-01-29T19:54:14.094002007Z [Plan Debug] Found Protractor RO: 46002, Customer: Audrianna Ferguson, Integration: protractor
+2026-01-29T19:54:14.094018727Z [Plan Debug] Latest RO number: 46002, total ROs: 0, sources checked: Protractor/Tekmetric/AutoFlow
+2026-01-29T19:54:14.094022167Z [Plan] Cache HIT - skipping expensive external API calls
+2026-01-29T19:54:14.146380989Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-01-29T19:52:38.152Z)
+2026-01-29T19:54:14.265024304Z [Plan] Using cached currentMiles: 89948
+2026-01-29T19:54:14.265041854Z [Plan Debug] VIN: 1FMJK1JT2MEA19957
+2026-01-29T19:54:14.265044585Z [Plan Debug] Current Miles: 89948
+2026-01-29T19:54:14.265048115Z [Plan Debug] OEM Items count: 0
+2026-01-29T19:54:14.265050585Z [Plan Debug] CARFAX Records count: 0
+2026-01-29T19:54:14.265053465Z [Plan Debug] DVI Findings count: 0
+2026-01-29T19:54:14.265056535Z [Plan Debug] Protractor deferred work count: 0
+2026-01-29T19:54:14.265059545Z [Plan] Using cached buckets for 1FMJK1JT2MEA19957
+2026-01-29T19:54:14.641476754Z [Cron] Tekmetric incremental sync completed in 5555ms: 3 synced, 0 removed, 4/4 from cache, 0 pages queued, 0 errors, 0 skipped
+2026-01-29T19:54:14.700120641Z [Cron] Found 8 Tekmetric shops for pregeneration
+2026-01-29T19:54:15.170517722Z [Cron] Triggered plan pre-generation for 0/8 Tekmetric shops with vehicles
+2026-01-29T19:54:15.172018615Z [2026-01-29T19:54:08.843Z] Sync complete: 3 synced, 8 shops, 5555ms
+2026-01-29T19:54:16Z clientIP="72.198.61.82" requestID="d31e9002-de15-4adc" responseTimeMS=139 responseBytes=1036 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:17Z clientIP="72.198.61.82" requestID="1ee4c54a-12d7-47cd" responseTimeMS=876 responseBytes=4526 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:17Z clientIP="72.198.61.82" requestID="fa622d3d-eb25-48e1" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:18Z clientIP="72.198.61.82" requestID="491dadea-016b-42d3" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:19Z clientIP="72.198.61.82" requestID="91ef2d70-5c4d-41b3" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:20Z clientIP="152.117.99.75" requestID="798ca52a-fb99-4a2a" responseTimeMS=185 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:54:20Z clientIP="152.117.99.75" requestID="84018fd6-3ace-4f81" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:54:20Z clientIP="152.117.99.75" requestID="4aece78f-cf85-4d64" responseTimeMS=203 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:54:20Z clientIP="152.117.99.75" requestID="7f056751-e6b2-4f49" responseTimeMS=180 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:54:20Z clientIP="72.198.61.82" requestID="e787828b-0f30-45c1" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:20Z clientIP="152.117.99.75" requestID="35d32417-5cb2-4818" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:54:21Z clientIP="72.198.61.82" requestID="37678691-961f-4e88" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:22Z clientIP="72.198.61.82" requestID="22b96154-7fd0-4189" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:24.178188691Z [Protractor] Using enriched cache with 566 items for shop 29
+2026-01-29T19:54:24.592503029Z [PlanCache] MISS: No cache entry for JF2GTACC1JH293574
+2026-01-29T19:54:24.59252959Z [Plan] Cache MISS for JF2GTACC1JH293574 - building from sources
+2026-01-29T19:54:24.728894298Z [Plan Debug] Found Protractor RO: 45962, Customer: Matt Gear, Integration: protractor
+2026-01-29T19:54:24.728915079Z [Plan Debug] Latest RO number: 45962, total ROs: 0, sources checked: Protractor/Tekmetric/AutoFlow
+2026-01-29T19:54:24.728918759Z [Plan] Cache MISS - fetching all external data
+2026-01-29T19:54:27.219461118Z [DataOne Cache] Stored 21 items for squish 1C6RR7FTES, expires 2026-02-05T19:54:10.917Z
+2026-01-29T19:54:27.457932724Z [PlanBuild] Tekmetric fetch error for 1C6RR7FT9ES460770: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:54:27.457954344Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:54:27.457959664Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:54:27.457963935Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:54:27.457969235Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:54:27.457973445Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:54:27.457977315Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:54:27.457982185Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:54:27.457987515Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:54:27.458005205Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:54:27.458008516Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:54:27.593903964Z [PlanCache] Cached plan for 1C6RR7FT9ES460770 at 199387 miles, TTL 4h
+2026-01-29T19:54:27.593921824Z [PlanBuild] Shop 29: Built and cached plan for 1C6RR7FT9ES460770 in 16913ms
+2026-01-29T19:54:28.197138417Z [PlanCache] MISS: No cache entry for 1FTPW14VX8FA45657
+2026-01-29T19:54:28.197156507Z [PlanBuild] Shop 29: Building full plan for 1FTPW14VX8FA45657 at 212048 miles
+2026-01-29T19:54:27Z clientIP="72.198.61.82" requestID="ded67eb5-47a9-4797" responseTimeMS=16917 responseBytes=377 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:28.459641582Z [DataOne Cache] MISS for squish 1FTPW14V8F, fetching from API...
+2026-01-29T19:54:29.124356544Z [DataOne Cache] Stored 24 items for squish 2FMDK3JCDB, expires 2026-02-05T19:54:13.693Z
+2026-01-29T19:54:29.306771489Z [PlanBuild] Tekmetric fetch error for 2FMDK3JC0DBE11534: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:54:29.306789359Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:54:29.306792179Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:54:29.306794729Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:54:29.306800869Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:54:29.306805429Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:54:29.306808199Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:54:29.306811279Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:54:29.306814719Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:54:29.306817379Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:54:29.30681989Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:54:29.427185162Z [PlanCache] Cached plan for 2FMDK3JC0DBE11534 at 108913 miles, TTL 4h
+2026-01-29T19:54:29.427200722Z [PlanBuild] Shop 29: Built and cached plan for 2FMDK3JC0DBE11534 in 16114ms
+2026-01-29T19:54:29Z clientIP="72.198.61.82" requestID="7752040d-2e2f-4768" responseTimeMS=16117 responseBytes=379 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:30.010945304Z [PlanCache] MISS: No cache entry for 1FTEW1EG7GFD34775
+2026-01-29T19:54:30.010964814Z [PlanBuild] Shop 29: Building full plan for 1FTEW1EG7GFD34775 at 174393 miles
+2026-01-29T19:54:30.243631785Z [DataOne Cache] MISS for squish 1FTEW1EGGF, fetching from API...
+2026-01-29T19:54:38Z clientIP="72.198.61.82" requestID="d76c601d-c1b5-46e7" responseTimeMS=811 responseBytes=4526 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:38Z clientIP="72.198.61.82" requestID="27b340e4-2f73-4c97" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:39Z clientIP="72.198.61.82" requestID="58b4ee2e-c321-4d01" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:40Z clientIP="72.198.61.82" requestID="2298f3a3-da7e-4fa4" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="b271827a-16a5-49fb" responseTimeMS=207 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="d393768e-fe7f-4393" responseTimeMS=200 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="ef70f7ed-f564-478c" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="9f50f74d-0a6f-4157" responseTimeMS=206 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="902e0f06-c427-4c8b" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="6269996e-3a59-4c9a" responseTimeMS=5 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="82392813-e71a-4bc2" responseTimeMS=4 responseBytes=285 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="cd84416d-b6e9-4684" responseTimeMS=3 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:41Z clientIP="72.198.61.82" requestID="f548ceb2-dafb-4d49" responseTimeMS=5 responseBytes=289 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:43Z clientIP="72.198.61.82" requestID="dc891d8d-b279-4e62" responseTimeMS=191 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:42Z clientIP="72.198.61.82" requestID="168428f1-85b6-44cd" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:43Z clientIP="72.198.61.82" requestID="4d2dc5ae-9460-496b" responseTimeMS=202 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:43Z clientIP="72.198.61.82" requestID="fb7a09d9-dec5-4bcd" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:43Z clientIP="72.198.61.82" requestID="1f5bab9a-dd42-444f" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:43Z clientIP="72.198.61.82" requestID="552ecd39-e03a-475a" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:45Z clientIP="72.198.61.82" requestID="62327e4e-2e69-41d7" responseTimeMS=15557 responseBytes=378 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:44Z clientIP="72.198.61.82" requestID="78a482d3-19ab-4f49" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:45Z clientIP="72.198.61.82" requestID="c71fdaf6-c09a-4ea7" responseTimeMS=66 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:45Z clientIP="72.198.61.82" requestID="7d806f4a-8f34-4c08" responseTimeMS=17477 responseBytes=378 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:46Z clientIP="72.198.61.82" requestID="c3ea2c78-6515-4987" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:47Z clientIP="72.198.61.82" requestID="c36e8cc1-1344-46f1" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:48Z clientIP="72.198.61.82" requestID="131184aa-c393-4deb" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:49Z clientIP="72.198.61.82" requestID="919e4d99-5392-45b0" responseTimeMS=64 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:44.673417437Z [2026-01-29T19:39:27.421Z] Attempt 3/3 failed: fetch failed
+2026-01-29T19:54:45.04588467Z [DataOne Cache] Stored 26 items for squish 1FTEW1EGGF, expires 2026-02-05T19:54:30.184Z
+2026-01-29T19:54:45.15552234Z [DataOne Cache] Stored 38 items for squish 1FTPW14V8F, expires 2026-02-05T19:54:28.393Z
+2026-01-29T19:54:45.247853806Z [PlanBuild] Tekmetric fetch error for 1FTEW1EG7GFD34775: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:54:45.247885617Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:54:45.247912858Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:54:45.247916558Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:54:45.247921038Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:54:45.247923618Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:54:45.247926358Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:54:45.247929418Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:54:45.247932718Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:54:45.247935368Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:54:45.247938498Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:54:45.344166659Z [PlanBuild] Tekmetric fetch error for 1FTPW14VX8FA45657: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:54:45.344187529Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:54:45.344190349Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:54:45.34419681Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:54:45.34420025Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:54:45.34420254Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:54:45.34420489Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:54:45.34420821Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:54:45.3442109Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:54:45.34421306Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:54:45.34421507Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:54:45.384606903Z [PlanCache] Cached plan for 1FTEW1EG7GFD34775 at 174393 miles, TTL 4h
+2026-01-29T19:54:45.384638304Z [PlanBuild] Shop 29: Built and cached plan for 1FTEW1EG7GFD34775 in 15551ms
+2026-01-29T19:54:45.47233863Z [PlanCache] Cached plan for 1FTPW14VX8FA45657 at 212048 miles, TTL 4h
+2026-01-29T19:54:45.472360941Z [PlanBuild] Shop 29: Built and cached plan for 1FTPW14VX8FA45657 in 17474ms
+2026-01-29T19:54:45.993216192Z [PlanCache] MISS: No cache entry for 3C6UR5FL9FG536592
+2026-01-29T19:54:45.993236613Z [PlanBuild] Shop 29: Building full plan for 3C6UR5FL9FG536592 at 101359 miles
+2026-01-29T19:54:46.256501455Z [DataOne Cache] EXPIRED for squish 3C6UR5FLFG, fetching from API...
+2026-01-29T19:54:46.292291599Z [PlanCache] MISS: No cache entry for 2C3CDXBG2EH154964
+2026-01-29T19:54:46.292312329Z [PlanBuild] Shop 29: Building full plan for 2C3CDXBG2EH154964 at 155232 miles
+2026-01-29T19:54:46.540593707Z [DataOne Cache] EXPIRED for squish 2C3CDXBGEH, fetching from API...
+2026-01-29T19:54:51Z clientIP="72.198.61.82" requestID="6b6a2208-039a-47f8" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:52Z clientIP="72.198.61.82" requestID="c70993f2-e686-4e61" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:53Z clientIP="72.198.61.82" requestID="1f7165ee-e8fa-42f4" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:54.683187761Z [2026-01-29T19:54:54.682Z] Running Protractor sync...
+2026-01-29T19:54:54Z clientIP="72.198.61.82" requestID="699325ce-126e-495c" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:55Z clientIP="72.198.61.82" requestID="adbbbeda-6fd5-45dc" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:56Z clientIP="72.198.61.82" requestID="cbf28546-d533-42c5" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:57Z clientIP="72.198.61.82" requestID="aa64a4c9-9afa-4a3b" responseTimeMS=66 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:58Z clientIP="72.198.61.82" requestID="b278cb1f-f5fb-490d" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:54:59Z clientIP="72.198.61.82" requestID="66861975-20bb-449e" responseTimeMS=109 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:00Z clientIP="72.198.61.82" requestID="c84b15b2-1652-465c" responseTimeMS=64 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:01Z clientIP="72.198.61.82" requestID="793e55a8-9b43-4086" responseTimeMS=62 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:01.998899946Z [DataOne Cache] Stored 30 items for squish 3C6UR5FLFG, expires 2026-02-05T19:54:46.189Z
+2026-01-29T19:55:02.011487198Z [DataOne Cache] Stored 19 items for squish 2C3CDXBGEH, expires 2026-02-05T19:54:46.477Z
+2026-01-29T19:55:02.192816989Z [PlanBuild] Tekmetric fetch error for 3C6UR5FL9FG536592: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:55:02.1928482Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:55:02.19285141Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:55:02.19285372Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:55:02.19285663Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:55:02.192859Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:55:02.19286185Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:55:02.1928647Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:55:02.19286769Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:55:02.19287011Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:55:02.19287217Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:55:02.297526483Z [PlanBuild] Tekmetric fetch error for 2C3CDXBG2EH154964: Error: Tekmetric API error 403: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+2026-01-29T19:55:02.297585874Z     at b (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:4565)
+2026-01-29T19:55:02.297589635Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-29T19:55:02.297591984Z     at async R (/opt/render/project/src/.next/server/app/api/plan-build/route.js:1:7964)
+2026-01-29T19:55:02.297595735Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-29T19:55:02.297598085Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-01-29T19:55:02.297600515Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-01-29T19:55:02.297604045Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-01-29T19:55:02.297607235Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-01-29T19:55:02.297609315Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-01-29T19:55:02.297611475Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-01-29T19:55:02.314391698Z [PlanCache] Cached plan for 3C6UR5FL9FG536592 at 101359 miles, TTL 4h
+2026-01-29T19:55:02.315002451Z [PlanBuild] Shop 29: Built and cached plan for 3C6UR5FL9FG536592 in 16519ms
+2026-01-29T19:55:02.432373169Z [PlanCache] Cached plan for 2C3CDXBG2EH154964 at 155232 miles, TTL 4h
+2026-01-29T19:55:02.432391139Z [PlanBuild] Shop 29: Built and cached plan for 2C3CDXBG2EH154964 in 16328ms
+2026-01-29T19:55:02Z clientIP="72.198.61.82" requestID="23e127e4-5851-4694" responseTimeMS=16332 responseBytes=379 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:02Z clientIP="72.198.61.82" requestID="069a8fc5-4ca5-4f82" responseTimeMS=67 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:03.175038066Z [PlanCache] MISS: No cache entry for 1FMCU9HD4JUD54039
+2026-01-29T19:55:03.1752283Z [PlanBuild] Shop 29: Building full plan for 1FMCU9HD4JUD54039 at 104853 miles
+2026-01-29T19:55:03Z clientIP="72.198.61.82" requestID="1d4f52d5-f5db-41b8" responseTimeMS=72 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:02Z clientIP="72.198.61.82" requestID="361c6aa9-8d2b-4077" responseTimeMS=16523 responseBytes=378 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:03.408111035Z [DataOne Cache] MISS for squish 1FMCU9HDJU, fetching from API...
+2026-01-29T19:55:04.171137733Z [PlanCache] MISS: No cache entry for 1V2JR2CA4MC528332
+2026-01-29T19:55:04.171168024Z [PlanBuild] Shop 29: Building full plan for 1V2JR2CA4MC528332 at 124389 miles
+2026-01-29T19:55:04.403561798Z [DataOne Cache] MISS for squish 1V2JR2CAMC, fetching from API...
+2026-01-29T19:55:04Z clientIP="72.198.61.82" requestID="3fc70cb0-6544-4474" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:05Z clientIP="72.198.61.82" requestID="f16fdd00-bf33-4b19" responseTimeMS=66 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:06Z clientIP="72.198.61.82" requestID="ffab3217-9497-435e" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:07Z clientIP="72.198.61.82" requestID="11cf41fd-7c2f-4ede" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:09Z clientIP="72.198.61.82" requestID="ce9719df-af8a-470f" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:08Z clientIP="72.198.61.82" requestID="a25f2caf-c046-4dbb" responseTimeMS=89 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:10Z clientIP="72.198.61.82" requestID="17b06e30-39a1-4548" responseTimeMS=74 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:11Z clientIP="72.198.61.82" requestID="50f7ce78-6000-4b4c" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:12Z clientIP="72.198.61.82" requestID="21006263-bc86-4e14" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:13Z clientIP="72.198.61.82" requestID="d197e180-1aec-4814" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:14Z clientIP="72.198.61.82" requestID="ace81b69-ca66-4b09" responseTimeMS=73 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:14Z clientIP="72.198.61.82" requestID="b658e7fb-c905-449f" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:14Z clientIP="72.198.61.82" requestID="f6f20560-211c-4abe" responseTimeMS=193 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:15Z clientIP="72.198.61.82" requestID="037b18d6-5a71-437e" responseTimeMS=67 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:16Z clientIP="72.198.61.82" requestID="e031860b-2039-4db3" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:17Z clientIP="72.198.61.82" requestID="2d6a3908-6679-4219" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:18Z clientIP="72.198.61.82" requestID="67205688-fdcb-4205" responseTimeMS=65 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:19Z clientIP="72.198.61.82" requestID="14166c54-6a79-4739" responseTimeMS=71 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:19Z clientIP="72.198.61.82" requestID="a8a2b2f6-62d3-487c" responseTimeMS=16798 responseBytes=379 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="72.198.61.82" requestID="997f6971-c699-4acd" responseTimeMS=64 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="152.117.99.75" requestID="a955121f-102a-4f07" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="152.117.99.75" requestID="8d166aa1-0e11-4d41" responseTimeMS=173 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="152.117.99.75" requestID="daef751e-3b26-475f" responseTimeMS=203 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="152.117.99.75" requestID="6702f2a9-39a3-4547" responseTimeMS=180 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:55:19Z clientIP="72.198.61.82" requestID="91077e09-1baa-4294" responseTimeMS=15912 responseBytes=378 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="152.117.99.75" requestID="ecbf8588-35c0-4af0" responseTimeMS=176 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-29T19:55:21Z clientIP="72.198.61.82" requestID="89ad35c0-6eaf-4870" responseTimeMS=63 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:22Z clientIP="72.198.61.82" requestID="cf1de9f3-86d2-42f5" responseTimeMS=61 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-29T19:55:20Z clientIP="44.243.83.172" requestID="9d37f607-491d-49f1" responseTimeMS=199 responseBytes=277 userAgent="axios/1.5.0"
