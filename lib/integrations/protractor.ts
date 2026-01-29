@@ -271,18 +271,6 @@ function httpsRequest(
       headers: headers,
     };
     
-    const authHash = headers.authentication 
-      ? crypto.createHash('md5').update(headers.authentication).digest('hex').slice(0, 8)
-      : 'none';
-    const connIdHash = headers.connectionid
-      ? crypto.createHash('md5').update(headers.connectionid).digest('hex').slice(0, 8)
-      : 'none';
-    
-    console.log(`[Protractor Debug] Node: ${process.version}, Env: ${process.env.RENDER ? 'Render' : 'Replit'}`);
-    console.log(`[Protractor Debug] ${method} ${url.pathname}`);
-    console.log(`[Protractor Debug] Headers: ${Object.keys(headers).join(', ')}`);
-    console.log(`[Protractor Debug] ConnId hash: ${connIdHash}, Auth hash: ${authHash}`);
-    
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
