@@ -2403,13 +2403,14 @@ export async function addDeferredWorkToWorkOrder(
     || deferredItem.Description 
     || "Deferred Service";
 
-  // Fetch the current work order
+  // Fetch the current work order (priority = user-initiated)
   const existingResult = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${workOrderGuid}`,
     config,
     {},
     0,
-    shopId
+    shopId,
+    { priority: true }
   );
 
   if (!existingResult.ok || !existingResult.data) {
@@ -2480,7 +2481,8 @@ export async function addDeferredWorkToWorkOrder(
       config,
       {},
       0,
-      shopId
+      shopId,
+      { priority: true }
     );
     
     if (originalWoResult.ok && originalWoResult.data) {
@@ -2676,7 +2678,8 @@ export async function addDeferredWorkToWorkOrder(
       body: JSON.stringify(updatedWorkOrder)
     },
     0,
-    shopId
+    shopId,
+    { priority: true }
   );
 
   if (updateResult.ok) {
