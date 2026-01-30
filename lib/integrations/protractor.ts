@@ -17,21 +17,36 @@ let lastRequestTime = 0;
 const rateLimitQueue: (() => void)[] = [];
 let isProcessingQueue = false;
 
+// Priority queue for user-initiated requests (added to front)
+const priorityRateLimitQueue: (() => void)[] = [];
+
 /**
  * Acquire rate limit slot with both local (5 rps) and distributed (300 rpm) enforcement.
  * The distributed limiter uses MongoDB for cross-worker coordination.
+ * Priority requests skip the local queue for faster execution.
  * Returns false if circuit breaker is open.
  */
-async function acquireRateLimitSlot(): Promise<{ acquired: boolean }> {
+async function acquireRateLimitSlot(priority: boolean = false): Promise<{ acquired: boolean; waitedMs?: number }> {
+  const startTime = Date.now();
+  
   // First: acquire distributed slot (blocks if global limit exceeded)
   const distributed = await acquireDistributedRateLimitSlot('protractor');
   if (!distributed.acquired) {
     if (distributed.circuitOpen) {
       console.warn(`[Protractor] Circuit breaker open, skipping request`);
-      return { acquired: false };
+      return { acquired: false, waitedMs: Date.now() - startTime };
     }
     console.warn(`[Protractor] Rate limit slot not acquired after ${distributed.waitedMs}ms, skipping request`);
-    return { acquired: false };
+    return { acquired: false, waitedMs: distributed.waitedMs };
+  }
+  
+  // For priority requests, use a faster path - skip local queue
+  if (priority) {
+    const waited = Date.now() - startTime;
+    if (waited > 100) {
+      console.log(`[Protractor:PRIORITY] Distributed slot acquired after ${waited}ms`);
+    }
+    return { acquired: true, waitedMs: waited };
   }
   
   // Then: local per-process queue (ensures 5 rps within this process)
@@ -40,7 +55,7 @@ async function acquireRateLimitSlot(): Promise<{ acquired: boolean }> {
     processRateLimitQueue();
   });
   
-  return { acquired: true };
+  return { acquired: true, waitedMs: Date.now() - startTime };
 }
 
 function processRateLimitQueue(): void {
@@ -301,14 +316,17 @@ export async function protractorFetch<T>(
   config: ProtractorConfig,
   options: RequestInit = {},
   retryCount = 0,
-  shopId?: number
+  shopId?: number,
+  opts?: { priority?: boolean }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
+  
+  const isPriority = opts?.priority === true;
 
   return protractorConcurrencyLimit(async () => {
-    const rateSlot = await acquireRateLimitSlot();
+    const rateSlot = await acquireRateLimitSlot(isPriority);
     if (!rateSlot.acquired) {
       return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
     }
@@ -316,56 +334,59 @@ export async function protractorFetch<T>(
     const url = `${BASE_URL}${endpoint}`;
     const startTime = Date.now();
     const method = (options.method || "GET").toUpperCase();
+    
+    if (isPriority) {
+      console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (waited ${rateSlot.waitedMs || 0}ms for slot)`);
+    }
   
-  try {
-    const headers: Record<string, string> = {
-      "connectionid": config.connectionId,
-      "apikey": config.apiKey,
-      "authentication": config.authentication,
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-    };
-    
-    if (options.headers) {
-      const optHeaders = options.headers as Record<string, string>;
-      Object.entries(optHeaders).forEach(([key, value]) => {
-        headers[key] = value;
-      });
-    }
-    
-    const body = options.body ? String(options.body) : undefined;
-    const res = await httpsRequest(url, method, headers, body);
-
-    const latencyMs = Date.now() - startTime;
-    const isServerError = res.statusCode >= 500;
-    const isRateLimited = res.statusCode === 429;
-    
-    trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
-      retryCount: retryCount > 0 ? retryCount : undefined,
-      errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
-      sourceWorker: process.env.RENDER ? 'render' : 'replit'
-    }).catch(() => {});
-
-    // Retry on rate limit (429) or server errors (5xx) with exponential backoff + jitter
-    if ((isRateLimited || isServerError) && retryCount < 3) {
-      const baseWaitMs = Math.pow(2, retryCount + 1) * 1000;
-      const jitter = Math.random() * 500; // Add up to 500ms jitter
-      const waitMs = baseWaitMs + jitter;
+    try {
+      const headers: Record<string, string> = {
+        "connectionid": config.connectionId,
+        "apikey": config.apiKey,
+        "authentication": config.authentication,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      };
       
-      console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
-      await new Promise(r => setTimeout(r, waitMs));
-      return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId);
-    }
+      if (options.headers) {
+        const optHeaders = options.headers as Record<string, string>;
+        Object.entries(optHeaders).forEach(([key, value]) => {
+          headers[key] = value;
+        });
+      }
+      
+      const body = options.body ? String(options.body) : undefined;
+      const res = await httpsRequest(url, method, headers, body);
 
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      return { ok: false, error: `HTTP ${res.statusCode}: ${res.body || "Unknown error"}` };
-    }
+      const latencyMs = Date.now() - startTime;
+      const isServerError = res.statusCode >= 500;
+      const isRateLimited = res.statusCode === 429;
+      
+      trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
+        retryCount: retryCount > 0 ? retryCount : undefined,
+        errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
+        sourceWorker: process.env.RENDER ? 'render' : 'replit'
+      }).catch(() => {});
 
-    const data = res.body ? JSON.parse(res.body) : null;
-    return { ok: true, data: data as T };
-  } catch (err: any) {
-    return { ok: false, error: err.message || "Network error" };
-  }
+      if ((isRateLimited || isServerError) && retryCount < 3) {
+        const baseWaitMs = Math.pow(2, retryCount + 1) * 1000;
+        const jitter = Math.random() * 500;
+        const waitMs = baseWaitMs + jitter;
+        
+        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
+        await new Promise(r => setTimeout(r, waitMs));
+        return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
+      }
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return { ok: false, error: `HTTP ${res.statusCode}: ${res.body || "Unknown error"}` };
+      }
+
+      const data = res.body ? JSON.parse(res.body) : null;
+      return { ok: true, data: data as T };
+    } catch (err: any) {
+      return { ok: false, error: err.message || "Network error" };
+    }
   });
 }
 
@@ -491,7 +512,8 @@ export async function fetchActiveWorkOrders(
 
 export async function fetchWorkOrderById(
   shopId: number | string,
-  workOrderId: string
+  workOrderId: string,
+  opts?: { priority?: boolean }
 ): Promise<{ ok: boolean; workOrder?: ProtractorWorkOrder; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -504,7 +526,8 @@ export async function fetchWorkOrderById(
     config,
     {},
     0,
-    numShopId
+    numShopId,
+    opts
   );
 
   if (!result.ok) {

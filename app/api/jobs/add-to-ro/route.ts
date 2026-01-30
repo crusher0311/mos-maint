@@ -30,6 +30,10 @@ type JobPayload = {
 };
 
 export async function POST(req: NextRequest) {
+  const requestId = Math.random().toString(36).substring(7);
+  const startTime = Date.now();
+  console.log(`[Add-to-RO:${requestId}] Request received at ${new Date().toISOString()}`);
+  
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,7 +65,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Job details are required" }, { status: 400 });
   }
 
-  const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid);
+  console.log(`[Add-to-RO:${requestId}] Fetching WO ${workOrderGuid} for shop ${shopId}...`);
+  const fetchWOStart = Date.now();
+  const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
+  console.log(`[Add-to-RO:${requestId}] WO fetch took ${Date.now() - fetchWOStart}ms`);
   if (!existingWOResult.ok || !existingWOResult.workOrder) {
     return NextResponse.json(
       { error: existingWOResult.error || "Work order not found" },
@@ -71,8 +78,8 @@ export async function POST(req: NextRequest) {
 
   const existingWorkOrder = existingWOResult.workOrder;
   
-  const workOrderType = existingWorkOrder.Type || existingWorkOrder.type;
-  const workOrderStage = existingWorkOrder.WorkflowStage || existingWorkOrder.workflowStage;
+  const workOrderType = existingWorkOrder.Type || (existingWorkOrder as any).type;
+  const workOrderStage = existingWorkOrder.WorkflowStage || (existingWorkOrder as any).workflowStage;
   
   console.log(`[Jobs Add to RO] WO ${workOrderGuid}: Type="${workOrderType}", Stage="${workOrderStage}"`);
   
@@ -216,7 +223,8 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  console.log(`[Jobs Add to RO] Adding "${job.title}" with ${job.lines.length} lines to WO ${workOrderGuid}...`);
+  console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines...`);
+  const postStart = Date.now();
 
   const updateResult = await protractorFetch<any>(
     `/WorkOrder/${workOrderGuid}`,
@@ -224,11 +232,16 @@ export async function POST(req: NextRequest) {
     {
       method: "POST",
       body: JSON.stringify(updatedWorkOrder),
-    }
+    },
+    0,
+    shopId,
+    { priority: true }
   );
+  
+  console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms`);
 
   if (!updateResult.ok) {
-    console.log(`[Jobs Add to RO] Failed: ${updateResult.error}`);
+    console.log(`[Add-to-RO:${requestId}] Failed: ${updateResult.error}, total time: ${Date.now() - startTime}ms`);
     return NextResponse.json(
       { error: updateResult.error || "Failed to add job to work order" },
       { status: 500 }
@@ -247,7 +260,7 @@ export async function POST(req: NextRequest) {
   const linesInResponse = addedPackage?.ServicePackageLines?.ItemCollection?.length || 
                           addedPackage?.ServicePackageLines?.length || 0;
   
-  console.log(`[Jobs Add to RO] Success: Added "${job.title}" with ${linesInResponse} lines to WO ${workOrderGuid}`);
+  console.log(`[Add-to-RO:${requestId}] Success: Added "${job.title}" to WO ${workOrderGuid}, total time: ${Date.now() - startTime}ms`);
 
   const totalAmount = job.lines.reduce((sum, line) => sum + (line.extendedPrice || 0), 0);
   const laborAmount = job.lines.filter(l => l.lineType === "labor").reduce((sum, l) => sum + (l.extendedPrice || 0), 0);
