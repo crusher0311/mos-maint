@@ -3,6 +3,14 @@ import { Db } from "mongodb";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
 const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
 
+export interface DeclinedServiceCache {
+  serviceKey: string;
+  serviceName: string;
+  mileage?: number | null;
+  reason?: string | null;
+  declinedAt: string;
+}
+
 export interface TriagedItemCache {
   key: string;
   serviceKey: string;
@@ -22,6 +30,7 @@ export interface TriagedItemCache {
   usingShopInterval?: boolean;
   protractorDeferredId?: string;
   matchedDeferred?: { id: string; title: string };
+  declined?: DeclinedServiceCache | null;
 }
 
 export interface CachedDeferredWork {
