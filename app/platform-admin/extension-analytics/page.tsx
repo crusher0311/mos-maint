@@ -10,6 +10,11 @@ type Stats = {
   topJobs: Array<{ jobTitle: string; count: number }>;
 };
 
+type TopUser = {
+  userId: string;
+  count: number;
+};
+
 type RecentEvent = {
   shopId: number;
   userId?: string;
@@ -25,6 +30,7 @@ type ShopLookup = Record<number, string>;
 
 export default function ExtensionAnalyticsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [shopNames, setShopNames] = useState<ShopLookup>({});
   const [loading, setLoading] = useState(true);
@@ -42,6 +48,7 @@ export default function ExtensionAnalyticsPage() {
       const res = await fetch(`/api/admin/extension-analytics?${params}`);
       const data = await res.json();
       setStats(data.stats);
+      setTopUsers(data.topUsers || []);
       setRecentEvents(data.recentEvents || []);
 
       const shopIds = [...new Set(data.recentEvents?.map((e: RecentEvent) => e.shopId) || [])];
@@ -223,7 +230,7 @@ export default function ExtensionAnalyticsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Jobs Added</h2>
               <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -245,16 +252,38 @@ export default function ExtensionAnalyticsPage() {
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Users</h2>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {topUsers.map((user, idx) => (
+                  <div key={user.userId} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 text-xs font-medium flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      <span className="text-sm text-gray-800 truncate max-w-[180px]" title={user.userId}>
+                        {user.userId}
+                      </span>
+                    </div>
+                    <span className="text-sm font-medium text-gray-600">{user.count}</span>
+                  </div>
+                ))}
+                {topUsers.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">No data yet</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Filter by shop or user..."
+                    placeholder="Filter..."
                     value={shopFilter}
                     onChange={(e) => setShopFilter(e.target.value)}
-                    className="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 w-48"
+                    className="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 w-28"
                   />
                 </div>
               </div>
@@ -263,14 +292,19 @@ export default function ExtensionAnalyticsPage() {
                   <div key={idx} className="flex items-start justify-between py-2 border-b border-gray-100 last:border-0">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{event.jobTitle}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${sourceColors[event.jobSource] || "bg-gray-500"} text-white`}>
                           {sourceLabels[event.jobSource] || event.jobSource}
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-500 truncate max-w-[100px]" title={shopNames[event.shopId] || `Shop ${event.shopId}`}>
                           {shopNames[event.shopId] || `Shop ${event.shopId}`}
                         </span>
                       </div>
+                      {event.userId && (
+                        <p className="text-xs text-blue-600 mt-0.5 truncate" title={event.userId}>
+                          {event.userId}
+                        </p>
+                      )}
                       {event.vehicleYear && (
                         <p className="text-xs text-gray-400 mt-0.5">
                           {event.vehicleYear} {event.vehicleMake} {event.vehicleModel}

@@ -19,16 +19,36 @@ export async function GET(request: NextRequest) {
     });
 
     const db = await getDb();
-    const recentEvents = await db.collection("extension_analytics")
-      .find({ eventType: "push_to_ro" })
-      .sort({ timestamp: -1 })
-      .limit(50)
-      .toArray();
+    
+    const matchStage: any = { 
+      eventType: "push_to_ro",
+      timestamp: { $gte: startDate }
+    };
+    if (shopId) matchStage.shopId = Number(shopId);
+    if (enterpriseId) matchStage.enterpriseId = enterpriseId;
+
+    const [recentEvents, topUsers] = await Promise.all([
+      db.collection("extension_analytics")
+        .find({ eventType: "push_to_ro" })
+        .sort({ timestamp: -1 })
+        .limit(50)
+        .toArray(),
+      db.collection("extension_analytics").aggregate([
+        { $match: matchStage },
+        { $group: { _id: "$userId", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 20 },
+      ]).toArray(),
+    ]);
 
     return NextResponse.json({
       stats,
+      topUsers: topUsers
+        .filter(u => u._id)
+        .map(u => ({ userId: u._id, count: u.count })),
       recentEvents: recentEvents.map(e => ({
         shopId: e.shopId,
+        userId: e.userId,
         jobTitle: e.jobTitle,
         jobSource: e.jobSource,
         vehicleYear: e.vehicleYear,
