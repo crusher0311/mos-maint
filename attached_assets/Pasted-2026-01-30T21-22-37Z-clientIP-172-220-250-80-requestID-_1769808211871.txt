@@ -1,0 +1,1000 @@
+2026-01-30T21:22:37Z clientIP="172.220.250.80" requestID="acf287e0-4bec-4e6a" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:38.423100933Z </html>
+2026-01-30T21:22:38.423118424Z 
+2026-01-30T21:22:38.423121204Z [Protractor] Trying GET /ServicePackageTemplate/d85825b3-5728-4343-971f-dcf44f69bcce...
+2026-01-30T21:22:38.601373132Z [Protractor] GET /ServicePackageTemplate/Read/adb54fde-f715-401a-a320-89668700226d: ok=false
+2026-01-30T21:22:38.601412074Z [Protractor] GET /ServicePackageTemplate/Read/adb54fde-f715-401a-a320-89668700226d error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:38.601417614Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:38.601419994Z <head>
+2026-01-30T21:22:38.601423174Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:38.601426164Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:38.601428994Z <style type="text/css">
+2026-01-30T21:22:38.601431204Z <!--
+2026-01-30T21:22:38.601434154Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:38.601436434Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:38.601438694Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:38.601440914Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:38.601443065Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:38.601446185Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:38.601448895Z background-color:#555555;}
+2026-01-30T21:22:38.601451085Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:38.601453395Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:38.601455615Z -->
+2026-01-30T21:22:38.601457845Z </style>
+2026-01-30T21:22:38.601460085Z </head>
+2026-01-30T21:22:38.601462365Z <body>
+2026-01-30T21:22:38.601464595Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:38.601466815Z <div id="content">
+2026-01-30T21:22:38.601469605Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:38.601471815Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:38.601474075Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:38.601476416Z  </fieldset></div>
+2026-01-30T21:22:38.601478566Z </div>
+2026-01-30T21:22:38.601480726Z </body>
+2026-01-30T21:22:38.601482876Z </html>
+2026-01-30T21:22:38.601484876Z 
+2026-01-30T21:22:38.601487216Z [Protractor] Trying GET /ServicePackageTemplate/adb54fde-f715-401a-a320-89668700226d...
+2026-01-30T21:22:38.805624438Z [Protractor] GET /ServicePackageTemplate/Read/fb842654-094b-40c4-b05d-708650bbdcbb: ok=false
+2026-01-30T21:22:38.805653519Z [Protractor] GET /ServicePackageTemplate/Read/fb842654-094b-40c4-b05d-708650bbdcbb error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:38.805658799Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:38.80566281Z <head>
+2026-01-30T21:22:38.80566751Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:38.80567162Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:38.80567639Z <style type="text/css">
+2026-01-30T21:22:38.80567965Z <!--
+2026-01-30T21:22:38.80568406Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:38.80568756Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:38.805691091Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:38.805708551Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:38.805710981Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:38.805713581Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:36Z clientIP="172.220.250.80" requestID="9cc33d24-7140-4f7f" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:38.805716121Z background-color:#555555;}
+2026-01-30T21:22:38.805718261Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:38.805720432Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:38.805722621Z -->
+2026-01-30T21:22:38.805724872Z </style>
+2026-01-30T21:22:38.805727092Z </head>
+2026-01-30T21:22:38.805729302Z <body>
+2026-01-30T21:22:38.805731422Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:38.805733542Z <div id="content">
+2026-01-30T21:22:38.805735702Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:38.805737802Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:38.805740022Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:38.805742112Z  </fieldset></div>
+2026-01-30T21:22:38.805744842Z </div>
+2026-01-30T21:22:38.805747002Z </body>
+2026-01-30T21:22:38.805749112Z </html>
+2026-01-30T21:22:38.805751082Z 
+2026-01-30T21:22:38.805753262Z [Protractor] Trying GET /ServicePackageTemplate/fb842654-094b-40c4-b05d-708650bbdcbb...
+2026-01-30T21:22:39.004471957Z [Protractor] GET /ServicePackageTemplate/Read/c9b8a9ba-caf4-48fb-b27f-7eaa56407568: ok=false
+2026-01-30T21:22:39.004493528Z [Protractor] GET /ServicePackageTemplate/Read/c9b8a9ba-caf4-48fb-b27f-7eaa56407568 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:39.004496828Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:39.004499228Z <head>
+2026-01-30T21:22:39.004502838Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:39.004505468Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:39.004508198Z <style type="text/css">
+2026-01-30T21:22:39.004510398Z <!--
+2026-01-30T21:22:39.004513198Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:39.004515538Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:39.004517838Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:39.004520328Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:39.004522538Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:39.004525398Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:39.004528089Z background-color:#555555;}
+2026-01-30T21:22:39.004530529Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:39.004532929Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:39.004535259Z -->
+2026-01-30T21:22:39.004537519Z </style>
+2026-01-30T21:22:39.004539839Z </head>
+2026-01-30T21:22:39.004542049Z <body>
+2026-01-30T21:22:39.004544329Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:39.004546629Z <div id="content">
+2026-01-30T21:22:39.004549239Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:39.004551619Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:39.004553999Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:39.004556789Z  </fieldset></div>
+2026-01-30T21:22:39.00456948Z </div>
+2026-01-30T21:22:39.00457197Z </body>
+2026-01-30T21:22:39.00457426Z </html>
+2026-01-30T21:22:39.00457632Z 
+2026-01-30T21:22:39.00457891Z [Protractor] Trying GET /ServicePackageTemplate/c9b8a9ba-caf4-48fb-b27f-7eaa56407568...
+2026-01-30T21:22:39.219312952Z [Protractor] GET /ServicePackageTemplate/Read/20dc347a-b6f4-4692-8ea5-7add9f688220: ok=false
+2026-01-30T21:22:39.219365964Z [Protractor] GET /ServicePackageTemplate/Read/20dc347a-b6f4-4692-8ea5-7add9f688220 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:39.219370654Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:39.219373504Z <head>
+2026-01-30T21:22:39.219377334Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:39.219381044Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:39.219384394Z <style type="text/css">
+2026-01-30T21:22:39.219408225Z <!--
+2026-01-30T21:22:39.219412865Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:39.219415745Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:39.219417535Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:39.219419225Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:39.219420945Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:39.219424195Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:39.219427675Z background-color:#555555;}
+2026-01-30T21:22:39.219430395Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:39.219433176Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:39.219435926Z -->
+2026-01-30T21:22:39.219438376Z </style>
+2026-01-30T21:22:39.219440656Z </head>
+2026-01-30T21:22:39.219443076Z <body>
+2026-01-30T21:22:39.219445616Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:39.219448316Z <div id="content">
+2026-01-30T21:22:39.219450826Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:39.219453256Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:39.219455706Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:39.219458336Z  </fieldset></div>
+2026-01-30T21:22:39.219460896Z </div>
+2026-01-30T21:22:39.219463587Z </body>
+2026-01-30T21:22:39.219466097Z </html>
+2026-01-30T21:22:39.219468557Z 
+2026-01-30T21:22:39.219474597Z [Protractor] Trying GET /ServicePackageTemplate/20dc347a-b6f4-4692-8ea5-7add9f688220...
+2026-01-30T21:22:39.409258474Z [Protractor] GET /ServicePackageTemplate/Read/2d71d860-f3f8-4b26-8de2-1907b4bdaf40: ok=false
+2026-01-30T21:22:39.409284634Z [Protractor] GET /ServicePackageTemplate/Read/2d71d860-f3f8-4b26-8de2-1907b4bdaf40 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:39.409289345Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:39.409293265Z <head>
+2026-01-30T21:22:39.409297545Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:39.409301295Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:39.409304265Z <style type="text/css">
+2026-01-30T21:22:39.409306495Z <!--
+2026-01-30T21:22:39.409309315Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:39.409311735Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:39.409327826Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:39.409330096Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:39.409332236Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:39.409334866Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:39.409337696Z background-color:#555555;}
+2026-01-30T21:22:39.409340046Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:39.409342206Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:39.409344436Z -->
+2026-01-30T21:22:39.409346636Z </style>
+2026-01-30T21:22:39.409348827Z </head>
+2026-01-30T21:22:39.409350976Z <body>
+2026-01-30T21:22:39.409353097Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:39.409355257Z <div id="content">
+2026-01-30T21:22:39.409357377Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:39.409359477Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:39.409361607Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:39.409363797Z  </fieldset></div>
+2026-01-30T21:22:39.409365927Z </div>
+2026-01-30T21:22:39.409368017Z </body>
+2026-01-30T21:22:39.409370447Z </html>
+2026-01-30T21:22:39.409372457Z 
+2026-01-30T21:22:39.409374877Z [Protractor] Trying GET /ServicePackageTemplate/2d71d860-f3f8-4b26-8de2-1907b4bdaf40...
+2026-01-30T21:22:39.602475787Z [Protractor] GET /ServicePackageTemplate/Read/7c7905f7-cb54-4a03-8f5f-6623a6dba81a: ok=false
+2026-01-30T21:22:39.602500068Z [Protractor] GET /ServicePackageTemplate/Read/7c7905f7-cb54-4a03-8f5f-6623a6dba81a error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:39.602503598Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:39.602505908Z <head>
+2026-01-30T21:22:39.602508828Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:39.602511858Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:39.602514458Z <style type="text/css">
+2026-01-30T21:22:39.602517388Z <!--
+2026-01-30T21:22:39.602521978Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:39.602526149Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:39.602529578Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:39.602533079Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:39.602536359Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:39.602540199Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:39.602544129Z background-color:#555555;}
+2026-01-30T21:22:39.602547719Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:39.602551349Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:39.602555139Z -->
+2026-01-30T21:22:39.602558719Z </style>
+2026-01-30T21:22:39.60256127Z </head>
+2026-01-30T21:22:39.60256351Z <body>
+2026-01-30T21:22:39.60256573Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:39.60256793Z <div id="content">
+2026-01-30T21:22:39.60257013Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:39.60257221Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:39.60257437Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:39.802902974Z [Protractor] GET /ServicePackageTemplate/Read/681ed101-1948-4abe-9022-1d7cf3c272cf: ok=false
+2026-01-30T21:22:39.802932435Z [Protractor] GET /ServicePackageTemplate/Read/681ed101-1948-4abe-9022-1d7cf3c272cf error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:39.802936925Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:39.802940136Z <head>
+2026-01-30T21:22:39.802944456Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:39.802948026Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:39.802951856Z <style type="text/css">
+2026-01-30T21:22:39.802955406Z <!--
+2026-01-30T21:22:39.802959266Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:38Z clientIP="172.220.250.80" requestID="121e829e-899c-4e2a" responseTimeMS=67 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:39Z clientIP="172.220.250.80" requestID="94425aec-bd73-4ca9" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:39.802962596Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:39.802965806Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:39.802969096Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:39.802972406Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:39.802976127Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:39.802979737Z background-color:#555555;}
+2026-01-30T21:22:39.802982797Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:39.802985767Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:39.802988587Z -->
+2026-01-30T21:22:39.802991737Z </style>
+2026-01-30T21:22:39.802994867Z </head>
+2026-01-30T21:22:39.802997967Z <body>
+2026-01-30T21:22:39.803001107Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:39.803004267Z <div id="content">
+2026-01-30T21:22:39.803007418Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:39.803010448Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:39.803013568Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:39.933587565Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:39.933612616Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:39.933617736Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T21:22:39.933620656Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T21:22:40Z clientIP="74.220.48.6" requestID="0d1686f3-6a03-4377" responseTimeMS=36418 responseBytes=1122 userAgent="node"
+2026-01-30T21:22:40.00231794Z [DataOne Cache] Stored 0 items for squish 1G11E5SADF, expires 2026-02-06T21:22:34.869Z
+2026-01-30T21:22:40.004611471Z [DataOne Cache] Stored 0 items for squish JHLRD7895C, expires 2026-02-06T21:22:34.869Z
+2026-01-30T21:22:40.005340754Z [DataOne Cache] Stored 0 items for squish JHMGK5H5GX, expires 2026-02-06T21:22:34.869Z
+2026-01-30T21:22:40.006536241Z [DataOne Cache] Stored 0 items for squish WMEEJ3BADK, expires 2026-02-06T21:22:34.869Z
+2026-01-30T21:22:40.007358957Z [DataOne Cache] Stored 0 items for squish 4S3GKAB6J3, expires 2026-02-06T21:22:34.869Z
+2026-01-30T21:22:40.019976899Z [Protractor] GET /ServicePackageTemplate/Read/9431538a-a9e1-45ae-ba27-0cab80417487: ok=false
+2026-01-30T21:22:40.019991649Z [Protractor] GET /ServicePackageTemplate/Read/9431538a-a9e1-45ae-ba27-0cab80417487 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:40.01999608Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:40.03675257Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:40.036770291Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:40.061291312Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:40.061311523Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:40.061314673Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T21:22:40.061317013Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T21:22:40.105602409Z [DataOne Cache] Stored 0 items for squish 1FMCU0EGCK, expires 2026-02-06T21:22:34.968Z
+2026-01-30T21:22:40.105732253Z [DataOne Cache] Stored 0 items for squish 1FTEW1E5LK, expires 2026-02-06T21:22:34.968Z
+2026-01-30T21:22:40.105741553Z [Plan Pregenerate] Processed 50 VINs for shop 1 in 36413ms
+2026-01-30T21:22:40.12557516Z [DataOne Cache] Stored 0 items for squish 3N1AB7APFY, expires 2026-02-06T21:22:34.995Z
+2026-01-30T21:22:40.129252084Z [DataOne Cache] Stored 0 items for squish JM3KFBDMM1, expires 2026-02-06T21:22:34.995Z
+2026-01-30T21:22:40.190069384Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:40.190090574Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:40.190094754Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T21:22:40.190097774Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T21:22:40.190100385Z     at async Promise.all (index 0)
+2026-01-30T21:22:40.190103385Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T21:22:40.190106155Z     at async Promise.allSettled (index 0)
+2026-01-30T21:22:39Z clientIP="172.220.250.80" requestID="4444d9a2-9ca3-41e9" responseTimeMS=200 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:40.190109255Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T21:22:40.190112105Z     at async Promise.all (index 4)
+2026-01-30T21:22:40.190114885Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T21:22:40.190118125Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T21:22:40.259913974Z [DataOne Cache] Stored 0 items for squish 7SAXCBE6PF, expires 2026-02-06T21:22:35.123Z
+2026-01-30T21:22:40.26010803Z [DataOne Cache] Stored 0 items for squish 1FMCU9GXGU, expires 2026-02-06T21:22:35.123Z
+2026-01-30T21:22:40.329222427Z [DataOne Cache] HIT for squish 1V2NR2CAJC, cached at 2026-01-29T20:36:44.846Z
+2026-01-30T21:22:40.329707402Z [DataOne Cache] HIT but missing vehicle info for squish JF2SKAUCLH, re-fetching...
+2026-01-30T21:22:40.329718733Z [DataOne Cache] EXPIRED for squish JF2SKAUCLH, fetching from API...
+2026-01-30T21:22:40.330891459Z [DataOne Cache] HIT but missing vehicle info for squish 5TFAY5F1MX, re-fetching...
+2026-01-30T21:22:40.3309157Z [DataOne Cache] EXPIRED for squish 5TFAY5F1MX, fetching from API...
+2026-01-30T21:22:40.331778677Z [DataOne Cache] HIT but missing vehicle info for squish 1G4GC5E3CF, re-fetching...
+2026-01-30T21:22:40.331791027Z [DataOne Cache] EXPIRED for squish 1G4GC5E3CF, fetching from API...
+2026-01-30T21:22:40.345852074Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:40.345871754Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:40.414676492Z [DataOne Cache] Stored 0 items for squish KL4CJGSBFB, expires 2026-02-06T21:22:35.279Z
+2026-01-30T21:22:40.416035754Z [DataOne Cache] Stored 0 items for squish 3GCPKTE3BG, expires 2026-02-06T21:22:35.279Z
+2026-01-30T21:22:40.416249311Z [DataOne Cache] Stored 0 items for squish 1FM5K8F8JG, expires 2026-02-06T21:22:35.279Z
+2026-01-30T21:22:40.417052886Z [DataOne Cache] Stored 0 items for squish 3TMCZ5ANHM, expires 2026-02-06T21:22:35.279Z
+2026-01-30T21:22:40.433517298Z [Protractor] GET /ServicePackageTemplate/Read/4de309a5-a9bc-4707-a400-9249a959154d: ok=false
+2026-01-30T21:22:40.433542138Z [Protractor] GET /ServicePackageTemplate/Read/4de309a5-a9bc-4707-a400-9249a959154d error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:40.433545889Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:40.433548329Z <head>
+2026-01-30T21:22:40.433551629Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:40.433554589Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:40.458099381Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:40.461336202Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T21:22:40.484103789Z [DataOne Cache] HIT for squish JF1SG6563H, cached at 2026-01-28T12:44:40.297Z
+2026-01-30T21:22:40.486869555Z [DataOne Cache] HIT but missing vehicle info for squish ZACCJBCBHP, re-fetching...
+2026-01-30T21:22:40.527279781Z [DataOne Cache] Stored 0 items for squish 1NXBR32E8Z, expires 2026-02-06T21:22:35.392Z
+2026-01-30T21:22:40.527705934Z [DataOne Cache] Stored 0 items for squish 4T4BE46K9R, expires 2026-02-06T21:22:35.392Z
+2026-01-30T21:22:40.527831118Z [DataOne Cache] Stored 0 items for squish WBA4F7C3HG, expires 2026-02-06T21:22:35.392Z
+2026-01-30T21:22:40.52820619Z [DataOne Cache] Stored 0 items for squish WA1LFAFPEA, expires 2026-02-06T21:22:35.392Z
+2026-01-30T21:22:40.598281527Z [DataOne Cache] HIT but missing vehicle info for squish YV140MFBF1, re-fetching...
+2026-01-30T21:22:40.598312468Z [DataOne Cache] EXPIRED for squish YV140MFBF1, fetching from API...
+2026-01-30T21:22:40.600507196Z [DataOne Cache] HIT but missing vehicle info for squish 5J8TC2H6ML, re-fetching...
+2026-01-30T21:22:40.600605929Z [DataOne Cache] EXPIRED for squish 5J8TC2H6ML, fetching from API...
+2026-01-30T21:22:40.601675133Z [DataOne Cache] HIT but missing vehicle info for squish KNDJ23AUL7, re-fetching...
+2026-01-30T21:22:40.601769015Z [DataOne Cache] EXPIRED for squish KNDJ23AUL7, fetching from API...
+2026-01-30T21:22:40.602778287Z [DataOne Cache] HIT but missing vehicle info for squish 5NPE34AFKH, re-fetching...
+2026-01-30T21:22:40.602797747Z [DataOne Cache] EXPIRED for squish 5NPE34AFKH, fetching from API...
+2026-01-30T21:22:40.612135458Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:40.633938575Z [Protractor] GET /ServicePackageTemplate/Read/aee23599-87c7-4534-947a-6d2d79449243: ok=false
+2026-01-30T21:22:40.633985866Z [Protractor] GET /ServicePackageTemplate/Read/aee23599-87c7-4534-947a-6d2d79449243 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:40.680845792Z [DataOne Cache] Stored 0 items for squish JTMBD33V86, expires 2026-02-06T21:22:35.543Z
+2026-01-30T21:22:40.681584235Z [DataOne Cache] Stored 0 items for squish JHMGE8849S, expires 2026-02-06T21:22:35.543Z
+2026-01-30T21:22:40.683327899Z [DataOne Cache] Stored 0 items for squish WDDUG8FBFA, expires 2026-02-06T21:22:35.543Z
+2026-01-30T21:22:40.684679841Z [DataOne Cache] Stored 0 items for squish KNDNB4H3R6, expires 2026-02-06T21:22:35.543Z
+2026-01-30T21:22:40.685004891Z [DataOne Cache] Stored 0 items for squish 4S4WMACDN3, expires 2026-02-06T21:22:35.543Z
+2026-01-30T21:22:39Z clientIP="172.220.250.80" requestID="ff7998f8-b2a3-4c1c" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:40.749837066Z [DataOne Cache] HIT but missing vehicle info for squish JN1CV6ARDM, re-fetching...
+2026-01-30T21:22:40.749863307Z [DataOne Cache] EXPIRED for squish JN1CV6ARDM, fetching from API...
+2026-01-30T21:22:40.751966342Z [DataOne Cache] HIT but missing vehicle info for squish 5NMJE3AEPH, re-fetching...
+2026-01-30T21:22:40.752052355Z [DataOne Cache] EXPIRED for squish 5NMJE3AEPH, fetching from API...
+2026-01-30T21:22:40.753779968Z [DataOne Cache] HIT but missing vehicle info for squish WDC0G5EBKF, re-fetching...
+2026-01-30T21:22:40.753792459Z [DataOne Cache] EXPIRED for squish WDC0G5EBKF, fetching from API...
+2026-01-30T21:22:40.755271095Z [DataOne Cache] HIT but missing vehicle info for squish 4T1BK36B7U, re-fetching...
+2026-01-30T21:22:40.809361225Z [Protractor] GET /ServicePackageTemplate/Read/263b1c6b-100a-4682-9ad0-1754fa00d582: ok=false
+2026-01-30T21:22:40.809415947Z [Protractor] GET /ServicePackageTemplate/Read/263b1c6b-100a-4682-9ad0-1754fa00d582 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:40.809426667Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:40.809429737Z <head>
+2026-01-30T21:22:40.809433177Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:41.053549842Z [Protractor] GET /ServicePackageTemplate/Read/99152a9e-194f-4380-a666-214a2b3e86ac: ok=false
+2026-01-30T21:22:41.053579073Z [Protractor] GET /ServicePackageTemplate/Read/99152a9e-194f-4380-a666-214a2b3e86ac error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:41.053586683Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:41.053592354Z <head>
+2026-01-30T21:22:41.053598514Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:41.053604654Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:41.053608894Z <style type="text/css">
+2026-01-30T21:22:41.053612454Z <!--
+2026-01-30T21:22:41.053616624Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:41.053633285Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:41.053635705Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:41.053637825Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:41.053639915Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:41.053642545Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:41.053645225Z background-color:#555555;}
+2026-01-30T21:22:41.053647635Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:41.053649825Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:41.053651965Z -->
+2026-01-30T21:22:41.053654345Z </style>
+2026-01-30T21:22:41.053656556Z </head>
+2026-01-30T21:22:41.053659136Z <body>
+2026-01-30T21:22:41.053661346Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:41.053663486Z <div id="content">
+2026-01-30T21:22:41.053665616Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:41.205506504Z [Protractor] GET /ServicePackageTemplate/Read/ad6d6f6c-e901-4f2d-af05-f6b0916add42: ok=false
+2026-01-30T21:22:41.205606197Z [Protractor] GET /ServicePackageTemplate/Read/ad6d6f6c-e901-4f2d-af05-f6b0916add42 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:41.205610377Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:41.205613137Z <head>
+2026-01-30T21:22:41.205616347Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:41.205619417Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:41.205622067Z <style type="text/css">
+2026-01-30T21:22:41.205624817Z <!--
+2026-01-30T21:22:41.205627918Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:41.205630978Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:41.205633958Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:41.205636338Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:41.205638628Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:40Z clientIP="72.198.61.82" requestID="7f50eb6a-890c-48f7" responseTimeMS=205 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="0098da07-42ae-4a10" responseTimeMS=199 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41.205641458Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:41.205644378Z background-color:#555555;}
+2026-01-30T21:22:41.205647008Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:41.205649778Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:41.205652308Z -->
+2026-01-30T21:22:41.205655088Z </style>
+2026-01-30T21:22:41.205657578Z </head>
+2026-01-30T21:22:41.205660199Z <body>
+2026-01-30T21:22:41.407637174Z [Protractor] GET /ServicePackageTemplate/Read/e2a684bf-04cd-4817-9cd6-821f6e3d1f0e: ok=false
+2026-01-30T21:22:41.407659745Z [Protractor] GET /ServicePackageTemplate/Read/e2a684bf-04cd-4817-9cd6-821f6e3d1f0e error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:41.407665425Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:41.407668895Z <head>
+2026-01-30T21:22:41.407673265Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:41.407677445Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:41.407681635Z <style type="text/css">
+2026-01-30T21:22:41.407684785Z <!--
+2026-01-30T21:22:41.407688705Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:41.407692126Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:41.407695216Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:41.407698626Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:41.407701936Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:41.407705966Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:41.407709926Z background-color:#555555;}
+2026-01-30T21:22:41.407712926Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:41.407716016Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:41.407719066Z -->
+2026-01-30T21:22:41.407722306Z </style>
+2026-01-30T21:22:41.407725727Z </head>
+2026-01-30T21:22:41.407729567Z <body>
+2026-01-30T21:22:41.407732637Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:41.407734857Z <div id="content">
+2026-01-30T21:22:41.407737027Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:41.407739277Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:41.407741487Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:41.407743647Z  </fieldset></div>
+2026-01-30T21:22:41.613696826Z [Protractor] GET /ServicePackageTemplate/Read/25416c26-1849-4584-9361-70bb643c565d: ok=false
+2026-01-30T21:22:41.613726537Z [Protractor] GET /ServicePackageTemplate/Read/25416c26-1849-4584-9361-70bb643c565d error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:41.613730667Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:41.613733667Z <head>
+2026-01-30T21:22:41.613737118Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:41.613740748Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:41.613744258Z <style type="text/css">
+2026-01-30T21:22:41.613746968Z <!--
+2026-01-30T21:22:41.613750308Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:41.613753088Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:41.613756088Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:41.613758908Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:41.613761588Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:40Z clientIP="72.198.61.82" requestID="852f5f64-d953-42de" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:40Z clientIP="72.198.61.82" requestID="4d7b5849-c255-42ee" responseTimeMS=200 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:40Z clientIP="72.198.61.82" requestID="b26a26ed-257c-4bbf" responseTimeMS=208 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:40Z clientIP="172.220.250.80" requestID="38978bda-1c6f-4c87" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="ba999727-95b0-4be5" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="0972473d-3249-4134" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="e5b8bb93-b208-4ca6" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="172.220.250.80" requestID="4d35e3b0-e55b-4311" responseTimeMS=66 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="68575503-29d8-4cdb" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="eb5ca8eb-c002-47dd" responseTimeMS=199 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41.613765179Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:41.806136165Z [Protractor] GET /ServicePackageTemplate/Read/d85ca73a-ffbc-4799-b3c2-73b2e5dc7133: ok=false
+2026-01-30T21:22:41.806385883Z [Protractor] GET /ServicePackageTemplate/Read/d85ca73a-ffbc-4799-b3c2-73b2e5dc7133 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:41.806426405Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:41.806429425Z <head>
+2026-01-30T21:22:41.806432625Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:41.806435485Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:41.806438325Z <style type="text/css">
+2026-01-30T21:22:41.806440625Z <!--
+2026-01-30T21:22:41.806443785Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:41.806499197Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:41.806501707Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:41.806504177Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:41.806506587Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:41.806509097Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:42.009117492Z [Protractor] GET /ServicePackageTemplate/Read/5b1c1ddd-1212-4fcc-abce-0300db475c4b: ok=false
+2026-01-30T21:22:42.009146953Z [Protractor] GET /ServicePackageTemplate/Read/5b1c1ddd-1212-4fcc-abce-0300db475c4b error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:42.009152403Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:42.009155923Z <head>
+2026-01-30T21:22:42.009160664Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:42.009164584Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:42.009168774Z <style type="text/css">
+2026-01-30T21:22:42.009171984Z <!--
+2026-01-30T21:22:42.009176654Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:42.009194225Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:42.009196605Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:42.009202875Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:42.009205065Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:42.009207785Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:42.009210425Z background-color:#555555;}
+2026-01-30T21:22:42.009212535Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:42.009214965Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:42.009217135Z -->
+2026-01-30T21:22:42.009219715Z </style>
+2026-01-30T21:22:42.009221905Z </head>
+2026-01-30T21:22:42.009224075Z <body>
+2026-01-30T21:22:42.205165663Z [Protractor] GET /ServicePackageTemplate/Read/2b6af650-1e72-421d-9e95-a091939aeec2: ok=false
+2026-01-30T21:22:42.205182904Z [Protractor] GET /ServicePackageTemplate/Read/2b6af650-1e72-421d-9e95-a091939aeec2 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:42.205187904Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:42.205190624Z <head>
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="05c37ff6-f7c4-4fdd" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="808e5b18-5e96-4cbe" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="e2897b9a-bf69-49c1" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="870c0ce8-af45-4455" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:42.205193534Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:42.205196204Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:42.205199064Z <style type="text/css">
+2026-01-30T21:22:42.205201215Z <!--
+2026-01-30T21:22:42.205203964Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:42.205206795Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:42.205209015Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:42.205211125Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:42.205213235Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:42.205215775Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:42.205218255Z background-color:#555555;}
+2026-01-30T21:22:42.205220395Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:42.205222635Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:42.205224775Z -->
+2026-01-30T21:22:42.205226915Z </style>
+2026-01-30T21:22:42.205229085Z </head>
+2026-01-30T21:22:42.205231296Z <body>
+2026-01-30T21:22:42.205233445Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:42.205235565Z <div id="content">
+2026-01-30T21:22:42.205237716Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:42.205239846Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:42.205257886Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:42.205261446Z  </fieldset></div>
+2026-01-30T21:22:42.205264437Z </div>
+2026-01-30T21:22:42.205267246Z </body>
+2026-01-30T21:22:42.205270267Z </html>
+2026-01-30T21:22:42.205272987Z 
+2026-01-30T21:22:42.205276227Z [Protractor] Trying GET /ServicePackageTemplate/2b6af650-1e72-421d-9e95-a091939aeec2...
+2026-01-30T21:22:42.405523219Z [Protractor] GET /ServicePackageTemplate/Read/2672cd99-9132-4030-8f04-2bbe2430e442: ok=false
+2026-01-30T21:22:42.405544619Z [Protractor] GET /ServicePackageTemplate/Read/2672cd99-9132-4030-8f04-2bbe2430e442 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:42.405550489Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:42.40555362Z <head>
+2026-01-30T21:22:42.40555813Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:42.40556285Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:42.40556655Z <style type="text/css">
+2026-01-30T21:22:42.40556957Z <!--
+2026-01-30T21:22:42.609591529Z [Protractor] GET /ServicePackageTemplate/Read/098ed606-72c3-491c-869f-de9096f4ca86: ok=false
+2026-01-30T21:22:42.60961537Z [Protractor] GET /ServicePackageTemplate/Read/098ed606-72c3-491c-869f-de9096f4ca86 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:42.60961866Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:42.60962109Z <head>
+2026-01-30T21:22:42.60962352Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:42.60962595Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:42.60962831Z <style type="text/css">
+2026-01-30T21:22:42.60963059Z <!--
+2026-01-30T21:22:42.609644241Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:42.609646751Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="d89a1c92-f283-4bd4" responseTimeMS=194 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="8d9204bb-d5c3-4879" responseTimeMS=201 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:41Z clientIP="72.198.61.82" requestID="f1823f41-cef6-405e" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:42Z clientIP="72.198.61.82" requestID="23dbbb87-bda3-4967" responseTimeMS=196 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:42Z clientIP="72.198.61.82" requestID="116d046a-ad73-45e6" responseTimeMS=195 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:42Z clientIP="72.198.61.82" requestID="1d794979-05d5-4e81" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:42.609648981Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:42.609651201Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:42.609653311Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:42.609655811Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:42.609658251Z background-color:#555555;}
+2026-01-30T21:22:42.609660431Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:42.609662601Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:42.609664811Z -->
+2026-01-30T21:22:42.609667002Z </style>
+2026-01-30T21:22:42.609669231Z </head>
+2026-01-30T21:22:42.609671392Z <body>
+2026-01-30T21:22:42.609673562Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:42.609675752Z <div id="content">
+2026-01-30T21:22:42.609677892Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:42.609680042Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:42.609682222Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:42.807165298Z [Protractor] GET /ServicePackageTemplate/Read/9d894d73-d072-4022-9ac3-f121ed80156f: ok=false
+2026-01-30T21:22:42.807185408Z [Protractor] GET /ServicePackageTemplate/Read/9d894d73-d072-4022-9ac3-f121ed80156f error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:42.807188948Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:42.807191729Z <head>
+2026-01-30T21:22:42.807195129Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:42.807198379Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:42.807201559Z <style type="text/css">
+2026-01-30T21:22:42.807204149Z <!--
+2026-01-30T21:22:42.807207639Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:42.807210119Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:42.807212669Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:42.807215169Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:42.807217549Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:42.80722052Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:43.027365389Z [Protractor] GET /ServicePackageTemplate/Read/a9203897-f9f6-47be-a27a-d61168defd9d: ok=false
+2026-01-30T21:22:43.027414161Z [Protractor] GET /ServicePackageTemplate/Read/a9203897-f9f6-47be-a27a-d61168defd9d error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:43.027420371Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:43.027422891Z <head>
+2026-01-30T21:22:43.027426231Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:43.027429131Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:43.027432011Z <style type="text/css">
+2026-01-30T21:22:43.027434712Z <!--
+2026-01-30T21:22:43.027437662Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:43.027440002Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:43.027442352Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:43.027444572Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:43.027446952Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:43.027449802Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:42Z clientIP="72.198.61.82" requestID="7aa74006-8932-410e" responseTimeMS=201 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:43.027452642Z background-color:#555555;}
+2026-01-30T21:22:43.027454932Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:43.027457292Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:43.027460362Z -->
+2026-01-30T21:22:43.027462643Z </style>
+2026-01-30T21:22:43.027464943Z </head>
+2026-01-30T21:22:43.027467933Z <body>
+2026-01-30T21:22:43.027470383Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:43.027472683Z <div id="content">
+2026-01-30T21:22:43.027474873Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:43.027477273Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:43.027479663Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:43.027482023Z  </fieldset></div>
+2026-01-30T21:22:43.027484263Z </div>
+2026-01-30T21:22:43.027486513Z </body>
+2026-01-30T21:22:43.027488773Z </html>
+2026-01-30T21:22:43.027490883Z 
+2026-01-30T21:22:43.027493264Z [Protractor] Trying GET /ServicePackageTemplate/a9203897-f9f6-47be-a27a-d61168defd9d...
+2026-01-30T21:22:43.238461058Z [Protractor] GET /ServicePackageTemplate/Read/75f48c8c-dc0e-4ed4-8bf8-2f974747cd96: ok=false
+2026-01-30T21:22:43.238486839Z [Protractor] GET /ServicePackageTemplate/Read/75f48c8c-dc0e-4ed4-8bf8-2f974747cd96 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:43.238490259Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:43.238493269Z <head>
+2026-01-30T21:22:43.23849696Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:43.23850018Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:43.23851871Z <style type="text/css">
+2026-01-30T21:22:43.23852161Z <!--
+2026-01-30T21:22:43.2385249Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:43.23852748Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:43.23853287Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:43.238536081Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:43.238538571Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:43.238541691Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:43.238544951Z background-color:#555555;}
+2026-01-30T21:22:43.238547481Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:43.238550591Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:43.238552971Z -->
+2026-01-30T21:22:43.238555571Z </style>
+2026-01-30T21:22:43.238558211Z </head>
+2026-01-30T21:22:43.238560771Z <body>
+2026-01-30T21:22:43.238563511Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:43.434650664Z [Protractor] GET /ServicePackageTemplate/Read/e5b8723e-81f8-4222-9c7d-ab5c2ddadf15: ok=false
+2026-01-30T21:22:43.434673025Z [Protractor] GET /ServicePackageTemplate/Read/e5b8723e-81f8-4222-9c7d-ab5c2ddadf15 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:43.434676565Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:43.434679015Z <head>
+2026-01-30T21:22:43.434681985Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:43.434684835Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:43.434687825Z <style type="text/css">
+2026-01-30T21:22:43.609490487Z [Protractor] GET /ServicePackageTemplate/Read/a4539c61-db33-4a9d-bbe7-48958d2815bb: ok=false
+2026-01-30T21:22:43.609518327Z [Protractor] GET /ServicePackageTemplate/Read/a4539c61-db33-4a9d-bbe7-48958d2815bb error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:43.609521617Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:43.609523888Z <head>
+2026-01-30T21:22:43.609526628Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:43.609529788Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:43.609532248Z <style type="text/css">
+2026-01-30T21:22:43.609534748Z <!--
+2026-01-30T21:22:43.609537938Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:43.609540208Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:43.609542398Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:43.609544538Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:43.609546578Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:43.609549128Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:43.609551638Z background-color:#555555;}
+2026-01-30T21:22:43.609553849Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:43.609556129Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:43.609558229Z -->
+2026-01-30T21:22:43.814885168Z [Protractor] GET /ServicePackageTemplate/Read/bd9ef8a8-e202-4809-b04a-f00263bb66de: ok=false
+2026-01-30T21:22:43.814915978Z [Protractor] GET /ServicePackageTemplate/Read/bd9ef8a8-e202-4809-b04a-f00263bb66de error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:43.814919569Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:43.814921929Z <head>
+2026-01-30T21:22:43.814924889Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:43.814943119Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:43.814946249Z <style type="text/css">
+2026-01-30T21:22:43.814948449Z <!--
+2026-01-30T21:22:43.814951299Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:43.81495367Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:43.81495596Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:43.81495815Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:43.81496024Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:43.81496322Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:43.81496604Z background-color:#555555;}
+2026-01-30T21:22:43.81496836Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:43.81497102Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:43.81497325Z -->
+2026-01-30T21:22:43.81497541Z </style>
+2026-01-30T21:22:43.81497759Z </head>
+2026-01-30T21:22:43.81497973Z <body>
+2026-01-30T21:22:43.81498194Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:43.81498426Z <div id="content">
+2026-01-30T21:22:43.814986891Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:43.814989031Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:43.814991341Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:44.01097001Z [Protractor] GET /ServicePackageTemplate/Read/d2ff7919-155e-4c48-92f2-c5768bab8630: ok=false
+2026-01-30T21:22:44.010992181Z [Protractor] GET /ServicePackageTemplate/Read/d2ff7919-155e-4c48-92f2-c5768bab8630 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:44.010995771Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:44.010998551Z <head>
+2026-01-30T21:22:44.011001861Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:44.011005111Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:44.011008461Z <style type="text/css">
+2026-01-30T21:22:44.011011261Z <!--
+2026-01-30T21:22:42Z clientIP="172.220.250.80" requestID="ac8af193-51ea-418a" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:44.011014641Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:44.011017782Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:44.011020582Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:44.011023372Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:44.011028642Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:44.011031932Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:44.20796117Z [Protractor] GET /ServicePackageTemplate/Read/62d7f07d-50cf-4ab6-831d-06b68c377b99: ok=false
+2026-01-30T21:22:44.207981921Z [Protractor] GET /ServicePackageTemplate/Read/62d7f07d-50cf-4ab6-831d-06b68c377b99 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:44.207986371Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:44.207990231Z <head>
+2026-01-30T21:22:44.207993811Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:44.207997942Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:44.208002012Z <style type="text/css">
+2026-01-30T21:22:44.208005152Z <!--
+2026-01-30T21:22:44.208008872Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:44.208012652Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:44.208015912Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:44.208019562Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:44.208022963Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:44.208026943Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:44.208030973Z background-color:#555555;}
+2026-01-30T21:22:44.208034373Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:44.208038013Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:44.208041243Z -->
+2026-01-30T21:22:44.208044423Z </style>
+2026-01-30T21:22:44.208047653Z </head>
+2026-01-30T21:22:44.208050983Z <body>
+2026-01-30T21:22:44.421097733Z [Protractor] GET /ServicePackageTemplate/Read/790bd5ea-b21c-47d1-923a-048f148e825e: ok=false
+2026-01-30T21:22:44.421114973Z [Protractor] GET /ServicePackageTemplate/Read/790bd5ea-b21c-47d1-923a-048f148e825e error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:44.421118293Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:44.421131384Z <head>
+2026-01-30T21:22:44.421133924Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:44.421136494Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:44.421138864Z <style type="text/css">
+2026-01-30T21:22:44.421140544Z <!--
+2026-01-30T21:22:44.421142984Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:44.421144774Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:44.421146454Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:44.421148194Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:44.421149865Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:44.421152705Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:44.421155054Z background-color:#555555;}
+2026-01-30T21:22:44.421156835Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:44.421158565Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:44.421160305Z -->
+2026-01-30T21:22:44.421163265Z </style>
+2026-01-30T21:22:44.421166195Z </head>
+2026-01-30T21:22:44.421169395Z <body>
+2026-01-30T21:22:44.614242524Z [Protractor] GET /ServicePackageTemplate/Read/aa00033c-6aeb-4481-b141-eef5ab4b25ac: ok=false
+2026-01-30T21:22:43Z clientIP="172.220.250.80" requestID="cc4d9f97-5048-404f" responseTimeMS=67 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:44.614267975Z [Protractor] GET /ServicePackageTemplate/Read/aa00033c-6aeb-4481-b141-eef5ab4b25ac error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:44.614272055Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:44.614274855Z <head>
+2026-01-30T21:22:44.614278185Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:44.614281415Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:44.614284325Z <style type="text/css">
+2026-01-30T21:22:44.614286755Z <!--
+2026-01-30T21:22:44.614290165Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:44.614292815Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:44.614295286Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:44.614297515Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:44.614299996Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:44.614303146Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:44.614305916Z background-color:#555555;}
+2026-01-30T21:22:44.614308416Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:44.614311226Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:44.614329336Z -->
+2026-01-30T21:22:44.614331947Z </style>
+2026-01-30T21:22:44.614334407Z </head>
+2026-01-30T21:22:44.614337007Z <body>
+2026-01-30T21:22:44.614339577Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:44.614342257Z <div id="content">
+2026-01-30T21:22:44.614344897Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:44.614347307Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:44.614349847Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:44.809357976Z [Protractor] GET /ServicePackageTemplate/Read/f81b21db-db26-4179-a2cc-32809cfea087: ok=false
+2026-01-30T21:22:44.809414038Z [Protractor] GET /ServicePackageTemplate/Read/f81b21db-db26-4179-a2cc-32809cfea087 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:44.809422258Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:44.809425308Z <head>
+2026-01-30T21:22:44.809428468Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:44.809431169Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:44.809434349Z <style type="text/css">
+2026-01-30T21:22:44.809436599Z <!--
+2026-01-30T21:22:44.809439619Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:44.809442369Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:44.809444769Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:44.809447279Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:44.809449579Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:44.809452479Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:45.006221643Z [Protractor] GET /ServicePackageTemplate/Read/aadeb174-cc41-4144-898a-77e807b5dbc2: ok=false
+2026-01-30T21:22:45.006251534Z [Protractor] GET /ServicePackageTemplate/Read/aadeb174-cc41-4144-898a-77e807b5dbc2 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:45.006271164Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:45.006273945Z <head>
+2026-01-30T21:22:45.006276705Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:45.006279685Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:45.006282515Z <style type="text/css">
+2026-01-30T21:22:45.006284615Z <!--
+2026-01-30T21:22:45.006287355Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:45.006289625Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:45.006291755Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:45.006294005Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:45.006296165Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:45.006299105Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:45.006301955Z background-color:#555555;}
+2026-01-30T21:22:45.006304055Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:45.006306155Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:45.006308235Z -->
+2026-01-30T21:22:45.006310326Z </style>
+2026-01-30T21:22:45.006312526Z </head>
+2026-01-30T21:22:45.006314766Z <body>
+2026-01-30T21:22:45.006316856Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:45.006319456Z <div id="content">
+2026-01-30T21:22:45.006321606Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:45.006323726Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:45.006325986Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:45.006328666Z  </fieldset></div>
+2026-01-30T21:22:45.141665521Z [DataOne Cache] Stored 0 items for squish 5LMJJ2LTLE, expires 2026-02-06T21:22:40.007Z
+2026-01-30T21:22:45.142069174Z [DataOne Cache] Stored 0 items for squish WDC0J4KBHF, expires 2026-02-06T21:22:40.007Z
+2026-01-30T21:22:45.143528839Z [DataOne Cache] Stored 0 items for squish 2T1KR30E6C, expires 2026-02-06T21:22:40.007Z
+2026-01-30T21:22:45.144153378Z [DataOne Cache] Stored 0 items for squish 1FTER4FHKL, expires 2026-02-06T21:22:40.007Z
+2026-01-30T21:22:45.145194451Z [DataOne Cache] Stored 0 items for squish KMHDH4AEDU, expires 2026-02-06T21:22:40.007Z
+2026-01-30T21:22:45.199607961Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:45.199634072Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:45.199639382Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T21:22:45.199642493Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T21:22:45.199645243Z     at async Promise.all (index 0)
+2026-01-30T21:22:45.199648143Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T21:22:45.230929305Z [Protractor] GET /ServicePackageTemplate/Read/19804bb8-109d-4182-ac20-084b038163ac: ok=false
+2026-01-30T21:22:45.230944325Z [Protractor] GET /ServicePackageTemplate/Read/19804bb8-109d-4182-ac20-084b038163ac error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:45.267594814Z [DataOne Cache] Stored 0 items for squish WA1BNAFYJ2, expires 2026-02-06T21:22:40.135Z
+2026-01-30T21:22:45.269690899Z [DataOne Cache] Stored 0 items for squish 7FARW2H8NE, expires 2026-02-06T21:22:40.135Z
+2026-01-30T21:22:45.271448053Z [DataOne Cache] Stored 0 items for squish WAUY4GF5JN, expires 2026-02-06T21:22:40.135Z
+2026-01-30T21:22:45.271819815Z [DataOne Cache] Stored 0 items for squish 1G1ZT5284F, expires 2026-02-06T21:22:40.135Z
+2026-01-30T21:22:45.329957362Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:45.329973132Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:45.329976622Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T21:22:45.329982242Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T21:22:45.329984602Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T21:22:45.329987382Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T21:22:45.329989663Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T21:22:45.397277453Z [DataOne Cache] Stored 0 items for squish 5TFAY5F1MX, expires 2026-02-06T21:22:40.263Z
+2026-01-30T21:22:45.398503991Z [DataOne Cache] Stored 0 items for squish 1G4GC5E3CF, expires 2026-02-06T21:22:40.263Z
+2026-01-30T21:22:45.398717638Z [DataOne Cache] Stored 0 items for squish JF2SKAUCLH, expires 2026-02-06T21:22:40.263Z
+2026-01-30T21:22:45.398887673Z [DataOne Cache] Stored 0 items for squish JN8AZ2NCG9, expires 2026-02-06T21:22:40.263Z
+2026-01-30T21:22:45.408186412Z [Protractor] GET /ServicePackageTemplate/Read/2680c6ea-a5df-47ff-9f6a-38ddd5ae2cb1: ok=false
+2026-01-30T21:22:45.408199742Z [Protractor] GET /ServicePackageTemplate/Read/2680c6ea-a5df-47ff-9f6a-38ddd5ae2cb1 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:45.408202642Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:45.408205033Z <head>
+2026-01-30T21:22:45.46281891Z [DataOne Cache] HIT but missing vehicle info for squish JTHBJ46G72, re-fetching...
+2026-01-30T21:22:44Z clientIP="172.220.250.80" requestID="dd5e2b7d-6c36-4fa8" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:45.462867511Z [DataOne Cache] EXPIRED for squish JTHBJ46G72, fetching from API...
+2026-01-30T21:22:45.464324346Z [DataOne Cache] HIT but missing vehicle info for squish ZARFANBNK7, re-fetching...
+2026-01-30T21:22:45.464335727Z [DataOne Cache] EXPIRED for squish ZARFANBNK7, fetching from API...
+2026-01-30T21:22:45.466209225Z [DataOne Cache] HIT but missing vehicle info for squish 58ABZ1B1KU, re-fetching...
+2026-01-30T21:22:45.48472774Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:45.484755491Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:45.551945659Z [DataOne Cache] Stored 0 items for squish 3CZRU6H3LM, expires 2026-02-06T21:22:40.417Z
+2026-01-30T21:22:45.554928461Z [DataOne Cache] Stored 0 items for squish ZACCJBCBHP, expires 2026-02-06T21:22:40.417Z
+2026-01-30T21:22:45.556355576Z [DataOne Cache] Stored 0 items for squish 5Y2SL6385Z, expires 2026-02-06T21:22:40.417Z
+2026-01-30T21:22:45.557972326Z [DataOne Cache] Stored 0 items for squish 5TDYZ3DCKS, expires 2026-02-06T21:22:40.417Z
+2026-01-30T21:22:45.599491186Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:45.599515067Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T21:22:45.599518347Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T21:22:45.599520667Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T21:22:45.599522957Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T21:22:45.599525957Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T21:22:45.599528247Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T21:22:45.599530597Z     at async Promise.all (index 0)
+2026-01-30T21:22:45.623935725Z [Protractor] GET /ServicePackageTemplate/Read/42327976-53bf-46c4-976c-47faaf8d19e9: ok=false
+2026-01-30T21:22:45.623954666Z [Protractor] GET /ServicePackageTemplate/Read/42327976-53bf-46c4-976c-47faaf8d19e9 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:45.664555218Z [DataOne Cache] Stored 0 items for squish YV140MFBF1, expires 2026-02-06T21:22:40.531Z
+2026-01-30T21:22:45.669321756Z [DataOne Cache] Stored 0 items for squish 5J8TC2H6ML, expires 2026-02-06T21:22:40.531Z
+2026-01-30T21:22:45.670282296Z [DataOne Cache] Stored 0 items for squish KNDJ23AUL7, expires 2026-02-06T21:22:40.531Z
+2026-01-30T21:22:45.670704938Z [DataOne Cache] Stored 0 items for squish 5NPE34AFKH, expires 2026-02-06T21:22:40.531Z
+2026-01-30T21:22:45.735876474Z [DataOne Cache] HIT but missing vehicle info for squish 5TDKY5G1JS, re-fetching...
+2026-01-30T21:22:45.735910495Z [DataOne Cache] EXPIRED for squish 5TDKY5G1JS, fetching from API...
+2026-01-30T21:22:45.737482524Z [DataOne Cache] HIT but missing vehicle info for squish 2T1BURHEHC, re-fetching...
+2026-01-30T21:22:45.737491864Z [DataOne Cache] EXPIRED for squish 2T1BURHEHC, fetching from API...
+2026-01-30T21:22:45.738762693Z [DataOne Cache] HIT but missing vehicle info for squish JTEUU5JRP6, re-fetching...
+2026-01-30T21:22:45.738774304Z [DataOne Cache] EXPIRED for squish JTEUU5JRP6, fetching from API...
+2026-01-30T21:22:45.740764155Z [DataOne Cache] HIT but missing vehicle info for squish 1FTEX1CPGK, re-fetching...
+2026-01-30T21:22:45.740772796Z [DataOne Cache] EXPIRED for squish 1FTEX1CPGK, fetching from API...
+2026-01-30T21:22:45.756140363Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T21:22:45.808016965Z [Protractor] GET /ServicePackageTemplate/Read/70672e45-5d92-45c9-bbab-862722f3c085: ok=false
+2026-01-30T21:22:45.808037256Z [Protractor] GET /ServicePackageTemplate/Read/70672e45-5d92-45c9-bbab-862722f3c085 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:45.808040416Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:45.808042256Z <head>
+2026-01-30T21:22:45.808044636Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:45.808047076Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:45.808049096Z <style type="text/css">
+2026-01-30T21:22:45.890162097Z [DataOne Cache] HIT but missing vehicle info for squish 2GCEK13M81, re-fetching...
+2026-01-30T21:22:45.890183418Z [DataOne Cache] EXPIRED for squish 2GCEK13M81, fetching from API...
+2026-01-30T21:22:45.891777307Z [DataOne Cache] HIT for squish 1FTEW1C5JK, cached at 2026-01-28T22:19:14.564Z
+2026-01-30T21:22:45.891956313Z [DataOne Cache] HIT but missing vehicle info for squish JTJBT20X60, re-fetching...
+2026-01-30T21:22:45.891961173Z [DataOne Cache] EXPIRED for squish JTJBT20X60, fetching from API...
+2026-01-30T21:22:45.893833271Z [DataOne Cache] HIT but missing vehicle info for squish 1HGCV1F3KA, re-fetching...
+2026-01-30T21:22:45.893845622Z [DataOne Cache] EXPIRED for squish 1HGCV1F3KA, fetching from API...
+2026-01-30T21:22:46.008452463Z [Protractor] GET /ServicePackageTemplate/Read/d11e1a9e-4eba-45e8-92e3-c1f8fa5fc7c6: ok=false
+2026-01-30T21:22:46.008474413Z [Protractor] GET /ServicePackageTemplate/Read/d11e1a9e-4eba-45e8-92e3-c1f8fa5fc7c6 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:45Z clientIP="172.220.250.80" requestID="3a626ea0-525b-4b15" responseTimeMS=67 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T21:22:46.008480293Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:46.008484504Z <head>
+2026-01-30T21:22:46.008489094Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:46.008494134Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:46.008498994Z <style type="text/css">
+2026-01-30T21:22:46.008503304Z <!--
+2026-01-30T21:22:46.008507804Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:46.008512294Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:46.008516365Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:46.008520175Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:46.008524235Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:46.008528655Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:46.211198012Z [Protractor] GET /ServicePackageTemplate/Read/f02e75f4-7325-4d2b-8bb0-cfe9777ed7df: ok=false
+2026-01-30T21:22:46.211223913Z [Protractor] GET /ServicePackageTemplate/Read/f02e75f4-7325-4d2b-8bb0-cfe9777ed7df error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:46.211228323Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:46.211231233Z <head>
+2026-01-30T21:22:46.211234913Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:46.211238463Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:46.211241673Z <style type="text/css">
+2026-01-30T21:22:46.211244423Z <!--
+2026-01-30T21:22:46.211248284Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:46.211251513Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:46.211254514Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:46.211256514Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:46.211258204Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:46.211262944Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:46.211265084Z background-color:#555555;}
+2026-01-30T21:22:46.211266824Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:46.211268664Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:46.430145925Z [Protractor] GET /ServicePackageTemplate/Read/969d50f0-4c39-49b7-bf8d-7f8720dc0432: ok=false
+2026-01-30T21:22:46.430174636Z [Protractor] GET /ServicePackageTemplate/Read/969d50f0-4c39-49b7-bf8d-7f8720dc0432 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:46.430191346Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:46.430193846Z <head>
+2026-01-30T21:22:46.430197146Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:46.430199936Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:46.430202836Z <style type="text/css">
+2026-01-30T21:22:46.430205016Z <!--
+2026-01-30T21:22:46.430207687Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:46.430209827Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:46.430211927Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:46.430213967Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:46.430216057Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:46.430218757Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:46.430224177Z background-color:#555555;}
+2026-01-30T21:22:46.430229057Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:46.430231367Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:46.430234017Z -->
+2026-01-30T21:22:46.430236217Z </style>
+2026-01-30T21:22:46.430238598Z </head>
+2026-01-30T21:22:46.430240778Z <body>
+2026-01-30T21:22:46.430243018Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:46.430245228Z <div id="content">
+2026-01-30T21:22:46.430247358Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:46.430249518Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:46.430251758Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:46.430254008Z  </fieldset></div>
+2026-01-30T21:22:46.430256208Z </div>
+2026-01-30T21:22:46.430258298Z </body>
+2026-01-30T21:22:46.430260338Z </html>
+2026-01-30T21:22:46.430262168Z 
+2026-01-30T21:22:46.430264238Z [Protractor] Trying GET /ServicePackageTemplate/969d50f0-4c39-49b7-bf8d-7f8720dc0432...
+2026-01-30T21:22:46.609197578Z [Protractor] GET /ServicePackageTemplate/Read/5163b65d-5689-42da-bb64-9a8094d1df34: ok=false
+2026-01-30T21:22:46.609226669Z [Protractor] GET /ServicePackageTemplate/Read/5163b65d-5689-42da-bb64-9a8094d1df34 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:46.609231009Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:46.609233849Z <head>
+2026-01-30T21:22:46.609236829Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:46.609239659Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:46.609242669Z <style type="text/css">
+2026-01-30T21:22:46.609244899Z <!--
+2026-01-30T21:22:46.830788353Z [Protractor] GET /ServicePackageTemplate/Read/86b0e765-28b4-4058-b01e-ddc9a08478cd: ok=false
+2026-01-30T21:22:46.830817374Z [Protractor] GET /ServicePackageTemplate/Read/86b0e765-28b4-4058-b01e-ddc9a08478cd error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:46.830821144Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:46.830823634Z <head>
+2026-01-30T21:22:46.830826714Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:46.830829764Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:46.830832824Z <style type="text/css">
+2026-01-30T21:22:46.830835154Z <!--
+2026-01-30T21:22:46.830837895Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:46.830840264Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:46.830842524Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:46.830845145Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:46.830847945Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:46.830851155Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:46.830854665Z background-color:#555555;}
+2026-01-30T21:22:46.830857485Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:46.830860265Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:46.830862855Z -->
+2026-01-30T21:22:46.830865525Z </style>
+2026-01-30T21:22:46.830868015Z </head>
+2026-01-30T21:22:46.830870605Z <body>
+2026-01-30T21:22:46.830873325Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:46.830875965Z <div id="content">
+2026-01-30T21:22:46.830878866Z  <div class="content-container"><fieldset>
+2026-01-30T21:22:46.830881316Z   <h2>404 - File or directory not found.</h2>
+2026-01-30T21:22:46.830883896Z   <h3>The resource you are looking for might have been removed, had its name changed, or is temporarily unavailable.</h3>
+2026-01-30T21:22:46.830886246Z  </fieldset></div>
+2026-01-30T21:22:47.009786124Z [Protractor] GET /ServicePackageTemplate/Read/8d9e8436-9053-4dd6-8dee-5756793d09fa: ok=false
+2026-01-30T21:22:47.009807485Z [Protractor] GET /ServicePackageTemplate/Read/8d9e8436-9053-4dd6-8dee-5756793d09fa error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:47.009827986Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:47.009830596Z <head>
+2026-01-30T21:22:47.009833536Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:47.009836486Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:47.009839116Z <style type="text/css">
+2026-01-30T21:22:47.009841216Z <!--
+2026-01-30T21:22:47.009843806Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:47.009846066Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:47.009848206Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:47.009850316Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:47.009852386Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:47.009855066Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:47.209798449Z [Protractor] GET /ServicePackageTemplate/Read/5085f532-5225-4722-97f1-dc45cc3b2949: ok=false
+2026-01-30T21:22:47.209820739Z [Protractor] GET /ServicePackageTemplate/Read/5085f532-5225-4722-97f1-dc45cc3b2949 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:47.20982374Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:47.20982573Z <head>
+2026-01-30T21:22:47.20982822Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:47.20983094Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:47.20983467Z <style type="text/css">
+2026-01-30T21:22:47.20983739Z <!--
+2026-01-30T21:22:47.20984087Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:47.2098438Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:47.20984642Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:47.20984893Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:47.2098518Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:47.209855611Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:47.209859391Z background-color:#555555;}
+2026-01-30T21:22:47.209875071Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:47.209878221Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T21:22:47.209881341Z -->
+2026-01-30T21:22:47.209883292Z </style>
+2026-01-30T21:22:47.209885052Z </head>
+2026-01-30T21:22:47.209886761Z <body>
+2026-01-30T21:22:47.209888492Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T21:22:47.409822824Z [Protractor] GET /ServicePackageTemplate/Read/cdd1fb9e-aaf0-4aa5-a794-900596318c43: ok=false
+2026-01-30T21:22:47.409840884Z [Protractor] GET /ServicePackageTemplate/Read/cdd1fb9e-aaf0-4aa5-a794-900596318c43 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T21:22:47.409845634Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T21:22:47.409849314Z <head>
+2026-01-30T21:22:47.409853335Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T21:22:47.409857555Z <title>404 - File or directory not found.</title>
+2026-01-30T21:22:47.409861265Z <style type="text/css">
+2026-01-30T21:22:47.409864895Z <!--
+2026-01-30T21:22:47.409868995Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T21:22:47.409872345Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T21:22:47.409874535Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T21:22:47.409876615Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T21:22:47.409878695Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T21:22:47.409882826Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T21:22:47.409887196Z background-color:#555555;}
+2026-01-30T21:22:47.409890516Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T21:22:47.409894426Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
