@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus, ChevronDown, ChevronUp, Wrench, Package, Clock, DollarSign } from "lucide-react";
+import { Search, Plus, ChevronDown, ChevronUp, Wrench, Package, Clock, DollarSign, Check } from "lucide-react";
 
 type JobResult = {
   _id: string;
@@ -114,41 +114,51 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
     }
   };
 
+  const [successfulJobs, setSuccessfulJobs] = useState<Set<string>>(new Set());
+
   const handleAddToRO = async (job: JobResult) => {
     if (!workOrderGuid) {
       setError("No work order selected");
       return;
     }
 
-    setAddingJob(job._id);
+    setSuccessfulJobs(prev => new Set(prev).add(job._id));
+    onJobAdded?.();
 
-    try {
-      const res = await fetch("/api/jobs/add-to-ro", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workOrderGuid,
-          job: {
-            title: job.job.title,
-            description: job.job.description,
-            code: job.job.code,
-            lines: job.lines,
-          },
-        }),
-      });
-
+    fetch("/api/jobs/add-to-ro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workOrderGuid,
+        job: {
+          title: job.job.title,
+          description: job.job.description,
+          code: job.job.code,
+          lines: job.lines,
+        },
+        source: "lookup",
+        vehicle: currentVehicle,
+      }),
+    }).then(async (res) => {
       const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || "Failed to add job");
+        console.error("[JobLookup] Background add failed:", data.error);
+        setSuccessfulJobs(prev => {
+          const next = new Set(prev);
+          next.delete(job._id);
+          return next;
+        });
+        setError(data.error || "Failed to add job");
       }
-
-      onJobAdded?.();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAddingJob(null);
-    }
+    }).catch((err) => {
+      console.error("[JobLookup] Background add failed:", err);
+      setSuccessfulJobs(prev => {
+        const next = new Set(prev);
+        next.delete(job._id);
+        return next;
+      });
+      setError("Network error adding job");
+    });
   };
 
   const formatCurrency = (amount: number) => {
@@ -405,14 +415,21 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                     </div>
 
                     {workOrderGuid && (
-                      <button
-                        onClick={() => handleAddToRO(job)}
-                        disabled={addingJob === job._id}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                      >
-                        <Plus className="w-4 h-4" />
-                        {addingJob === job._id ? "Adding..." : "Add to RO"}
-                      </button>
+                      successfulJobs.has(job._id) ? (
+                        <span className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg">
+                          <Check className="w-4 h-4" />
+                          Added
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleAddToRO(job)}
+                          disabled={addingJob === job._id}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                          <Plus className="w-4 h-4" />
+                          {addingJob === job._id ? "Adding..." : "Add to RO"}
+                        </button>
+                      )
                     )}
                   </div>
                 </div>

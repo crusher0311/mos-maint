@@ -227,37 +227,42 @@ export function AddToROWithHistory({
       return;
     }
 
-    setStatus("adding");
     setSelectedJob(job);
+    setStatus("success");
+    setShowDropdown(false);
 
-    try {
-      const res = await fetch("/api/jobs/add-to-ro", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          workOrderGuid,
-          job: {
-            title: job.job.title,
-            description: job.job.description,
-            code: job.job.code,
-            lines: job.lines,
-          },
-        }),
-      });
-
+    fetch("/api/jobs/add-to-ro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        workOrderGuid,
+        job: {
+          title: job.job.title,
+          description: job.job.description,
+          code: job.job.code,
+          lines: job.lines,
+        },
+        source: "lookup",
+        vehicle: {
+          vin,
+          year: vehicleYear,
+          make: vehicleMake,
+          model: vehicleModel,
+        },
+      }),
+    }).then(async (res) => {
       const data = await res.json();
-
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Failed to add job");
+        console.error("[AddToRO] Background add failed:", data.error);
+        setStatus("error");
+        setErrorMsg(data.error || "Failed to add job - please try again");
       }
-
-      setStatus("success");
-      setShowDropdown(false);
-    } catch (err: unknown) {
+    }).catch((err) => {
+      console.error("[AddToRO] Background add failed:", err);
       setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Failed to add");
-    }
+      setErrorMsg("Network error - please try again");
+    });
   }
 
   function formatPrice(lines: HistoricalJob["lines"]) {
