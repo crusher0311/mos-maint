@@ -34,6 +34,27 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Modular Features**: A la carte feature flags (maintenance, job lookup, common failures, oil sticker, keytags, auto booking, part cross-reference) managed via platform admin.
 *   **User Preferences**: Shops can choose distance units (miles/kilometers).
 
+## Future Work
+
+### Robust Stripe Billing with Grace Periods
+**Priority:** High | **Status:** Planned
+
+Current webhook handles payment failures by setting status to "past_due", but lacks:
+1. **Grace period tracking** - Add `pastDueSince`, `failedPaymentCount` fields to track when failures started
+2. **Configurable grace period** - Add `gracePeriodDays` to billing settings (default: 7 days)
+3. **Account locking** - Add "locked" billing status for accounts past grace period
+4. **Feature gating update** - Modify `isBillingActive()` in `lib/featureResolver.ts` to:
+   - Allow access during grace period (past_due but within X days)
+   - Block access after grace period expires
+5. **Failed payment notifications** - Email customers when payments fail with instructions to update payment method
+6. **Daily cleanup job** - Auto-lock accounts that exceed grace period
+
+**Files to modify:**
+- `lib/stripe.ts` - Add grace period settings
+- `lib/featureResolver.ts` - Update `isBillingActive()` logic
+- `app/api/stripe/webhook/route.ts` - Track failure timestamps and counts
+- `lib/email.ts` - Add payment failure email template
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
