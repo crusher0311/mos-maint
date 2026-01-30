@@ -4,7 +4,7 @@ import { getSessionById, linkSessionToTicket } from "@/lib/support-chat";
 import { getDb } from "@/lib/mongo";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
-import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
+import { getPlatformAdminEmails } from "@/lib/super-admins";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -72,7 +72,8 @@ export async function POST(req: NextRequest) {
     link: `/support/tickets/${ticketId}`
   });
 
-  for (const adminEmail of SUPER_ADMIN_EMAILS) {
+  const platformAdminEmails = await getPlatformAdminEmails();
+  for (const adminEmail of platformAdminEmails) {
     const adminEmailContent = makeNewTicketAdminEmail(ticketNumber, ticketSubject, "general", "medium", "Escalated from Chat");
     await sendEmail({ to: adminEmail, ...adminEmailContent });
     await createNotification({

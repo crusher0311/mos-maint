@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
 import { createNotificationsForUsers } from "@/lib/notifications";
-import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
+import { getPlatformAdminEmails } from "@/lib/super-admins";
 
 export async function GET(request: NextRequest) {
   try {
@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const adminUserIds = SUPER_ADMIN_EMAILS.map(email => `admin:${email}`);
+      const platformAdminEmails = await getPlatformAdminEmails();
+      const adminUserIds = platformAdminEmails.map(email => `admin:${email}`);
       await createNotificationsForUsers(adminUserIds, {
         type: "ticket_created",
         title: `New Ticket: ${ticketNumber}`,
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
         metadata: { ticketId: result.insertedId.toString(), ticketNumber }
       });
       
-      for (const adminEmail of SUPER_ADMIN_EMAILS) {
+      for (const adminEmail of platformAdminEmails) {
         try {
           const adminEmailContent = makeNewTicketAdminEmail(
             ticketNumber,
