@@ -7,6 +7,22 @@ import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 const DATAONE_API_BASE = process.env.DATAONE_API_URL || "http://3.144.191.161:3000";
 const CACHE_TTL_HOURS = 24 * 7; // Cache for 7 days (OEM data rarely changes)
+const FETCH_TIMEOUT_MS = 5000; // 5 second timeout for API calls
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 interface VinReferenceData {
   vin_id: number;
@@ -85,7 +101,7 @@ export async function decodeVin(vin: string): Promise<{
     const url = `${DATAONE_API_BASE}/api/data/VIN_REFERENCE?vin_pattern__regex=^${squish}&limit=1`;
     const startTime = Date.now();
     
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
     });
@@ -122,7 +138,7 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
     const startTime = Date.now();
     
     const vinMaintenanceUrl = `${DATAONE_API_BASE}/api/data/LKP_VIN_MAINTENANCE?squish=${squish}&limit=500`;
-    const vinMaintenanceResponse = await fetch(vinMaintenanceUrl);
+    const vinMaintenanceResponse = await fetchWithTimeout(vinMaintenanceUrl);
     
     trackApiRequest('dataone', '/LKP_VIN_MAINTENANCE', 'GET', vinMaintenanceResponse.status, Date.now() - startTime).catch(() => {});
     
@@ -140,8 +156,8 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
     const vinMaintenanceIds = vinMaintenanceData.data.map((d: any) => d.vin_maintenance_id);
 
     const [maintenanceDefsResponse, intervalsResponse] = await Promise.all([
-      fetch(`${DATAONE_API_BASE}/api/data/DEF_MAINTENANCE?maintenance_id__in=${maintenanceIds.join(",")}&limit=500`),
-      fetch(`${DATAONE_API_BASE}/api/data/LKP_VIN_MAINTENANCE_INTERVAL?vin_maintenance_id__in=${vinMaintenanceIds.join(",")}&limit=1000`)
+      fetchWithTimeout(`${DATAONE_API_BASE}/api/data/DEF_MAINTENANCE?maintenance_id__in=${maintenanceIds.join(",")}&limit=500`),
+      fetchWithTimeout(`${DATAONE_API_BASE}/api/data/LKP_VIN_MAINTENANCE_INTERVAL?vin_maintenance_id__in=${vinMaintenanceIds.join(",")}&limit=1000`)
     ]);
 
     const maintenanceDefs = await maintenanceDefsResponse.json();
@@ -151,7 +167,7 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
     
     let intervalDefs: any[] = [];
     if (intervalIds.length > 0) {
-      const intervalDefsResponse = await fetch(`${DATAONE_API_BASE}/api/data/DEF_MAINTENANCE_INTERVAL?maintenance_interval_id__in=${intervalIds.join(",")}&limit=500`);
+      const intervalDefsResponse = await fetchWithTimeout(`${DATAONE_API_BASE}/api/data/DEF_MAINTENANCE_INTERVAL?maintenance_interval_id__in=${intervalIds.join(",")}&limit=500`);
       const intervalDefsData = await intervalDefsResponse.json();
       intervalDefs = intervalDefsData.data;
     }
