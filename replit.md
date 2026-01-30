@@ -14,17 +14,18 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 
 **Technical Implementations:**
 *   **Data Management**: MongoDB Atlas for caching third-party API responses, state tracking, and normalized data storage.
-*   **Integration Mechanisms**: Webhooks for real-time updates and an incremental sync system for shop management systems (e.g., Tekmetric, Protractor) with robust error handling, OAuth token management, and rate limiting.
+*   **Integration Mechanisms**: Webhooks for real-time updates and an incremental sync system for shop management systems (e.g., Tekmetric, Protractor) with robust error handling, OAuth token management, and rate limiting. The integration layer is modular, enabling independent development of each integration with a unified `IIntegrationAdapter` interface and an `IntegrationFacade`.
 *   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based setup.
 *   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration for checkout and billing portal, and feature flags for modular functionality.
-*   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring across all external services, Chrome Extension Version API, and a support ticketing system for customer issue management with email and in-app notifications.
-*   **Notification System**: Email notifications via Resend API and in-app notification bell with real-time polling. Notifications for ticket creation, status updates, and new messages. Admin notifications distributed to SUPER_ADMINS list.
-*   **AI Support Chatbot**: Floating chat widget with OpenAI-powered responses, knowledge base retrieval from resolved tickets, chat session persistence, and ticket escalation path. Admins can save ticket resolutions to the knowledge base for AI learning.
-*   **Sticker & Keytag Generation**: QR code generation using HoverCode API, sticker image generation via `node-html-to-image`, and Dymo label printing for keytags with a visual designer.
-*   **AI & Recommendations**: AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor leveraging shop data and AI.
-*   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems, enabling a normalized, SMS-agnostic data layer with provenance tracking and dual-write ingestion.
-*   **Auto Booking**: A feature-gated system for automated oil change appointment scheduling, including lead time configuration, holiday/business hour management, and a review queue, with a trigger from sticker printing.
-*   **Chrome Extension**: A side panel extension integrating with Tekmetric for maintenance recommendations, common failures, job history search, canned jobs, and oil change sticker printing.
+*   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring, Chrome Extension Version API, and a support ticketing system.
+*   **Notification System**: Email notifications via Resend API and in-app notification bell.
+*   **AI Support Chatbot**: Floating chat widget with OpenAI-powered responses, knowledge base retrieval, and ticket escalation.
+*   **Sticker & Keytag Generation**: QR code generation using HoverCode API, sticker image generation via `node-html-to-image`, and Dymo label printing with a visual designer.
+*   **AI & Recommendations**: AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor.
+*   **SMS Adapter Architecture**: `ISMSAdapter` interface for shop management systems, enabling a normalized, SMS-agnostic data layer.
+*   **Auto Booking**: A feature-gated system for automated oil change appointment scheduling.
+*   **Chrome Extension**: A side panel extension integrating with Tekmetric for maintenance recommendations, job history, and sticker printing.
+*   **Plan Caching**: Full plan caching in `lib/plan-cache.ts` stores assembled plan buckets (overdue, dueSoon, upcoming) for instant loads, with mileage tolerance-based invalidation.
 
 **Feature Specifications:**
 *   **Core Management**: Vehicle analysis, customer dashboard, multi-shop management.
@@ -42,142 +43,3 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
-
-## Future Implementations
-
-### SSO (Single Sign-On) - Planned for Later
-Two SSO approaches identified for future development:
-
-**1. SAML SP (Service Provider) - For Enterprise Shops**
-- Let enterprise shops use existing identity providers (Azure AD, Okta, Google Workspace)
-- Employees log into MOS Tools with company credentials
-- MOS acts as Service Provider accepting logins from shop's IdP
-- Benefits: Centralized access control, auto-disable on employee departure
-- Priority for multi-location enterprise customers with existing IT infrastructure
-
-**2. OAuth 2.0 Provider - For Partner Apps (AppFueled, etc.)**
-- Partner apps can offer "Login with MOS Tools"
-- Users authorize access without sharing passwords
-- Scope-based permissions (profile, shop:read, appointments:write)
-- Endpoints needed: /oauth/authorize, /oauth/token, /oauth/userinfo
-- Partner app registration system required
-
-**Implementation Order:** SAML first (enterprise shops already have IdPs), OAuth second (partner ecosystem)
-
-## Integration Modular Architecture (Completed)
-
-The integration layer has been refactored into a modular architecture enabling independent development of each integration.
-
-**Directory Structure:**
-```
-lib/integrations/
-├── core/               # Foundation layer
-│   ├── types.ts        # IIntegrationAdapter interface, Result<T>, normalized types
-│   ├── facade.ts       # IntegrationFacade, IntegrationRegistry
-│   ├── rate-limiter.ts # Shared rate limiting utilities
-│   └── index.ts
-├── protractor/         # Self-contained Protractor module
-│   ├── types.ts        # Protractor-specific types
-│   ├── client.ts       # API client and auth resolution
-│   ├── transform.ts    # Protractor → Normalized data transformers
-│   ├── adapter.ts      # IIntegrationAdapter implementation
-│   └── index.ts        # Auto-registers with facade
-├── tekmetric/          # Self-contained Tekmetric module
-│   ├── types.ts        # Tekmetric-specific types
-│   ├── auth.ts         # OAuth token management
-│   ├── client.ts       # API client functions
-│   ├── adapter.ts      # IIntegrationAdapter implementation
-│   └── index.ts        # Auto-registers with facade
-├── autoflow/           # Self-contained AutoFlow DVI module
-│   ├── types.ts        # DVI-specific types
-│   ├── client.ts       # API client for DVI fetching
-│   ├── adapter.ts      # IIntegrationAdapter implementation
-│   └── index.ts        # Auto-registers with facade
-└── index.ts            # Main exports, auto-registers all adapters
-```
-
-**Key Patterns:**
-- **Unified Interface**: All adapters implement `IIntegrationAdapter` with standard methods
-- **Auto-Registration**: Each adapter registers itself with `integrationRegistry` on import
-- **Integration Facade**: `integrationFacade.getConfiguredAdapter(shopId)` returns active adapter
-- **Backward Compatibility**: Legacy exports maintained via re-exports from main index
-
-**Usage:**
-```typescript
-import { integrationFacade, integrationRegistry } from '@/lib/integrations';
-
-// Get configured adapter for a shop
-const adapter = await integrationFacade.getConfiguredAdapter(shopId);
-
-// Or use specific adapter
-import { protractorAdapter } from '@/lib/integrations/protractor';
-const vehicle = await protractorAdapter.getVehicleByVin(shopId, vin);
-```
-
-**Benefits:**
-- Independent development: Work on Tekmetric without affecting Protractor
-- Clear boundaries: Each integration is self-contained
-- Consistent API: All adapters follow the same interface
-- Easy testing: Mock individual adapters independently
-
-See **`TECHNICAL_DEBT_REVIEW.md`** for original analysis and phase plan.
-
-See **`PROTRACTOR_REFERENCE.md`** for Protractor API integration details including labor rate calculations and line formatting.
-
-## Recent Changes
-
-**January 29, 2026:**
-- Added platform-agnostic `DeclinedService` normalized type to core integration types
-- Added `getDeclinedServices(shopId, vehicleId)` method to `IIntegrationAdapter` interface and `IntegrationFacade`
-- Implemented Protractor `getDeclinedServices` with `transformDeferredWork` transformer
-- Fixed deferred work bug: plan-build now always fetches Protractor vehicle ID (not just when customer name is missing)
-- Canned jobs UI now shows "Jobs" button with all available canned jobs as fallback when no service-specific mappings exist
-- Pregenerate now queries ALL dashboard-visible vehicles (top 50 by recent activity), not just recently synced ones
-- Increased plan pregeneration from 10 to 50 VINs per shop (matches dashboard page size)
-- Added batch parallelism (5 concurrent VINs) to pregenerate endpoint for faster processing
-- Fixed prefetch worker production deployment by moving tsx from devDependencies to dependencies
-- Created internal API endpoints (`/api/internal/prefetch-shops`, `/api/internal/prefetch-vehicles`) with secret-based auth to bypass session requirements
-- Fixed shop filtering in prefetch-shops to include both Tekmetric (tekmetric.shopId) and Protractor (protractor.apiKey) shops
-- Fixed vehicles endpoint to fallback to cached_plans collection when no work orders found
-- Fixed field name mappings for cached plans (mileage at root level, vehicle info nested in plan.vehicle)
-- Internal endpoints use secret header (x-internal-secret) for authentication instead of session cookies
-
-**January 28, 2026:**
-- Implemented full plan caching in `lib/plan-cache.ts` - caches assembled plan buckets (overdue, dueSoon, upcoming) for instant subsequent loads
-- Plan cache includes mileage tolerance (500 miles) - cache invalidated if mileage changes significantly
-- Added cache hit path in plan page that skips ALL expensive external API calls (DataOne, Carfax, Protractor, AutoFlow, AutoVitals)
-- Cache hit path only fetches cheap local data: shop config status, shop branding
-- Cache miss path builds plan from all sources and stores assembled buckets to `cached_plans` MongoDB collection with 4-hour TTL
-- Cached plan data includes: buckets, vehicle info (year/make/model/engine), currentMiles, mpdBlended, customerName, latestRoNumber, distanceUnit, soonMiles, soonDays
-- Added `?refresh=1` query parameter support for force cache bypass when needed
-- Created `/api/plan-build` endpoint for background plan building - builds complete maintenance plans and caches them in MongoDB
-- Dashboard prefetch now calls `/api/plan-build` to build full plans (not just warm individual API caches) for instant first-visit loads
-- Prefetch system processes top 15 vehicles from dashboard with 2 concurrent requests and 300ms delays to avoid overwhelming external APIs
-- Added `isPlanPrefetched()` check to skip redundant prefetch calls for already-cached plans
-- Enhanced plan prefetch system to require mileage - skips prefetch for vehicles without mileage (maintenance plans are mileage-dependent)
-
-**January 27, 2026:**
-- Added `shop_media` MongoDB collection for storing logos and QR codes
-- Logo uploads now stored as base64 in MongoDB (works on Render without Replit object storage)
-- QR codes cached in MongoDB to reduce HoverCode API calls
-- Added location identifier display to enterprise overview page
-
-**January 26, 2026:**
-- Fixed labor rate calculation when adding jobs from history - now uses 3-tier fallback (WO lines → shop job history → historical rate)
-- Improved service title normalization for job search matching (singular forms for better matching)
-- Fixed deferred work matching to prevent partial matches (e.g., "Cabin Air Filter" no longer matches "Air Filter")
-
-**January 25, 2026:**
-- Completed full modular architecture refactoring for integration layer (all 6 phases)
-- Created foundation layer with unified `IIntegrationAdapter` interface and `IntegrationFacade`
-- Split Protractor monolith (2,671 lines) into 6 focused modules (~100-500 lines each)
-- Modularized Tekmetric integration with OAuth management and API client separation
-- Modularized AutoFlow DVI integration with self-contained structure
-- Implemented auto-registration pattern for all integration adapters
-- Maintained backward compatibility through re-exports in main index
-
-**January 24, 2026:**
-- Added failsafe mechanism for Protractor backfills with stale detection (30-min threshold)
-- Fixed Next.js Suspense boundary issues in setup pages using dynamic imports with `ssr: false`
-- Payment-first signup flow implemented (no free trial)
-- Protractor backfill runs inline on connection with adaptive chunk sizing
