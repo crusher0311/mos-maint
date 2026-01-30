@@ -7,6 +7,7 @@ import {
   fetchWorkOrdersForVehicle,
 } from "@/lib/integrations/protractor";
 import { logRecommendationEvent } from "@/lib/enterprise";
+import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,6 +132,15 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[Apply Canned Job] Failed to log recommendation event:", err);
   }
+
+  trackPushToRO({
+    shopId,
+    userId: session.email || undefined,
+    vin: vin?.toUpperCase(),
+    jobTitle: cannedJobTitle || cannedJobId,
+    jobSource: "canned",
+    repairOrderId: String(targetWorkOrderId),
+  }).catch(err => console.error("[Apply Canned Job] Analytics tracking failed:", err));
 
   return NextResponse.json({
     success: true,
