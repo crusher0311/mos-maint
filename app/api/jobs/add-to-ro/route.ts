@@ -123,19 +123,16 @@ export async function POST(req: NextRequest) {
     if (shopLaborRate > 0) break;
   }
   
-  // If no rate found from WO, check shop's job history cache for their typical rate
+  // If no rate found from WO, use cached labor rate from shop document (fast)
   if (shopLaborRate === 0) {
     const { getDb } = await import("@/lib/mongo");
     const db = await getDb();
-    const recentJob = await db.collection("job_index").findOne(
-      { shopId, "lines.lineType": "labor", "lines.unitPrice": { $gt: 0 } },
-      { sort: { lastPerformed: -1 } }
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { cachedLaborRate: 1 } }
     );
-    if (recentJob?.lines) {
-      const laborLine = recentJob.lines.find((l: any) => l.lineType === "labor" && l.unitPrice > 0);
-      if (laborLine) {
-        shopLaborRate = laborLine.unitPrice;
-      }
+    if (shop?.cachedLaborRate && shop.cachedLaborRate > 0) {
+      shopLaborRate = shop.cachedLaborRate;
     }
   }
   

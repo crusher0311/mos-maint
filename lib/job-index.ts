@@ -411,6 +411,9 @@ export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{
   let inserted = 0;
   let updated = 0;
   
+  // Track labor rates per shop to cache the most recent one
+  const shopLaborRates = new Map<number, number>();
+  
   for (const entry of entries) {
     const filter = {
       shopId: entry.shopId,
@@ -428,6 +431,25 @@ export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{
       inserted++;
     } else if (result.modifiedCount > 0) {
       updated++;
+    }
+    
+    // Extract labor rate from entry lines
+    for (const line of entry.lines) {
+      if (line.lineType === "labor" && line.unitPrice > 0) {
+        shopLaborRates.set(entry.shopId, line.unitPrice);
+        break;
+      }
+    }
+  }
+  
+  // Cache labor rates at shop level for fast lookups
+  if (shopLaborRates.size > 0) {
+    const shopsCollection = db.collection("shops");
+    for (const [shopId, laborRate] of shopLaborRates) {
+      await shopsCollection.updateOne(
+        { shopId },
+        { $set: { cachedLaborRate: laborRate, cachedLaborRateUpdatedAt: new Date() } }
+      );
     }
   }
   
