@@ -7,22 +7,41 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const shopId = searchParams.get("shopId");
     const enterpriseId = searchParams.get("enterpriseId");
+    const dateFilter = searchParams.get("dateFilter");
     const days = parseInt(searchParams.get("days") || "30");
     
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    let startDate: Date;
+    let endDate: Date | undefined;
+    
+    if (dateFilter === "today") {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else if (dateFilter === "yesterday") {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setHours(0, 0, 0, 0);
+    } else {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+    }
 
     const stats = await getPushToROStats({
       shopId: shopId ? Number(shopId) : undefined,
       enterpriseId: enterpriseId || undefined,
       startDate,
+      endDate,
     });
 
     const db = await getDb();
     
+    const timestampQuery: any = { $gte: startDate };
+    if (endDate) timestampQuery.$lt = endDate;
+    
     const matchStage: any = { 
       eventType: "push_to_ro",
-      timestamp: { $gte: startDate }
+      timestamp: timestampQuery
     };
     if (shopId) matchStage.shopId = Number(shopId);
     if (enterpriseId) matchStage.enterpriseId = enterpriseId;

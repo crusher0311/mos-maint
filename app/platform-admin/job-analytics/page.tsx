@@ -35,17 +35,22 @@ export default function JobAnalyticsPage() {
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [shopNames, setShopNames] = useState<ShopLookup>({});
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
+  const [timeFilter, setTimeFilter] = useState("30");
   const [shopFilter, setShopFilter] = useState("");
 
   useEffect(() => {
     fetchData();
-  }, [days]);
+  }, [timeFilter]);
 
   async function fetchData() {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ days: String(days) });
+      const params = new URLSearchParams();
+      if (timeFilter === "today" || timeFilter === "yesterday") {
+        params.set("dateFilter", timeFilter);
+      } else {
+        params.set("days", timeFilter);
+      }
       const res = await fetch(`/api/admin/extension-analytics?${params}`);
       const data = await res.json();
       setStats(data.stats);
@@ -114,15 +119,15 @@ export default function JobAnalyticsPage() {
         </div>
         <div className="flex items-center gap-3">
           <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
           >
-            <option value={1}>Today</option>
-            <option value={2}>Yesterday</option>
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
           </select>
         </div>
       </div>
