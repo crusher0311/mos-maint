@@ -73,16 +73,24 @@ export async function POST(req: NextRequest) {
   });
 
   const platformAdminEmails = await getPlatformAdminEmails();
-  for (const adminEmail of platformAdminEmails) {
-    const adminEmailContent = makeNewTicketAdminEmail(ticketNumber, ticketSubject, "general", "medium", "Escalated from Chat");
-    await sendEmail({ to: adminEmail, ...adminEmailContent });
-    await createNotification({
-      userId: `admin:${adminEmail}`,
-      type: "system",
-      title: "New Escalated Ticket",
-      message: `${session.email} escalated chat to ticket: ${ticketSubject}`,
-      link: `/platform-admin/tickets/${ticketId}`
-    });
+  for (let i = 0; i < platformAdminEmails.length; i++) {
+    const adminEmail = platformAdminEmails[i];
+    if (i > 0) {
+      await new Promise(r => setTimeout(r, 600));
+    }
+    try {
+      const adminEmailContent = makeNewTicketAdminEmail(ticketNumber, ticketSubject, "general", "medium", "Escalated from Chat");
+      await sendEmail({ to: adminEmail, ...adminEmailContent });
+      await createNotification({
+        userId: `admin:${adminEmail}`,
+        type: "system",
+        title: "New Escalated Ticket",
+        message: `${session.email} escalated chat to ticket: ${ticketSubject}`,
+        link: `/platform-admin/tickets/${ticketId}`
+      });
+    } catch (adminEmailErr) {
+      console.error(`Failed to send admin email to ${adminEmail}:`, adminEmailErr);
+    }
   }
 
   return NextResponse.json({

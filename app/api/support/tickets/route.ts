@@ -124,7 +124,11 @@ export async function POST(request: NextRequest) {
         metadata: { ticketId: result.insertedId.toString(), ticketNumber }
       });
       
-      for (const adminEmail of platformAdminEmails) {
+      for (let i = 0; i < platformAdminEmails.length; i++) {
+        const adminEmail = platformAdminEmails[i];
+        if (i > 0) {
+          await new Promise(r => setTimeout(r, 600));
+        }
         try {
           const adminEmailContent = makeNewTicketAdminEmail(
             ticketNumber,
