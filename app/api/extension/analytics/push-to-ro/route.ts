@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validSources = ["plan", "failures", "lookup", "canned", "autocomplete"];
+    const validSources = ["plan", "failures", "lookup", "canned", "autocomplete", "deferred"];
     if (!validSources.includes(jobSource)) {
       return NextResponse.json(
         { error: `Invalid jobSource. Must be one of: ${validSources.join(", ")}` },

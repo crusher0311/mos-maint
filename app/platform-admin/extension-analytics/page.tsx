@@ -76,6 +76,7 @@ export default function ExtensionAnalyticsPage() {
     failures: "Common Failures",
     canned: "Canned Jobs",
     autocomplete: "Autocomplete",
+    deferred: "Deferred Work",
   };
 
   const sourceColors: Record<string, string> = {
@@ -84,6 +85,7 @@ export default function ExtensionAnalyticsPage() {
     failures: "bg-orange-500",
     canned: "bg-purple-500",
     autocomplete: "bg-pink-500",
+    deferred: "bg-teal-500",
   };
 
   const filteredEvents = recentEvents.filter((e) => {
@@ -213,24 +215,33 @@ export default function ExtensionAnalyticsPage() {
 
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Daily Activity</h2>
-              <div className="flex items-end gap-1 h-40">
-                {(stats?.byDay || []).slice(0, 14).reverse().map((day) => (
-                  <div key={day.date} className="flex-1 flex flex-col items-center">
-                    <div
-                      className="w-full bg-blue-500 rounded-t"
-                      style={{ height: `${(day.count / maxDayCount) * 100}%`, minHeight: day.count > 0 ? "4px" : "0" }}
-                      title={`${day.date}: ${day.count}`}
-                    />
-                    <span className="text-[10px] text-gray-400 mt-1 rotate-[-45deg] origin-top-left">
-                      {day.date.slice(5)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              {(stats?.byDay?.length || 0) === 0 ? (
+                <div className="h-40 flex items-center justify-center">
+                  <p className="text-sm text-gray-400">No daily data yet</p>
+                </div>
+              ) : (
+                <div className="flex items-end gap-1 h-40">
+                  {(stats?.byDay || []).slice(0, 14).reverse().map((day) => {
+                    const barHeight = maxDayCount > 0 ? Math.max((day.count / maxDayCount) * 100, day.count > 0 ? 5 : 0) : 0;
+                    return (
+                      <div key={day.date} className="flex-1 flex flex-col items-center justify-end h-full">
+                        <div
+                          className="w-full bg-blue-500 rounded-t transition-all"
+                          style={{ height: `${barHeight}%` }}
+                          title={`${day.date}: ${day.count} adds`}
+                        />
+                        <span className="text-[9px] text-gray-400 mt-2 whitespace-nowrap">
+                          {day.date.slice(5)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Jobs Added</h2>
               <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -240,7 +251,7 @@ export default function ExtensionAnalyticsPage() {
                       <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-medium flex items-center justify-center">
                         {idx + 1}
                       </span>
-                      <span className="text-sm text-gray-800 truncate max-w-[200px]">{job.jobTitle}</span>
+                      <span className="text-sm text-gray-800 truncate max-w-[280px]">{job.jobTitle}</span>
                     </div>
                     <span className="text-sm font-medium text-gray-600">{job.count}</span>
                   </div>
@@ -260,7 +271,7 @@ export default function ExtensionAnalyticsPage() {
                       <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 text-xs font-medium flex items-center justify-center">
                         {idx + 1}
                       </span>
-                      <span className="text-sm text-gray-800 truncate max-w-[180px]" title={user.userId}>
+                      <span className="text-sm text-gray-800 truncate max-w-[280px]" title={user.userId}>
                         {user.userId}
                       </span>
                     </div>
@@ -272,59 +283,70 @@ export default function ExtensionAnalyticsPage() {
                 )}
               </div>
             </div>
+          </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Filter..."
-                    value={shopFilter}
-                    onChange={(e) => setShopFilter(e.target.value)}
-                    className="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 w-28"
-                  />
-                </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Filter by shop, user, or job..."
+                  value={shopFilter}
+                  onChange={(e) => setShopFilter(e.target.value)}
+                  className="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 w-64"
+                />
               </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {filteredEvents.slice(0, 20).map((event, idx) => (
-                  <div key={idx} className="flex items-start justify-between py-2 border-b border-gray-100 last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{event.jobTitle}</p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${sourceColors[event.jobSource] || "bg-gray-500"} text-white`}>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Job Title</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Source</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Shop</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">User</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Vehicle</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Date/Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEvents.slice(0, 30).map((event, idx) => (
+                    <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 px-3 max-w-[200px]">
+                        <span className="truncate block" title={event.jobTitle}>{event.jobTitle}</span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${sourceColors[event.jobSource] || "bg-gray-500"} text-white`}>
                           {sourceLabels[event.jobSource] || event.jobSource}
                         </span>
-                        <span className="text-xs text-gray-500 truncate max-w-[100px]" title={shopNames[event.shopId] || `Shop ${event.shopId}`}>
-                          {shopNames[event.shopId] || `Shop ${event.shopId}`}
+                      </td>
+                      <td className="py-2 px-3">
+                        <div>
+                          <span className="text-gray-800">{shopNames[event.shopId] || "Unknown"}</span>
+                          <span className="text-gray-400 text-xs ml-1">(#{event.shopId})</span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 max-w-[180px]">
+                        <span className="text-blue-600 truncate block" title={event.userId || "—"}>
+                          {event.userId || "—"}
                         </span>
-                      </div>
-                      {event.userId && (
-                        <p className="text-xs text-blue-600 mt-0.5 truncate" title={event.userId}>
-                          {event.userId}
-                        </p>
-                      )}
-                      {event.vehicleYear && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {event.vehicleYear} {event.vehicleMake} {event.vehicleModel}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-2">
-                      <p className="text-xs text-gray-400">
-                        {new Date(event.timestamp).toLocaleDateString()}
-                      </p>
-                      <p className="text-[10px] text-gray-400">
+                      </td>
+                      <td className="py-2 px-3 text-gray-600">
+                        {event.vehicleYear ? `${event.vehicleYear} ${event.vehicleMake || ""} ${event.vehicleModel || ""}`.trim() : "—"}
+                      </td>
+                      <td className="py-2 px-3 text-right text-gray-500 whitespace-nowrap">
+                        {new Date(event.timestamp).toLocaleDateString()}{" "}
                         {new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {filteredEvents.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-4">No activity found</p>
-                )}
-              </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredEvents.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No activity found</p>
+              )}
             </div>
           </div>
         </>
