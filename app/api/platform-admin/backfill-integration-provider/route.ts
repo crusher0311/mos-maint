@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { SUPER_ADMIN_EMAILS } from '@/lib/super-admins';
+import { isPlatformAdmin } from '@/lib/super-admins';
 import { backfillIntegrationProvider } from '@/lib/scripts/backfill-integration-provider';
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
-    if (!session?.email || !SUPER_ADMIN_EMAILS.includes(session.email)) {
+    const isAdmin = await isPlatformAdmin(session?.email);
+    if (!session?.email || !isAdmin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
