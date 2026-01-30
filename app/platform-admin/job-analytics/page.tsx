@@ -26,9 +26,10 @@ type RecentEvent = {
   timestamp: string;
 };
 
-type ShopLookup = Record<number, string>;
+type ShopInfo = { name: string; location?: string };
+type ShopLookup = Record<number, ShopInfo>;
 
-export default function ExtensionAnalyticsPage() {
+export default function JobAnalyticsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
@@ -90,11 +91,15 @@ export default function ExtensionAnalyticsPage() {
 
   const filteredEvents = recentEvents.filter((e) => {
     if (!shopFilter) return true;
-    const shopName = shopNames[e.shopId] || "";
+    const shop = shopNames[e.shopId];
+    const shopName = shop?.name || "";
+    const shopLocation = shop?.location || "";
     return (
       shopName.toLowerCase().includes(shopFilter.toLowerCase()) ||
+      shopLocation.toLowerCase().includes(shopFilter.toLowerCase()) ||
       String(e.shopId).includes(shopFilter) ||
-      e.userId?.toLowerCase().includes(shopFilter.toLowerCase())
+      e.userId?.toLowerCase().includes(shopFilter.toLowerCase()) ||
+      e.jobTitle?.toLowerCase().includes(shopFilter.toLowerCase())
     );
   });
 
@@ -104,8 +109,8 @@ export default function ExtensionAnalyticsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Extension Analytics</h1>
-          <p className="text-gray-500 mt-1">Track "Add to RO" usage across all shops</p>
+          <h1 className="text-2xl font-bold text-gray-900">Job Analytics</h1>
+          <p className="text-gray-500 mt-1">Track jobs added to work orders across all shops</p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -324,8 +329,10 @@ export default function ExtensionAnalyticsPage() {
                       </td>
                       <td className="py-2 px-3">
                         <div>
-                          <span className="text-gray-800">{shopNames[event.shopId] || "Unknown"}</span>
-                          <span className="text-gray-400 text-xs ml-1">(#{event.shopId})</span>
+                          <span className="text-gray-800">{shopNames[event.shopId]?.name || "Unknown"}</span>
+                          {shopNames[event.shopId]?.location && (
+                            <span className="text-gray-400 text-xs ml-1">({shopNames[event.shopId].location})</span>
+                          )}
                         </div>
                       </td>
                       <td className="py-2 px-3 max-w-[180px]">

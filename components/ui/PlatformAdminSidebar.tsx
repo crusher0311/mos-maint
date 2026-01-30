@@ -300,19 +300,19 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
             </Link>
           </li>
 
-          {/* Extension Analytics */}
+          {/* Job Analytics */}
           <li>
             <Link
-              href="/platform-admin/extension-analytics"
+              href="/platform-admin/job-analytics"
               onClick={handleNavClick}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive("/platform-admin/extension-analytics")
+                isActive("/platform-admin/job-analytics")
                   ? "bg-[rgba(60,129,195,0.75)] text-white"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
               }`}
             >
               <BarChart3 className="w-5 h-5" />
-              <span>Extension Analytics</span>
+              <span>Job Analytics</span>
             </Link>
           </li>
 
