@@ -112,6 +112,38 @@ Use CARFAX history to estimate current mileage for vehicles without an input odo
 - Prefetch and cache plans for vehicles without odometer readings
 - More accurate "overdue" notifications
 
+### Deferred Work vs CARFAX Comparison
+**Priority:** Medium | **Status:** Idea
+
+Cross-reference deferred work against CARFAX service history to detect if declined services were completed elsewhere.
+
+**Detection Logic:**
+1. Track deferred work with timestamps and service categories
+2. On CARFAX pull, scan for new service records after the decline date
+3. Match service categories (e.g., "Brake Pads" declined → "Brake Service" in CARFAX)
+4. Flag potential matches for advisor review
+
+**UI - Deferred Work List:**
+- Badge: "CARFAX activity detected" next to matched items
+- Expandable detail showing CARFAX record date and description
+- Days between decline and CARFAX service
+
+**Advisor Actions:**
+- "Mark as Done Elsewhere" - Closes deferred item, logs reason
+- "Still Needs Service" - Keeps open (CARFAX was unrelated/partial)
+- "Discuss with Customer" - Flags for follow-up conversation
+
+**Benefits:**
+- Creates natural conversation opportunities with customers
+- Keeps deferred list accurate (advisor-controlled cleanup)
+- Tracks "declined but done elsewhere" patterns
+- Avoids re-recommending services already completed
+
+**Data to Track:**
+- Match confidence (exact vs category match)
+- Days between decline and external service
+- Advisor resolution (done elsewhere / still needed / discussed)
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas
 *   **AI**: OpenAI API
