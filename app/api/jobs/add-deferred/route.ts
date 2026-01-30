@@ -43,8 +43,9 @@ export async function POST(req: NextRequest) {
 
   await trackPushToRO({
     shopId,
+    userId: session.email,
     vin,
-    jobSource: "plan",
+    jobSource: "deferred",
     jobTitle: serviceTitle || result.servicePackage?.Title || "Deferred Work",
   }).catch(() => {});
 
