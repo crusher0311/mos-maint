@@ -118,6 +118,8 @@ export default function JobAnalyticsPage() {
             onChange={(e) => setDays(Number(e.target.value))}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
           >
+            <option value={1}>Today</option>
+            <option value={2}>Yesterday</option>
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
