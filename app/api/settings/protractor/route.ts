@@ -91,7 +91,11 @@ export async function POST(req: NextRequest) {
           "protractor.locations": testResult.locations,
           "protractor.updateWorkOrderPackage": true,
           "protractor.updateWorkOrderLine": true,
+          protractorBackfillComplete: false,
           updatedAt: new Date(),
+        },
+        $unset: {
+          protractorBackfillCompletedAt: "",
         },
         $setOnInsert: {
           createdAt: new Date(),
@@ -100,10 +104,15 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
-    await db.collection("protractor_canned_jobs").deleteOne({ shopId });
-    await db.collection("protractor_vehicles").deleteMany({ shopId });
-    await db.collection("protractor_work_orders").deleteMany({ shopId });
-    await db.collection("protractor_deferred_work").deleteMany({ shopId });
+    // Clear all cached data and reset backfill progress for fresh start
+    await Promise.all([
+      db.collection("protractor_canned_jobs").deleteOne({ shopId }),
+      db.collection("protractor_vehicles").deleteMany({ shopId }),
+      db.collection("protractor_work_orders").deleteMany({ shopId }),
+      db.collection("protractor_deferred_work").deleteMany({ shopId }),
+      db.collection("backfill_progress").deleteOne({ shopId }),
+      db.collection("cached_plans").deleteMany({ shopId }),
+    ]);
 
     // Run job history backfill inline (fire-and-forget, runs in background)
     runProtractorBackfill(shopId).then(result => {
