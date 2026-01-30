@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { createNotificationsForUsers } from "@/lib/notifications";
 import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
+import { sendEmail } from "@/lib/email";
 
 export async function GET(
   request: NextRequest,
@@ -106,6 +107,36 @@ export async function POST(
         link: `/platform-admin/tickets?id=${ticketId}`,
         metadata: { ticketId, ticketNumber: ticket.ticketNumber }
       });
+
+      for (const adminEmail of SUPER_ADMIN_EMAILS) {
+        try {
+          await sendEmail({
+            to: adminEmail,
+            subject: `[MOS Support] Reply on ${ticket.ticketNumber}: ${ticket.subject}`,
+            html: `
+              <div style="font-family:system-ui,-apple-system,sans-serif;line-height:1.5">
+                <h2>New Reply on Support Ticket ${ticket.ticketNumber}</h2>
+                <p><strong>From:</strong> ${session.email}</p>
+                <p><strong>Subject:</strong> ${ticket.subject}</p>
+                <p><strong>Category:</strong> ${ticket.category}</p>
+                <hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0">
+                <p><strong>Message:</strong></p>
+                <p style="background:#f5f5f5;padding:12px;border-radius:4px">${message.replace(/\n/g, '<br>')}</p>
+                <p style="margin-top:16px">
+                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://mostools.io'}/platform-admin/tickets?id=${ticketId}" 
+                     style="background:#2563eb;color:white;padding:8px 16px;border-radius:4px;text-decoration:none">
+                    View Ticket
+                  </a>
+                </p>
+              </div>
+            `,
+            text: `New reply on ticket ${ticket.ticketNumber} from ${session.email}:\n\n${message}`,
+            replyTo: session.email
+          });
+        } catch (emailErr) {
+          console.error(`Failed to send email to ${adminEmail}:`, emailErr);
+        }
+      }
     } catch (notifErr) {
       console.error("Failed to create admin notifications:", notifErr);
     }
