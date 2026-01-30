@@ -312,36 +312,30 @@ export default function JobAnalyticsPage() {
                     <th className="text-left py-2 px-3 font-medium text-gray-600">Source</th>
                     <th className="text-left py-2 px-3 font-medium text-gray-600">Shop</th>
                     <th className="text-left py-2 px-3 font-medium text-gray-600">User</th>
-                    <th className="text-left py-2 px-3 font-medium text-gray-600">Vehicle</th>
                     <th className="text-right py-2 px-3 font-medium text-gray-600">Date/Time</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredEvents.slice(0, 30).map((event, idx) => (
                     <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-2 px-3 max-w-[200px]">
+                      <td className="py-2 px-3 max-w-[280px]">
                         <span className="truncate block" title={event.jobTitle}>{event.jobTitle}</span>
                       </td>
                       <td className="py-2 px-3">
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${sourceColors[event.jobSource] || "bg-gray-500"} text-white`}>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${sourceColors[event.jobSource] || "bg-gray-500"} text-white`}>
                           {sourceLabels[event.jobSource] || event.jobSource}
                         </span>
                       </td>
                       <td className="py-2 px-3">
-                        <div>
-                          <span className="text-gray-800">{shopNames[event.shopId]?.name || "Unknown"}</span>
-                          {shopNames[event.shopId]?.location && (
-                            <span className="text-gray-400 text-xs ml-1">({shopNames[event.shopId].location})</span>
-                          )}
-                        </div>
+                        <div className="text-gray-800">{shopNames[event.shopId]?.name || "Unknown"}</div>
+                        {shopNames[event.shopId]?.location && (
+                          <div className="text-gray-400 text-xs">{shopNames[event.shopId].location}</div>
+                        )}
                       </td>
                       <td className="py-2 px-3 max-w-[180px]">
                         <span className="text-blue-600 truncate block" title={event.userId || "—"}>
                           {event.userId || "—"}
                         </span>
-                      </td>
-                      <td className="py-2 px-3 text-gray-600">
-                        {event.vehicleYear ? `${event.vehicleYear} ${event.vehicleMake || ""} ${event.vehicleModel || ""}`.trim() : "—"}
                       </td>
                       <td className="py-2 px-3 text-right text-gray-500 whitespace-nowrap">
                         {new Date(event.timestamp).toLocaleDateString()}{" "}
