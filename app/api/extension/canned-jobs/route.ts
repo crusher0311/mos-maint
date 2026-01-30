@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,7 +17,6 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const smsShopId = searchParams.get("shopId");
-    const provider = searchParams.get("provider") || "tekmetric";
 
     if (!smsShopId) {
       return NextResponse.json(
@@ -30,38 +30,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
-    const db = await getDb();
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
-    let mosShopId: number | null = null;
+    const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
     
-    if (provider === "tekmetric") {
-      const query: any = { "tekmetric.shopId": parseInt(smsShopId) };
-      if (!isPlatformAdmin) {
-        query.shopId = { $in: userShopIds };
-      }
-      const shop = await db.collection("shops").findOne(query);
-      if (shop) {
-        mosShopId = shop.shopId;
-      }
-    } else if (provider === "protractor") {
-      const query: any = { "protractor.connectionId": smsShopId };
-      if (!isPlatformAdmin) {
-        query.shopId = { $in: userShopIds };
-      }
-      const shop = await db.collection("shops").findOne(query);
-      if (shop) {
-        mosShopId = shop.shopId;
-      }
-    }
-
-    if (!mosShopId) {
+    if (!shopResult) {
       return NextResponse.json(
-        { error: `No accessible shop configured for ${provider}` },
+        { error: `No accessible shop configured for SMS shop ID ${smsShopId}` },
         { status: 404, headers: corsHeaders }
       );
     }
+    
+    const mosShopId = shopResult.mosShopId;
+    const db = await getDb();
 
     const cannedJobs = await db.collection("canned_jobs")
       .find({ 

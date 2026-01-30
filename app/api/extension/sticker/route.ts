@@ -494,7 +494,7 @@ async function resolveMosShopId(
   db: any,
   authResult: any,
   smsShopId?: string | null,
-  provider?: string | null
+  _provider?: string | null // Provider hint is now ignored - we detect from shop config
 ): Promise<{ mosShopId: number | null; shop: any }> {
   const isPlatformAdmin = authResult.user?.role === "platform_admin";
   const userShopIds = [
@@ -502,15 +502,22 @@ async function resolveMosShopId(
     ...(authResult.user?.shopIds || []).map((id: any) => Number(id)),
   ];
 
-  if (smsShopId && provider === "tekmetric") {
+  // Search across all integration types
+  if (smsShopId) {
     const tekShopIdNum = parseInt(smsShopId);
     const tekShopIdStr = String(smsShopId);
     const query: any = {
       $or: [
+        // Tekmetric
         { "tekmetric.shopId": tekShopIdNum },
         { "tekmetric.shopId": tekShopIdStr },
         { tekmetricShopId: tekShopIdNum },
         { tekmetricShopId: tekShopIdStr },
+        // Protractor
+        { "protractor.connectionId": smsShopId },
+        { protractorConnectionId: smsShopId },
+        // AutoFlow
+        { "autoflow.shopId": smsShopId },
       ],
     };
     if (!isPlatformAdmin) {
@@ -518,16 +525,7 @@ async function resolveMosShopId(
     }
     const shop = await db.collection("shops").findOne(query);
     if (shop) {
-      console.log(`[Extension Sticker] Found MOS shop ${shop.shopId} for Tekmetric shop ${smsShopId}`);
-      return { mosShopId: shop.shopId, shop };
-    }
-  } else if (smsShopId && provider === "protractor") {
-    const query: any = { "protractor.connectionId": smsShopId };
-    if (!isPlatformAdmin) {
-      query.shopId = { $in: userShopIds };
-    }
-    const shop = await db.collection("shops").findOne(query);
-    if (shop) {
+      console.log(`[Extension Sticker] Found MOS shop ${shop.shopId} for SMS shop ${smsShopId}, provider: ${shop.integrationProvider || 'unknown'}`);
       return { mosShopId: shop.shopId, shop };
     }
   }

@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
           "protractor.updateWorkOrderLine": true,
           protractorBackfillComplete: false,
           updatedAt: new Date(),
+          integrationProvider: "protractor",
         },
         $unset: {
           protractorBackfillCompletedAt: "",

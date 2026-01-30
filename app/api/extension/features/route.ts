@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,38 +17,21 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const smsShopId = searchParams.get("shopId");
-    const provider = searchParams.get("provider") || "tekmetric";
 
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
-    const db = await getDb();
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
     let mosShopId: number | null = null;
     
     if (smsShopId) {
-      if (provider === "tekmetric") {
-        const query: any = { "tekmetric.shopId": parseInt(smsShopId) };
-        if (!isPlatformAdmin) {
-          query.shopId = { $in: userShopIds };
-        }
-        const shop = await db.collection("shops").findOne(query);
-        if (shop) {
-          mosShopId = shop.shopId;
-        }
-      } else if (provider === "protractor") {
-        const query: any = { "protractor.connectionId": smsShopId };
-        if (!isPlatformAdmin) {
-          query.shopId = { $in: userShopIds };
-        }
-        const shop = await db.collection("shops").findOne(query);
-        if (shop) {
-          mosShopId = shop.shopId;
-        }
+      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
+      if (shopResult) {
+        mosShopId = shopResult.mosShopId;
       }
     }
 

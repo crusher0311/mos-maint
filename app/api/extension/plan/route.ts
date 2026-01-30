@@ -5,6 +5,7 @@ import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/ca
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin } from "@/lib/plan-cache";
 import { getValidToken } from "@/lib/tekmetric-auth";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -327,7 +328,7 @@ export async function GET(request: NextRequest) {
     const smsShopId = searchParams.get("shopId");
     let vin = searchParams.get("vin");
     const roId = searchParams.get("roId");
-    const provider = searchParams.get("provider") || "tekmetric";
+    const providerHint = searchParams.get("provider"); // Optional hint, we verify against actual config
     const forceRefresh = searchParams.get("refresh") === "true";
 
     if (!smsShopId) {
@@ -349,44 +350,56 @@ export async function GET(request: NextRequest) {
     let mosShopId: number | null = null;
     let shopDoc: any = null;
     
-    if (provider === "tekmetric") {
-      // Support both nested tekmetric.shopId and legacy tekmetricShopId fields, and handle string/number types
-      const tekShopIdNum = parseInt(smsShopId);
-      const tekShopIdStr = String(smsShopId);
-      const query: any = {
-        $or: [
-          { "tekmetric.shopId": tekShopIdNum },
-          { "tekmetric.shopId": tekShopIdStr },
-          { tekmetricShopId: tekShopIdNum },
-          { tekmetricShopId: tekShopIdStr }
-        ]
-      };
-      if (!isPlatformAdmin) {
-        query.shopId = { $in: userShopIds };
-      }
-      shopDoc = await db.collection("shops").findOne(query);
-      if (shopDoc) {
-        mosShopId = shopDoc.shopId;
-        console.log(`[Extension] Found shop ${mosShopId} for Tekmetric shop ${smsShopId}`);
-      } else {
-        console.log(`[Extension] No shop found for Tekmetric shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
-      }
-    } else if (provider === "protractor") {
-      const query: any = { "protractor.connectionId": smsShopId };
-      if (!isPlatformAdmin) {
-        query.shopId = { $in: userShopIds };
-      }
-      shopDoc = await db.collection("shops").findOne(query);
-      if (shopDoc) {
-        mosShopId = shopDoc.shopId;
-      }
+    // Try to find shop by SMS shop ID across all integration types
+    const tekShopIdNum = parseInt(smsShopId);
+    const tekShopIdStr = String(smsShopId);
+    
+    // Build query to find shop by any integration's shop ID
+    const shopQuery: any = {
+      $or: [
+        // Tekmetric
+        { "tekmetric.shopId": tekShopIdNum },
+        { "tekmetric.shopId": tekShopIdStr },
+        { tekmetricShopId: tekShopIdNum },
+        { tekmetricShopId: tekShopIdStr },
+        // Protractor
+        { "protractor.connectionId": smsShopId },
+        { protractorConnectionId: smsShopId },
+        // AutoFlow
+        { "autoflow.shopId": smsShopId },
+      ]
+    };
+    
+    if (!isPlatformAdmin) {
+      shopQuery.shopId = { $in: userShopIds };
+    }
+    
+    shopDoc = await db.collection("shops").findOne(shopQuery);
+    
+    if (shopDoc) {
+      mosShopId = shopDoc.shopId;
+      console.log(`[Extension] Found shop ${mosShopId} (${shopDoc.name}), integrationProvider: ${shopDoc.integrationProvider}`);
+    } else {
+      console.log(`[Extension] No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
     }
 
     if (!mosShopId) {
       return NextResponse.json(
-        { error: `No accessible shop configured for ${provider}` },
+        { error: `No accessible shop configured for SMS shop ID ${smsShopId}` },
         { status: 404, headers: corsHeaders }
       );
+    }
+    
+    // Use the shop's actual integration provider, not the passed hint
+    // Fall back to detecting from config if integrationProvider field not set
+    const provider = shopDoc.integrationProvider 
+      || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
+        : shopDoc.protractor?.connectionId ? 'protractor' 
+        : shopDoc.autoflow?.domain ? 'autoflow' 
+        : providerHint || 'tekmetric');
+    
+    if (providerHint && providerHint !== provider) {
+      console.log(`[Extension] Provider mismatch: hint=${providerHint}, actual=${provider}`);
     }
     
     // Get shop preferences - showInspectItems defaults to true if not set

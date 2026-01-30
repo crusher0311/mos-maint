@@ -4,6 +4,7 @@ import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getValidToken } from "@/lib/tekmetric-auth";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,6 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get("q") || "";
     const smsShopId = searchParams.get("shopId");
     const roId = searchParams.get("roId"); // RO ID for vehicle lookup fallback
-    const provider = searchParams.get("provider") || "tekmetric";
     let year = searchParams.get("year");
     let make = searchParams.get("make");
     let model = searchParams.get("model");
@@ -38,29 +38,29 @@ export async function GET(request: NextRequest) {
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
     // Use user's session shop if available (most reliable)
-    // This ensures extension uses the same shop as the web app
     let mosShopId: number | null = auth.user.shopId ? parseInt(auth.user.shopId) : null;
+    let provider: string = 'tekmetric';
     
-    // Only fall back to SMS shop ID lookup if user doesn't have a session shop
-    if (!mosShopId && smsShopId) {
-      if (provider === "tekmetric") {
-        const shopQuery: any = { "tekmetric.shopId": parseInt(smsShopId) };
-        if (!isPlatformAdmin) {
-          shopQuery.shopId = { $in: userShopIds };
-        }
-        const shop = await db.collection("shops").findOne(shopQuery);
-        if (shop) {
-          mosShopId = shop.shopId;
-        }
-      } else if (provider === "protractor") {
-        const shopQuery: any = { "protractor.connectionId": smsShopId };
-        if (!isPlatformAdmin) {
-          shopQuery.shopId = { $in: userShopIds };
-        }
-        const shop = await db.collection("shops").findOne(shopQuery);
-        if (shop) {
-          mosShopId = shop.shopId;
-        }
+    // Look up shop to get the correct integration provider
+    if (mosShopId) {
+      // User has a session shop - look up its integration provider
+      const shopDoc = await db.collection("shops").findOne(
+        { shopId: { $in: [mosShopId, String(mosShopId)] } },
+        { projection: { integrationProvider: 1, tekmetric: 1, protractor: 1, autoflow: 1 } }
+      );
+      if (shopDoc) {
+        provider = shopDoc.integrationProvider 
+          || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
+            : shopDoc.protractor?.connectionId ? 'protractor' 
+            : shopDoc.autoflow?.domain ? 'autoflow' 
+            : 'tekmetric');
+      }
+    } else if (smsShopId) {
+      // Fall back to SMS shop ID lookup
+      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
+      if (shopResult) {
+        mosShopId = shopResult.mosShopId;
+        provider = shopResult.provider;
       }
     }
 

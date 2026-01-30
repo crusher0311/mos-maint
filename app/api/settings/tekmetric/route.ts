@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
           "tekmetric.shopId": tekmetricShopId,
           "tekmetric.shopName": validation.shop?.name,
           "tekmetric.connectedAt": new Date(),
+          integrationProvider: "tekmetric",
         },
       },
       { upsert: true }
