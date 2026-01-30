@@ -1,0 +1,300 @@
+2026-01-30T15:12:35Z clientIP="67.53.223.136" requestID="2544b111-d12a-463b" responseTimeMS=12339 responseBytes=377 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-01-30T15:12:35Z clientIP="74.220.48.7" requestID="978301aa-2e25-4ff9" responseTimeMS=105050 responseBytes=1095 userAgent="node"
+2026-01-30T15:12:35Z clientIP="74.220.48.7" requestID="c65a2fc3-1904-4da3" responseTimeMS=104934 responseBytes=1134 userAgent="node"
+2026-01-30T15:12:35.788069528Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T15:12:35.788072538Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T15:12:35.788075218Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T15:12:35.788078549Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T15:12:35.994357738Z [Protractor] GET /ServicePackageTemplate/Read/414fcd09-91c8-4bc1-82a4-79915a6b8209: ok=false
+2026-01-30T15:12:35.994378079Z [Protractor] GET /ServicePackageTemplate/Read/414fcd09-91c8-4bc1-82a4-79915a6b8209 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T15:12:35.994381889Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T15:12:35.994384599Z <head>
+2026-01-30T15:12:35.994388059Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T15:12:35.994391879Z <title>404 - File or directory not found.</title>
+2026-01-30T15:12:35.994395379Z <style type="text/css">
+2026-01-30T15:12:35.994398049Z <!--
+2026-01-30T15:12:35.994401479Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T15:12:35.994404069Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T15:12:35.994406559Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T15:12:35.99440902Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T15:12:35.994411729Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T15:12:35.99441498Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T15:12:35.99441842Z background-color:#555555;}
+2026-01-30T15:12:35.99442129Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T15:12:35.99442378Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T15:12:35.99442631Z -->
+2026-01-30T15:12:35.99442885Z </style>
+2026-01-30T15:12:35.99443132Z </head>
+2026-01-30T15:12:35.99443405Z <body>
+2026-01-30T15:12:35.99443666Z <div id="header"><h1>Server Error</h1></div>
+2026-01-30T15:12:36.197826629Z [Protractor] GET /ServicePackageTemplate/Read/e4064558-c2bf-4aa0-b14b-eff970786a51: ok=false
+2026-01-30T15:12:36.19784855Z [Protractor] GET /ServicePackageTemplate/Read/e4064558-c2bf-4aa0-b14b-eff970786a51 error: HTTP 404: <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+2026-01-30T15:12:36.19785201Z <html xmlns="http://www.w3.org/1999/xhtml">
+2026-01-30T15:12:36.19785442Z <head>
+2026-01-30T15:12:36.19785777Z <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/>
+2026-01-30T15:12:36.19786086Z <title>404 - File or directory not found.</title>
+2026-01-30T15:12:36.19786412Z <style type="text/css">
+2026-01-30T15:12:36.19786659Z <!--
+2026-01-30T15:12:36.19786939Z body{margin:0;font-size:.7em;font-family:Verdana, Arial, Helvetica, sans-serif;background:#EEEEEE;}
+2026-01-30T15:12:36.1978722Z fieldset{padding:0 15px 10px 15px;} 
+2026-01-30T15:12:36.197888851Z h1{font-size:2.4em;margin:0;color:#FFF;}
+2026-01-30T15:12:36.197891751Z h2{font-size:1.7em;margin:0;color:#CC0000;} 
+2026-01-30T15:12:36.197894331Z h3{font-size:1.2em;margin:10px 0 0 0;color:#000000;} 
+2026-01-30T15:12:36.197897441Z #header{width:96%;margin:0 0 0 0;padding:6px 2% 6px 2%;font-family:"trebuchet MS", Verdana, sans-serif;color:#FFF;
+2026-01-30T15:12:36.197901201Z background-color:#555555;}
+2026-01-30T15:12:36.197903911Z #content{margin:0 0 0 2%;position:relative;}
+2026-01-30T15:12:36.197906441Z .content-container{background:#FFF;width:96%;margin-top:8px;padding:10px;position:relative;}
+2026-01-30T15:12:36.197908931Z -->
+2026-01-30T15:12:36.197911321Z </style>
+2026-01-30T15:12:36.197913781Z </head>
+2026-01-30T15:12:36.197916241Z <body>
+2026-01-30T15:14:35.98971125Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.98971306Z   }
+2026-01-30T15:14:35.98971481Z }
+2026-01-30T15:14:35.990141719Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:35.990150819Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.990153459Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.990155829Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.99015818Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.99016054Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.99016298Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:5328)
+2026-01-30T15:14:35.9901655Z     at async Promise.all (index 0)
+2026-01-30T15:14:35.99016788Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.99017044Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.99017305Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.99017573Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.99017805Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.9901801Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.9901822Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.99018432Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.99018629Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.99018836Z   }
+2026-01-30T15:14:35.99019053Z }
+2026-01-30T15:14:35.990354544Z DataOne VIN decode error: TypeError: fetch failed
+2026-01-30T15:14:35.990359604Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.990362634Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.990365424Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.990367494Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.990369284Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.990370954Z     at async l (/opt/render/project/src/.next/server/chunks/7784.js:1:4779)
+2026-01-30T15:14:35.990372704Z     at async Promise.all (index 1)
+2026-01-30T15:14:35.990374444Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.990376174Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.990378034Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.990379714Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.990386614Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.990388424Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.990390304Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.990391954Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.990393664Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.990395345Z   }
+2026-01-30T15:14:35.990397085Z }
+2026-01-30T15:14:35.990776662Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:35.990785683Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.990788893Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.990791593Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.990793313Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.990795303Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.990797133Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:5328)
+2026-01-30T15:14:35.990798823Z     at async Promise.all (index 0)
+2026-01-30T15:14:35.990800583Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.990802353Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.990804223Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.990806063Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.990807743Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.990809453Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.990811143Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.990812833Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.990814623Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.990816313Z   }
+2026-01-30T15:14:35.990818053Z }
+2026-01-30T15:14:35.991029888Z DataOne VIN decode error: TypeError: fetch failed
+2026-01-30T15:14:35.991034348Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.991037258Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.991040308Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.991042108Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.991043848Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.991045558Z     at async l (/opt/render/project/src/.next/server/chunks/7784.js:1:4779)
+2026-01-30T15:14:35.991048018Z     at async Promise.all (index 1)
+2026-01-30T15:14:35.991049778Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.991051488Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.991053278Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.991055028Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.991056738Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.991058418Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.991060058Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.991067339Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.991069099Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.991070779Z   }
+2026-01-30T15:14:35.991072468Z }
+2026-01-30T15:14:35.991446766Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:35.991451847Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.991454136Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.991458757Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.991460987Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.991463087Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.991465267Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:5328)
+2026-01-30T15:14:35.991467377Z     at async Promise.all (index 0)
+2026-01-30T15:14:35.991469507Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.991471747Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.991474087Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.991476357Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.991480767Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.991483057Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.991485267Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.991487477Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.991489707Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.991491957Z   }
+2026-01-30T15:14:35.991494407Z }
+2026-01-30T15:14:35.991653121Z DataOne VIN decode error: TypeError: fetch failed
+2026-01-30T15:14:35.991656981Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.991659781Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.991661861Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.991663971Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.991666061Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.991668041Z     at async l (/opt/render/project/src/.next/server/chunks/7784.js:1:4779)
+2026-01-30T15:14:35.991670071Z     at async Promise.all (index 1)
+2026-01-30T15:14:35.991672191Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.991674191Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.991676861Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.991679001Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.991680981Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.991683161Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.991685231Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.991687181Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.991689201Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.991691301Z   }
+2026-01-30T15:14:35.991701302Z }
+2026-01-30T15:14:35.99210207Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:35.9921114Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.9921142Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.992116361Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.992118481Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.99212049Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.992122781Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:5328)
+2026-01-30T15:14:35.992124881Z     at async Promise.all (index 0)
+2026-01-30T15:14:35.992126991Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.992128971Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.992131261Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.992133261Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.992135241Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.992137461Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.992139561Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.992141631Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.992143641Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.992145601Z   }
+2026-01-30T15:14:35.992147581Z }
+2026-01-30T15:14:35.992610411Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:35.992615781Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.992618661Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.992620941Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.992623441Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.992625821Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.992628001Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:5328)
+2026-01-30T15:14:35.992630231Z     at async Promise.all (index 0)
+2026-01-30T15:14:35.992632421Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.992635151Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.992638331Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.992640712Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.992643321Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.992645612Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.992647702Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.992649652Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.992651702Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.992653782Z   }
+2026-01-30T15:14:35.992655802Z }
+2026-01-30T15:14:35.992904717Z DataOne VIN decode error: TypeError: fetch failed
+2026-01-30T15:14:35.992916767Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.992919917Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.992933638Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.992937088Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.992939868Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.992941798Z     at async l (/opt/render/project/src/.next/server/chunks/7784.js:1:4779)
+2026-01-30T15:14:35.992943598Z     at async Promise.all (index 1)
+2026-01-30T15:14:35.992945288Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:35.992946988Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:35.992948888Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:35.992950668Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:35.992952548Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:35.992954368Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:35.992956148Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:35.992958168Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:35.992959948Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:35.992961688Z   }
+2026-01-30T15:14:35.992963418Z }
+2026-01-30T15:14:35.993389627Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:35.993396097Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:35.993401168Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:35.993404477Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:35.993406708Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:35.993408388Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:35.993410078Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:5328)
+2026-01-30T15:14:36.04688636Z [Protractor] GET /ServicePackageTemplate/c345308d-7951-457e-96d5-3be19ea452bb: ok=true
+2026-01-30T15:14:36.046919201Z [Protractor] Got template detail with 2 lines
+2026-01-30T15:14:36.055985611Z [DataOne Cache] Stored 0 items for squish 2HGFB2F5DH, expires 2026-02-06T15:14:25.627Z
+2026-01-30T15:14:36.114359276Z [DataOne Cache] HIT for squish 1GKS2GKCGR, cached at 2026-01-28T22:18:21.132Z
+2026-01-30T15:14:36.116048462Z [DataOne Cache] HIT for squish 1FM5K7B8JG, cached at 2026-01-28T22:11:52.408Z
+2026-01-30T15:14:36.117211566Z [DataOne Cache] HIT for squish KL79MTSLPB, cached at 2026-01-28T22:12:09.195Z
+2026-01-30T15:14:36.11788671Z [DataOne Cache] HIT for squish 5UXZV4C5CL, cached at 2026-01-28T12:43:08.682Z
+2026-01-30T15:14:36.119864342Z [DataOne Cache] HIT but missing vehicle info for squish JH4CL9696C, re-fetching...
+2026-01-30T15:14:36.119874662Z [DataOne Cache] EXPIRED for squish JH4CL9696C, fetching from API...
+2026-01-30T15:14:36.12121832Z [DataOne Cache] HIT but missing vehicle info for squish JTHBW1GGF2, re-fetching...
+2026-01-30T15:14:36.127537463Z [DataOne Cache] HIT but missing vehicle info for squish KM8K1CAAMU, re-fetching...
+2026-01-30T15:14:36.175455878Z [Protractor] GET /ServicePackageTemplate/0ec7738f-7454-4f61-956d-03910e30f86b: ok=true
+2026-01-30T15:14:36.175480719Z [Protractor] Got template detail with 2 lines
+2026-01-30T15:14:36.17792753Z [DataOne Cache] HIT for squish 1FD7X2A6ME, cached at 2026-01-28T22:11:16.832Z
+2026-01-30T15:14:36.248334218Z [DataOne Cache] HIT but missing vehicle info for squish 1N4AL3APEN, re-fetching...
+2026-01-30T15:14:36.248359839Z [DataOne Cache] EXPIRED for squish 1N4AL3APEN, fetching from API...
+2026-01-30T15:14:36.250239948Z [DataOne Cache] HIT for squish 1FT8W3DTJE, cached at 2026-01-28T22:19:46.881Z
+2026-01-30T15:14:36.251407383Z [DataOne Cache] HIT for squish 2HGFG3A5CH, cached at 2026-01-28T22:12:27.098Z
+2026-01-30T15:14:36.251820611Z [DataOne Cache] HIT but missing vehicle info for squish 1C6SRFJTMN, re-fetching...
+2026-01-30T15:14:36.251828461Z [DataOne Cache] EXPIRED for squish 1C6SRFJTMN, fetching from API...
+2026-01-30T15:14:36.252610928Z [DataOne Cache] HIT but missing vehicle info for squish 1C4RJFBGEC, re-fetching...
+2026-01-30T15:14:36.252617538Z [DataOne Cache] EXPIRED for squish 1C4RJFBGEC, fetching from API...
+2026-01-30T15:14:36.374105248Z [Protractor] GET /ServicePackageTemplate/8ea4a5b9-6fba-41bd-890c-3c12d72544c3: ok=true
+2026-01-30T15:14:36.374134578Z [Protractor] Got template detail with 2 lines
+2026-01-30T15:14:36.480267236Z DataOne VIN decode error: TypeError: fetch failed
+2026-01-30T15:14:36.480288546Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:36.480292616Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:36.480295286Z     at runNextTicks (node:internal/process/task_queues:69:3)
+2026-01-30T15:14:36.480298156Z     at process.processImmediate (node:internal/timers:453:9)
+2026-01-30T15:14:36.480300596Z     at process.callbackTrampoline (node:internal/async_hooks:130:17)
+2026-01-30T15:14:36.480303096Z     at async l (/opt/render/project/src/.next/server/chunks/7784.js:1:4779)
+2026-01-30T15:14:36.480305487Z     at async Promise.all (index 1)
+2026-01-30T15:14:36.480308017Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8584)
+2026-01-30T15:14:36.480310947Z     at async Promise.allSettled (index 0)
+2026-01-30T15:14:36.480314407Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783) {
+2026-01-30T15:14:36.480317277Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:36.480319937Z       at onConnectTimeout (node:internal/deps/undici/undici:2602:28)
+2026-01-30T15:14:36.480323077Z       at Immediate._onImmediate (node:internal/deps/undici/undici:2583:11)
+2026-01-30T15:14:36.480325697Z       at process.processImmediate (node:internal/timers:485:21)
+2026-01-30T15:14:36.480328357Z       at process.callbackTrampoline (node:internal/async_hooks:130:17) {
+2026-01-30T15:14:36.480330947Z     code: 'UND_ERR_CONNECT_TIMEOUT'
+2026-01-30T15:14:36.480333507Z   }
+2026-01-30T15:14:36.480336147Z }
+2026-01-30T15:14:36.480594333Z DataOne maintenance schedule error: TypeError: fetch failed
+2026-01-30T15:14:36.480602423Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T15:14:36.480605933Z     at processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-01-30T15:14:36.48763399Z   [cause]: ConnectTimeoutError: Connect Timeout Error (attempted address: 3.144.191.161:3000, timeout: 10000ms)
+2026-01-30T15:14:36.548203101Z [DataOne Cache] Stored 0 items for squish WAUENAF4HN, expires 2026-02-06T15:14:26.324Z
+2026-01-30T15:14:36.549214783Z [DataOne Cache] Stored 0 items for squish 5N1AR1NBCC, expires 2026-02-06T15:14:26.324Z
+2026-01-30T15:14:36.54956274Z [DataOne Cache] Stored 0 items for squish 1GNSKTKLPR, expires 2026-02-06T15:14:26.324Z
+2026-01-30T15:14:36.551054632Z [DataOne Cache] Stored 0 items for squish 1FTFW1RGHF, expires 2026-02-06T15:14:26.185Z
+2026-01-30T15:14:36.551653244Z [DataOne Cache] Stored 0 items for squish JF2SJGWCHH, expires 2026-02-06T15:14:26.185Z
+2026-01-30T15:14:36.556477485Z [DataOne Cache] Stored 0 items for squish JF2SJAHCFH, expires 2026-02-06T15:14:26.045Z
+2026-01-30T15:14:36.570179943Z [Protractor] GET /ServicePackageTemplate/a9162cd6-160a-458a-8c88-7cd4bb2a9f90: ok=true
+2026-01-30T15:14:36.619173591Z [DataOne Cache] HIT but missing vehicle info for squish JM1BM1M7E1, re-fetching...
+2026-01-30T15:14:36.619197322Z [DataOne Cache] EXPIRED for squish JM1BM1M7E1, fetching from API...
+2026-01-30T15:14:36.620920188Z [DataOne Cache] HIT but missing vehicle info for squish 1C4PJLLNKD, re-fetching...
+2026-01-30T15:14:36.620937598Z [DataOne Cache] EXPIRED for squish 1C4PJLLNKD, fetching from API...
+2026-01-30T15:14:36.623198446Z [DataOne Cache] HIT but missing vehicle info for squish 1GNERHKWKJ, re-fetching...
+2026-01-30T15:14:36.623213256Z [DataOne Cache] EXPIRED for squish 1GNERHKWKJ, fetching from API...
+2026-01-30T15:14:36.624313449Z [DataOne Cache] HIT but missing vehicle info for squish JN1AZ4EHHM, re-fetching...
+2026-01-30T15:14:36.624326829Z [DataOne Cache] EXPIRED for squish JN1AZ4EHHM, fetching from API...
+2026-01-30T15:14:36.677439534Z [DataOne Cache] HIT for squish 3TMCZ5ANKM, cached at 2026-01-29T20:04:11.056Z
+2026-01-30T15:14:36.771936057Z [Protractor] GET /ServicePackageTemplate/21f39544-92d5-47d8-afc9-c8c3ae5c273e: ok=true
+2026-01-30T15:14:36.771963248Z [Protractor] Got template detail with 2 lines
+2026-01-30T15:14:36.972232561Z [Protractor] GET /ServicePackageTemplate/519860da-c4e3-4d42-af51-79a7072d80bc: ok=true
+2026-01-30T15:14:36.972249221Z [Protractor] Got template detail with 2 lines
+2026-01-30T15:14:35Z clientIP="172.220.250.80" requestID="cd12c1e3-8559-412c" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T15:14:36Z clientIP="172.220.250.80" requestID="0aadcce5-f075-4374" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
