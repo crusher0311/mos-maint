@@ -46,12 +46,45 @@ export async function POST(request: NextRequest) {
 
     const db = await getDb();
 
+    let shopId = session.shopId || null;
     let shopName = null;
     let locationIdentifier = null;
-    if (session.shopId) {
-      const shop = await db.collection("shops").findOne({ shopId: session.shopId });
+    
+    if (shopId) {
+      // Use the session's current shop
+      const shop = await db.collection("shops").findOne({ shopId });
       shopName = shop?.name || null;
       locationIdentifier = shop?.locationIdentifier || null;
+    } else {
+      // Fallback: look up user's shop associations (same logic as /api/user/shops)
+      const userRecords = await db
+        .collection("users")
+        .find({ email: session.email.toLowerCase() })
+        .project({ shopId: 1 })
+        .toArray();
+      
+      const shopIds = [...new Set(userRecords.map((u) => Number(u.shopId)))];
+      
+      if (shopIds.length === 1) {
+        // User has exactly one shop - use it
+        shopId = shopIds[0];
+        const shop = await db.collection("shops").findOne({ shopId });
+        shopName = shop?.name || null;
+        locationIdentifier = shop?.locationIdentifier || null;
+      } else if (shopIds.length > 1) {
+        // User has multiple shops - get all shop names for context
+        const shops = await db
+          .collection("shops")
+          .find({ shopId: { $in: shopIds } })
+          .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+          .toArray();
+        
+        // Store all shop names in locationIdentifier for admin visibility
+        const shopDisplayNames = shops.map(s => 
+          s.locationIdentifier || s.name || `Shop ${s.shopId}`
+        );
+        locationIdentifier = `Multiple: ${shopDisplayNames.join(", ")}`;
+      }
     }
 
     const ticketCount = await db.collection("support_tickets").countDocuments();
@@ -66,7 +99,7 @@ export async function POST(request: NextRequest) {
       status: "open",
       userEmail: session.email,
       userName: session.email.split("@")[0],
-      shopId: session.shopId || null,
+      shopId,
       shopName,
       locationIdentifier,
       assignedTo: null,
