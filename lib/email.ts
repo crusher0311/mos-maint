@@ -66,18 +66,19 @@ export function makeResetEmail(resetUrl: string) {
   return { subject, html, text };
 }
 
-export function makeInviteEmail(inviteUrl: string, shopId: number, role: string) {
-  const subject = `You've been invited to MOS Maintenance (Shop #${shopId})`;
+export function makeInviteEmail(inviteUrl: string, shopName: string, locationIdentifier: string | null, role: string) {
+  const shopDisplay = locationIdentifier ? `${shopName} (${locationIdentifier})` : shopName;
+  const subject = `You've been invited to MOS Tools - ${shopDisplay}`;
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
       <h2>You're invited</h2>
-      <p>You've been invited to join Shop <b>#${shopId}</b> as <b>${role}</b>.</p>
+      <p>You've been invited to join <b>${shopDisplay}</b> as <b>${role}</b>.</p>
       <p>Click below to complete your account setup.</p>
       <p><a href="${inviteUrl}" style="background:#111;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none;display:inline-block">Accept Invite</a></p>
       <p>or copy/paste this URL:</p>
       <p><a href="${inviteUrl}">${inviteUrl}</a></p>
     </div>`;
-  const text = `Accept your invite: ${inviteUrl}`;
+  const text = `You've been invited to join ${shopDisplay} as ${role}. Accept your invite: ${inviteUrl}`;
   return { subject, html, text };
 }
 

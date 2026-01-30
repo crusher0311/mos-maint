@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
   const db = await getDb();
   const setup = db.collection("setup_tokens");
 
+  const shop = await db.collection("shops").findOne({ shopId: sess.shopId });
+  const shopName = shop?.name || `Shop #${sess.shopId}`;
+  const locationIdentifier = shop?.locationIdentifier || null;
+
   const token = crypto.randomBytes(16).toString("hex");
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -51,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   let emailSent = false;
   try {
-    const msg = makeInviteEmail(setupUrl, sess.shopId, inviteRole);
+    const msg = makeInviteEmail(setupUrl, shopName, locationIdentifier, inviteRole);
     await sendEmail({ to: emailInput, ...msg });
     emailSent = true;
   } catch (err) {
