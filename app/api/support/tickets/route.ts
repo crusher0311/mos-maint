@@ -47,9 +47,11 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
 
     let shopName = null;
+    let locationIdentifier = null;
     if (session.shopId) {
-      const shop = await db.collection("shops").findOne({ id: session.shopId });
+      const shop = await db.collection("shops").findOne({ shopId: session.shopId });
       shopName = shop?.name || null;
+      locationIdentifier = shop?.locationIdentifier || null;
     }
 
     const ticketCount = await db.collection("support_tickets").countDocuments();
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
       userName: session.email.split("@")[0],
       shopId: session.shopId || null,
       shopName,
+      locationIdentifier,
       assignedTo: null,
       messages: [{
         id: new ObjectId().toString(),

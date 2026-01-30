@@ -22,7 +22,7 @@ interface TicketStats {
   byCategory: Record<string, number>;
   byPriority: Record<string, number>;
   byDay: { date: string; count: number }[];
-  topUsers: { email: string; shopName: string | null; count: number }[];
+  topUsers: { email: string; shopName: string | null; locationIdentifier: string | null; count: number }[];
 }
 
 export default function TicketReportsPage() {
@@ -242,7 +242,11 @@ export default function TicketReportsPage() {
                   {stats.topUsers.map((user, i) => (
                     <tr key={user.email} className="border-b border-gray-50">
                       <td className="py-3 text-gray-900">{user.email}</td>
-                      <td className="py-3 text-gray-600">{user.shopName || "N/A"}</td>
+                      <td className="py-3 text-gray-600">
+                        {user.shopName 
+                          ? (user.locationIdentifier ? `${user.shopName} (${user.locationIdentifier})` : user.shopName)
+                          : "N/A"}
+                      </td>
                       <td className="py-3 text-right font-medium text-gray-900">{user.count}</td>
                     </tr>
                   ))}

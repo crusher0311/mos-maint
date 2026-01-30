@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const byCategory: Record<string, number> = {};
     const byPriority: Record<string, number> = {};
     const byDay: Record<string, number> = {};
-    const byUser: Record<string, { count: number; shopName: string | null }> = {};
+    const byUser: Record<string, { count: number; shopName: string | null; locationIdentifier: string | null }> = {};
     let totalResolutionTime = 0;
     let resolvedCount = 0;
 
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
       const email = ticket.userEmail;
       if (!byUser[email]) {
-        byUser[email] = { count: 0, shopName: ticket.shopName || null };
+        byUser[email] = { count: 0, shopName: ticket.shopName || null, locationIdentifier: ticket.locationIdentifier || null };
       }
       byUser[email].count++;
 
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     }
 
     const topUsers = Object.entries(byUser)
-      .map(([email, data]) => ({ email, shopName: data.shopName, count: data.count }))
+      .map(([email, data]) => ({ email, shopName: data.shopName, locationIdentifier: data.locationIdentifier, count: data.count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
