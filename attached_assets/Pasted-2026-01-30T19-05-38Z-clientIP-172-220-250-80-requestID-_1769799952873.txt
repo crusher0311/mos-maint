@@ -1,0 +1,300 @@
+2026-01-30T19:05:38Z clientIP="172.220.250.80" requestID="5f34a27f-c85e-4703" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T19:05:39Z clientIP="172.220.250.80" requestID="5c5d6aa4-7da0-4021" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+2026-01-30T19:05:39.277090678Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:39.277093598Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:39.277096858Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:39.277100118Z     at async Promise.all (index 0)
+2026-01-30T19:05:39.277102898Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:39.277105478Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:39.277108108Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:39.277209841Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:39.277237562Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:39.277241632Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:39.277244442Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:39.277246982Z     at async Promise.all (index 1)
+2026-01-30T19:05:39.277249723Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:39.277252512Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:39.277255073Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:39.277257893Z     at async Promise.all (index 0)
+2026-01-30T19:05:39.277260783Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:39.277263563Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:39.280962388Z [DataOne Cache] Stored 0 items for squish KL4CJESBJB, expires 2026-02-06T19:05:34.151Z
+2026-01-30T19:05:39.283120665Z [DataOne Cache] Stored 0 items for squish 1FMCU9GXGU, expires 2026-02-06T19:05:34.151Z
+2026-01-30T19:05:39.285855581Z [DataOne Cache] Stored 0 items for squish 2C4RDGCGJR, expires 2026-02-06T19:05:34.151Z
+2026-01-30T19:05:39.287728779Z [DataOne Cache] Stored 0 items for squish 4S3BMBJ6E3, expires 2026-02-06T19:05:34.151Z
+2026-01-30T19:05:39.287913515Z [DataOne Cache] Stored 0 items for squish JF2SKAWCKH, expires 2026-02-06T19:05:34.151Z
+2026-01-30T19:05:39.334740135Z [DataOne Cache] Stored 0 items for squish 1FAHP2F8DG, expires 2026-02-06T19:05:34.208Z
+2026-01-30T19:05:39.336615983Z [DataOne Cache] Stored 0 items for squish 5XYP54HCNG, expires 2026-02-06T19:05:34.208Z
+2026-01-30T19:05:39.339975988Z [DataOne Cache] Stored 0 items for squish WA1CMAFPEA, expires 2026-02-06T19:05:34.208Z
+2026-01-30T19:05:39.340481814Z [DataOne Cache] Stored 0 items for squish 1C6SRFJTMN, expires 2026-02-06T19:05:34.208Z
+2026-01-30T19:05:39.345049236Z [DataOne Cache] Stored 0 items for squish 4S4BSENCJ3, expires 2026-02-06T19:05:34.208Z
+2026-01-30T19:05:39.351650462Z [DataOne Cache] HIT but missing vehicle info for squish JF2SKAUCLH, re-fetching...
+2026-01-30T19:05:39.351666292Z [DataOne Cache] EXPIRED for squish JF2SKAUCLH, fetching from API...
+2026-01-30T19:05:39.352964383Z [DataOne Cache] HIT but missing vehicle info for squish 1G4GC5E3CF, re-fetching...
+2026-01-30T19:05:39.352974473Z [DataOne Cache] EXPIRED for squish 1G4GC5E3CF, fetching from API...
+2026-01-30T19:05:39.354503791Z [DataOne Cache] HIT but missing vehicle info for squish 7SAXCBE6PF, re-fetching...
+2026-01-30T19:05:39.354518411Z [DataOne Cache] EXPIRED for squish 7SAXCBE6PF, fetching from API...
+2026-01-30T19:05:39.355500762Z [DataOne Cache] HIT but missing vehicle info for squish JN8AZ2NCG9, re-fetching...
+2026-01-30T19:05:39.355511882Z [DataOne Cache] EXPIRED for squish JN8AZ2NCG9, fetching from API...
+2026-01-30T19:05:39.356459132Z [DataOne Cache] HIT but missing vehicle info for squish 5TFAY5F1MX, re-fetching...
+2026-01-30T19:05:39.356472782Z [DataOne Cache] EXPIRED for squish 5TFAY5F1MX, fetching from API...
+2026-01-30T19:05:39.409176565Z [DataOne Cache] HIT but missing vehicle info for squish 4S4WMACDN3, re-fetching...
+2026-01-30T19:05:39.409199925Z [DataOne Cache] EXPIRED for squish 4S4WMACDN3, fetching from API...
+2026-01-30T19:05:39.410454184Z [DataOne Cache] HIT but missing vehicle info for squish JTMBD33V86, re-fetching...
+2026-01-30T19:05:39.410465235Z [DataOne Cache] EXPIRED for squish JTMBD33V86, fetching from API...
+2026-01-30T19:05:39.411366083Z [DataOne Cache] HIT but missing vehicle info for squish KNDNB4H3R6, re-fetching...
+2026-01-30T19:05:39.411384584Z [DataOne Cache] EXPIRED for squish KNDNB4H3R6, fetching from API...
+2026-01-30T19:05:39.412607302Z [DataOne Cache] HIT but missing vehicle info for squish WDDUG8FBFA, re-fetching...
+2026-01-30T19:05:39.412622382Z [DataOne Cache] EXPIRED for squish WDDUG8FBFA, fetching from API...
+2026-01-30T19:05:39.413885111Z [DataOne Cache] HIT but missing vehicle info for squish JHMGE8849S, re-fetching...
+2026-01-30T19:05:39.413894832Z [DataOne Cache] EXPIRED for squish JHMGE8849S, fetching from API...
+2026-01-30T19:05:44.352526945Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.352549996Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.352554466Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.352557676Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.352560346Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.352563946Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.352566867Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.352569576Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.352572027Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.352574937Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.352578597Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.352740922Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.352744882Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.352746832Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.352748612Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.352761282Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.352763222Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.352764882Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.352767463Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.352769163Z     at async Promise.all (index 4)
+2026-01-30T19:05:44.352770893Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.352773393Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.353278238Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.353281759Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.353283569Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.353296199Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.353298149Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.353299839Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.353301649Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.353303329Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.353304999Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.35330683Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.35330853Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.353455434Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.353467235Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.353469544Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.353472515Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.353475695Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.353478765Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.353481225Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.353484595Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.353487385Z     at async Promise.all (index 3)
+2026-01-30T19:05:44.353490075Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.353493325Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.355058714Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.355066614Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.355068584Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.355070254Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.355071974Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.355073794Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.355075675Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.355077815Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.355079845Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.355089035Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.355090915Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.355198589Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.355203919Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.355206939Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.355209769Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.355212579Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.355215589Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.355217369Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.355219079Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.355220749Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.355222419Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.355224309Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.355636252Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.355645092Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.355648363Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.355650912Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.355656413Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.355659963Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.355662803Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.355665493Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.355668163Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.355670733Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.355674073Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.355774987Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.355779176Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.355782447Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.355785197Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.355787707Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.355790277Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.355793127Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.355795757Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.355798237Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.355801117Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.355803827Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.356149258Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.356153128Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.356154878Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.356162959Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.356164848Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.356166559Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.356168289Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.356170039Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.356183049Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.356184859Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.356186999Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.35749486Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.357508721Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.35751283Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.357516331Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.357519631Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.357522691Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.357526161Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.357530091Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.357533781Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.357537341Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.357541562Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.409348197Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.409369677Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.409373377Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.409376257Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.409379037Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.409381858Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.409384787Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.409415848Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.409421709Z     at async Promise.all (index 4)
+2026-01-30T19:05:44.409424419Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.409426819Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.410565974Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.410576015Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.410579535Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.410582385Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.410585055Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.410587795Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.410590585Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.410605996Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.410609196Z     at async Promise.all (index 4)
+2026-01-30T19:05:44.410611746Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.410614736Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.411104131Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.411112061Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.411115601Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.411118441Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.411121102Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.411123692Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.411126582Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.411129502Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.411131842Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.411134412Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.411137282Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.411281306Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.411289057Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.411292047Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.411294327Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.411296647Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.411298887Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.411301197Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.411303817Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.411306037Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.411308258Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.411310558Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.411760681Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.411771852Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.411774812Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.411777892Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.411780762Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.411783242Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.411786312Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.411789012Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.411791902Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.411795523Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.411797773Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.413061082Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.413077693Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.413081393Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.413084253Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.413086853Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.413089733Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.413092493Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.413095343Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.413097993Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.413100933Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.413104243Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.413489875Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.413501786Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.413504636Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.413507046Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.413509686Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.413512506Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.413515486Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.413518436Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.413521336Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.413524147Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.413526997Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.413663931Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.413670831Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.413674101Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.413677001Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.413680032Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.413682781Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.413685432Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.413689052Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.413692292Z     at async Promise.all (index 2)
+2026-01-30T19:05:44.413695302Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.413698832Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.415445826Z DataOne maintenance schedule error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.415456827Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.415460557Z     at runNextTicks (node:internal/process/task_queues:65:5)
+2026-01-30T19:05:44.415463417Z     at listOnTimeout (node:internal/timers:549:9)
+2026-01-30T19:05:44.415466497Z     at process.processTimers (node:internal/timers:523:7)
+2026-01-30T19:05:44.415469697Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.415480488Z     at async c (/opt/render/project/src/.next/server/chunks/7784.js:1:5481)
+2026-01-30T19:05:44.415483197Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.415486188Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.415488728Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.415492028Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.415662763Z DataOne VIN decode error: DOMException [AbortError]: This operation was aborted
+2026-01-30T19:05:44.415669223Z     at node:internal/deps/undici/undici:13510:13
+2026-01-30T19:05:44.415672494Z     at async o (/opt/render/project/src/.next/server/chunks/7784.js:1:4673)
+2026-01-30T19:05:44.415675183Z     at async s (/opt/render/project/src/.next/server/chunks/7784.js:1:4936)
+2026-01-30T19:05:44.415677924Z     at async Promise.all (index 1)
+2026-01-30T19:05:44.415680714Z     at async d (/opt/render/project/src/.next/server/chunks/7784.js:1:8721)
+2026-01-30T19:05:44.415683164Z     at async Promise.allSettled (index 0)
+2026-01-30T19:05:44.415685544Z     at async n (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:1783)
+2026-01-30T19:05:44.415687924Z     at async Promise.all (index 0)
+2026-01-30T19:05:44.415690454Z     at async h (/opt/render/project/src/.next/server/app/api/internal/plan-pregenerate/route.js:1:2025)
+2026-01-30T19:05:44.415693814Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-01-30T19:05:44.42102046Z [DataOne Cache] Stored 0 items for squish JF2SKAUCLH, expires 2026-02-06T19:05:39.287Z
+2026-01-30T19:05:44.422011401Z [DataOne Cache] Stored 0 items for squish 1G4GC5E3CF, expires 2026-02-06T19:05:39.287Z
+2026-01-30T19:05:44.423686373Z [DataOne Cache] Stored 0 items for squish 7SAXCBE6PF, expires 2026-02-06T19:05:39.287Z
+2026-01-30T19:05:44.424167058Z [DataOne Cache] Stored 0 items for squish JN8AZ2NCG9, expires 2026-02-06T19:05:39.287Z
+2026-01-30T19:05:44.425246002Z [DataOne Cache] Stored 0 items for squish 5TFAY5F1MX, expires 2026-02-06T19:05:39.287Z
+2026-01-30T19:05:44.477405098Z [DataOne Cache] Stored 0 items for squish 4S4WMACDN3, expires 2026-02-06T19:05:39.345Z
+2026-01-30T19:05:44.477635795Z [DataOne Cache] Stored 0 items for squish JTMBD33V86, expires 2026-02-06T19:05:39.345Z
+2026-01-30T19:05:44.478494342Z [DataOne Cache] Stored 0 items for squish KNDNB4H3R6, expires 2026-02-06T19:05:39.345Z
+2026-01-30T19:05:44.479909696Z [DataOne Cache] Stored 0 items for squish WDDUG8FBFA, expires 2026-02-06T19:05:39.345Z
+2026-01-30T19:05:44.480217195Z [DataOne Cache] Stored 0 items for squish JHMGE8849S, expires 2026-02-06T19:05:39.345Z
+2026-01-30T19:05:44.484735446Z [DataOne Cache] HIT but missing vehicle info for squish 3GTRKXE2AG, re-fetching...
+2026-01-30T19:05:44.484746147Z [DataOne Cache] EXPIRED for squish 3GTRKXE2AG, fetching from API...
+2026-01-30T19:05:44.488794713Z [DataOne Cache] HIT but missing vehicle info for squish 58ABZ1B1KU, re-fetching...
+2026-01-30T19:05:44.488806403Z [DataOne Cache] EXPIRED for squish 58ABZ1B1KU, fetching from API...
+2026-01-30T19:05:44.492140697Z [DataOne Cache] HIT for squish 1V2NR2CAJC, cached at 2026-01-29T20:36:44.846Z
+2026-01-30T19:05:44.492763306Z [DataOne Cache] HIT but missing vehicle info for squish ZARFANBNK7, re-fetching...
+2026-01-30T19:05:44.492775637Z [DataOne Cache] EXPIRED for squish ZARFANBNK7, fetching from API...
+2026-01-30T19:05:44.493561491Z [DataOne Cache] HIT but missing vehicle info for squish JTHBJ46G72, re-fetching...
+2026-01-30T19:05:44.493574322Z [DataOne Cache] EXPIRED for squish JTHBJ46G72, fetching from API...
+2026-01-30T19:05:44.54517109Z [DataOne Cache] HIT but missing vehicle info for squish 4T1BK36B7U, re-fetching...
+2026-01-30T19:05:44.545195461Z [DataOne Cache] EXPIRED for squish 4T1BK36B7U, fetching from API...
+2026-01-30T19:05:44.546226363Z [DataOne Cache] HIT but missing vehicle info for squish JN1CV6ARDM, re-fetching...
+2026-01-30T19:05:44.546237393Z [DataOne Cache] EXPIRED for squish JN1CV6ARDM, fetching from API...
+2026-01-30T19:05:44.546939985Z [DataOne Cache] HIT but missing vehicle info for squish JTDKN3DUB1, re-fetching...
+2026-01-30T19:05:44.546951256Z [DataOne Cache] EXPIRED for squish JTDKN3DUB1, fetching from API...
+2026-01-30T19:05:44.547677698Z [DataOne Cache] HIT but missing vehicle info for squish WDC0G5EBKF, re-fetching...
+2026-01-30T19:05:44.547688649Z [DataOne Cache] EXPIRED for squish WDC0G5EBKF, fetching from API...
+2026-01-30T19:05:44.548639748Z [DataOne Cache] HIT but missing vehicle info for squish 5NMJE3AEPH, re-fetching...
+2026-01-30T19:05:44.548649019Z [DataOne Cache] EXPIRED for squish 5NMJE3AEPH, fetching from API...
+2026-01-30T19:05:44Z clientIP="172.220.250.80" requestID="ee823e5f-c406-45dc" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
