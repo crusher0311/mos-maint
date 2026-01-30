@@ -93,6 +93,7 @@ export default function PlatformTicketsPage() {
   const [replyMessage, setReplyMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [replyError, setReplyError] = useState("");
 
   const loadTickets = useCallback(async () => {
     try {
@@ -120,8 +121,9 @@ export default function PlatformTicketsPage() {
     loadTickets();
   }, [loadTickets]);
 
-  const updateTicket = async (ticketId: string, updates: Record<string, any>) => {
+  const updateTicket = async (ticketId: string, updates: Record<string, any>): Promise<boolean> => {
     setUpdating(true);
+    setReplyError("");
     try {
       const res = await fetch("/api/platform-admin/tickets", {
         method: "PATCH",
@@ -136,9 +138,15 @@ export default function PlatformTicketsPage() {
           setSelectedTicket(data.ticket);
         }
         loadTickets();
+        return true;
+      } else {
+        setReplyError(data.error || "Failed to update ticket");
+        return false;
       }
     } catch (error) {
       console.error("Error updating ticket:", error);
+      setReplyError("Failed to update ticket. Please try again.");
+      return false;
     } finally {
       setUpdating(false);
     }
@@ -148,11 +156,15 @@ export default function PlatformTicketsPage() {
     if (!selectedTicket || !replyMessage.trim()) return;
 
     setSending(true);
+    setReplyError("");
     try {
-      await updateTicket(selectedTicket._id, { message: replyMessage.trim() });
-      setReplyMessage("");
+      const success = await updateTicket(selectedTicket._id, { message: replyMessage.trim() });
+      if (success) {
+        setReplyMessage("");
+      }
     } catch (error) {
       console.error("Error sending reply:", error);
+      setReplyError("Failed to send reply. Please try again.");
     } finally {
       setSending(false);
     }
@@ -484,6 +496,11 @@ export default function PlatformTicketsPage() {
 
             {selectedTicket.status !== "closed" && (
               <div className="p-4 border-t border-gray-200">
+                {replyError && (
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {replyError}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <textarea
                     value={replyMessage}

@@ -63,6 +63,7 @@ export default function SupportPage() {
   const [replyMessage, setReplyMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     loadTickets();
@@ -126,6 +127,7 @@ export default function SupportPage() {
     if (!selectedTicket || !replyMessage.trim()) return;
 
     setSending(true);
+    setError("");
     try {
       const res = await fetch(`/api/support/tickets/${selectedTicket._id}`, {
         method: "POST",
@@ -138,9 +140,12 @@ export default function SupportPage() {
         setSelectedTicket(data.ticket);
         setReplyMessage("");
         loadTickets();
+      } else {
+        setError(data.error || "Failed to send reply. Please try again.");
       }
-    } catch (error) {
-      console.error("Error sending reply:", error);
+    } catch (err) {
+      console.error("Error sending reply:", err);
+      setError("Failed to send reply. Please check your connection and try again.");
     } finally {
       setSending(false);
     }
@@ -251,6 +256,11 @@ export default function SupportPage() {
 
           {selectedTicket.status !== "closed" && (
             <div className="p-6 border-t border-gray-100">
+              {error && (
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
               <div className="flex gap-2">
                 <textarea
                   value={replyMessage}
