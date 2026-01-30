@@ -196,7 +196,7 @@ export async function PATCH(request: NextRequest) {
     const session = await requirePlatformAdmin();
 
     const body = await request.json();
-    const { ticketId, status, priority, assignedTo, message } = body;
+    const { ticketId, status, priority, assignedTo, message, resolutionNotes } = body;
 
     if (!ticketId) {
       return NextResponse.json({ error: "Missing ticket ID" }, { status: 400 });
@@ -216,10 +216,18 @@ export async function PATCH(request: NextRequest) {
       updateFields.status = status;
       if (status === "resolved") {
         updateFields.resolvedAt = new Date();
+        updateFields.resolvedBy = (await requirePlatformAdmin()).email;
+        if (resolutionNotes) {
+          updateFields.resolutionNotes = resolutionNotes;
+        }
         await clearTicketNotifications(ticketId);
       }
       if (status === "closed") {
         updateFields.closedAt = new Date();
+        updateFields.closedBy = (await requirePlatformAdmin()).email;
+        if (resolutionNotes) {
+          updateFields.resolutionNotes = resolutionNotes;
+        }
         await clearTicketNotifications(ticketId);
       }
     }

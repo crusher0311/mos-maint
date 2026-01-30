@@ -94,6 +94,8 @@ export default function PlatformTicketsPage() {
   const [sending, setSending] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [replyError, setReplyError] = useState("");
+  const [resolutionModal, setResolutionModal] = useState<{ open: boolean; status: string; ticketId: string }>({ open: false, status: "", ticketId: "" });
+  const [resolutionNotes, setResolutionNotes] = useState("");
 
   const loadTickets = useCallback(async () => {
     try {
@@ -167,6 +169,29 @@ export default function PlatformTicketsPage() {
       setReplyError("Failed to send reply. Please try again.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleStatusChange = (ticketId: string, newStatus: string) => {
+    if (newStatus === "resolved" || newStatus === "closed") {
+      setResolutionModal({ open: true, status: newStatus, ticketId });
+      setResolutionNotes("");
+    } else {
+      updateTicket(ticketId, { status: newStatus });
+    }
+  };
+
+  const submitResolution = async () => {
+    if (!resolutionModal.ticketId) return;
+    
+    const success = await updateTicket(resolutionModal.ticketId, {
+      status: resolutionModal.status,
+      resolutionNotes: resolutionNotes.trim() || undefined
+    });
+    
+    if (success) {
+      setResolutionModal({ open: false, status: "", ticketId: "" });
+      setResolutionNotes("");
     }
   };
 
@@ -409,7 +434,7 @@ export default function PlatformTicketsPage() {
                   <span className="text-gray-500 block">Status</span>
                   <select
                     value={selectedTicket.status}
-                    onChange={(e) => updateTicket(selectedTicket._id, { status: e.target.value })}
+                    onChange={(e) => handleStatusChange(selectedTicket._id, e.target.value)}
                     disabled={updating}
                     className="mt-1 px-2 py-1 border border-gray-200 rounded text-sm w-full"
                   >
@@ -459,6 +484,16 @@ export default function PlatformTicketsPage() {
                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <div className="text-xs text-blue-600 font-medium mb-2">Original Description</div>
                   <p className="text-gray-700 whitespace-pre-wrap">{selectedTicket.description}</p>
+                </div>
+              )}
+
+              {(selectedTicket as any).resolutionNotes && (
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-xs text-green-700 font-medium mb-2">Resolution Notes</div>
+                  <p className="text-gray-700 whitespace-pre-wrap">{(selectedTicket as any).resolutionNotes}</p>
+                  {(selectedTicket as any).resolvedBy && (
+                    <p className="text-xs text-green-600 mt-2">Resolved by: {(selectedTicket as any).resolvedBy}</p>
+                  )}
                 </div>
               )}
               
@@ -520,6 +555,52 @@ export default function PlatformTicketsPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {resolutionModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {resolutionModal.status === "resolved" ? "Resolve Ticket" : "Close Ticket"}
+              </h3>
+            </div>
+            <div className="p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Resolution Notes (optional)
+              </label>
+              <textarea
+                value={resolutionNotes}
+                onChange={(e) => setResolutionNotes(e.target.value)}
+                placeholder="Describe how the issue was resolved..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3c81c3] resize-none"
+                rows={4}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                This will be saved with the ticket for future reference.
+              </p>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setResolutionModal({ open: false, status: "", ticketId: "" })}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitResolution}
+                disabled={updating}
+                className={`px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 ${
+                  resolutionModal.status === "closed" 
+                    ? "bg-gray-600 hover:bg-gray-700" 
+                    : "bg-green-600 hover:bg-green-700"
+                }`}
+              >
+                {updating ? "Saving..." : resolutionModal.status === "resolved" ? "Mark Resolved" : "Close Ticket"}
+              </button>
+            </div>
           </div>
         </div>
       )}
