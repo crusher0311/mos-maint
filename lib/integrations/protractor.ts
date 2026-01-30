@@ -7,8 +7,11 @@ import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usag
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
-// Concurrency limiter: max 3 concurrent Protractor requests per process
+// Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
+
+// PRIORITY concurrency limiter: separate pool for user-initiated requests (bypasses background queue)
+const priorityConcurrencyLimit = pLimit(2);
 
 // Local rate limiter: 5 requests per second (enforced per-process)
 const RATE_LIMIT_RPS = 5;
@@ -16,9 +19,6 @@ const RATE_LIMIT_INTERVAL_MS = 1000 / RATE_LIMIT_RPS; // 200ms between requests
 let lastRequestTime = 0;
 const rateLimitQueue: (() => void)[] = [];
 let isProcessingQueue = false;
-
-// Priority queue for user-initiated requests (added to front)
-const priorityRateLimitQueue: (() => void)[] = [];
 
 /**
  * Acquire rate limit slot with both local (5 rps) and distributed (300 rpm) enforcement.
@@ -324,8 +324,12 @@ export async function protractorFetch<T>(
   }
   
   const isPriority = opts?.priority === true;
+  
+  // Use separate concurrency pool for priority (user-initiated) vs background requests
+  const concurrencyLimiter = isPriority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
 
-  return protractorConcurrencyLimit(async () => {
+  return concurrencyLimiter(async () => {
+    const concurrencyWaitStart = Date.now();
     const rateSlot = await acquireRateLimitSlot(isPriority);
     if (!rateSlot.acquired) {
       return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
@@ -334,9 +338,10 @@ export async function protractorFetch<T>(
     const url = `${BASE_URL}${endpoint}`;
     const startTime = Date.now();
     const method = (options.method || "GET").toUpperCase();
+    const totalWaitMs = Date.now() - concurrencyWaitStart;
     
     if (isPriority) {
-      console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (waited ${rateSlot.waitedMs || 0}ms for slot)`);
+      console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms, rate wait: ${rateSlot.waitedMs || 0}ms)`);
     }
   
     try {
