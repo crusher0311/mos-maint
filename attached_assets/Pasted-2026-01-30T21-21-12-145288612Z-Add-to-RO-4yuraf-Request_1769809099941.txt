@@ -1,0 +1,30 @@
+2026-01-30T21:21:12.145288612Z [Add-to-RO:4yuraf] Request received at 2026-01-30T21:21:12.145Z
+2026-01-30T21:21:12.332332243Z [Add-to-RO:4yuraf] Fetching WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f for shop 29...
+2026-01-30T21:21:20.648527495Z [Add-to-RO:4yuraf] WO fetch took 8316ms
+2026-01-30T21:21:20.651099455Z [Add-to-RO:4yuraf] Sending POST to add "Cabin Air Filter" with 2 lines...
+2026-01-30T21:21:21.240311012Z [Add-to-RO:4yuraf] POST took 592ms
+2026-01-30T21:21:21.240383344Z [Add-to-RO:4yuraf] Success: Added "Cabin Air Filter" to WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f, total time: 9095ms
+2026-01-30T21:21:22.387263997Z [Add-to-RO:81lcdj] Request received at 2026-01-30T21:21:22.387Z
+2026-01-30T21:21:22.575238557Z [Add-to-RO:81lcdj] Fetching WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f for shop 29...
+2026-01-30T21:21:32.939622866Z [Add-to-RO:81lcdj] WO fetch took 10365ms
+2026-01-30T21:21:32.939663028Z [Add-to-RO:81lcdj] Sending POST to add "BG BRAKE FLUID SERVICE - Service Due Every 30k Miles" with 2 lines...
+2026-01-30T21:21:44.111467324Z [Add-to-RO:81lcdj] POST took 11170ms
+2026-01-30T21:21:44.111500135Z [Add-to-RO:81lcdj] Success: Added "BG BRAKE FLUID SERVICE - Service Due Every 30k Miles" to WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f, total time: 21722ms
+2026-01-30T21:37:03.648164708Z [Add-to-RO:ajks1] Request received at 2026-01-30T21:37:03.647Z
+2026-01-30T21:37:03.847821227Z [Add-to-RO:ajks1] Fetching WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f for shop 29...
+2026-01-30T21:37:04.059495302Z [Add-to-RO:ajks1] WO fetch took 212ms
+2026-01-30T21:37:04.059778997Z [Add-to-RO:ajks1] Sending POST to add "BG Coolant Service - Service Due Every 30k Miles" with 5 lines...
+2026-01-30T21:37:04.352964458Z [Add-to-RO:ajks1] POST took 293ms
+2026-01-30T21:37:04.353091229Z [Add-to-RO:ajks1] Success: Added "BG Coolant Service - Service Due Every 30k Miles" to WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f, total time: 705ms
+2026-01-30T21:37:19.433358998Z [Add-to-RO:amox2kb] Request received at 2026-01-30T21:37:19.433Z
+2026-01-30T21:37:19.631277641Z [Add-to-RO:amox2kb] Fetching WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f for shop 29...
+2026-01-30T21:37:20.051309323Z [Add-to-RO:amox2kb] WO fetch took 420ms
+2026-01-30T21:37:20.051435105Z [Add-to-RO:amox2kb] Sending POST to add "Serpentine Belt(s) - Drive Belt Glazed / Worn
+2026-01-30T21:37:20.844941756Z [Add-to-RO:amox2kb] POST took 793ms
+2026-01-30T21:37:20.844964477Z [Add-to-RO:amox2kb] Success: Added "Serpentine Belt(s) - Drive Belt Glazed / Worn
+2026-01-30T21:37:27.800845411Z [Add-to-RO:00tr5k] Request received at 2026-01-30T21:37:27.800Z
+2026-01-30T21:37:27.988744898Z [Add-to-RO:00tr5k] Fetching WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f for shop 29...
+2026-01-30T21:37:28.243262862Z [Add-to-RO:00tr5k] WO fetch took 255ms
+2026-01-30T21:37:28.243464725Z [Add-to-RO:00tr5k] Sending POST to add "Spark Plug(s)- Age and Mileage No Carfax History" with 2 lines...
+2026-01-30T21:37:28.544594262Z [Add-to-RO:00tr5k] POST took 301ms
+2026-01-30T21:37:28.544620493Z [Add-to-RO:00tr5k] Success: Added "Spark Plug(s)- Age and Mileage No Carfax History" to WO 27c34c35-d3eb-4e4e-aaa3-c37aa442a48f, total time: 744ms
