@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { createNotificationsForUsers } from "@/lib/notifications";
-import { SUPER_ADMINS } from "@/lib/super-admins";
+import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { ticketId: string } }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -25,7 +25,7 @@ export async function GET(
 
     const ticket = await db.collection("support_tickets").findOne({
       _id: new ObjectId(ticketId),
-      userEmail: user.email
+      userEmail: session.email
     });
 
     if (!ticket) {
@@ -47,8 +47,8 @@ export async function POST(
   { params }: { params: { ticketId: string } }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -68,7 +68,7 @@ export async function POST(
 
     const ticket = await db.collection("support_tickets").findOne({
       _id: new ObjectId(ticketId),
-      userEmail: user.email
+      userEmail: session.email
     });
 
     if (!ticket) {
@@ -80,15 +80,15 @@ export async function POST(
     }
 
     const result = await db.collection("support_tickets").findOneAndUpdate(
-      { _id: new ObjectId(ticketId), userEmail: user.email },
+      { _id: new ObjectId(ticketId), userEmail: session.email },
       {
         $set: { updatedAt: new Date() },
         $push: {
           messages: {
             id: new ObjectId().toString(),
             from: "user",
-            fromEmail: user.email,
-            fromName: user.name || user.email.split("@")[0],
+            fromEmail: session.email,
+            fromName: session.name || session.email.split("@")[0],
             message,
             createdAt: new Date()
           }
@@ -98,7 +98,7 @@ export async function POST(
     );
 
     try {
-      const adminUserIds = SUPER_ADMINS.map(email => `admin:${email}`);
+      const adminUserIds = SUPER_ADMIN_EMAILS.map(email => `admin:${email}`);
       await createNotificationsForUsers(adminUserIds, {
         type: "ticket_message",
         title: `User Reply: ${ticket.ticketNumber}`,
