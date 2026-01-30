@@ -16,15 +16,14 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
     const shops = await db.collection("shops").find(
       { shopId: { $in: shopIds } },
-      { projection: { shopId: 1, name: 1, city: 1, state: 1, location: 1 } }
+      { projection: { shopId: 1, name: 1, locationIdentifier: 1 } }
     ).toArray();
     
     const lookup: Record<number, { name: string; location?: string }> = {};
     for (const shop of shops) {
-      const location = shop.location || shop.city || (shop.state ? `${shop.city || ""}, ${shop.state}`.trim() : undefined);
       lookup[shop.shopId] = {
         name: shop.name || `Shop ${shop.shopId}`,
-        location: location?.replace(/^,\s*/, "") || undefined,
+        location: shop.locationIdentifier || undefined,
       };
     }
     
