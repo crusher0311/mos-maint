@@ -815,13 +815,14 @@ export async function POST(req: NextRequest) {
     }));
 
     let customerName: string | null = null;
-    if (isTekmetricConfigured()) {
+    const tekmetricShopId = shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId;
+    if (isTekmetricConfigured() && tekmetricShopId) {
       try {
-        const vehicleResult = await searchVehiclesByVin(shopId, vin);
+        const vehicleResult = await searchVehiclesByVin(tekmetricShopId, vin);
         if (vehicleResult.content?.length > 0) {
           const vehicle = vehicleResult.content[0];
           if (vehicle.id) {
-            const rosResult = await getRepairOrders(shopId, { vehicleId: vehicle.id, size: 1 });
+            const rosResult = await getRepairOrders(tekmetricShopId, { vehicleId: vehicle.id, size: 1 });
             if (rosResult.content?.length > 0) {
               latestRoNumber = String(rosResult.content[0].repairOrderNumber);
               const ro = rosResult.content[0] as any;
