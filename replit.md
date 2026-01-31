@@ -13,10 +13,10 @@ The application uses Next.js 14.2.5 with React 18, Next.js API Routes, MongoDB A
 The design features a modern SaaS-style interface with a dark sidebar, light content areas, card-based layouts, and blue as the accent color. Key UI elements include a unified integrations page, a tabbed vehicle detail page, visual data source badges, and dedicated UIs for "My Oil Sticker" and "Quick Sticker" features with customization and rapid printing. Keytag printing includes a visual designer with drag-and-drop editing and live preview.
 
 **Technical Implementations:**
-*   **Data Management**: MongoDB Atlas is used for caching third-party API responses, state tracking, and normalized data storage. Plan caching in `lib/plan-cache.ts` stores assembled plan buckets for instant loads with mileage tolerance-based invalidation.
-*   **Integration Mechanisms**: Modular integration layer with a unified `IIntegrationAdapter` and `IntegrationFacade` for shop management systems (e.g., Tekmetric, Protractor). Features include webhooks, incremental sync, robust error handling, OAuth token management, and rate limiting. An `ISMSAdapter` interface normalizes SMS data.
+*   **Data Management**: MongoDB Atlas is currently used for caching and state tracking, with a planned migration to PostgreSQL for core business data to leverage its relational capabilities for complex reporting and data integrity. Plan caching in `lib/plan-cache.ts` stores assembled plan buckets for instant loads with mileage tolerance-based invalidation.
+*   **Integration Mechanisms**: A modular integration layer uses `IIntegrationAdapter` and `IntegrationFacade` for shop management systems (e.g., Tekmetric, Protractor), featuring webhooks, incremental sync, OAuth, and rate limiting. An `ISMSAdapter` interface normalizes SMS data.
 *   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based setup.
-*   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration for checkout, and feature flags for modular functionality.
+*   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration, and feature flags for modular functionality.
 *   **Admin & Monitoring**: Comprehensive admin audit logging, unified API usage monitoring, and a support ticketing system.
 *   **Notification System**: Email notifications via Resend API and in-app notifications.
 *   **AI Support Chatbot**: Floating chat widget with OpenAI-powered responses, knowledge base retrieval, and ticket escalation.
@@ -29,11 +29,11 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Core Management**: Vehicle analysis, customer dashboard, multi-shop management.
 *   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services.
 *   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
-*   **Modular Features**: A la carte feature flags (maintenance, job lookup, common failures, oil sticker, keytags, auto booking, part cross-reference) managed via platform admin.
+*   **Modular Features**: A la carte feature flags for various functionalities (e.g., maintenance, job lookup, oil sticker, keytags, auto booking, part cross-reference) managed via platform admin.
 *   **User Preferences**: Shops can choose distance units (miles/kilometers).
 
 ## External Dependencies
-*   **Database**: MongoDB Atlas
+*   **Database**: MongoDB Atlas (with a planned migration to PostgreSQL)
 *   **AI**: OpenAI API
 *   **Payments**: Stripe
 *   **VIN Decoding & OEM Schedules**: DataOne API
@@ -41,3 +41,4 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
+*   **Email Notifications**: Resend API
