@@ -1002,7 +1002,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
-                        <VinSpecsTooltip vin={vin} />
+                        <VinSpecsTooltip vin={vin} specs={data.quickSpecs?.[vin]} />
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.displayRo ? (

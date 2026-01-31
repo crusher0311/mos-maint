@@ -531,3 +531,73 @@ export async function getDataOneSyncStatus(): Promise<{
     return { available: false };
   }
 }
+
+export interface QuickSpecs {
+  fuelTankCapacity?: string;
+  maxTowingCapacity?: string;
+  maxPayload?: string;
+  frontTireDescription?: string;
+  frontBrakeDiameter?: string;
+  bedLength?: string;
+}
+
+export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string, QuickSpecs>> {
+  if (!vins.length) return {};
+  
+  const result: Record<string, QuickSpecs> = {};
+  
+  try {
+    const squishPatterns = vins.map(vin => ({ vin, squish: toSquish(vin) }));
+    const uniqueSquishes = [...new Set(squishPatterns.map(p => p.squish))];
+    
+    const vinRows = await sql<{ vin_pattern: string; vehicle_id: number }[]>`
+      SELECT vin_pattern, vehicle_id 
+      FROM dataone_vin_reference 
+      WHERE vin_pattern = ANY(${uniqueSquishes})
+    `;
+    
+    if (!vinRows.length) return result;
+    
+    const squishToVehicleId = new Map(vinRows.map(r => [r.vin_pattern, r.vehicle_id]));
+    const vehicleIds = [...new Set(vinRows.map(r => r.vehicle_id))];
+    
+    const specs = await sql<{ vehicle_id: number; specification_name: string; specification_value: string }[]>`
+      SELECT DISTINCT vs.vehicle_id, s.specification_name, s.specification_value
+      FROM dataone_lkp_veh_standard_specification vs
+      JOIN dataone_def_specification s ON vs.specification_id = s.specification_id
+      WHERE vs.vehicle_id = ANY(${vehicleIds})
+        AND s.specification_name IN (
+          'Fuel Tank Capacity', 'Max Towing Capacity', 'Max Payload', 
+          'Front Tire Description', 'Front Brake Rotor Diameter', 'Bed Length'
+        )
+    `;
+    
+    const vehicleSpecs = new Map<number, QuickSpecs>();
+    for (const row of specs) {
+      if (!vehicleSpecs.has(row.vehicle_id)) {
+        vehicleSpecs.set(row.vehicle_id, {});
+      }
+      const qs = vehicleSpecs.get(row.vehicle_id)!;
+      switch (row.specification_name) {
+        case 'Fuel Tank Capacity': qs.fuelTankCapacity = row.specification_value; break;
+        case 'Max Towing Capacity': qs.maxTowingCapacity = row.specification_value; break;
+        case 'Max Payload': qs.maxPayload = row.specification_value; break;
+        case 'Front Tire Description': qs.frontTireDescription = row.specification_value; break;
+        case 'Front Brake Rotor Diameter': qs.frontBrakeDiameter = row.specification_value; break;
+        case 'Bed Length': qs.bedLength = row.specification_value; break;
+      }
+    }
+    
+    for (const { vin, squish } of squishPatterns) {
+      const vehicleId = squishToVehicleId.get(squish);
+      if (vehicleId && vehicleSpecs.has(vehicleId)) {
+        result[vin] = vehicleSpecs.get(vehicleId)!;
+      }
+    }
+    
+    return result;
+  } catch (err) {
+    console.error("getBatchQuickSpecs error:", err);
+    return result;
+  }
+}

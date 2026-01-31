@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
+import { getBatchQuickSpecs } from "@/lib/integrations/dataone-local";
 
 export async function GET(request: NextRequest) {
   try {
@@ -597,8 +598,15 @@ export async function GET(request: NextRequest) {
       .filter(key => entitlements.effectiveFeatures[key]);
 
     // Add cache-control headers to prevent browser caching
+    // Pre-load quick specs for all VINs on this page
+    const vins = paginatedRows
+      .map((r: any) => r.displayVin)
+      .filter((v: string) => v && v.length === 17);
+    const quickSpecs = await getBatchQuickSpecs(vins);
+    
     const response = NextResponse.json({
       rows: paginatedRows,
+      quickSpecs,
       pagination: {
         page,
         pageSize,

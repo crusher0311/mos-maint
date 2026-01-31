@@ -1,100 +1,37 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
-interface VehicleSpecsGrouped {
-  weightsAndCapacities: {
-    fuelTankCapacity?: string;
-    baseTowingCapacity?: string;
-    maxTowingCapacity?: string;
-    maxPayload?: string;
-    curbWeight?: string;
-    gvwr?: string;
-  };
-  wheelsAndTires: {
-    frontTireDescription?: string;
-    tireType?: string;
-  };
-  brakes: {
-    frontBrakeDiameter?: string;
-    rearBrakeDiameter?: string;
-  };
-  dimensions: {
-    groundClearance?: string;
-  };
-  truckSpecs: {
-    bedLength?: string;
-  };
+export interface QuickSpecs {
+  fuelTankCapacity?: string;
+  maxTowingCapacity?: string;
+  maxPayload?: string;
+  frontTireDescription?: string;
+  frontBrakeDiameter?: string;
+  bedLength?: string;
 }
 
 interface VinSpecsTooltipProps {
   vin: string;
+  specs?: QuickSpecs;
   className?: string;
 }
 
-export function VinSpecsTooltip({ vin, className = "" }: VinSpecsTooltipProps) {
+export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [specs, setSpecs] = useState<VehicleSpecsGrouped | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fetchedRef = useRef(false);
-
-  const fetchSpecs = async () => {
-    if (fetchedRef.current || loading) return;
-    fetchedRef.current = true;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/vehicles/${vin}/specs`);
-      const data = await res.json();
-      if (data.ok) {
-        setSpecs(data.grouped);
-      } else {
-        setError(true);
-      }
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleMouseEnter = () => {
-    timeoutRef.current = setTimeout(() => {
-      setIsHovered(true);
-      if (!fetchedRef.current) {
-        fetchSpecs();
-      }
-    }, 300);
-  };
-
-  const handleMouseLeave = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    setIsHovered(false);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
 
   const hasSpecs = specs && (
-    specs.weightsAndCapacities.fuelTankCapacity ||
-    specs.weightsAndCapacities.maxTowingCapacity ||
-    specs.wheelsAndTires.frontTireDescription
+    specs.fuelTankCapacity ||
+    specs.maxTowingCapacity ||
+    specs.frontTireDescription
   );
 
   return (
     <div 
       className="relative inline-block"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <Link
         href={`/dashboard/vehicles/${vin}?tab=specs`}
@@ -109,61 +46,46 @@ export function VinSpecsTooltip({ vin, className = "" }: VinSpecsTooltipProps) {
             Quick Specs
           </div>
           
-          {loading && (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-              Loading...
-            </div>
-          )}
-          
-          {error && !loading && (
-            <div className="text-sm text-gray-500">
-              Specs not available
-            </div>
-          )}
-          
-          {!loading && !error && hasSpecs && (
+          {hasSpecs ? (
             <div className="space-y-2 text-sm">
-              {specs.weightsAndCapacities.fuelTankCapacity && (
+              {specs.fuelTankCapacity && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Fuel Tank:</span>
-                  <span className="font-medium">{specs.weightsAndCapacities.fuelTankCapacity} gal</span>
+                  <span className="font-medium">{specs.fuelTankCapacity} gal</span>
                 </div>
               )}
-              {specs.weightsAndCapacities.maxTowingCapacity && (
+              {specs.maxTowingCapacity && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Max Towing:</span>
-                  <span className="font-medium">{Number(specs.weightsAndCapacities.maxTowingCapacity).toLocaleString()} lbs</span>
+                  <span className="font-medium">{Number(specs.maxTowingCapacity).toLocaleString()} lbs</span>
                 </div>
               )}
-              {specs.weightsAndCapacities.maxPayload && (
+              {specs.maxPayload && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Payload:</span>
-                  <span className="font-medium">{Number(specs.weightsAndCapacities.maxPayload).toLocaleString()} lbs</span>
+                  <span className="font-medium">{Number(specs.maxPayload).toLocaleString()} lbs</span>
                 </div>
               )}
-              {specs.wheelsAndTires.frontTireDescription && (
+              {specs.frontTireDescription && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Tires:</span>
-                  <span className="font-medium text-xs">{specs.wheelsAndTires.frontTireDescription}</span>
+                  <span className="font-medium text-xs">{specs.frontTireDescription}</span>
                 </div>
               )}
-              {specs.brakes.frontBrakeDiameter && (
+              {specs.frontBrakeDiameter && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Front Brake:</span>
-                  <span className="font-medium">{specs.brakes.frontBrakeDiameter}"</span>
+                  <span className="font-medium">{specs.frontBrakeDiameter}"</span>
                 </div>
               )}
-              {specs.truckSpecs?.bedLength && (
+              {specs.bedLength && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Bed Length:</span>
-                  <span className="font-medium">{specs.truckSpecs.bedLength}"</span>
+                  <span className="font-medium">{specs.bedLength}"</span>
                 </div>
               )}
             </div>
-          )}
-          
-          {!loading && !error && !hasSpecs && (
+          ) : (
             <div className="text-sm text-gray-500">
               No specs available for this VIN
             </div>
