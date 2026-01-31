@@ -236,8 +236,46 @@ Each new integration implements `ISMSAdapter` interface. Data flows through exis
 **Estimated time per new SMS integration:** 2-3 days (vs weeks before normalization)
 
 ### Priority Order
-1. Database Migration (9 weeks)
-2. Chrome Extension Fixes
-3. Stripe Billing Verification
-4. Documentation & Tutorials
-5. New Integrations
+1. **DataOne Direct Integration (3-4 days)** - Move from external API to local PostgreSQL
+2. Database Migration (9 weeks)
+3. Chrome Extension Fixes
+4. Stripe Billing Verification
+5. Documentation & Tutorials
+6. New Integrations
+
+---
+
+## DataOne Direct Integration Plan
+
+### Overview
+Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integration.
+
+### Current State
+- External API at `3.144.191.161:3000`
+- Weekly SFTP updates (full files, not deltas)
+- App calls API for VIN decoding and maintenance schedules
+- MongoDB caches API responses
+
+### Target State
+- DataOne data loaded directly into PostgreSQL
+- Local queries (~5ms) instead of API calls (~100-500ms)
+- Weekly SFTP sync with atomic table swap (zero downtime)
+- No external API dependency
+
+### Key Tables
+| Table | Purpose |
+|-------|---------|
+| `VIN_REFERENCE` | VIN decoding (Year/Make/Model/Engine) |
+| `LKP_VIN_MAINTENANCE` | Links VIN patterns to maintenance items |
+| `LKP_VIN_MAINTENANCE_INTERVAL` | Interval schedules per VIN |
+| `DEF_MAINTENANCE` | Maintenance item definitions |
+| `DEF_MAINTENANCE_INTERVAL` | Interval definitions (miles/months) |
+
+### Implementation Phases
+1. **Schema & Initial Load (1-2 days)** - Create PostgreSQL tables, indexes, SFTP import script
+2. **Update Strategy (1 day)** - Staging table approach with atomic swap
+3. **API Refactor (0.5 days)** - Update `lib/integrations/dataone-api.ts` to query local PostgreSQL
+4. **Scheduled Sync (0.5 days)** - Weekly cron job for SFTP check and reload
+
+### Required Secrets
+- `DATAONE_SFTP_HOST`, `DATAONE_SFTP_PORT`, `DATAONE_SFTP_USER`, `DATAONE_SFTP_PASS`
