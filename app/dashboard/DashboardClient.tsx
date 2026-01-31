@@ -1053,17 +1053,25 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           {r.displayMiles != null && r.displayMiles > 0 ? (
                             <Link
                               href={VEHICLE_HREF(vin)}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="View Recommendations"
+                              className="p-1.5 hover:bg-blue-50 rounded transition-colors"
+                              title="View Vehicle Health Intelligence"
                             >
-                              <ClipboardList className="w-4 h-4" />
+                              <img 
+                                src="/icons/vehicle-health-intelligence.svg" 
+                                alt="Vehicle Health Intelligence" 
+                                className="w-5 h-5"
+                              />
                             </Link>
                           ) : (
                             <span 
-                              className="p-1.5 text-gray-300 cursor-not-allowed"
+                              className="p-1.5 opacity-30 cursor-not-allowed"
                               title="Mileage required for recommendations"
                             >
-                              <ClipboardList className="w-4 h-4" />
+                              <img 
+                                src="/icons/vehicle-health-intelligence.svg" 
+                                alt="Vehicle Health Intelligence" 
+                                className="w-5 h-5 grayscale"
+                              />
                             </span>
                           )}
                           <button
