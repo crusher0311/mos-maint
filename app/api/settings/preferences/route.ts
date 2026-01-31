@@ -41,14 +41,6 @@ export async function GET() {
     recallsExpanded: shop?.preferences?.recallsExpanded !== false, // default true
     tekmetricLabels: shop?.preferences?.tekmetricLabels || [], // empty = show all
     jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null, // null = all enterprise shops
-    quickSpecsDisplay: shop?.preferences?.quickSpecsDisplay || {
-      fuelTank: true,
-      maxTowing: true,
-      payload: true,
-      tires: true,
-      frontBrake: false,
-      bedLength: false,
-    },
     enterpriseShops, // for UI to display options
   });
 }
@@ -66,7 +58,7 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds, quickSpecsDisplay } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds } = await req.json();
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
@@ -88,7 +80,6 @@ export async function PUT(req: NextRequest) {
   if (recallsExpanded !== undefined) updates["preferences.recallsExpanded"] = recallsExpanded;
   if (tekmetricLabels !== undefined) updates["preferences.tekmetricLabels"] = tekmetricLabels;
   if (jobHistoryShopIds !== undefined) updates["preferences.jobHistoryShopIds"] = jobHistoryShopIds;
-  if (quickSpecsDisplay !== undefined) updates["preferences.quickSpecsDisplay"] = quickSpecsDisplay;
 
   await db.collection("shops").updateOne(
     { shopId: Number(sess.shopId) },

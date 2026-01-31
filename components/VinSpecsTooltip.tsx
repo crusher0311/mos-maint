@@ -4,52 +4,29 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
 export interface QuickSpecs {
-  fuelTankCapacity?: string;
-  maxTowingCapacity?: string;
-  maxPayload?: string;
   frontTireDescription?: string;
+  rearTireDescription?: string;
   frontBrakeDiameter?: string;
-  bedLength?: string;
-}
-
-export interface QuickSpecsDisplay {
-  fuelTank?: boolean;
-  maxTowing?: boolean;
-  payload?: boolean;
-  tires?: boolean;
-  frontBrake?: boolean;
-  bedLength?: boolean;
+  rearBrakeDiameter?: string;
+  wheelbase?: string;
 }
 
 interface VinSpecsTooltipProps {
   vin: string;
   specs?: QuickSpecs;
-  displayConfig?: QuickSpecsDisplay;
   className?: string;
 }
 
-const DEFAULT_DISPLAY: QuickSpecsDisplay = {
-  fuelTank: true,
-  maxTowing: true,
-  payload: true,
-  tires: true,
-  frontBrake: false,
-  bedLength: false,
-};
-
-export function VinSpecsTooltip({ vin, specs, displayConfig, className = "" }: VinSpecsTooltipProps) {
+export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  const config = { ...DEFAULT_DISPLAY, ...displayConfig };
 
   const hasSpecs = specs && (
-    (config.fuelTank && specs.fuelTankCapacity) ||
-    (config.maxTowing && specs.maxTowingCapacity) ||
-    (config.payload && specs.maxPayload) ||
-    (config.tires && specs.frontTireDescription) ||
-    (config.frontBrake && specs.frontBrakeDiameter) ||
-    (config.bedLength && specs.bedLength)
+    specs.frontTireDescription ||
+    specs.rearTireDescription ||
+    specs.frontBrakeDiameter ||
+    specs.rearBrakeDiameter ||
+    specs.wheelbase
   );
 
   // Close tooltip when clicking outside
@@ -100,40 +77,34 @@ export function VinSpecsTooltip({ vin, specs, displayConfig, className = "" }: V
           
           {hasSpecs ? (
             <div className="space-y-2 text-sm">
-              {config.fuelTank && specs.fuelTankCapacity && (
+              {specs.frontTireDescription && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Fuel Tank:</span>
-                  <span className="font-medium">{specs.fuelTankCapacity} gal</span>
-                </div>
-              )}
-              {config.maxTowing && specs.maxTowingCapacity && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Max Towing:</span>
-                  <span className="font-medium">{Number(specs.maxTowingCapacity).toLocaleString()} lbs</span>
-                </div>
-              )}
-              {config.payload && specs.maxPayload && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Payload:</span>
-                  <span className="font-medium">{Number(specs.maxPayload).toLocaleString()} lbs</span>
-                </div>
-              )}
-              {config.tires && specs.frontTireDescription && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Tires:</span>
+                  <span className="text-gray-500">Front Tires:</span>
                   <span className="font-medium text-xs">{specs.frontTireDescription}</span>
                 </div>
               )}
-              {config.frontBrake && specs.frontBrakeDiameter && (
+              {specs.rearTireDescription && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Front Brake:</span>
+                  <span className="text-gray-500">Rear Tires:</span>
+                  <span className="font-medium text-xs">{specs.rearTireDescription}</span>
+                </div>
+              )}
+              {specs.frontBrakeDiameter && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Front Brakes:</span>
                   <span className="font-medium">{specs.frontBrakeDiameter}"</span>
                 </div>
               )}
-              {config.bedLength && specs.bedLength && (
+              {specs.rearBrakeDiameter && (
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Bed Length:</span>
-                  <span className="font-medium">{specs.bedLength}"</span>
+                  <span className="text-gray-500">Rear Brakes:</span>
+                  <span className="font-medium">{specs.rearBrakeDiameter}"</span>
+                </div>
+              )}
+              {specs.wheelbase && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Wheelbase:</span>
+                  <span className="font-medium">{specs.wheelbase}"</span>
                 </div>
               )}
             </div>

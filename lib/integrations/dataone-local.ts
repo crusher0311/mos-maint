@@ -567,8 +567,8 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
       JOIN dataone_def_specification s ON vs.specification_id = s.specification_id
       WHERE vs.vehicle_id = ANY(${vehicleIds})
         AND s.specification_name IN (
-          'Fuel Tank Capacity', 'Max Towing Capacity', 'Max Payload', 
-          'Front Tire Description', 'Front Brake Rotor Diameter', 'Bed Length'
+          'Front Tire Description', 'Rear Tire Description',
+          'Front Brake Rotor Diameter', 'Rear Brake Rotor Diameter', 'Wheelbase'
         )
     `;
     
@@ -579,12 +579,11 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
       }
       const qs = vehicleSpecs.get(row.vehicle_id)!;
       switch (row.specification_name) {
-        case 'Fuel Tank Capacity': qs.fuelTankCapacity = row.specification_value; break;
-        case 'Max Towing Capacity': qs.maxTowingCapacity = row.specification_value; break;
-        case 'Max Payload': qs.maxPayload = row.specification_value; break;
         case 'Front Tire Description': qs.frontTireDescription = row.specification_value; break;
+        case 'Rear Tire Description': qs.rearTireDescription = row.specification_value; break;
         case 'Front Brake Rotor Diameter': qs.frontBrakeDiameter = row.specification_value; break;
-        case 'Bed Length': qs.bedLength = row.specification_value; break;
+        case 'Rear Brake Rotor Diameter': qs.rearBrakeDiameter = row.specification_value; break;
+        case 'Wheelbase': qs.wheelbase = row.specification_value; break;
       }
     }
     

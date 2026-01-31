@@ -5,7 +5,7 @@ import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
-import { VinSpecsTooltip, QuickSpecsDisplay } from "@/components/VinSpecsTooltip";
+import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch } from "@/lib/plan-prefetch";
 
@@ -24,12 +24,11 @@ type PaginationInfo = {
 type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
 
 type QuickSpecs = {
-  fuelTankCapacity?: string;
-  maxTowingCapacity?: string;
-  maxPayload?: string;
   frontTireDescription?: string;
+  rearTireDescription?: string;
   frontBrakeDiameter?: string;
-  bedLength?: string;
+  rearBrakeDiameter?: string;
+  wheelbase?: string;
 };
 
 type DashboardData = {
@@ -41,7 +40,6 @@ type DashboardData = {
   distanceUnit?: "miles" | "kilometers";
   enabledFeatures?: FeatureId[];
   quickSpecs?: Record<string, QuickSpecs>;
-  quickSpecsDisplay?: QuickSpecsDisplay;
 };
 
 const PAGE_SIZE = 100;
@@ -1013,7 +1011,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
-                        <VinSpecsTooltip vin={vin} specs={data.quickSpecs?.[vin]} displayConfig={data.quickSpecsDisplay} />
+                        <VinSpecsTooltip vin={vin} specs={data.quickSpecs?.[vin]} />
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.displayRo ? (
