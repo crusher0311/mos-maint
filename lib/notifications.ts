@@ -1,28 +1,34 @@
-import { getDb } from "@/lib/mongo";
-import { ObjectId } from "mongodb";
+import sql from "@/lib/db/postgres";
 
 export interface Notification {
-  _id?: ObjectId;
+  id?: number;
   userId: string;
   shopId?: number;
   type: "ticket_created" | "ticket_updated" | "ticket_message" | "ticket_resolved" | "system";
   title: string;
   message: string;
   link?: string;
-  read: boolean;
+  isRead: boolean;
   createdAt: Date;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
-export async function createNotification(notification: Omit<Notification, "_id" | "read" | "createdAt">): Promise<ObjectId | null> {
+export async function createNotification(notification: Omit<Notification, "id" | "isRead" | "createdAt">): Promise<number | null> {
   try {
-    const db = await getDb();
-    const result = await db.collection("notifications").insertOne({
-      ...notification,
-      read: false,
-      createdAt: new Date(),
-    });
-    return result.insertedId;
+    const result = await sql`
+      INSERT INTO notifications (user_id, shop_id, type, title, message, link, metadata)
+      VALUES (
+        ${notification.userId}::uuid, 
+        ${notification.shopId ? String(notification.shopId) : null}, 
+        ${notification.type}, 
+        ${notification.title}, 
+        ${notification.message || null}, 
+        ${notification.link || null}, 
+        ${JSON.stringify(notification.metadata || {})}
+      )
+      RETURNING id
+    `;
+    return result[0]?.id || null;
   } catch (error) {
     console.error("Error creating notification:", error);
     return null;
@@ -31,21 +37,25 @@ export async function createNotification(notification: Omit<Notification, "_id" 
 
 export async function createNotificationsForUsers(
   userIds: string[],
-  notification: Omit<Notification, "_id" | "userId" | "read" | "createdAt">
+  notification: Omit<Notification, "id" | "userId" | "isRead" | "createdAt">
 ): Promise<number> {
   try {
-    const db = await getDb();
-    const docs = userIds.map(userId => ({
-      ...notification,
-      userId,
-      read: false,
-      createdAt: new Date(),
+    if (userIds.length === 0) return 0;
+    
+    const values = userIds.map(userId => ({
+      user_id: userId,
+      shop_id: notification.shopId ? String(notification.shopId) : null,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message || null,
+      link: notification.link || null,
+      metadata: JSON.stringify(notification.metadata || {}),
     }));
     
-    if (docs.length === 0) return 0;
-    
-    const result = await db.collection("notifications").insertMany(docs);
-    return result.insertedCount;
+    const result = await sql`
+      INSERT INTO notifications ${sql(values)}
+    `;
+    return result.count;
   } catch (error) {
     console.error("Error creating notifications:", error);
     return 0;
@@ -58,17 +68,27 @@ export async function getUserNotifications(
   unreadOnly: boolean = false
 ): Promise<Notification[]> {
   try {
-    const db = await getDb();
-    const query: any = { userId };
+    let query;
     if (unreadOnly) {
-      query.read = false;
+      query = sql`
+        SELECT id, user_id as "userId", shop_id as "shopId", type, title, message, 
+               link, is_read as "isRead", metadata, created_at as "createdAt"
+        FROM notifications 
+        WHERE user_id = ${userId}::uuid AND is_read = FALSE
+        ORDER BY created_at DESC LIMIT ${limit}
+      `;
+    } else {
+      query = sql`
+        SELECT id, user_id as "userId", shop_id as "shopId", type, title, message, 
+               link, is_read as "isRead", metadata, created_at as "createdAt"
+        FROM notifications 
+        WHERE user_id = ${userId}::uuid
+        ORDER BY created_at DESC LIMIT ${limit}
+      `;
     }
     
-    return await db.collection("notifications")
-      .find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray() as Notification[];
+    const results = await query;
+    return results as unknown as Notification[];
   } catch (error) {
     console.error("Error fetching notifications:", error);
     return [];
@@ -77,11 +97,11 @@ export async function getUserNotifications(
 
 export async function getUnreadCount(userId: string): Promise<number> {
   try {
-    const db = await getDb();
-    return await db.collection("notifications").countDocuments({
-      userId,
-      read: false,
-    });
+    const result = await sql`
+      SELECT COUNT(*) as count FROM notifications 
+      WHERE user_id = ${userId}::uuid AND is_read = FALSE
+    `;
+    return Number(result[0]?.count || 0);
   } catch (error) {
     console.error("Error counting notifications:", error);
     return 0;
@@ -90,12 +110,11 @@ export async function getUnreadCount(userId: string): Promise<number> {
 
 export async function markAsRead(notificationId: string, userId: string): Promise<boolean> {
   try {
-    const db = await getDb();
-    const result = await db.collection("notifications").updateOne(
-      { _id: new ObjectId(notificationId), userId },
-      { $set: { read: true } }
-    );
-    return result.modifiedCount > 0;
+    const result = await sql`
+      UPDATE notifications SET is_read = TRUE 
+      WHERE id = ${Number(notificationId)} AND user_id = ${userId}::uuid
+    `;
+    return result.count > 0;
   } catch (error) {
     console.error("Error marking notification as read:", error);
     return false;
@@ -104,12 +123,11 @@ export async function markAsRead(notificationId: string, userId: string): Promis
 
 export async function markAllAsRead(userId: string): Promise<number> {
   try {
-    const db = await getDb();
-    const result = await db.collection("notifications").updateMany(
-      { userId, read: false },
-      { $set: { read: true } }
-    );
-    return result.modifiedCount;
+    const result = await sql`
+      UPDATE notifications SET is_read = TRUE 
+      WHERE user_id = ${userId}::uuid AND is_read = FALSE
+    `;
+    return result.count;
   } catch (error) {
     console.error("Error marking all notifications as read:", error);
     return 0;
@@ -118,12 +136,11 @@ export async function markAllAsRead(userId: string): Promise<number> {
 
 export async function deleteNotification(notificationId: string, userId: string): Promise<boolean> {
   try {
-    const db = await getDb();
-    const result = await db.collection("notifications").deleteOne({
-      _id: new ObjectId(notificationId),
-      userId,
-    });
-    return result.deletedCount > 0;
+    const result = await sql`
+      DELETE FROM notifications 
+      WHERE id = ${Number(notificationId)} AND user_id = ${userId}::uuid
+    `;
+    return result.count > 0;
   } catch (error) {
     console.error("Error deleting notification:", error);
     return false;
@@ -132,12 +149,15 @@ export async function deleteNotification(notificationId: string, userId: string)
 
 export async function getPlatformAdminNotifications(limit: number = 20): Promise<Notification[]> {
   try {
-    const db = await getDb();
-    return await db.collection("notifications")
-      .find({ userId: { $regex: /^admin:/ } })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray() as Notification[];
+    const results = await sql`
+      SELECT n.id, n.user_id as "userId", n.shop_id as "shopId", n.type, n.title, 
+             n.message, n.link, n.is_read as "isRead", n.metadata, n.created_at as "createdAt"
+      FROM notifications n
+      JOIN users u ON n.user_id = u.id
+      WHERE u.is_super_admin = TRUE
+      ORDER BY n.created_at DESC LIMIT ${limit}
+    `;
+    return results as unknown as Notification[];
   } catch (error) {
     console.error("Error fetching admin notifications:", error);
     return [];
@@ -146,11 +166,12 @@ export async function getPlatformAdminNotifications(limit: number = 20): Promise
 
 export async function getAdminUnreadCount(): Promise<number> {
   try {
-    const db = await getDb();
-    return await db.collection("notifications").countDocuments({
-      userId: { $regex: /^admin:/ },
-      read: false,
-    });
+    const result = await sql`
+      SELECT COUNT(*) as count FROM notifications n
+      JOIN users u ON n.user_id = u.id
+      WHERE u.is_super_admin = TRUE AND n.is_read = FALSE
+    `;
+    return Number(result[0]?.count || 0);
   } catch (error) {
     console.error("Error counting admin notifications:", error);
     return 0;
@@ -159,15 +180,11 @@ export async function getAdminUnreadCount(): Promise<number> {
 
 export async function clearTicketNotifications(ticketId: string): Promise<number> {
   try {
-    const db = await getDb();
-    const result = await db.collection("notifications").updateMany(
-      { 
-        "metadata.ticketId": ticketId,
-        read: false
-      },
-      { $set: { read: true } }
-    );
-    return result.modifiedCount;
+    const result = await sql`
+      UPDATE notifications SET is_read = TRUE 
+      WHERE metadata->>'ticketId' = ${ticketId} AND is_read = FALSE
+    `;
+    return result.count;
   } catch (error) {
     console.error("Error clearing ticket notifications:", error);
     return 0;

@@ -1,5 +1,4 @@
-import { getDb } from "./mongo";
-import { ObjectId } from "mongodb";
+import sql from "@/lib/db/postgres";
 import { searchArticles, KnowledgeArticle } from "./knowledge-base";
 import OpenAI from "openai";
 
@@ -13,7 +12,7 @@ export interface ChatMessage {
 }
 
 export interface ChatSession {
-  _id?: ObjectId;
+  id?: number;
   sessionId: string;
   userEmail: string;
   shopId: number;
@@ -22,52 +21,105 @@ export interface ChatSession {
   updatedAt: Date;
   resolved: boolean;
   escalatedToTicket?: string;
+  status?: string;
+  ticketId?: string;
+  satisfactionRating?: number;
 }
 
 export async function getOrCreateSession(userEmail: string, shopId: number): Promise<ChatSession> {
-  const db = await getDb();
   const sessionId = `${userEmail}-${shopId}-${Date.now()}`;
   
-  const existingSession = await db.collection<ChatSession>("support_chat_sessions")
-    .findOne({ 
-      userEmail, 
-      shopId, 
-      resolved: false,
-      updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-    });
+  const existingSessions = await sql`
+    SELECT id, user_email as "userEmail", shop_id as "shopId", messages, 
+           status, ticket_id as "ticketId", satisfaction_rating as "satisfactionRating",
+           created_at as "createdAt", updated_at as "updatedAt"
+    FROM support_chat_sessions 
+    WHERE user_email = ${userEmail} 
+      AND shop_id = ${String(shopId)} 
+      AND status = 'active'
+      AND updated_at >= NOW() - INTERVAL '24 hours'
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `;
   
-  if (existingSession) {
-    return existingSession;
+  if (existingSessions.length > 0) {
+    const session = existingSessions[0];
+    return {
+      id: session.id as number,
+      sessionId: `${session.userEmail}-${session.shopId}-${new Date(session.createdAt as Date).getTime()}`,
+      userEmail: session.userEmail as string,
+      shopId: Number(session.shopId),
+      messages: (session.messages as ChatMessage[]) || [],
+      createdAt: session.createdAt as Date,
+      updatedAt: session.updatedAt as Date,
+      resolved: session.status === 'resolved',
+      escalatedToTicket: session.ticketId as string | undefined,
+    };
   }
   
-  const newSession: ChatSession = {
+  const result = await sql`
+    INSERT INTO support_chat_sessions (user_email, shop_id, status, messages)
+    VALUES (${userEmail}, ${String(shopId)}, 'active', '[]'::jsonb)
+    RETURNING id, created_at, updated_at
+  `;
+  
+  return {
+    id: result[0].id as number,
     sessionId,
     userEmail,
     shopId,
     messages: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: result[0].created_at as Date,
+    updatedAt: result[0].updated_at as Date,
     resolved: false
   };
-  
-  const result = await db.collection("support_chat_sessions").insertOne(newSession);
-  return { ...newSession, _id: result.insertedId };
 }
 
 export async function getSessionById(sessionId: string): Promise<ChatSession | null> {
-  const db = await getDb();
-  return db.collection<ChatSession>("support_chat_sessions").findOne({ sessionId });
+  const parts = sessionId.split('-');
+  if (parts.length < 3) return null;
+  
+  const userEmail = parts.slice(0, -2).join('-');
+  const shopId = parts[parts.length - 2];
+  const timestamp = Number(parts[parts.length - 1]);
+  
+  const results = await sql`
+    SELECT id, user_email as "userEmail", shop_id as "shopId", messages, 
+           status, ticket_id as "ticketId", satisfaction_rating as "satisfactionRating",
+           created_at as "createdAt", updated_at as "updatedAt"
+    FROM support_chat_sessions 
+    WHERE user_email = ${userEmail} AND shop_id = ${shopId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  
+  if (results.length === 0) return null;
+  
+  const session = results[0];
+  return {
+    id: session.id as number,
+    sessionId,
+    userEmail: session.userEmail as string,
+    shopId: Number(session.shopId),
+    messages: (session.messages as ChatMessage[]) || [],
+    createdAt: session.createdAt as Date,
+    updatedAt: session.updatedAt as Date,
+    resolved: session.status === 'resolved',
+    escalatedToTicket: session.ticketId as string | undefined,
+  };
 }
 
 export async function addMessageToSession(sessionId: string, message: ChatMessage): Promise<void> {
-  const db = await getDb();
-  await db.collection("support_chat_sessions").updateOne(
-    { sessionId },
-    { 
-      $push: { messages: message as any },
-      $set: { updatedAt: new Date() }
-    }
-  );
+  const session = await getSessionById(sessionId);
+  if (!session || !session.id) return;
+  
+  const updatedMessages = [...session.messages, message];
+  
+  await sql`
+    UPDATE support_chat_sessions 
+    SET messages = ${JSON.stringify(updatedMessages)}::jsonb, updated_at = NOW()
+    WHERE id = ${session.id}
+  `;
 }
 
 export async function generateAIResponse(
@@ -126,7 +178,7 @@ If the user wants to escalate to human support, let them know they can create a 
     
     return {
       response,
-      articleIds: relevantArticles.map(a => a._id!.toString())
+      articleIds: relevantArticles.map(a => String(a.id))
     };
   } catch (error) {
     console.error("AI chat error:", error);
@@ -138,26 +190,47 @@ If the user wants to escalate to human support, let them know they can create a 
 }
 
 export async function markSessionResolved(sessionId: string): Promise<void> {
-  const db = await getDb();
-  await db.collection("support_chat_sessions").updateOne(
-    { sessionId },
-    { $set: { resolved: true, updatedAt: new Date() } }
-  );
+  const session = await getSessionById(sessionId);
+  if (!session || !session.id) return;
+  
+  await sql`
+    UPDATE support_chat_sessions 
+    SET status = 'resolved', resolved_at = NOW(), updated_at = NOW()
+    WHERE id = ${session.id}
+  `;
 }
 
 export async function linkSessionToTicket(sessionId: string, ticketId: string): Promise<void> {
-  const db = await getDb();
-  await db.collection("support_chat_sessions").updateOne(
-    { sessionId },
-    { $set: { escalatedToTicket: ticketId, updatedAt: new Date() } }
-  );
+  const session = await getSessionById(sessionId);
+  if (!session || !session.id) return;
+  
+  await sql`
+    UPDATE support_chat_sessions 
+    SET ticket_id = ${ticketId}, escalated_at = NOW(), updated_at = NOW()
+    WHERE id = ${session.id}
+  `;
 }
 
 export async function getUserSessions(userEmail: string, limit: number = 10): Promise<ChatSession[]> {
-  const db = await getDb();
-  return db.collection<ChatSession>("support_chat_sessions")
-    .find({ userEmail })
-    .sort({ updatedAt: -1 })
-    .limit(limit)
-    .toArray();
+  const results = await sql`
+    SELECT id, user_email as "userEmail", shop_id as "shopId", messages, 
+           status, ticket_id as "ticketId", satisfaction_rating as "satisfactionRating",
+           created_at as "createdAt", updated_at as "updatedAt"
+    FROM support_chat_sessions 
+    WHERE user_email = ${userEmail}
+    ORDER BY updated_at DESC
+    LIMIT ${limit}
+  `;
+  
+  return results.map((session: Record<string, unknown>) => ({
+    id: session.id as number,
+    sessionId: `${session.userEmail}-${session.shopId}-${new Date(session.createdAt as Date).getTime()}`,
+    userEmail: session.userEmail as string,
+    shopId: Number(session.shopId),
+    messages: (session.messages as ChatMessage[]) || [],
+    createdAt: session.createdAt as Date,
+    updatedAt: session.updatedAt as Date,
+    resolved: session.status === 'resolved',
+    escalatedToTicket: session.ticketId as string | undefined,
+  }));
 }
