@@ -466,6 +466,98 @@ Each script handles platform-specific field mappings:
 - `raw_*` tables preserved permanently as audit trail
 - Documented rollback procedure
 
+### Architectural Fixes (During Migration)
+
+These issues get fixed as part of the migration, not as separate work:
+
+| Issue | Fix Phase | Solution |
+|-------|-----------|----------|
+| Customer duplicates | Phase 3 | PostgreSQL unique constraints + `ON CONFLICT` upserts |
+| Missing indexes | Phase 3 | Created with normalized tables |
+| Backfill race conditions | Phase 4 | PostgreSQL advisory locks |
+| N+1 queries | Phase 4 | Batch reads in transform scripts |
+| Silent API tracking loss | Phase 5 | Direct PostgreSQL writes (no buffer) |
+| Rate limit handling | Phase 5 | Explicit error types in app layer |
+| MongoDB connection issues | Phase 7 | PostgreSQL connection pooling |
+
+---
+
+## 9. Backfill Improvement Plan
+
+**Priority:** High  
+**Status:** Planning
+
+### Overview
+Improve the backfill system for faster new shop onboarding, real-time webhook updates, and smarter prefetch prioritization.
+
+### Current Problems
+- **Backward processing**: New shops wait days before recent data is indexed
+- **No webhook sync**: Real-time updates from SMS not captured immediately
+- **First-visit cold start**: User sees 10-20s loading spinner
+- **500-mile threshold**: Mileage updates trigger full plan rebuild
+- **Single-threaded**: One shop at a time, no parallelism
+
+### Improvements
+
+#### 1. Hot Start for New Shops
+Process the **last 30 days first**, then backfill history.
+
+```
+NEW SHOP ONBOARDING:
+Day 0: Sync last 30 days (immediate dashboard utility)
+Day 1-3: Backfill 30-90 days
+Day 3+: Continue historical backfill in background
+```
+
+#### 2. Webhook-Driven Real-Time Sync
+When SMS sends webhook, immediately update:
+- Customer record
+- Vehicle mileage
+- Active RO status
+- Queue prefetch for that VIN
+
+```
+Webhook → Update normalized tables → Queue prefetch → Dashboard shows instantly
+```
+
+#### 3. Smarter Prefetch Queue
+Prioritize by likelihood of being viewed:
+1. **In-progress ROs** (highest priority)
+2. **Recently updated vehicles** (webhook-triggered)
+3. **Vehicles viewed in last 24 hours**
+4. **Scheduled appointments for today/tomorrow**
+
+#### 4. Incremental Plan Updates
+Instead of rebuilding the entire plan when mileage changes:
+- Update only `milesToGo` and `daysToGo` fields (fast: ~50ms)
+- Only fetch new OEM data if crossing a service interval threshold
+- Schedule full refresh async if needed
+
+#### 5. Parallel Shop Processing
+- Run up to 3 shops in parallel (respecting global rate limits)
+- Use PostgreSQL advisory locks for coordination
+- Separate worker pools per platform
+
+### Implementation by Phase
+
+| Phase | Improvement | How |
+|-------|-------------|-----|
+| Phase 3 | Hot Start | Add `hotStartCompleted` flag to shops table |
+| Phase 4 | Parallel Processing | PostgreSQL advisory locks + worker pools |
+| Phase 5 | Webhook Real-Time Sync | Update normalized tables directly on webhook |
+| Phase 5 | Incremental Plan Updates | Separate `plan_summary` (fast) from `plan_details` (slow) |
+| Phase 6 | Smarter Prefetch | Query PostgreSQL for active ROs + appointments |
+
+### Expected Results
+
+| Metric | Before | After |
+|--------|--------|-------|
+| New shop first data | Days | Minutes |
+| First-visit load | 10-20s | <2s (cached) |
+| Mileage update impact | Full rebuild | Incremental (~50ms) |
+| Webhook → Dashboard | N/A | <5 seconds |
+| Backfill completion | Days | Hours (parallel) |
+
 ---
 
 ## Notes
