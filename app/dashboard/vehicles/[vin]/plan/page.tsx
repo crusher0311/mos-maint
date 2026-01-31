@@ -1570,17 +1570,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
           {/* Top navigation menu */}
           <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
             <Link href="/dashboard" className="hover:underline">← Back</Link>
-            <Link href={`/dashboard/vehicles/${vin}?tab=oe`} className="hover:opacity-80 flex items-center">
-              {getOELogoUrl(vehicleMake) ? (
-                <img src={getOELogoUrl(vehicleMake)!} alt={vehicleMake || "OE"} className="h-5 object-contain" />
-              ) : (
-                <span className="hover:underline">OE</span>
-              )}
-            </Link>
+            <Link href={`/dashboard/vehicles/${vin}?tab=oe`} className="hover:underline">OE</Link>
             <Link href={`/dashboard/vehicles/${vin}?tab=dvi`} className="hover:underline">DVI</Link>
-            <Link href={`/dashboard/vehicles/${vin}?tab=carfax`} className="hover:opacity-80">
-              <img src="/badges/carfax.png" alt="CARFAX" className="h-4" />
-            </Link>
+            <Link href={`/dashboard/vehicles/${vin}?tab=carfax`} className="hover:underline">CARFAX</Link>
           </nav>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
