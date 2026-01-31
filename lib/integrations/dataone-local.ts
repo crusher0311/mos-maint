@@ -537,7 +537,10 @@ export interface QuickSpecs {
   maxTowingCapacity?: string;
   maxPayload?: string;
   frontTireDescription?: string;
+  rearTireDescription?: string;
   frontBrakeDiameter?: string;
+  rearBrakeDiameter?: string;
+  wheelbase?: string;
   bedLength?: string;
 }
 
@@ -568,7 +571,7 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
       WHERE vs.vehicle_id = ANY(${vehicleIds})
         AND s.specification_name IN (
           'Front Tire Description', 'Rear Tire Description',
-          'Front Brake Rotor Diameter', 'Rear Brake Rotor Diameter', 'Wheelbase'
+          'Front Brake Diameter', 'Rear Brake Diameter', 'Wheelbase'
         )
     `;
     
@@ -581,8 +584,8 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
       switch (row.specification_name) {
         case 'Front Tire Description': qs.frontTireDescription = row.specification_value; break;
         case 'Rear Tire Description': qs.rearTireDescription = row.specification_value; break;
-        case 'Front Brake Rotor Diameter': qs.frontBrakeDiameter = row.specification_value; break;
-        case 'Rear Brake Rotor Diameter': qs.rearBrakeDiameter = row.specification_value; break;
+        case 'Front Brake Diameter': qs.frontBrakeDiameter = row.specification_value; break;
+        case 'Rear Brake Diameter': qs.rearBrakeDiameter = row.specification_value; break;
         case 'Wheelbase': qs.wheelbase = row.specification_value; break;
       }
     }
