@@ -1554,7 +1554,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold truncate flex items-center gap-2">
                 <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-8 h-8" />
-                {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Vehicle Health Intelligence
+                Vehicle Health Intelligence
               </h1>
               <div className="text-sm text-neutral-600">
                 {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
@@ -1609,7 +1609,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         <div className="mt-4">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-8 h-8" />
-            {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Vehicle Health Intelligence
+            Vehicle Health Intelligence
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
             VIN: {vin}
