@@ -29,6 +29,7 @@ import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
+import { isFeatureEnabled } from "@/lib/features";
 import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
@@ -856,6 +857,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   );
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
+  const hasJobLookupFeature = await isFeatureEnabled(shopId, "job_lookup");
   const showInspectItems = shop?.preferences?.showInspectItems !== false; // default true
   const showRecalls = shop?.preferences?.showRecalls !== false; // default true
   const recallsExpanded = shop?.preferences?.recallsExpanded !== false; // default true
@@ -1769,7 +1771,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
+                          showHistoryButton={hasJobLookupFeature}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
@@ -1928,7 +1930,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
+                          showHistoryButton={hasJobLookupFeature}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
@@ -2005,7 +2007,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
+                          showHistoryButton={hasJobLookupFeature}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
@@ -2136,7 +2138,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
+                          showHistoryButton={hasJobLookupFeature}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />

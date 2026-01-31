@@ -1,0 +1,210 @@
+contentscript.js:25 [contentscript] No benefits on init, will wait for fetch
+main-app.js?v=1769885777113:1825 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+plan-prefetch.ts:210 [Prefetch] Shop 16: Queuing 18 vehicles (from 19 total)
+plan-prefetch.ts:210 [Prefetch] Shop 16: Queuing 18 vehicles (from 19 total)
+hot-reloader-client.js:187 [Fast Refresh] rebuilding
+hot-reloader-client.js:187 [Fast Refresh] rebuilding
+hot-reloader-client.js:44 [Fast Refresh] done in 186ms
+hot-reloader-client.js:44 [Fast Refresh] done in 468ms
+hot-reloader-client.js:44 [Fast Refresh] done in 1325ms
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 3C6MRVJG3PE605350
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached W1KWJ8EB0MG068480
+hot-reloader-client.js:44 [Fast Refresh] done in 1711ms
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached JTEES43A092134354
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 1C4NJPBA5ED541059
+DashboardClient.tsx:800  GET https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev/api/dashboard/updates 502 (Bad Gateway)
+checkForUpdates @ DashboardClient.tsx:800
+setInterval
+eval @ DashboardClient.tsx:813
+commitHookEffectListMount @ react-dom.development.js:21102
+invokePassiveEffectMountInDEV @ react-dom.development.js:23980
+invokeEffectsInDev @ react-dom.development.js:26852
+legacyCommitDoubleInvokeEffectsInDEV @ react-dom.development.js:26835
+commitDoubleInvokeEffectsInDEV @ react-dom.development.js:26816
+flushPassiveEffectsImpl @ react-dom.development.js:26514
+flushPassiveEffects @ react-dom.development.js:26438
+eval @ react-dom.development.js:26172
+workLoop @ scheduler.development.js:256
+flushWork @ scheduler.development.js:225
+performWorkUntilDeadline @ scheduler.development.js:534
+plan-prefetch.ts:79  POST https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev/api/plan-build?vin=5FPYK1F57DB003420&mileage=147854 502 (Bad Gateway)
+processNextItem @ plan-prefetch.ts:79
+eval @ plan-prefetch.ts:51
+setTimeout
+scheduleNextProcess @ plan-prefetch.ts:49
+processNextItem @ plan-prefetch.ts:108
+eval @ plan-prefetch.ts:51
+setTimeout
+scheduleNextProcess @ plan-prefetch.ts:49
+processNextItem @ plan-prefetch.ts:108
+eval @ plan-prefetch.ts:51
+setTimeout
+scheduleNextProcess @ plan-prefetch.ts:49
+eval @ plan-prefetch.ts:104
+Promise.finally
+processNextItem @ plan-prefetch.ts:102
+eval @ plan-prefetch.ts:51
+setTimeout
+scheduleNextProcess @ plan-prefetch.ts:49
+queuePrefetch @ plan-prefetch.ts:186
+eval @ plan-prefetch.ts:215
+setTimeout
+eval @ plan-prefetch.ts:214
+queueMultiplePrefetch @ plan-prefetch.ts:212
+DashboardClient._data_user @ DashboardClient.tsx:790
+commitHookEffectListMount @ react-dom.development.js:21102
+commitHookPassiveMountEffects @ react-dom.development.js:23154
+commitPassiveMountOnFiber @ react-dom.development.js:23259
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23256
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23370
+recursivelyTraversePassiveMountEffects @ react-dom.development.js:23237
+commitPassiveMountOnFiber @ react-dom.development.js:23267
+commitPassiveMountEffects @ react-dom.development.js:23225
+flushPassiveEffectsImpl @ react-dom.development.js:26497
+flushPassiveEffects @ react-dom.development.js:26438
+eval @ react-dom.development.js:26172
+workLoop @ scheduler.development.js:256
+flushWork @ scheduler.development.js:225
+performWorkUntilDeadline @ scheduler.development.js:534
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 1GT49REY1PF179523
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 5N1AZ2MG2FN212743
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 1C4RJKDG6S8654139
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 2T3W1RFV6MW113466
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached JF2GTANC8KH238991
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached JTJHY7AX1F4186372
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached JF2GTHMC2MH270638
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 2T3P1RFV7NC301727
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached WA1FECF39L1009738
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached NM0LS7E74H1329907
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 5TDKK3DC6GS749868
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 3GCRKSE35AG148948
+plan-prefetch.ts:93 [Prefetch] Shop 16: Already cached 3C6LRVCG1PE504400
+DashboardClient.tsx:800  GET https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev/api/dashboard/updates 502 (Bad Gateway)
+checkForUpdates @ DashboardClient.tsx:800
+setInterval
+eval @ DashboardClient.tsx:813
+commitHookEffectListMount @ react-dom.development.js:21102
+invokePassiveEffectMountInDEV @ react-dom.development.js:23980
+invokeEffectsInDev @ react-dom.development.js:26852
+legacyCommitDoubleInvokeEffectsInDEV @ react-dom.development.js:26835
+commitDoubleInvokeEffectsInDEV @ react-dom.development.js:26816
+flushPassiveEffectsImpl @ react-dom.development.js:26514
+flushPassiveEffects @ react-dom.development.js:26438
+eval @ react-dom.development.js:26172
+workLoop @ scheduler.development.js:256
+flushWork @ scheduler.development.js:225
+performWorkUntilDeadline @ scheduler.development.js:534
