@@ -392,7 +392,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
           vehicle: vehicleInfo,
           fetchedAt: now,
           expiresAt,
-          source: "local",
+          source: "cache",
         },
       },
       { upsert: true }
