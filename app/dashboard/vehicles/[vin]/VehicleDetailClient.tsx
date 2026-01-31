@@ -68,11 +68,14 @@ interface RepairOrderSummary {
 
 interface DviCategory {
   name?: string;
-  video?: boolean;
+  video?: string;
+  videoNotes?: string;
   items?: Array<{
     name: string;
     status: string;
     notes?: string;
+    videos?: string[];
+    pictures?: string[];
   }>;
 }
 
@@ -591,9 +594,17 @@ export default function VehicleDetailClient({
                               </span>
                             )}
                             {cat.video && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                                Has Video
-                              </span>
+                              <a 
+                                href={cat.video} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full hover:bg-blue-200 flex items-center gap-1"
+                              >
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                                </svg>
+                                Watch Video
+                              </a>
                             )}
                           </div>
                         </div>
@@ -634,11 +645,39 @@ export default function VehicleDetailClient({
                                 )}
                               </div>
                             </div>
-                            {item.notes && (
-                              <span className="text-xs text-gray-500 max-w-xs truncate">
-                                {item.notes}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {item.notes && (
+                                <span className="text-xs text-gray-500 max-w-xs truncate">
+                                  {item.notes}
+                                </span>
+                              )}
+                              {item.videos && item.videos.length > 0 && (
+                                <a 
+                                  href={item.videos[0]} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full hover:bg-blue-200 flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                                  </svg>
+                                  Video
+                                </a>
+                              )}
+                              {item.pictures && item.pictures.length > 0 && (
+                                <a 
+                                  href={item.pictures[0]} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full hover:bg-green-200 flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-2.69l-2.22-2.219a.75.75 0 00-1.06 0l-1.91 1.909.47.47a.75.75 0 11-1.06 1.06L6.53 8.091a.75.75 0 00-1.06 0L2.5 11.06zm10-1.56a1.75 1.75 0 100-3.5 1.75 1.75 0 000 3.5z" clipRule="evenodd"/>
+                                  </svg>
+                                  Photo
+                                </a>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
