@@ -42,3 +42,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
 *   **Email Notifications**: Resend API
+
+## Important Project Files
+*   **FEATURE_BACKLOG.md**: Tracks all planned features and future work items. Always check this file for pending enhancements.
+*   **MOS-REBUILD-PLAN.md**: Long-term architecture roadmap for ground-up rebuild.
