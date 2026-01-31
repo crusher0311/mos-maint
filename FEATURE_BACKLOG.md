@@ -290,6 +290,22 @@ Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integr
 ### Estimated Duration
 3-4 days
 
+### SFTP Connection Details
+- **Host:** sftp://sftp.dataonesoftware.com
+- **Port:** 2222
+- **Update Frequency:** Complete replacement file daily by 6am EST
+- **Protocol:** SFTP only (not FTP or port 22)
+
+**DataOne IPs (whitelist for firewall):**
+- 52.41.161.7 (Primary)
+- 35.164.72.128 (Secondary)
+- 34.194.121.217 (Secondary)
+- 34.227.238.224 (Secondary)
+
+**Files Provided:**
+- CSV data files
+- SQL CREATE TABLE statements
+
 ### Key DataOne Tables (from SFTP)
 
 **VIN_REFERENCE** - Primary VIN decoding table
