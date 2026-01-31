@@ -1553,7 +1553,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold truncate flex items-center gap-2">
-                <img src="/icons/vehicle-health-intelligence.png?v=2" alt="" className="w-8 h-8" />
+                <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-8 h-8" />
                 {[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence
               </h1>
               <div className="text-sm text-neutral-600">
@@ -1608,7 +1608,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         </div>
         <div className="mt-4">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <img src="/icons/vehicle-health-intelligence.png?v=2" alt="" className="w-8 h-8" />
+            <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-8 h-8" />
             {[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
