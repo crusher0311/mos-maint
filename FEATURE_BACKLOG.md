@@ -267,7 +267,7 @@ Cross-reference deferred work against CARFAX service history to detect if declin
 ## 8. DataOne Direct Integration
 
 **Priority:** High  
-**Status:** Planning
+**Status:** ✅ Complete
 
 ### Overview
 Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integration.
