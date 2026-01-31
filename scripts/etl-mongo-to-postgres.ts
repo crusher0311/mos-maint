@@ -58,7 +58,7 @@ async function migrateShops(db: any) {
           ${shopId},
           ${shop.name || ""},
           ${shop.slug || shopId},
-          ${shop.ownerId || null},
+          ${null},
           ${JSON.stringify(shop.settings || {})}::jsonb,
           ${JSON.stringify({
             plan: shop.billingPlan || "trial",
@@ -71,7 +71,7 @@ async function migrateShops(db: any) {
             gracePeriodEndsAt: shop.gracePeriodEndsAt,
           })}::jsonb,
           ${shop.isActive !== false},
-          ${shop.enterpriseId || null},
+          ${null},
           ${JSON.stringify(shop.tekmetricConfig || shop.tekmetric || null)}::jsonb,
           ${JSON.stringify(shop.protractorConfig || shop.protractor || null)}::jsonb,
           ${JSON.stringify(shop.autoflowConfig || shop.autoflow || null)}::jsonb,
