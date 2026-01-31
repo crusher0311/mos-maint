@@ -4,6 +4,7 @@
 
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { getMaintenanceScheduleLocal, decodeVinLocal } from "@/lib/integrations/dataone-local";
 
 const DATAONE_API_BASE = process.env.DATAONE_API_URL || "http://3.144.191.161:3000";
 const CACHE_TTL_HOURS = 24 * 7; // Cache for 7 days (OEM data rarely changes)
@@ -356,13 +357,13 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       console.log(`[DataOne Cache] HIT but missing vehicle info for squish ${squish}, re-fetching...`);
     }
     
-    // Cache miss or expired - fetch from API
-    console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from API...`);
+    // Cache miss or expired - fetch from LOCAL PostgreSQL database (fast!)
+    console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from local PostgreSQL...`);
     
-    // Fetch both maintenance schedule and vehicle decode in parallel
-    const [apiResult, decoded] = await Promise.all([
-      getMaintenanceSchedule(vin),
-      decodeVin(vin)
+    // Fetch both maintenance schedule and vehicle decode from local database in parallel
+    const [localResult, decoded] = await Promise.all([
+      getMaintenanceScheduleLocal(vin),
+      decodeVinLocal(vin)
     ]);
     
     // Extract vehicle info from decode
@@ -373,7 +374,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       engine: decoded.decoded.engine_name,
     } : undefined;
     
-    // Store in cache (even if API failed, to avoid hammering)
+    // Store in cache (even if local query returned no data)
     const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
     
     await cacheCollection.updateOne(
@@ -383,39 +384,39 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
           squish,
           vin,
           data: {
-            ok: apiResult.ok,
-            count: apiResult.count,
-            items: apiResult.items,
-            error: apiResult.error,
+            ok: localResult.ok,
+            count: localResult.count,
+            items: localResult.items,
+            error: localResult.error,
           },
           vehicle: vehicleInfo,
           fetchedAt: now,
           expiresAt,
-          source: "api",
+          source: "local",
         },
       },
       { upsert: true }
     );
     
-    console.log(`[DataOne Cache] Stored ${apiResult.count} items for squish ${squish}, expires ${expiresAt.toISOString()}`);
+    console.log(`[DataOne Cache] Stored ${localResult.count} items for squish ${squish} from local DB, expires ${expiresAt.toISOString()}`);
     
     return {
-      ok: apiResult.ok,
+      ok: localResult.ok,
       vin,
       squish,
-      count: apiResult.count,
-      items: apiResult.items,
+      count: localResult.count,
+      items: localResult.items,
       vehicle: vehicleInfo,
-      error: apiResult.error,
-      source: "api",
+      error: localResult.error,
+      source: "cache",
     };
   } catch (error) {
     console.error("[DataOne Cache] Error:", error);
-    // Fallback to direct API call if cache layer fails
-    const apiResult = await getMaintenanceSchedule(vin);
+    // Fallback to direct local database call if cache layer fails
+    const localResult = await getMaintenanceScheduleLocal(vin);
     return {
-      ...apiResult,
-      source: "api",
+      ...localResult,
+      source: "local" as "api" | "cache",
     };
   }
 }
