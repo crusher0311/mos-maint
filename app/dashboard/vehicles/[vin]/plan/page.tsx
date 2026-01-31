@@ -1553,8 +1553,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold truncate flex items-center gap-2">
-                <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-8 h-8" />
-                {vehicle ? [vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle"} Health Intelligence
+                <img src="/icons/vehicle-health-intelligence.png?v=2" alt="" className="w-8 h-8" />
+                {[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence
               </h1>
               <div className="text-sm text-neutral-600">
                 {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
@@ -1600,7 +1600,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
           {shopLogo ? (
             <img src={shopLogo} alt="Shop Logo" className="h-12" />
           ) : (
-            <div className="text-lg font-bold text-neutral-800">{vehicle ? [vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle"} Health Intelligence Report</div>
+            <div className="text-lg font-bold text-neutral-800">{[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence Report</div>
           )}
           <div className="text-right text-sm text-neutral-600">
             <div>Report Date: {new Date().toLocaleDateString()}</div>
@@ -1608,8 +1608,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
         </div>
         <div className="mt-4">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-8 h-8" />
-            {vehicle ? [vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle"} Health Intelligence
+            <img src="/icons/vehicle-health-intelligence.png?v=2" alt="" className="w-8 h-8" />
+            {[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
             VIN: {vin}
