@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
-import { sendEmail, makeWelcomeEmail } from "@/lib/email";
+import { sendEmail, makeWelcomeEmail, makePaymentFailedEmail, makePaymentRecoveredEmail } from "@/lib/email";
 import { createHovercodeQR } from "@/lib/hovercode";
 import Stripe from "stripe";
 import crypto from "node:crypto";
@@ -287,15 +287,57 @@ export async function POST(req: NextRequest) {
           const periodEnd = (subscription as any).current_period_end;
           
           if (shopId) {
+            const shop = await db.collection("shops").findOne({ shopId });
+            const wasInGracePeriod = shop?.billing?.status === "past_due" || shop?.billing?.status === "suspended";
+            
+            const updateData: Record<string, any> = {
+              "billing.status": "active",
+              "billing.lastPaymentAt": new Date(),
+              "billing.nextBillingDate": periodEnd ? new Date(periodEnd * 1000) : null,
+              "billing.gracePeriodStartedAt": null,
+              "billing.gracePeriodEndsAt": null,
+              "billing.gracePeriodExtendedBy": null,
+              "billing.gracePeriodExtendedAt": null,
+            };
+            
+            if (wasInGracePeriod && shop?.billing?.status === "suspended") {
+              const plan = shop?.billing?.plan || "starter";
+              const planFeatures: Record<string, boolean> = {
+                maintenance: true,
+                job_lookup: plan !== "starter" && plan !== "trial",
+                common_failures: plan !== "starter" && plan !== "trial",
+                oil_sticker: plan !== "trial",
+                keytags: plan === "elite" || plan === "enterprise",
+                auto_booking: plan === "elite" || plan === "enterprise",
+                part_xref: plan === "elite" || plan === "enterprise",
+              };
+              
+              updateData["enabledFeatures.maintenance"] = planFeatures.maintenance;
+              updateData["enabledFeatures.job_lookup"] = planFeatures.job_lookup;
+              updateData["enabledFeatures.common_failures"] = planFeatures.common_failures;
+              updateData["enabledFeatures.oil_sticker"] = planFeatures.oil_sticker;
+              updateData["enabledFeatures.keytags"] = planFeatures.keytags;
+              updateData["enabledFeatures.auto_booking"] = planFeatures.auto_booking;
+              updateData["enabledFeatures.part_xref"] = planFeatures.part_xref;
+              
+              console.log(`[Stripe] Shop ${shopId} payment recovered from suspended - re-enabling features for ${plan} plan`);
+              
+              const owner = await db.collection("users").findOne({ shopId, role: "owner" });
+              if (owner?.email && shop) {
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+                const loginUrl = `${baseUrl}/dashboard`;
+                const emailContent = makePaymentRecoveredEmail(shop.name || `Shop ${shopId}`, loginUrl);
+                sendEmail({ to: owner.email, ...emailContent }).catch(err => {
+                  console.error(`[Stripe] Failed to send payment recovered email to ${owner.email}:`, err);
+                });
+              }
+            } else if (wasInGracePeriod) {
+              console.log(`[Stripe] Shop ${shopId} payment recovered from past_due - clearing grace period`);
+            }
+            
             await db.collection("shops").updateOne(
               { shopId },
-              {
-                $set: {
-                  "billing.status": "active",
-                  "billing.lastPaymentAt": new Date(),
-                  "billing.nextBillingDate": periodEnd ? new Date(periodEnd * 1000) : null,
-                },
-              }
+              { $set: updateData }
             );
           }
         }
@@ -311,16 +353,38 @@ export async function POST(req: NextRequest) {
           const shopId = Number(subscription.metadata?.shopId);
           
           if (shopId) {
+            const shop = await db.collection("shops").findOne({ shopId });
+            const now = new Date();
+            const gracePeriodDays = 7;
+            const gracePeriodEndsAt = new Date(now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000);
+            
+            const updateData: Record<string, any> = {
+              "billing.status": "past_due",
+              "billing.updatedAt": now,
+            };
+            
+            if (!shop?.billing?.gracePeriodStartedAt) {
+              updateData["billing.gracePeriodStartedAt"] = now;
+              updateData["billing.gracePeriodEndsAt"] = gracePeriodEndsAt;
+              console.log(`[Stripe] Shop ${shopId} payment failed - starting 7-day grace period (ends ${gracePeriodEndsAt.toISOString()})`);
+              
+              const owner = await db.collection("users").findOne({ shopId, role: "owner" });
+              if (owner?.email && shop) {
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+                const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
+                const emailContent = makePaymentFailedEmail(shop.name || `Shop ${shopId}`, updatePaymentUrl, gracePeriodEndsAt);
+                sendEmail({ to: owner.email, ...emailContent }).catch(err => {
+                  console.error(`[Stripe] Failed to send payment failed email to ${owner.email}:`, err);
+                });
+              }
+            } else {
+              console.log(`[Stripe] Shop ${shopId} payment failed again - grace period already active`);
+            }
+            
             await db.collection("shops").updateOne(
               { shopId },
-              {
-                $set: {
-                  "billing.status": "past_due",
-                  "billing.updatedAt": new Date(),
-                },
-              }
+              { $set: updateData }
             );
-            console.log(`[Stripe] Shop ${shopId} payment failed`);
           }
         }
         break;

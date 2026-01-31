@@ -411,3 +411,148 @@ export async function sendAnnouncementEmails(
   return sent;
 }
 
+export function makePaymentFailedEmail(shopName: string, updatePaymentUrl: string, gracePeriodEndsAt: Date) {
+  const daysRemaining = Math.ceil((gracePeriodEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  const endDateStr = gracePeriodEndsAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  
+  const subject = `[Action Required] Payment failed for ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin-bottom:20px">
+        <h1 style="color:#92400e;font-size:20px;margin:0">Payment Failed</h1>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        We were unable to process the payment for <b>${shopName}</b>.
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Your account will continue to work normally for <b>${daysRemaining} more days</b> (until ${endDateStr}). 
+        Please update your payment method to avoid any interruption in service.
+      </p>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${updatePaymentUrl}" style="background:#f59e0b;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Method</a>
+      </div>
+      
+      <p style="color:#4b5563;font-size:14px">
+        If you believe this is an error or need assistance, please contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+      </p>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Payment Failed for ${shopName}\n\nWe couldn't process your payment. Your account will work for ${daysRemaining} more days (until ${endDateStr}).\n\nUpdate payment: ${updatePaymentUrl}\n\nContact support@mos.tools if you need help.`;
+  return { subject, html, text };
+}
+
+export function makeGraceReminderEmail(shopName: string, updatePaymentUrl: string, daysRemaining: number) {
+  const subject = `[Reminder] ${daysRemaining} days left to update payment - ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin-bottom:20px">
+        <h1 style="color:#92400e;font-size:20px;margin:0">Payment Reminder</h1>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        This is a reminder that payment for <b>${shopName}</b> is still pending.
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        You have <b>${daysRemaining} days remaining</b> to update your payment method before your account features are temporarily disabled.
+      </p>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${updatePaymentUrl}" style="background:#f59e0b;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Method</a>
+      </div>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Payment Reminder for ${shopName}\n\n${daysRemaining} days left to update your payment method.\n\nUpdate payment: ${updatePaymentUrl}`;
+  return { subject, html, text };
+}
+
+export function makeAccountSuspendedEmail(shopName: string, updatePaymentUrl: string) {
+  const subject = `[URGENT] Account suspended - ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:16px;border-radius:4px;margin-bottom:20px">
+        <h1 style="color:#991b1b;font-size:20px;margin:0">Account Suspended</h1>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        The account for <b>${shopName}</b> has been temporarily suspended due to an unpaid balance.
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Your data is safe and your account will be fully restored once payment is received. 
+        In the meantime, you have read-only access to your dashboard.
+      </p>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${updatePaymentUrl}" style="background:#dc2626;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Now</a>
+      </div>
+      
+      <p style="color:#4b5563;font-size:14px">
+        Need help? Contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+      </p>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Account Suspended - ${shopName}\n\nYour account has been suspended due to an unpaid balance. Your data is safe.\n\nUpdate payment: ${updatePaymentUrl}\n\nContact support@mos.tools for help.`;
+  return { subject, html, text };
+}
+
+export function makePaymentRecoveredEmail(shopName: string, loginUrl: string) {
+  const subject = `Welcome back! Payment received - ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <div style="background:#dcfce7;border-left:4px solid #22c55e;padding:16px;border-radius:4px;margin-bottom:20px">
+        <h1 style="color:#166534;font-size:20px;margin:0">Payment Received</h1>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Great news! We've received your payment for <b>${shopName}</b>.
+      </p>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Your account is now fully active and all features have been restored. Thank you for your continued business!
+      </p>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${loginUrl}" style="background:#22c55e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Go to Dashboard</a>
+      </div>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Payment Received - ${shopName}\n\nYour payment has been received and your account is fully active.\n\nGo to dashboard: ${loginUrl}`;
+  return { subject, html, text };
+}
+

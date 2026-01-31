@@ -2,7 +2,7 @@ import { getDb } from "./mongo";
 
 export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
 
-export type BillingStatus = "trial" | "active" | "past_due" | "canceled" | "enterprise" | "demo";
+export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
 export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "demo";
 
@@ -21,6 +21,10 @@ export interface ShopBilling {
   status: BillingStatus;
   vinLimit: number;
   vinViewCount?: number;
+  gracePeriodStartedAt?: Date | null;
+  gracePeriodEndsAt?: Date | null;
+  gracePeriodExtendedBy?: string | null;
+  gracePeriodExtendedAt?: Date | null;
 }
 
 export interface FeatureEntitlements {
@@ -208,7 +212,7 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   };
   
   const isBillingActive = () => {
-    return status === "active" || status === "trial" || status === "enterprise" || status === "demo";
+    return status === "active" || status === "trial" || status === "enterprise" || status === "demo" || status === "past_due";
   };
   
   const isFeatureEnabled = (feature: FeatureKey) => {
