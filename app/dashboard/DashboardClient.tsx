@@ -5,7 +5,7 @@ import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
-import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
+import { VinSpecsTooltip, QuickSpecsDisplay } from "@/components/VinSpecsTooltip";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch } from "@/lib/plan-prefetch";
 
@@ -41,6 +41,7 @@ type DashboardData = {
   distanceUnit?: "miles" | "kilometers";
   enabledFeatures?: FeatureId[];
   quickSpecs?: Record<string, QuickSpecs>;
+  quickSpecsDisplay?: QuickSpecsDisplay;
 };
 
 const PAGE_SIZE = 100;
@@ -1012,7 +1013,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
-                        <VinSpecsTooltip vin={vin} specs={data.quickSpecs?.[vin]} />
+                        <VinSpecsTooltip vin={vin} specs={data.quickSpecs?.[vin]} displayConfig={data.quickSpecsDisplay} />
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.displayRo ? (

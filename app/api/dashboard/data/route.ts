@@ -590,6 +590,14 @@ export async function GET(request: NextRequest) {
     }
     
     const distanceUnit = shop?.preferences?.distanceUnit || "miles";
+    const quickSpecsDisplay = shop?.preferences?.quickSpecsDisplay || {
+      fuelTank: true,
+      maxTowing: true,
+      payload: true,
+      tires: true,
+      frontBrake: false,
+      bedLength: false,
+    };
     
     // Get enabled features for this shop from featureResolver
     const shopIdNum = typeof user.shopId === 'string' ? parseInt(user.shopId, 10) : user.shopId;
@@ -607,6 +615,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({
       rows: paginatedRows,
       quickSpecs,
+      quickSpecsDisplay,
       pagination: {
         page,
         pageSize,

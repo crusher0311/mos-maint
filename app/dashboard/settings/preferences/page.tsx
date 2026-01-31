@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag, Building2 } from "lucide-react";
+import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag, Building2, Info } from "lucide-react";
 
 const WORKFLOW_STAGES = [
   { key: "Unassigned", label: "Unassigned", description: "New work orders not yet assigned" },
@@ -16,6 +16,30 @@ const DEFAULT_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", 
 
 type TekmetricLabel = { name: string; color: string };
 type EnterpriseShop = { shopId: number; name: string; locationIdentifier: string | null };
+type QuickSpecsDisplay = {
+  fuelTank: boolean;
+  maxTowing: boolean;
+  payload: boolean;
+  tires: boolean;
+  frontBrake: boolean;
+  bedLength: boolean;
+};
+const DEFAULT_QUICK_SPECS: QuickSpecsDisplay = {
+  fuelTank: true,
+  maxTowing: true,
+  payload: true,
+  tires: true,
+  frontBrake: false,
+  bedLength: false,
+};
+const QUICK_SPECS_OPTIONS = [
+  { key: "fuelTank", label: "Fuel Tank Capacity", description: "Fuel tank size in gallons" },
+  { key: "maxTowing", label: "Max Towing Capacity", description: "Maximum towing weight in lbs" },
+  { key: "payload", label: "Payload Capacity", description: "Maximum payload weight in lbs" },
+  { key: "tires", label: "Tire Size", description: "Front tire size specification" },
+  { key: "frontBrake", label: "Front Brake Diameter", description: "Front brake rotor diameter" },
+  { key: "bedLength", label: "Bed Length", description: "Truck bed length (trucks only)" },
+];
 
 export default function PreferencesPage() {
   const [distanceUnit, setDistanceUnit] = useState("miles");
@@ -33,6 +57,7 @@ export default function PreferencesPage() {
   const [selectedTekmetricLabels, setSelectedTekmetricLabels] = useState<string[]>([]);
   const [enterpriseShops, setEnterpriseShops] = useState<EnterpriseShop[]>([]);
   const [jobHistoryShopIds, setJobHistoryShopIds] = useState<number[] | null>(null);
+  const [quickSpecsDisplay, setQuickSpecsDisplay] = useState<QuickSpecsDisplay>(DEFAULT_QUICK_SPECS);
 
   useEffect(() => {
     fetchPreferences();
@@ -57,6 +82,7 @@ export default function PreferencesPage() {
         setSelectedTekmetricLabels(data.tekmetricLabels || []);
         setEnterpriseShops(data.enterpriseShops || []);
         setJobHistoryShopIds(data.jobHistoryShopIds || null);
+        setQuickSpecsDisplay(data.quickSpecsDisplay || DEFAULT_QUICK_SPECS);
       }
       
       if (integrationsRes.ok) {
@@ -113,6 +139,13 @@ export default function PreferencesPage() {
     setJobHistoryShopIds(null); // null means all
   }
 
+  function toggleQuickSpec(key: keyof QuickSpecsDisplay) {
+    setQuickSpecsDisplay(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  }
+
   async function savePreferences() {
     setSaving(true);
     setSaved(false);
@@ -128,7 +161,8 @@ export default function PreferencesPage() {
           showRecalls,
           recallsExpanded,
           tekmetricLabels: selectedTekmetricLabels,
-          jobHistoryShopIds
+          jobHistoryShopIds,
+          quickSpecsDisplay
         }),
       });
       if (res.ok) {
@@ -416,6 +450,51 @@ export default function PreferencesPage() {
                 </p>
               </div>
             </label>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Info className="w-5 h-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Quick Specs Display</h2>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">
+              Select which vehicle specifications to show when hovering over a VIN on the dashboard.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {QUICK_SPECS_OPTIONS.map((spec) => (
+                <label
+                  key={spec.key}
+                  className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                    quickSpecsDisplay[spec.key as keyof QuickSpecsDisplay]
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={quickSpecsDisplay[spec.key as keyof QuickSpecsDisplay]}
+                    onChange={() => toggleQuickSpec(spec.key as keyof QuickSpecsDisplay)}
+                    className="w-4 h-4 text-blue-600 mt-0.5"
+                  />
+                  <div>
+                    <p className="font-medium text-gray-900">{spec.label}</p>
+                    <p className="text-sm text-gray-500">{spec.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {!Object.values(quickSpecsDisplay).some(v => v) && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  No specs selected. The VIN tooltip will show "No specs available".
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

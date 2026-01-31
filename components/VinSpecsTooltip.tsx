@@ -12,20 +12,44 @@ export interface QuickSpecs {
   bedLength?: string;
 }
 
+export interface QuickSpecsDisplay {
+  fuelTank?: boolean;
+  maxTowing?: boolean;
+  payload?: boolean;
+  tires?: boolean;
+  frontBrake?: boolean;
+  bedLength?: boolean;
+}
+
 interface VinSpecsTooltipProps {
   vin: string;
   specs?: QuickSpecs;
+  displayConfig?: QuickSpecsDisplay;
   className?: string;
 }
 
-export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipProps) {
+const DEFAULT_DISPLAY: QuickSpecsDisplay = {
+  fuelTank: true,
+  maxTowing: true,
+  payload: true,
+  tires: true,
+  frontBrake: false,
+  bedLength: false,
+};
+
+export function VinSpecsTooltip({ vin, specs, displayConfig, className = "" }: VinSpecsTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  const config = { ...DEFAULT_DISPLAY, ...displayConfig };
 
   const hasSpecs = specs && (
-    specs.fuelTankCapacity ||
-    specs.maxTowingCapacity ||
-    specs.frontTireDescription
+    (config.fuelTank && specs.fuelTankCapacity) ||
+    (config.maxTowing && specs.maxTowingCapacity) ||
+    (config.payload && specs.maxPayload) ||
+    (config.tires && specs.frontTireDescription) ||
+    (config.frontBrake && specs.frontBrakeDiameter) ||
+    (config.bedLength && specs.bedLength)
   );
 
   // Close tooltip when clicking outside
@@ -76,37 +100,37 @@ export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipP
           
           {hasSpecs ? (
             <div className="space-y-2 text-sm">
-              {specs.fuelTankCapacity && (
+              {config.fuelTank && specs.fuelTankCapacity && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Fuel Tank:</span>
                   <span className="font-medium">{specs.fuelTankCapacity} gal</span>
                 </div>
               )}
-              {specs.maxTowingCapacity && (
+              {config.maxTowing && specs.maxTowingCapacity && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Max Towing:</span>
                   <span className="font-medium">{Number(specs.maxTowingCapacity).toLocaleString()} lbs</span>
                 </div>
               )}
-              {specs.maxPayload && (
+              {config.payload && specs.maxPayload && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Payload:</span>
                   <span className="font-medium">{Number(specs.maxPayload).toLocaleString()} lbs</span>
                 </div>
               )}
-              {specs.frontTireDescription && (
+              {config.tires && specs.frontTireDescription && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Tires:</span>
                   <span className="font-medium text-xs">{specs.frontTireDescription}</span>
                 </div>
               )}
-              {specs.frontBrakeDiameter && (
+              {config.frontBrake && specs.frontBrakeDiameter && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Front Brake:</span>
                   <span className="font-medium">{specs.frontBrakeDiameter}"</span>
                 </div>
               )}
-              {specs.bedLength && (
+              {config.bedLength && specs.bedLength && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Bed Length:</span>
                   <span className="font-medium">{specs.bedLength}"</span>
