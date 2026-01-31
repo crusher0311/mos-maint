@@ -73,13 +73,16 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 ## MongoDB to PostgreSQL Migration Plan
 **Priority:** High | **Status:** Planning
 
-### Strategy: Lift and Shift, Then Normalize
+### Strategy: Raw Archive + Clean Normalized Tables
 
-**Phase 1: Lift and Shift (Raw Data)**
-Move all data to PostgreSQL as-is using JSONB columns. No transformation during migration.
+**Phase 1: Copy Raw Data**
+Move all MongoDB data to PostgreSQL `raw_*` tables using JSONB. These become permanent archive/audit tables - never modified after initial load.
 
-**Phase 2: Normalize Incrementally**
-Add normalized columns alongside raw JSONB, backfill, update queries one at a time.
+**Phase 2: Build New Normalized Tables**
+Create clean, properly structured tables (`vehicles`, `customers`, `repair_orders`, etc.) with proper relationships and indexes.
+
+**Phase 3: Populate from Raw**
+Write transform scripts that read from `raw_*` JSONB and insert into normalized tables. One script per platform (Tekmetric, Protractor, AutoFlow).
 
 ### Current MongoDB Collections
 
@@ -112,29 +115,27 @@ Add normalized columns alongside raw JSONB, backfill, update queries one at a ti
 - `cached_plans`, `plan_prefetch_cache`
 - All `*_cache` collections for API responses
 
-### Phase 1 Schema (JSONB-First)
+### Phase 1: Raw Archive Tables
 
 ```sql
--- Raw data tables - preserve everything
+-- Permanent archive tables - never modified after migration
 CREATE TABLE raw_work_orders (
   id SERIAL PRIMARY KEY,
   shop_id VARCHAR(50) NOT NULL,
   source VARCHAR(20) NOT NULL,  -- 'tekmetric' | 'protractor' | 'autoflow'
   external_id VARCHAR(100),
   raw_data JSONB NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
+  migrated_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(shop_id, source, external_id)
 );
 
 CREATE TABLE raw_vehicles (
   id SERIAL PRIMARY KEY,
   shop_id VARCHAR(50) NOT NULL,
-  vin VARCHAR(17),
   source VARCHAR(20) NOT NULL,
   external_id VARCHAR(100),
   raw_data JSONB NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
+  migrated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE raw_customers (
@@ -143,49 +144,131 @@ CREATE TABLE raw_customers (
   source VARCHAR(20) NOT NULL,
   external_id VARCHAR(100),
   raw_data JSONB NOT NULL,
+  migrated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Phase 2: Clean Normalized Tables
+
+```sql
+-- Enterprise groupings
+CREATE TABLE enterprises (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Indexes for querying JSONB
-CREATE INDEX idx_raw_wo_shop ON raw_work_orders(shop_id);
-CREATE INDEX idx_raw_wo_vin ON raw_work_orders((raw_data->>'vin'));
-CREATE INDEX idx_raw_vehicles_vin ON raw_vehicles(vin);
+-- Shops with proper relationships
+CREATE TABLE shops (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) UNIQUE NOT NULL,  -- Legacy ID
+  enterprise_id INTEGER REFERENCES enterprises(id),
+  name VARCHAR(255) NOT NULL,
+  integration_provider VARCHAR(20),  -- 'tekmetric' | 'protractor' | 'autoflow'
+  settings JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Clean customer records
+CREATE TABLE customers (
+  id SERIAL PRIMARY KEY,
+  shop_id INTEGER REFERENCES shops(id),
+  enterprise_customer_id INTEGER,  -- Cross-shop linking
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  phone VARCHAR(20),
+  email VARCHAR(255),
+  raw_id INTEGER REFERENCES raw_customers(id),  -- Link to source
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Clean vehicle records
+CREATE TABLE vehicles (
+  id SERIAL PRIMARY KEY,
+  shop_id INTEGER REFERENCES shops(id),
+  customer_id INTEGER REFERENCES customers(id),
+  vin VARCHAR(17) NOT NULL,
+  year INTEGER,
+  make VARCHAR(50),
+  model VARCHAR(100),
+  mileage INTEGER,
+  mileage_updated_at TIMESTAMP,
+  raw_id INTEGER REFERENCES raw_vehicles(id),  -- Link to source
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(shop_id, vin)
+);
+
+-- Clean repair orders
+CREATE TABLE repair_orders (
+  id SERIAL PRIMARY KEY,
+  shop_id INTEGER REFERENCES shops(id),
+  vehicle_id INTEGER REFERENCES vehicles(id),
+  customer_id INTEGER REFERENCES customers(id),
+  ro_number VARCHAR(50),
+  status VARCHAR(30),
+  total_amount DECIMAL(10,2),
+  closed_at TIMESTAMP,
+  raw_id INTEGER REFERENCES raw_work_orders(id),  -- Link to source
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Separate line items table
+CREATE TABLE ro_line_items (
+  id SERIAL PRIMARY KEY,
+  repair_order_id INTEGER REFERENCES repair_orders(id),
+  service_key VARCHAR(50),
+  description TEXT,
+  labor_amount DECIMAL(10,2),
+  parts_amount DECIMAL(10,2)
+);
+
+-- Deferred work with cross-shop support
+CREATE TABLE deferred_work (
+  id SERIAL PRIMARY KEY,
+  shop_id INTEGER REFERENCES shops(id),
+  vehicle_id INTEGER REFERENCES vehicles(id),
+  service_key VARCHAR(50),
+  description TEXT,
+  estimated_amount DECIMAL(10,2),
+  declined_at TIMESTAMP,
+  resolved_at TIMESTAMP,
+  resolved_by_shop_id INTEGER REFERENCES shops(id),
+  resolution VARCHAR(30)  -- 'completed' | 'done_elsewhere' | 'cancelled'
+);
+
+-- Indexes
+CREATE INDEX idx_vehicles_vin ON vehicles(vin);
+CREATE INDEX idx_vehicles_shop ON vehicles(shop_id);
+CREATE INDEX idx_customers_phone ON customers(phone);
+CREATE INDEX idx_customers_email ON customers(email);
+CREATE INDEX idx_repair_orders_shop ON repair_orders(shop_id);
+CREATE INDEX idx_deferred_shop ON deferred_work(shop_id);
 ```
 
-### Phase 2 Schema (Add Normalized Columns)
+### Phase 3: Transform Scripts
 
-```sql
--- Add normalized columns alongside raw_data
-ALTER TABLE raw_vehicles ADD COLUMN year INTEGER;
-ALTER TABLE raw_vehicles ADD COLUMN make VARCHAR(50);
-ALTER TABLE raw_vehicles ADD COLUMN model VARCHAR(100);
-ALTER TABLE raw_vehicles ADD COLUMN mileage INTEGER;
-
--- Backfill from JSONB (Tekmetric example)
-UPDATE raw_vehicles SET
-  year = (raw_data->>'year')::INTEGER,
-  make = raw_data->>'make',
-  model = raw_data->>'model',
-  mileage = (raw_data->>'mileage')::INTEGER
-WHERE source = 'tekmetric';
-
--- Add indexes on normalized columns
-CREATE INDEX idx_vehicles_make_model ON raw_vehicles(make, model);
 ```
+transform_tekmetric.ts   → Reads raw_*, writes to normalized tables
+transform_protractor.ts  → Reads raw_*, writes to normalized tables  
+transform_autoflow.ts    → Reads raw_*, writes to normalized tables
+```
+
+Each script handles platform-specific field mappings (e.g., Tekmetric's `firstName` vs Protractor's `FirstName`).
 
 ### Migration Timeline
 
 | Phase | Duration | Deliverable |
 |-------|----------|-------------|
-| 1. Lift & Shift | 2 weeks | All data in PostgreSQL JSONB |
-| 2. Validation | 1 week | Row counts match, queries work |
-| 3. Normalize vehicles | 1 week | VIN, year, make, model columns |
-| 4. Normalize customers | 1 week | Phone, email, name columns |
-| 5. Normalize ROs | 1 week | RO number, status, amounts |
-| 6. Cutover reads | 1 week | PostgreSQL primary for reads |
-| 7. Cutover writes | 1 week | MongoDB becomes cache-only |
+| 1. Copy Raw Data | 2 weeks | All MongoDB data in `raw_*` PostgreSQL tables |
+| 2. Validate | 1 week | Row counts match, JSONB queryable |
+| 3. Build Normalized Schema | 1 week | Create clean tables with relationships |
+| 4. Transform Scripts | 2 weeks | Populate normalized tables from raw |
+| 5. Cutover Reads | 1 week | App reads from PostgreSQL |
+| 6. Cutover Writes | 1 week | New data goes to PostgreSQL |
+| 7. MongoDB → Cache Only | 1 week | Remove MongoDB from critical path |
 
 ### Rollback Plan
 - MongoDB stays fully synced for 30 days
 - Feature flag to switch back to MongoDB reads
+- `raw_*` tables preserved permanently as audit trail
 - Documented rollback procedure
