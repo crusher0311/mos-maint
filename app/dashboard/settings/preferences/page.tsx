@@ -22,6 +22,8 @@ export default function PreferencesPage() {
   const [workflowStages, setWorkflowStages] = useState<string[]>(DEFAULT_STAGES);
   const [showInspectItems, setShowInspectItems] = useState(true);
   const [showOnlyWithMileage, setShowOnlyWithMileage] = useState(true);
+  const [showRecalls, setShowRecalls] = useState(true);
+  const [recallsExpanded, setRecallsExpanded] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -50,6 +52,8 @@ export default function PreferencesPage() {
         setWorkflowStages(data.workflowStages || DEFAULT_STAGES);
         setShowInspectItems(data.showInspectItems !== false);
         setShowOnlyWithMileage(data.showOnlyWithMileage !== false);
+        setShowRecalls(data.showRecalls !== false);
+        setRecallsExpanded(data.recallsExpanded !== false);
         setSelectedTekmetricLabels(data.tekmetricLabels || []);
         setEnterpriseShops(data.enterpriseShops || []);
         setJobHistoryShopIds(data.jobHistoryShopIds || null);
@@ -121,6 +125,8 @@ export default function PreferencesPage() {
           workflowStages, 
           showInspectItems, 
           showOnlyWithMileage,
+          showRecalls,
+          recallsExpanded,
           tekmetricLabels: selectedTekmetricLabels,
           jobHistoryShopIds
         }),
@@ -441,6 +447,51 @@ export default function PreferencesPage() {
                 </p>
               </div>
             </label>
+
+            <label
+              className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                showRecalls
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={showRecalls}
+                onChange={(e) => setShowRecalls(e.target.checked)}
+                className="w-4 h-4 text-blue-600 mt-0.5"
+              />
+              <div>
+                <p className="font-medium text-gray-900">Show NHTSA Recalls</p>
+                <p className="text-sm text-gray-500">
+                  Display NHTSA safety recalls at the top of the Vehicle Health Intelligence page.
+                  When off, the recalls section is hidden from the maintenance plan.
+                </p>
+              </div>
+            </label>
+
+            {showRecalls && (
+              <label
+                className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ml-6 ${
+                  recallsExpanded
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={recallsExpanded}
+                  onChange={(e) => setRecallsExpanded(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 mt-0.5"
+                />
+                <div>
+                  <p className="font-medium text-gray-900">Recalls Expanded by Default</p>
+                  <p className="text-sm text-gray-500">
+                    When on, recalls are shown expanded. When off, recalls are collapsed and can be expanded by clicking.
+                  </p>
+                </div>
+              </label>
+            )}
           </div>
         </div>
 

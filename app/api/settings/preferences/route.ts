@@ -37,6 +37,8 @@ export async function GET() {
     workflowStages: shop?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES,
     showInspectItems: shop?.preferences?.showInspectItems !== false, // default true
     showOnlyWithMileage: shop?.preferences?.showOnlyWithMileage !== false, // default true
+    showRecalls: shop?.preferences?.showRecalls !== false, // default true
+    recallsExpanded: shop?.preferences?.recallsExpanded !== false, // default true
     tekmetricLabels: shop?.preferences?.tekmetricLabels || [], // empty = show all
     jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null, // null = all enterprise shops
     enterpriseShops, // for UI to display options
@@ -56,7 +58,7 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, tekmetricLabels, jobHistoryShopIds } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds } = await req.json();
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
@@ -74,6 +76,8 @@ export async function PUT(req: NextRequest) {
   if (workflowStages !== undefined) updates["preferences.workflowStages"] = workflowStages;
   if (showInspectItems !== undefined) updates["preferences.showInspectItems"] = showInspectItems;
   if (showOnlyWithMileage !== undefined) updates["preferences.showOnlyWithMileage"] = showOnlyWithMileage;
+  if (showRecalls !== undefined) updates["preferences.showRecalls"] = showRecalls;
+  if (recallsExpanded !== undefined) updates["preferences.recallsExpanded"] = recallsExpanded;
   if (tekmetricLabels !== undefined) updates["preferences.tekmetricLabels"] = tekmetricLabels;
   if (jobHistoryShopIds !== undefined) updates["preferences.jobHistoryShopIds"] = jobHistoryShopIds;
 

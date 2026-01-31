@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
@@ -23,6 +23,15 @@ type PaginationInfo = {
 
 type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
 
+type QuickSpecs = {
+  fuelTankCapacity?: string;
+  maxTowingCapacity?: string;
+  maxPayload?: string;
+  frontTireDescription?: string;
+  frontBrakeDiameter?: string;
+  bedLength?: string;
+};
+
 type DashboardData = {
   rows: any[];
   pagination?: PaginationInfo;
@@ -31,6 +40,7 @@ type DashboardData = {
   smsType?: string;
   distanceUnit?: "miles" | "kilometers";
   enabledFeatures?: FeatureId[];
+  quickSpecs?: Record<string, QuickSpecs>;
 };
 
 const PAGE_SIZE = 100;
