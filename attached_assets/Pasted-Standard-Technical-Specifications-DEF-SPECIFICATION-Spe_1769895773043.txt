@@ -1,0 +1,79 @@
+Standard Technical Specifications
+
+DEF_SPECIFICATION
+
+Specifications are generally numeric measures of a vehicle's dimensions, weights, capacities, and performance characteristics.
+
+Field	Type	Description
+specification_id	int	Primary Key
+specification_category	varchar(32)	Specification Category. Can be used as a means of grouping specifications.
+specification_name	varchar(32)	Name of specification (e.g. Length, Curb Weight)
+specification_value	varchar(32)	Value of specification (e.g. 214.70, 4250)
+is_ancillary	enum('Y','N')	When 'Y', please note that coverage will be limited. May not be provided for all Makes/Models
+
+
+LKP_VEH_STANDARD_SPECIFICATION
+
+Links vehicle_id from VEH_TRIM_STYLES or VIN_REFERENCE to its standard specification values.
+
+Field	Type	Description
+veh_specification_id	int	Primary Key for lookup table
+vehicle_id	int	From VEH_TRIM_STYLES or VIN_REFERENCE
+specification_id	int	From DEF_SPECIFICATION
+
+
+Unique Combinations of Specification Category & Name
+
+The following list shows the currently available Specification Categories and Names. Please note that this list is subject to change. For more information, please contact support@dataonesoftware.com.
+
+spec_category	spec_name	Notes
+Brakes	Front Brake Diameter	
+Brakes	Rear Brake Diameter	
+Drivetrain	4WD HUB Type	
+Drivetrain	Axle Ratio	
+Exterior Dimensions	Front Track Width	
+Exterior Dimensions	Ground Clearance	
+Exterior Dimensions	Height	
+Exterior Dimensions	Length	
+Exterior Dimensions	Rear Track Width	
+Exterior Dimensions	Wheelbase	
+Exterior Dimensions	Width	
+Interior Dimensions	Cargo Volume	
+Interior Dimensions	Cargo Volume All Rear Seats Down	
+Interior Dimensions	Cargo Volume Third Row Down Only	
+Interior Dimension	Interior Volume	
+Interior Dimensions	Passenger Volume	
+Seating	Head Room 1st Row	
+Seating	Head Room 2nd Row/Rear	
+Seating	Head Room 3rd Row	
+Seating	Hip Room 1st Row	
+Seating	Hip Room 2nd Row/Rear	
+Seating	Hip Room 3rd Row	
+Seating	Leg Room 1st Row	
+Seating	Leg Room 2nd Row/Rear	
+Seating	Leg Room 3rd Row	
+Seating	Max Seating	
+Seating	Seating Rows	
+Seating	Shoulder Room 1st Row	
+Seating	Shoulder Room 2nd Row/Rear	
+Seating	Shoulder Room 3rd Row	
+Seating	Standard Seating	
+Truck Specifications	Bed Length	
+Weights and Capacities	Base Towing Capacity	
+Weights and Capacities	Curb Weight	
+Weights and Capacities	Fuel Tank Capacity	
+Weights and Capacities	Gross Combined Weight Rating	
+Weights and Capacities	Gross Vehicle Weight Range	
+Weights and Capacities	Gross Vehicle Weight Rating	
+Weights and Capacities	Max Payload	
+Weights and Capacities	Max Towing Capacity	
+Weights and Capacities	Tonnage	
+Wheels and Tires	Front Tire Description	
+Wheels and Tires	Front Wheel Diameter	
+Wheels and Tires	Front Wheel Size	
+Wheels and Tires	Front Wheel Width	
+Wheels and Tires	Rear Tire Description	
+Wheels and Tires	Rear Wheel Diameter	
+Wheels and Tires	Rear Wheel Size	
+Wheels and Tires	Rear Wheel Width	
+Wheels and Tires	Tire Type	

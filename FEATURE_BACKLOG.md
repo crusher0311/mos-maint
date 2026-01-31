@@ -290,6 +290,52 @@ Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integr
 ### Estimated Duration
 3-4 days
 
+### Key DataOne Tables (from SFTP)
+
+**VIN_REFERENCE** - Primary VIN decoding table
+| Field | Type | Description |
+|-------|------|-------------|
+| vin_id | int | Primary key |
+| vehicle_id | int | Links to VEH_TRIM_STYLES |
+| vin_pattern | varchar(10) | VIN positions 1-8,10,11 |
+| year | int | Model year |
+| make | varchar(24) | Make |
+| model | varchar(32) | Model |
+| trim | varchar(48) | Trim |
+| style | varchar(128) | Style |
+| drive_type | varchar(3) | FWD, RWD, AWD, 4X4, 4X2, 4WD |
+| vehicle_type | varchar(24) | Car, SUV, Truck, Van |
+| body_type | varchar(32) | Body type |
+| engine_name | varchar(128) | Engine name |
+| engine_size | float | Displacement in liters |
+| engine_cylinders | int | Cylinder count |
+| fuel_type | varchar(12) | Fuel type |
+| trans_name | varchar(64) | Transmission name |
+| trans_type | varchar(3) | A, M, CVT |
+| wheelbase | float | Wheelbase in inches |
+| brake_system | varchar(18) | Brake type |
+
+**VEH_TRIM_STYLES** - Vehicle style details
+| Field | Type | Description |
+|-------|------|-------------|
+| vehicle_id | int | Primary key |
+| year | int | Model year |
+| make | varchar(24) | Make |
+| model | varchar(32) | Model |
+| trim | varchar(48) | Trim |
+| drive_type | varchar(10) | Drive type |
+| style | varchar(128) | Style name |
+| vehicle_type | varchar(24) | Car, SUV, Truck, Van |
+| body_type | varchar(32) | Body type |
+| doors | int | Door count |
+
+**LKP_VEH_MODEL_NUMBER** - Model number lookup
+| Field | Type | Description |
+|-------|------|-------------|
+| veh_mfr_model_num_id | int | Primary key |
+| vehicle_id | int | Links to VEH_TRIM_STYLES |
+| mfr_model_num | varchar(32) | Manufacturer model number |
+
 ---
 
 ## 9. MongoDB to PostgreSQL Migration
