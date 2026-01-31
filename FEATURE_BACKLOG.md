@@ -560,6 +560,84 @@ Instead of rebuilding the entire plan when mileage changes:
 
 ---
 
+## 10. Post-Migration Priorities
+
+**Priority:** High  
+**Status:** Planning
+
+After database migration is complete, focus on these areas before adding new integrations:
+
+### 10.1 Chrome Extension Fixes
+The Tekmetric Chrome extension needs updates to work properly with web-based integrations:
+- Side panel integration with maintenance recommendations
+- Job history display within Tekmetric interface
+- Sticker printing from Chrome extension
+- Consistent behavior across all web-based SMS platforms
+
+### 10.2 Stripe Billing Verification
+Ensure billing system is flawless before scaling:
+- VIN-based billing accuracy (300 VINs included, then per-VIN charges)
+- Trial limits enforcement
+- Subscription management (upgrades, downgrades, cancellations)
+- Invoice accuracy and payment processing
+- Webhook handling for payment events
+- Feature flags tied to subscription status
+
+### 10.3 Documentation & Customer Success
+Build comprehensive self-service resources:
+
+**Walkthrough Tutorials:**
+- Getting started / onboarding flow
+- Connecting SMS integration (Tekmetric, Protractor, AutoFlow)
+- Reading maintenance plans
+- Using the Chrome extension
+- Printing stickers and keytags
+- Understanding billing
+
+**Support Documents:**
+- Troubleshooting common issues
+- FAQ for each feature
+- Integration-specific guides
+
+**Knowledge Base:**
+- Searchable help center
+- AI chatbot training data (improves support bot responses)
+- Video tutorials where helpful
+
+**In-App Guidance:**
+- Contextual tooltips
+- First-time user tours
+- Empty state messaging with next steps
+
+---
+
+## 11. Future Integration Expansion
+
+**Priority:** Low  
+**Status:** Idea
+
+After post-migration priorities are complete, the normalized schema + adapter pattern enables rapid addition of new integrations.
+
+### Potential New Integrations
+- Shop-Ware, Mitchell 1, R.O. Writer (SMS platforms)
+- Hunter (alignment equipment data)
+- Snap-on (diagnostic tool data)
+- Parts ordering (WorldPac, PartsAuth, etc.)
+
+### Integration Adapter Pattern
+Each new integration implements `ISMSAdapter` interface. Data flows through existing normalized tables; backfill/prefetch/cache systems work automatically.
+
+**Estimated time per new SMS integration:** 2-3 days (vs weeks before normalization)
+
+### Priority Order
+1. Database Migration (9 weeks)
+2. Chrome Extension Fixes
+3. Stripe Billing Verification
+4. Documentation & Tutorials
+5. New Integrations
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
