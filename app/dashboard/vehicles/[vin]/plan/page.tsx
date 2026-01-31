@@ -1291,11 +1291,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
   }
 
-  // Vehicle info fallback: prefer vehicles collection, fall back to VIN decode from OEM (or cached values)
-  const vehicleYear = useCachedData ? cachedPlan?.plan?.vehicle?.year : (vehicle?.year ?? oemData.vehicle?.year);
-  const vehicleMake = useCachedData ? cachedPlan?.plan?.vehicle?.make : (vehicle?.make ?? oemData.vehicle?.make);
-  const vehicleModel = useCachedData ? cachedPlan?.plan?.vehicle?.model : (vehicle?.model ?? oemData.vehicle?.model);
-  const vehicleEngine = useCachedData ? cachedPlan?.plan?.vehicle?.engine : oemData.vehicle?.engine;
+  // Vehicle info fallback: try all sources - cache, vehicles collection, and OEM data
+  const vehicleYear = cachedPlan?.plan?.vehicle?.year ?? vehicle?.year ?? oemData.vehicle?.year;
+  const vehicleMake = cachedPlan?.plan?.vehicle?.make ?? vehicle?.make ?? oemData.vehicle?.make;
+  const vehicleModel = cachedPlan?.plan?.vehicle?.model ?? vehicle?.model ?? oemData.vehicle?.model;
+  const vehicleEngine = cachedPlan?.plan?.vehicle?.engine ?? oemData.vehicle?.engine;
 
   // Build normalized inputs
 
