@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
@@ -1053,25 +1053,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           {r.displayMiles != null && r.displayMiles > 0 ? (
                             <Link
                               href={VEHICLE_HREF(vin)}
-                              className="p-1.5 hover:bg-blue-50 rounded transition-colors"
+                              className="p-1.5 text-sky-500 hover:text-sky-700 hover:bg-sky-50 rounded transition-colors"
                               title="View Vehicle Health Intelligence"
                             >
-                              <img 
-                                src="/icons/vehicle-health-intelligence.svg" 
-                                alt="Vehicle Health Intelligence" 
-                                className="w-5 h-5"
-                              />
+                              <HeartPulse className="w-4 h-4" />
                             </Link>
                           ) : (
                             <span 
-                              className="p-1.5 opacity-30 cursor-not-allowed"
+                              className="p-1.5 text-gray-300 cursor-not-allowed"
                               title="Mileage required for recommendations"
                             >
-                              <img 
-                                src="/icons/vehicle-health-intelligence.svg" 
-                                alt="Vehicle Health Intelligence" 
-                                className="w-5 h-5 grayscale"
-                              />
+                              <HeartPulse className="w-4 h-4" />
                             </span>
                           )}
                           <button
