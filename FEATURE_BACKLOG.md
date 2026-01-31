@@ -118,7 +118,28 @@ Add `auto_populate` to existing feature flags system
 **Status:** Idea
 
 ### Overview
-Use CARFAX service history data to estimate current vehicle mileage when odometer reading is unavailable or outdated.
+Use CARFAX history to estimate current mileage for vehicles without an input odometer reading, enabling plan generation.
+
+### Algorithm
+1. Fetch last 3 CARFAX data points with mileage readings
+2. Calculate average miles per day between readings
+3. Days since last reading = today - last CARFAX date
+4. Estimated mileage = last reading + (avg miles/day × days since)
+
+### UI/UX
+- Display as "Estimated: ~70,000 mi" with distinct badge/color
+- Allow user to override with actual reading at any time
+- Show confidence level based on consistency of driving patterns
+
+### Data Storage
+- Store both `estimatedMileage` and `confirmedMileage`
+- Track estimation date and source data points
+- Invalidate estimate when real mileage is entered
+
+### Use Cases
+- Plan generation when `inputMileage` is null/0
+- Prefetch and cache plans for vehicles without odometer readings
+- More accurate "overdue" notifications
 
 ---
 
