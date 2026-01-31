@@ -81,6 +81,28 @@ function toSquish(vin: string) {
   return v.slice(0, 8) + v.slice(9, 11);
 }
 
+const OE_LOGO_MAP: Record<string, string> = {
+  "AUDI": "/logos/makes/audi.png",
+  "CADILLAC": "/logos/makes/cadillac.png",
+  "CHEVROLET": "/logos/makes/chevrolet.png",
+  "CHRYSLER": "/logos/makes/chrysler.png",
+  "FORD": "/logos/makes/ford.png",
+  "HONDA": "/logos/makes/honda.png",
+  "JAGUAR": "/logos/makes/jaguar.png",
+  "LEXUS": "/logos/makes/lexus.png",
+  "LINCOLN": "/logos/makes/lincoln.png",
+  "MAZDA": "/logos/makes/mazda.png",
+  "MERCEDES-BENZ": "/logos/makes/mercedes-benz.png",
+  "SUBARU": "/logos/makes/subaru.png",
+  "TOYOTA": "/logos/makes/toyota.png",
+};
+
+function getOELogoUrl(make: string | null | undefined): string | null {
+  if (!make) return null;
+  const normalized = make.toUpperCase().trim();
+  return OE_LOGO_MAP[normalized] || null;
+}
+
 function formatOverdueDate(date: Date | null | undefined): { text: string; isVeryOverdue: boolean; yearsOverdue: number } {
   if (!date) return { text: "", isVeryOverdue: false, yearsOverdue: 0 };
   const now = new Date();
@@ -1548,7 +1570,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
           {/* Top navigation menu */}
           <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
             <Link href="/dashboard" className="hover:underline">← Back</Link>
-            <Link href={`/dashboard/vehicles/${vin}?tab=oe`} className="hover:underline">OE</Link>
+            <Link href={`/dashboard/vehicles/${vin}?tab=oe`} className="hover:opacity-80 flex items-center">
+              {getOELogoUrl(vehicleMake) ? (
+                <img src={getOELogoUrl(vehicleMake)!} alt={vehicleMake || "OE"} className="h-5 object-contain" />
+              ) : (
+                <span className="hover:underline">OE</span>
+              )}
+            </Link>
             <Link href={`/dashboard/vehicles/${vin}?tab=dvi`} className="hover:underline">DVI</Link>
             <Link href={`/dashboard/vehicles/${vin}?tab=carfax`} className="hover:opacity-80">
               <img src="/badges/carfax.png" alt="CARFAX" className="h-4" />
@@ -1556,18 +1584,32 @@ async function PlanContent({ params, searchParams }: PageProps) {
           </nav>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold truncate flex items-center gap-2">
-                <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-8 h-8" />
-                {[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence
-              </h1>
-              <div className="text-sm text-neutral-600">
-                {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
-                {latestRoNumber && <>RO# <code className="font-medium">{latestRoNumber}</code> • </>}
-                VIN <code>{vin}</code>
-                {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
-                {mpdBlended != null && <> • ~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</>}
+            <div className="min-w-0 flex items-center gap-3">
+              {getOELogoUrl(vehicleMake) && (
+                <img 
+                  src={getOELogoUrl(vehicleMake)!} 
+                  alt={vehicleMake || ""} 
+                  className="h-10 sm:h-12 object-contain flex-shrink-0" 
+                />
+              )}
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold truncate">
+                  {[vehicleYear, vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"}
+                </h1>
+                <div className="text-sm text-neutral-600">
+                  {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
+                  {latestRoNumber && <>RO# <code className="font-medium">{latestRoNumber}</code> • </>}
+                  VIN <code>{vin}</code>
+                  {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
+                  {mpdBlended != null && <> • ~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</>}
+                </div>
               </div>
+            </div>
+            
+            {/* Health Intelligence branding - moved to right */}
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+              <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-10 h-10" />
+              <div className="text-base font-semibold text-blue-800">Vehicle Health Intelligence</div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -1605,16 +1647,31 @@ async function PlanContent({ params, searchParams }: PageProps) {
           {shopLogo ? (
             <img src={shopLogo} alt="Shop Logo" className="h-12" />
           ) : (
-            <div className="text-lg font-bold text-neutral-800">{[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence Report</div>
+            <div className="flex items-center gap-2">
+              {getOELogoUrl(vehicleMake) && (
+                <img src={getOELogoUrl(vehicleMake)!} alt={vehicleMake || ""} className="h-10" />
+              )}
+              <span className="text-lg font-bold text-neutral-800">
+                {[vehicleYear, vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"}
+              </span>
+            </div>
           )}
-          <div className="text-right text-sm text-neutral-600">
-            <div>Report Date: {new Date().toLocaleDateString()}</div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-lg border border-blue-100">
+              <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-6 h-6" />
+              <span className="text-sm font-semibold text-blue-800">Vehicle Health Intelligence</span>
+            </div>
+            <div className="text-right text-sm text-neutral-600">
+              <div>Report Date: {new Date().toLocaleDateString()}</div>
+            </div>
           </div>
         </div>
         <div className="mt-4">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-8 h-8" />
-            {[vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"} Health Intelligence
+          <h1 className="text-2xl font-bold flex items-center gap-3">
+            {getOELogoUrl(vehicleMake) && (
+              <img src={getOELogoUrl(vehicleMake)!} alt={vehicleMake || ""} className="h-10" />
+            )}
+            {[vehicleYear, vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"}
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
             VIN: {vin}
