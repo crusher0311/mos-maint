@@ -128,6 +128,7 @@ type Props = {
   integration?: IntegrationType;
   protractorDeferredId?: string;
   matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
+  showHistoryButton?: boolean; // Show History button (requires backfill integration)
 };
 
 export function AddToROWithHistory({
@@ -145,6 +146,7 @@ export function AddToROWithHistory({
   integration = "protractor",
   protractorDeferredId,
   matchedDeferred,
+  showHistoryButton = true,
 }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "loaded" | "adding" | "success" | "error" | "fallback">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -363,7 +365,8 @@ export function AddToROWithHistory({
         <span className="text-xs text-red-600">{deferredError}</span>
       )}
 
-      {/* Add History button */}
+      {/* Add History button - only show if shop has backfill integration */}
+      {showHistoryButton && (
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => {
@@ -584,6 +587,7 @@ export function AddToROWithHistory({
         </div>
       )}
       </div>
+      )}
       
       {/* Add Canned Job button - only show when service-specific mappings exist */}
       {cannedJobOptions.length > 0 && (
