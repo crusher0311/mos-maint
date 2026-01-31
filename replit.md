@@ -42,3 +42,150 @@ The design features a modern SaaS-style interface with a dark sidebar, light con
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
 *   **Email Notifications**: Resend API
+
+---
+
+## Future Work
+
+### Robust Stripe Billing with Grace Periods
+**Priority:** High | **Status:** Idea
+
+### AI Auto-Populate for Repair Orders
+**Priority:** Medium | **Status:** Idea
+
+### CARFAX-Based Mileage Estimation
+**Priority:** Medium | **Status:** Idea
+
+### Service History Timeline
+**Priority:** Medium | **Status:** Idea
+
+### Cross-Shop Customer View
+**Priority:** Medium | **Status:** Idea
+
+### AI-Powered KPI Dashboard
+**Priority:** Medium | **Status:** Idea
+
+### Deferred Work vs CARFAX Comparison
+**Priority:** Medium | **Status:** Idea
+
+---
+
+## MongoDB to PostgreSQL Migration Plan
+**Priority:** High | **Status:** Planning
+
+### Strategy: Lift and Shift, Then Normalize
+
+**Phase 1: Lift and Shift (Raw Data)**
+Move all data to PostgreSQL as-is using JSONB columns. No transformation during migration.
+
+**Phase 2: Normalize Incrementally**
+Add normalized columns alongside raw JSONB, backfill, update queries one at a time.
+
+### Current MongoDB Collections
+
+**Raw API Response Caches:**
+| Collection | Source | Data |
+|------------|--------|------|
+| `tekmetric_work_orders` | Tekmetric API | Raw RO/job data |
+| `tekmetric_vehicle_cache` | Tekmetric API | Raw vehicle data |
+| `tekmetric_customer_cache` | Tekmetric API | Raw customer data |
+| `protractor_work_orders` | Protractor API | Raw work order data |
+| `protractor_ro_cache` | Protractor API | Raw RO cache |
+| `dataone_cache` | DataOne API | VIN decode/maintenance |
+| `events` | AutoFlow webhooks | Raw webhook payloads |
+| `sms_historical_work_orders` | Backfill scripts | Historical RO data |
+
+**Already Normalized:**
+| Collection | Status |
+|------------|--------|
+| `customers` | Partially normalized |
+| `vehicles` | Partially normalized |
+| `repair_orders` | Partially normalized |
+| `normalized_work_orders` | Fully normalized |
+
+**Core Business (Migrate):**
+- `shops`, `users`, `sessions`, `enterprise_accounts`
+- `viewed_vins`, `job_index`, `shop_features`
+- `notifications`, `support_chat_sessions`
+
+**Keep in MongoDB (Cache Only):**
+- `cached_plans`, `plan_prefetch_cache`
+- All `*_cache` collections for API responses
+
+### Phase 1 Schema (JSONB-First)
+
+```sql
+-- Raw data tables - preserve everything
+CREATE TABLE raw_work_orders (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) NOT NULL,
+  source VARCHAR(20) NOT NULL,  -- 'tekmetric' | 'protractor' | 'autoflow'
+  external_id VARCHAR(100),
+  raw_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(shop_id, source, external_id)
+);
+
+CREATE TABLE raw_vehicles (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) NOT NULL,
+  vin VARCHAR(17),
+  source VARCHAR(20) NOT NULL,
+  external_id VARCHAR(100),
+  raw_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE raw_customers (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) NOT NULL,
+  source VARCHAR(20) NOT NULL,
+  external_id VARCHAR(100),
+  raw_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes for querying JSONB
+CREATE INDEX idx_raw_wo_shop ON raw_work_orders(shop_id);
+CREATE INDEX idx_raw_wo_vin ON raw_work_orders((raw_data->>'vin'));
+CREATE INDEX idx_raw_vehicles_vin ON raw_vehicles(vin);
+```
+
+### Phase 2 Schema (Add Normalized Columns)
+
+```sql
+-- Add normalized columns alongside raw_data
+ALTER TABLE raw_vehicles ADD COLUMN year INTEGER;
+ALTER TABLE raw_vehicles ADD COLUMN make VARCHAR(50);
+ALTER TABLE raw_vehicles ADD COLUMN model VARCHAR(100);
+ALTER TABLE raw_vehicles ADD COLUMN mileage INTEGER;
+
+-- Backfill from JSONB (Tekmetric example)
+UPDATE raw_vehicles SET
+  year = (raw_data->>'year')::INTEGER,
+  make = raw_data->>'make',
+  model = raw_data->>'model',
+  mileage = (raw_data->>'mileage')::INTEGER
+WHERE source = 'tekmetric';
+
+-- Add indexes on normalized columns
+CREATE INDEX idx_vehicles_make_model ON raw_vehicles(make, model);
+```
+
+### Migration Timeline
+
+| Phase | Duration | Deliverable |
+|-------|----------|-------------|
+| 1. Lift & Shift | 2 weeks | All data in PostgreSQL JSONB |
+| 2. Validation | 1 week | Row counts match, queries work |
+| 3. Normalize vehicles | 1 week | VIN, year, make, model columns |
+| 4. Normalize customers | 1 week | Phone, email, name columns |
+| 5. Normalize ROs | 1 week | RO number, status, amounts |
+| 6. Cutover reads | 1 week | PostgreSQL primary for reads |
+| 7. Cutover writes | 1 week | MongoDB becomes cache-only |
+
+### Rollback Plan
+- MongoDB stays fully synced for 30 days
+- Feature flag to switch back to MongoDB reads
+- Documented rollback procedure
