@@ -42,3 +42,102 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
 *   **QR Code Generation**: HoverCode API
 *   **Email Notifications**: Resend API
+
+---
+
+## Database Migration Plan
+
+### Strategy: Raw Archive + Clean Normalized Tables
+- Archive all raw SMS data (MongoDB → PostgreSQL jsonb)
+- Build clean normalized tables (vehicles, customers, repair_orders, etc.)
+- 9-week timeline across 7 phases
+
+### Ultimate Performance Targets
+
+| Metric | Current | Target |
+|--------|---------|--------|
+| Integration → usable dashboard | Days | <2 minutes |
+| Webhook → dashboard update | N/A | <5 seconds |
+| First vehicle view (cached) | 10-20s | <500ms |
+| Mileage update | 10-20s rebuild | 50ms incremental |
+| Full backfill completion | Days (serial) | Hours (parallel) |
+| Cache hit rate | ~60% | 95%+ |
+
+### Key Optimizations (Built During Migration)
+1. **Instant Onboarding** - Fetch last 7 days immediately, dashboard usable in <2 minutes
+2. **Webhook Real-Time Sync** - Push-based updates, <5 second latency
+3. **Proactive Prefetch** - Predict and cache vehicles before user views them
+4. **Incremental Plan Updates** - Fast summary updates (~50ms) vs slow full rebuilds
+5. **Parallel Backfill** - PostgreSQL-coordinated workers, hours not days
+
+---
+
+## Post-Migration Priorities
+
+After database migration is complete, focus on these areas before adding new integrations:
+
+### 1. Chrome Extension Fixes
+The Tekmetric Chrome extension needs updates to work properly with web-based integrations:
+- Side panel integration with maintenance recommendations
+- Job history display within Tekmetric interface
+- Sticker printing from Chrome extension
+- Consistent behavior across all web-based SMS platforms
+
+### 2. Stripe Billing Verification
+Ensure billing system is flawless before scaling:
+- VIN-based billing accuracy (300 VINs included, then per-VIN charges)
+- Trial limits enforcement
+- Subscription management (upgrades, downgrades, cancellations)
+- Invoice accuracy and payment processing
+- Webhook handling for payment events
+- Feature flags tied to subscription status
+
+### 3. Documentation & Customer Success
+Build comprehensive self-service resources:
+
+**Walkthrough Tutorials:**
+- Getting started / onboarding flow
+- Connecting SMS integration (Tekmetric, Protractor, AutoFlow)
+- Reading maintenance plans
+- Using the Chrome extension
+- Printing stickers and keytags
+- Understanding billing
+
+**Support Documents:**
+- Troubleshooting common issues
+- FAQ for each feature
+- Integration-specific guides
+
+**Knowledge Base:**
+- Searchable help center
+- AI chatbot training data (improves support bot responses)
+- Video tutorials where helpful
+
+**In-App Guidance:**
+- Contextual tooltips
+- First-time user tours
+- Empty state messaging with next steps
+
+---
+
+## Future Integration Expansion
+
+After post-migration priorities are complete, the normalized schema + adapter pattern enables rapid addition:
+
+### Potential New Integrations
+- Shop-Ware, Mitchell 1, R.O. Writer (SMS platforms)
+- Hunter (alignment equipment data)
+- Snap-on (diagnostic tool data)
+- Parts ordering (WorldPac, PartsAuth, etc.)
+
+### Integration Adapter Pattern
+Each new integration implements `ISMSAdapter` interface. Data flows through existing normalized tables; backfill/prefetch/cache systems work automatically.
+
+**Estimated time per new SMS integration:** 2-3 days (vs weeks before normalization)
+
+### Priority Order
+1. Database Migration (9 weeks)
+2. Chrome Extension Fixes
+3. Stripe Billing Verification
+4. Documentation & Tutorials
+5. New Integrations
