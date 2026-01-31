@@ -1769,7 +1769,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured}
+                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
@@ -1928,7 +1928,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured}
+                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
@@ -2005,7 +2005,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured}
+                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
@@ -2136,7 +2136,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           repairOrderId={latestRepairOrderId ?? undefined}
                           cannedJobOptions={opts}
                           integration={activeIntegration ?? "protractor"}
-                          showHistoryButton={protractorCfg.configured}
+                          showHistoryButton={protractorCfg.configured || tekmetricCfg?.configured}
                           protractorDeferredId={t.protractorDeferredId}
                           matchedDeferred={t.matchedDeferred}
                         />
