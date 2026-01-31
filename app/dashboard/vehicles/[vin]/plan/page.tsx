@@ -1599,9 +1599,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
             </div>
             
             {/* Health Intelligence branding - moved to right */}
-            <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
-              <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-10 h-10" />
-              <div className="text-base font-semibold text-blue-800">Vehicle Health Intelligence</div>
+            <div className="hidden sm:flex items-center gap-3">
+              <img src="/icons/vehicle-health-intelligence.png?v=4" alt="" className="w-14 h-14" />
+              <div className="text-lg font-semibold text-blue-800">Vehicle Health Intelligence<sup className="text-xs">™</sup></div>
             </div>
 
             <div className="flex items-center gap-3">
