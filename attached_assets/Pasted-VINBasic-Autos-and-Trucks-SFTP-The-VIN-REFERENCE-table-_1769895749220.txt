@@ -1,0 +1,110 @@
+VINBasic™ Autos and Trucks (SFTP)
+
+The VIN_REFERENCE table directly references 10-digit VIN patterns to vehicle_ids. This table contains replicated vehicle data from several other tables for the purpose of easily exporting the most commonly used data. Unique data contained in this table includes the 10-digit VIN pattern (positions 1-8,10,11 of the full 17-digit VIN), country of manufacture, and plant location (generally city, state/county).
+
+VIN_REFERENCE
+
+Field	Type	Description
+vin_id	int	Primary key
+vehicle_id	int	vehicle_id, from VEH_TRIM_STYLES
+vin_pattern	varchar(10)	VIN Pattern. Includes digits 1-8,10,11 from a 17-digit VIN
+year	int	Year
+make	varchar(24)	Make
+model	varchar(32)	Model
+trim	varchar(48)	Trim
+style	varchar(128)	Style
+mfr_model_num	varchar(12)	Manufacturer Model Number
+mfr_package_code	varchar(12)	Manufacturer Package Code
+doors	int	Number of doors
+drive_type	varchar(3)	Refers to how many or which wheels are powered by the engine.
+
+Returned values: [FWD, RWD, AWD, 4X4, 4X2, 4WD]
+
+Please see the following definitions for each drive_type value:
+FWD - (All years)
+Front Wheel Drive, two axle powertrain that provides power to the front wheels only.
+RWD - (All years)
+Rear Wheel Drive, two axle powertrain that provides power to the rear wheels only.
+AWD - (All years)
+All Wheel Drive, two axle powertrain that provides power to the front and rear wheels full time or automatically on-demand.
+4X4 - (2008 to current. *Some assignments for 2003-2007)
+Four by Four or Four Wheel Drive, two axle powertrain that provides power to the front and rear wheels according to the driver controlled transfer case setting. Used primarily for model year 2008 forward.
+4X2 - (2008 to current. *Some assignments for 2006-2007)
+Four by Two or Two Wheel Drive or Rear Wheel Drive, two axle powertrain that provides power to the rear wheels only. Used primarily for model year 2008 forward.
+4WD - (2007 and earlier Trucks, Vans, and SUVs. *Some assignments in 2008)
+Four by Four or Four Wheel Drive, two axle powertrain that provides power to the front and rear wheels according to the driver controlled selector. Used primarily for model year 2007 and earlier.
+vehicle_type	varchar(24)	Vehicle type (Car, SUV, Truck, Van)
+rear_axle	varchar(6)	Rear axle type
+body_type	varchar(32)	Body Type (Chassis, Convertible, Coupe, Full-Size, Hatchback, Mini-Van, Pickup, Sedan, Step Van, SUV, Wagon)
+body_subtype	varchar(32)	Body Subtype - Further describes Pickup Truck Body / Cab configurations (Cargo, Commercial/Cutaway/Chassis, Crew Cab, Crossover, Extended Cab, Extended Length Cargo, Extended Length Passenger, Passenger, Regular Cab).
+bed_length	varchar(8)	Bed Length (in inches)
+engine_id	int	engine_id, from DEF_ENGINE
+engine_name	varchar(128)	Engine name
+engine_size	float	Engine displacement in Liters
+engine_block	char(1)	Block type, as described in DEF_ENGINE
+engine_cylinders	int	Cylinders, as described in DEF_ENGINE
+engine_valves	int	Valves, as described in DEF_ENGINE
+engine_induction	varchar(32)	Fuel Induction, as described in DEF_ENGINE
+engine_aspiration	varchar(32)	Aspiration, as described in DEF_ENGINE
+engine_cam_type	varchar(8)	Cam Type, as described in DEF_ENGINE
+fuel_type	varchar(12)	Fuel Type, as described in DEF_ENGINE
+trans_id	int	trans_id, from DEF_TRANSMISSION
+trans_name	varchar(64)	Transmission Name
+trans_type	varchar(3)	Transmission Type (A, M, CVT)
+trans_speeds	int	Number of transmission gears
+wheelbase	float	Wheelbase, measured in inches.
+gross_vehicle_weight_range	varchar(20)	Gross Vehicle Weight Range (for Trucks)
+restraint_type	varchar(255)	Description of restraint/personal safety system.
+brake_system	varchar(18)	Description of brake type
+country_of_mfr	varchar(24)	Country in which vehicle was manufactured.
+plant	varchar(32)	Name of plant, or city in which plant is located, at which the vehicle was manufactured.
+
+
+The LKP_VEH_MODEL_NUMBER table contains a many-to-one lookup between manufacturer model number and vehicle_id. Note that a single vehicle_id may have more than one manufacturer model number associated with it.
+
+LKP_VEH_MODEL_NUMBER
+
+Field	Type	Description
+veh_mfr_model_num_id	int	Primary key of Vehicle-Model Number lookup
+vehicle_id	int	vehicle_id, from VEH_TRIM_STYLES and VIN_REFERENCE
+mfr_model_num	varchar(32)	Manufacturer Model Number
+
+
+The VEH_TRIM_STYLES table contains basic information describing a vehicle style, along with the unique identifier for DataOne's vehicle styles, vehicle_id. A complete list of fields follows:
+
+VEH_TRIM_STYLES
+
+Field	Type	Description
+vehicle_id	int	vehicle_id, the ID that uniquely defines a vehicle style throughout the dataset.
+style_complete	enum('N','Y')	Flag to indicate that all data for this vehicle has been recorded.
+fleet	enum('Y','N','UK')	
+year	int	Model year
+make	varchar(24)	Vehicle Make
+model	varchar(32)	Vehicle Model
+trim	varchar(48)	Vehicle Trim
+drive_type	varchar(10)	Refers to how many or which wheels are powered by the engine.
+
+Returned values: [FWD, RWD, AWD, 4X4, 4X2, 4WD]
+
+Please see the following definitions for each drive_type value:
+FWD - (All years)
+Front Wheel Drive, two axle powertrain that provides power to the front wheels only.
+RWD - (All years)
+Rear Wheel Drive, two axle powertrain that provides power to the rear wheels only.
+AWD - (All years)
+All Wheel Drive, two axle powertrain that provides power to the front and rear wheels full time or automatically on-demand.
+4X4 - (2008 to current. *Some assignments for 2003-2007)
+Four by Four or Four Wheel Drive, two axle powertrain that provides power to the front and rear wheels according to the driver controlled transfer case setting. Used primarily for model year 2008 forward.
+4X2 - (2008 to current. *Some assignments for 2006-2007)
+Four by Two or Two Wheel Drive or Rear Wheel Drive, two axle powertrain that provides power to the rear wheels only. Used primarily for model year 2008 forward.
+4WD - (2007 and earlier Trucks, Vans, and SUVs. *Some assignments in 2008)
+Four by Four or Four Wheel Drive, two axle powertrain that provides power to the front and rear wheels according to the driver controlled selector. Used primarily for model year 2007 and earlier.
+style	varchar(128)	Vehicle style name.
+vehicle_type	varchar(24)	Basic vehicle type (Car, SUV, Truck, Van)
+body_type	varchar(32)	Body Type (Chassis, Convertible, Coupe, Full-Size, Hatchback, Mini-Van, Pickup, Sedan, Step Van, SUV, Wagon)
+body_subtype	varchar(32)	Body Subtype - Further describes Pickup Truck Body / Cab configurations (Cargo, Commercial/Cutaway/Chassis, Crew Cab, Crossover, Extended Cab, Extended Length Cargo, Extended Length Passenger, Passenger, Regular Cab).
+oem_body_style	varchar(64)	An OEM-compliant expression of body style. For example, Cabriolet, Gran Coupe, King Cab, Double Cab
+doors	int	Number of doors (based on default configuration)
+oem_doors	int	An OEM-compliant expression of the number of doors on a vehicle. For example, an OEM may refer to a 4-door hatchback as a "5-door"
+mfr_model_num	varchar(32)	Manufacturer model number
+mfr_package_code	varchar(12)	Manufacturer package code

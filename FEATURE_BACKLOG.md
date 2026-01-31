@@ -264,7 +264,35 @@ Cross-reference deferred work against CARFAX service history to detect if declin
 
 ---
 
-## 8. MongoDB to PostgreSQL Migration
+## 8. DataOne Direct Integration
+
+**Priority:** High  
+**Status:** Planning
+
+### Overview
+Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integration.
+
+### Current State
+- External API at `3.144.191.161:3000`
+- Weekly SFTP updates (full files, not deltas)
+- App calls API for VIN decoding and maintenance schedules
+- MongoDB caches API responses
+
+### Target State
+- DataOne data loaded directly into PostgreSQL
+- Local queries (~5ms) instead of API calls (~100-500ms)
+- Weekly SFTP sync with atomic table swap (zero downtime)
+- No external API dependency
+
+### Performance Improvement
+~10-100x faster: 5ms local vs 100-500ms API
+
+### Estimated Duration
+3-4 days
+
+---
+
+## 9. MongoDB to PostgreSQL Migration
 
 **Priority:** High  
 **Status:** Planning
@@ -482,7 +510,7 @@ These issues get fixed as part of the migration, not as separate work:
 
 ---
 
-## 9. Backfill Improvement Plan
+## 10. Backfill Improvement Plan
 
 **Priority:** High  
 **Status:** Planning
@@ -560,21 +588,21 @@ Instead of rebuilding the entire plan when mileage changes:
 
 ---
 
-## 10. Post-Migration Priorities
+## 11. Post-Migration Priorities
 
 **Priority:** High  
 **Status:** Planning
 
 After database migration is complete, focus on these areas before adding new integrations:
 
-### 10.1 Chrome Extension Fixes
+### 11.1 Chrome Extension Fixes
 The Tekmetric Chrome extension needs updates to work properly with web-based integrations:
 - Side panel integration with maintenance recommendations
 - Job history display within Tekmetric interface
 - Sticker printing from Chrome extension
 - Consistent behavior across all web-based SMS platforms
 
-### 10.2 Stripe Billing Verification
+### 11.2 Stripe Billing Verification
 Ensure billing system is flawless before scaling:
 - VIN-based billing accuracy (300 VINs included, then per-VIN charges)
 - Trial limits enforcement
@@ -583,7 +611,7 @@ Ensure billing system is flawless before scaling:
 - Webhook handling for payment events
 - Feature flags tied to subscription status
 
-### 10.3 Documentation & Customer Success
+### 11.3 Documentation & Customer Success
 Build comprehensive self-service resources:
 
 **Walkthrough Tutorials:**
@@ -611,7 +639,7 @@ Build comprehensive self-service resources:
 
 ---
 
-## 11. Future Integration Expansion
+## 12. Future Integration Expansion
 
 **Priority:** Low  
 **Status:** Idea
@@ -630,11 +658,12 @@ Each new integration implements `ISMSAdapter` interface. Data flows through exis
 **Estimated time per new SMS integration:** 2-3 days (vs weeks before normalization)
 
 ### Priority Order
-1. Database Migration (9 weeks)
-2. Chrome Extension Fixes
-3. Stripe Billing Verification
-4. Documentation & Tutorials
-5. New Integrations
+1. DataOne Direct Integration (3-4 days)
+2. Database Migration (9 weeks)
+3. Chrome Extension Fixes
+4. Stripe Billing Verification
+5. Documentation & Tutorials
+6. New Integrations
 
 ---
 
