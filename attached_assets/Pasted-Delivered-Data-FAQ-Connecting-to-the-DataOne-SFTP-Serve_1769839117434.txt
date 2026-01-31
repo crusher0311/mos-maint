@@ -1,0 +1,103 @@
+Delivered Data FAQ
+
+Connecting to the DataOne SFTP Server
+
+Host: sftp://sftp.dataonesoftware.com
+
+Port: 2222
+
+Username: Provided in your service activation email from DataOne
+
+Password: Provided in your service activation email from DataOne
+
+DataOne IP Information	
+52.41.161.7	Primary server IP
+35.164.72.128	Secondary server IP
+34.194.121.217	Secondary server IP
+34.227.238.224	Secondary server IP
+DataOne performs routine maintenance on our primary server, during which we switch to a secondary server. You may receive an alert about a changed or unknown RSA host key, often due to an unrecognized IP address. To prevent this, please whitelist the IP addresses listed above.
+
+FAQ
+
+Does DataOne restrict access by IP address?
+DataOne does not whitelist/blacklist IP addresses. Users with a valid username and password combination can access the SFTP directory.
+
+How often are the data files updated?
+We provide a complete replacement file daily by 6 a.m. EST.
+
+What methods does DataOne allow to access the data files?
+DataOne requires SFTP (Secure File Transfer Protocol) for data transfers.
+
+Is there any way I can connect through port 22?
+We can’t support inbound traffic on port 22, you will need to allow outbound traffic to our fixed IPs on port 2222 to use the SFTP service. Our IP addresses are listed above in the Connecting to the DataOne SFTP Server section for reference.
+
+Is the SFTP username the same as my Client Portal username?
+No, they are not the same. The Client Portal username is typically your email address, while the SFTP username is typically based on your organization name and is issued when your account is set up. If you do not know your SFTP username, please contact us with your customer account number for assistance.
+
+Can DataOne re-send us our password?
+Unfortunately, we are unable to resend a SFTP password. The SFTP account credentials were issued upon account setup and need to be retrieved from the internal source responsible for maintaining that information within your organization.
+
+If you are unable to locate your credentials, please contact us and we can reset them for you.
+
+How do I reset my password?
+To schedule a password change, please contact us and include the following details:
+
+Your SFTP username
+Email address(s) that the new password should be sent to
+Please note that once a new password is issued, the old password will no longer work and cannot be re-enabled.
+
+Do you offer test environments?
+We do not provide a separate endpoint specifically for development or testing. However, you can set up your own production and test environments using the credentials provided to you.
+
+Is it possible for DataOne to place the files directly on my server instead of requiring us to retrieve them?
+Access to the data files is available by downloading from the DataOne server only.
+
+How does SFTP work?
+SFTP works over the Secure Shell (SSH) data stream to establish a secure connection and provides a higher level of file transfer protection. This is because SFTP uses encryption algorithms to securely move data to your server and keep files unreadable during the process. Authentication prevents unauthorized file access during the operation.
+
+How do I connect using FTP client software?
+For most customers, your ETL processes will connect via automated means to DataOne’s SFTP service to regularly download data. If you wish to download data manually, you’ll need an FTP client. We’ve included instructions below for connecting with a common FTP client, FileZilla®. You should be able to utilize these instructions as general guidelines to assist you in using any third-party client of your choice to connect.
+
+Example: Instructions for Connecting with FileZilla®
+
+Open the program. At the top, there is a Quickconnect bar. Enter the host, username, password, and port. Click the Quickconnect button.
+You may get a warning dialog box “Unknown host key”. If desired, check “Always trust this host, add this key to the cache”.
+Click “OK”.
+If the connection is successfully established, your data files can then be downloaded to the location you have selected for you to access.
+Filezilla Screenshot
+How do I automate SFTP?
+Automating SFTP involves a systematic approach to ensure a seamless and secure file transfer process. This article provides in-depth instructions to successfully automate SFTP.
+
+Can I download with my web browser using SFTP?
+Many browsers no longer allow SFTP access. Most have deprecated the function or only allow it by configuring advanced settings or using third party add ons.
+
+Can I use Excel to access the relational database tables?
+While you can access data files in Excel, we recommend using a relational database management system (RDBMS) such as MySQL for working with relational database tables. Excel has a record limit of approximately 1 million records, and if your data exceeds this limit, some records may be missing or not displayed properly. For handling large datasets, an RDBMS is a more suitable choice.
+
+Do you offer example queries to set up the tables?
+We provide SQL files with "CREATE TABLE" statements in your SFTP directory to complement the CSV data files.
+
+Troubleshooting
+
+If you are having trouble connecting to the server and you have established that your login information is correct (i.e. host, port, username, password), there is a good chance that the network you are using is blocking the connection due to one or many backend settings or protocols in place.
+
+Confirm you are using the correct credentials.
+Confirm you are using SFTP to connect to sftp.dataonesoftware.com using port 2222.
+Confirm your network configuration / firewall is allowing bidirectional traffic on port 2222 to the DataOne IPs listed above. Note that DataOne uses port 2222 for SFTP, not the standard SSH port 22.
+If #1 and #2 are confirmed to be correct, it is most likely an issue in the process through which you are attempting to connect to our server.
+We will notify you in case of any outage. If you haven't received a notification, there is likely no service interruption on our end causing connection problems.
+We do not whitelist or blacklist client IP addresses. Any user with valid credentials is able to access the associated DataOne directory.
+The cause of the issue may be a network configuration issue within your organization.
+To test this, you can try accessing the server on a different network. If you're able to download in either of these scenarios, that points to an issue with the method or network configuration within your organization.
+FileZilla has a network configuration guide that may help diagnose network issues.
+Are you using a VPN? In some cases, users have VPN settings that interfere with accessing our servers.
+Does your company require IPs to be whitelisted?
+Does anyone else have this issue? If everyone on your company network has this issue, it likely is a setting on your end. If you are the only one that has this issue, it may be an issue with the method you are using or individual settings in place.
+If you are still receiving an error message and unable to connect, please send the following information in an email to support@dataonesoftware.com:
+Screenshot(s) of the error(s)
+Your IP address
+Steps taken so far to resolve
+Please do not send your password to DataOne. DataOne will never ask you for your password.
+We will attempt to troubleshoot further via email or schedule a video conference call with screen sharing as needed.
+Who do I contact if I have questions?
+We are available to work directly with you and encourage you to submit any questions directly to our Support team by sending an email to support@dataonesoftware.com. Or, we would be happy to schedule a call with you at any point if you think that would be helpful.
