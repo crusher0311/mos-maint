@@ -7,6 +7,7 @@ import QuickStickerModal from "@/components/stickers/QuickStickerModal";
 import SupportChatWidget from "@/components/ui/SupportChatWidget";
 import { GhostModeBanner } from "@/components/ui/GhostModeBanner";
 import { AnnouncementBanner } from "@/components/ui/AnnouncementBanner";
+import { BillingStatusBanner, BillingStatus } from "@/components/ui/BillingStatusBanner";
 import { Menu } from "lucide-react";
 
 interface UserInfo {
@@ -21,6 +22,8 @@ interface UserInfo {
   enterpriseId?: string | null;
   hasEnterpriseBilling?: boolean;
   enabledFeatures?: string[];
+  billingStatus?: BillingStatus;
+  gracePeriodEndsAt?: string | null;
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -41,14 +44,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           if (authData.authenticated) {
             let enabledFeatures = ["maintenance"];
             
+            let billingStatus: BillingStatus | undefined;
+            let gracePeriodEndsAt: string | null = null;
+            
             if (featuresRes.ok) {
               const featuresData = await featuresRes.json();
               if (featuresData.enabledFeatureIds) {
                 enabledFeatures = featuresData.enabledFeatureIds;
               }
+              if (featuresData.billing) {
+                billingStatus = featuresData.billing.status;
+                gracePeriodEndsAt = featuresData.billing.gracePeriodEndsAt;
+              }
             }
             
-            setUserInfo({ ...authData, enabledFeatures });
+            setUserInfo({ ...authData, enabledFeatures, billingStatus, gracePeriodEndsAt });
           }
         }
       } catch (err) {
@@ -159,6 +169,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 pt-4 sm:px-6 sm:pt-6">
             <AnnouncementBanner />
+            {userInfo?.billingStatus && (
+              <BillingStatusBanner 
+                status={userInfo.billingStatus}
+                gracePeriodEndsAt={userInfo.gracePeriodEndsAt}
+                shopName={userInfo.shopName}
+              />
+            )}
           </div>
           {children}
         </div>

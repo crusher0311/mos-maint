@@ -16,7 +16,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Data Management**: Data is transitioning from MongoDB Atlas to PostgreSQL. Plan caching stores assembled plan buckets for instant loads with mileage tolerance-based invalidation.
 *   **Integration Mechanisms**: A modular integration layer supports shop management systems (e.g., Tekmetric, Protractor) through `IIntegrationAdapter` and `IntegrationFacade` patterns, incorporating webhooks, incremental sync, OAuth, and rate limiting. An `ISMSAdapter` interface normalizes SMS data.
 *   **Authentication & Authorization**: Role-based access using bcrypt hashing and token-based authentication.
-*   **Billing & Licensing**: Features VIN-based billing with trial limits, Stripe integration, and modular feature flags.
+*   **Billing & Licensing**: VIN-based billing with trial limits, Stripe integration, modular feature flags, and robust grace period handling. Grace periods (7 days) automatically trigger on payment failure with email reminders at days 3-4 and 1-2 remaining. Accounts transition to suspended status when grace expires, with automatic feature disable. Admins can extend grace periods via `/api/admin/billing/extend-grace`. Daily cron job checks expired grace periods (`scripts/daily-grace-check.ts`).
 *   **Admin & Monitoring**: Includes comprehensive admin audit logging, unified API usage monitoring, and a support ticketing system.
 *   **Notification System**: Supports email notifications via Resend API and in-app notifications.
 *   **AI Support Chatbot**: A floating chat widget provides OpenAI-powered responses, knowledge base retrieval, and ticket escalation.

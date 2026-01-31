@@ -39,5 +39,10 @@ export async function GET() {
     ok: true,
     enabledFeatures,
     enabledFeatureIds,
+    billing: {
+      status: entitlements.billing.status,
+      plan: entitlements.billing.plan,
+      gracePeriodEndsAt: entitlements.billing.gracePeriodEndsAt || null,
+    },
   });
 }

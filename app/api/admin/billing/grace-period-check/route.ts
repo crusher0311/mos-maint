@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { sendEmail, makeAccountSuspendedEmail } from "@/lib/email";
+import { sendEmail, makeAccountSuspendedEmail, makeGraceReminderEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +8,12 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
+  
+  const isProduction = process.env.NODE_ENV === "production";
+  if (isProduction && !cronSecret) {
+    console.error("[Grace Period] CRON_SECRET not configured in production");
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+  }
   
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,8 +30,48 @@ export async function POST(req: NextRequest) {
   const results = {
     checked: expiredGracePeriodShops.length,
     suspended: [] as number[],
+    remindersSent: 0,
+    transitioned: [] as { shopId: number; shopName: string }[],
     errors: [] as { shopId: number; error: string }[],
   };
+  
+  const activeGracePeriodShops = await db.collection("shops").find({
+    "billing.status": "past_due",
+    "billing.gracePeriodEndsAt": { $gt: now }
+  }).toArray();
+  
+  for (const shop of activeGracePeriodShops) {
+    try {
+      const gracePeriodEndsAt = new Date(shop.billing.gracePeriodEndsAt);
+      const daysRemaining = Math.ceil((gracePeriodEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      
+      const lastReminderSent = shop.billing?.lastReminderSentAt 
+        ? new Date(shop.billing.lastReminderSentAt) 
+        : null;
+      const hoursSinceLastReminder = lastReminderSent 
+        ? (now.getTime() - lastReminderSent.getTime()) / (1000 * 60 * 60)
+        : 999;
+      
+      if ((daysRemaining === 3 || daysRemaining === 4 || daysRemaining === 2 || daysRemaining === 1) && hoursSinceLastReminder > 20) {
+        const owner = await db.collection("users").findOne({ shopId: shop.shopId, role: "owner" });
+        if (owner?.email) {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+          const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
+          const emailContent = makeGraceReminderEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl, daysRemaining);
+          
+          await sendEmail({ to: owner.email, ...emailContent });
+          await db.collection("shops").updateOne(
+            { shopId: shop.shopId },
+            { $set: { "billing.lastReminderSentAt": now } }
+          );
+          results.remindersSent++;
+          console.log(`[Grace Period] Sent ${daysRemaining}-day reminder to ${owner.email} for shop ${shop.shopId}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Grace Period] Error sending reminder for shop ${shop.shopId}:`, error);
+    }
+  }
   
   for (const shop of expiredGracePeriodShops) {
     try {
@@ -48,6 +94,7 @@ export async function POST(req: NextRequest) {
       );
       
       results.suspended.push(shop.shopId);
+      results.transitioned.push({ shopId: shop.shopId, shopName: shop.name || `Shop ${shop.shopId}` });
       console.log(`[Grace Period] Shop ${shop.shopId} (${shop.name}) suspended - grace period expired`);
       
       const owner = await db.collection("users").findOne({ shopId: shop.shopId, role: "owner" });
