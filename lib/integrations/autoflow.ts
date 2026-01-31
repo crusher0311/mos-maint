@@ -142,19 +142,28 @@ export async function fetchDviByInvoice(
   if (!inv) return { ok: false, error: "Missing invoice/RO." };
 
   const url = `${cfg.base}/api/v1/dvi/${encodeURIComponent(String(inv))}`;
+  console.log(`[AutoFlow] Fetching DVI from: ${url}`);
   
   let res: Response;
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     res = await doFetch(url, {
       headers: {
         Authorization: basicAuthHeader(String(cfg.apiKey), String(cfg.apiPassword)),
         accept: "application/json",
       },
       cache: "no-store",
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
   } catch (err: any) {
-    console.error(`[AutoFlow] Network error fetching DVI for invoice ${inv}:`, err?.message || err);
-    return { ok: false, error: `AutoFlow connection failed: ${err?.message || 'Network error'}` };
+    const isTimeout = err?.name === 'AbortError';
+    const errorMsg = isTimeout ? 'Request timed out (10s)' : (err?.message || 'Network error');
+    console.error(`[AutoFlow] ${isTimeout ? 'Timeout' : 'Network error'} fetching DVI for invoice ${inv} from ${cfg.domain}:`, errorMsg);
+    return { ok: false, error: `AutoFlow connection failed: ${errorMsg}` };
   }
 
   if (!res.ok) {
