@@ -63,18 +63,21 @@ export async function createNotificationsForUsers(
 }
 
 export async function getUserNotifications(
-  userId: string,
+  userIdOrEmail: string,
   limit: number = 20,
   unreadOnly: boolean = false
 ): Promise<Notification[]> {
   try {
+    const userId = await resolveUserId(userIdOrEmail);
+    if (!userId) return [];
+    
     let query;
     if (unreadOnly) {
       query = sql`
         SELECT id, user_id as "userId", shop_id as "shopId", type, title, message, 
                link, is_read as "isRead", metadata, created_at as "createdAt"
         FROM notifications 
-        WHERE user_id = ${userId}::uuid AND is_read = FALSE
+        WHERE user_id = ${userId} AND is_read = FALSE
         ORDER BY created_at DESC LIMIT ${limit}
       `;
     } else {
@@ -82,7 +85,7 @@ export async function getUserNotifications(
         SELECT id, user_id as "userId", shop_id as "shopId", type, title, message, 
                link, is_read as "isRead", metadata, created_at as "createdAt"
         FROM notifications 
-        WHERE user_id = ${userId}::uuid
+        WHERE user_id = ${userId}
         ORDER BY created_at DESC LIMIT ${limit}
       `;
     }
@@ -95,8 +98,19 @@ export async function getUserNotifications(
   }
 }
 
-export async function getUnreadCount(userId: string): Promise<number> {
+async function resolveUserId(userIdOrEmail: string): Promise<string | null> {
+  if (userIdOrEmail.includes('@')) {
+    const users = await sql`SELECT id FROM users WHERE email = ${userIdOrEmail} LIMIT 1`;
+    return users[0]?.id as string || null;
+  }
+  return userIdOrEmail;
+}
+
+export async function getUnreadCount(userIdOrEmail: string): Promise<number> {
   try {
+    const userId = await resolveUserId(userIdOrEmail);
+    if (!userId) return 0;
+    
     const result = await sql`
       SELECT COUNT(*) as count FROM notifications 
       WHERE user_id = ${userId}::uuid AND is_read = FALSE
@@ -108,8 +122,11 @@ export async function getUnreadCount(userId: string): Promise<number> {
   }
 }
 
-export async function markAsRead(notificationId: string, userId: string): Promise<boolean> {
+export async function markAsRead(notificationId: string, userIdOrEmail: string): Promise<boolean> {
   try {
+    const userId = await resolveUserId(userIdOrEmail);
+    if (!userId) return false;
+    
     const result = await sql`
       UPDATE notifications SET is_read = TRUE 
       WHERE id = ${Number(notificationId)} AND user_id = ${userId}::uuid
@@ -121,8 +138,11 @@ export async function markAsRead(notificationId: string, userId: string): Promis
   }
 }
 
-export async function markAllAsRead(userId: string): Promise<number> {
+export async function markAllAsRead(userIdOrEmail: string): Promise<number> {
   try {
+    const userId = await resolveUserId(userIdOrEmail);
+    if (!userId) return 0;
+    
     const result = await sql`
       UPDATE notifications SET is_read = TRUE 
       WHERE user_id = ${userId}::uuid AND is_read = FALSE
@@ -134,8 +154,11 @@ export async function markAllAsRead(userId: string): Promise<number> {
   }
 }
 
-export async function deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+export async function deleteNotification(notificationId: string, userIdOrEmail: string): Promise<boolean> {
   try {
+    const userId = await resolveUserId(userIdOrEmail);
+    if (!userId) return false;
+    
     const result = await sql`
       DELETE FROM notifications 
       WHERE id = ${Number(notificationId)} AND user_id = ${userId}::uuid
