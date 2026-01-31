@@ -112,6 +112,61 @@ Use CARFAX history to estimate current mileage for vehicles without an input odo
 - Prefetch and cache plans for vehicles without odometer readings
 - More accurate "overdue" notifications
 
+### Service History Timeline
+**Priority:** Medium | **Status:** Idea
+
+A visual timeline showing the complete service history of a vehicle, combining data from multiple sources into one unified view.
+
+**Data Sources (in priority order):**
+1. **Shop RO History** - Work performed at this shop (Tekmetric/Protractor/AutoFlow)
+2. **CARFAX Service History** - Work performed at other shops
+3. **Deferred Work** - Declined services (shown as yellow/warning items)
+4. **OEM Milestones** - Factory-scheduled service intervals (shown as reference markers)
+
+**Timeline Entry Types:**
+- `completed` (green) - Service performed at this shop
+- `external` (blue) - Service performed elsewhere (CARFAX)
+- `declined` (yellow) - Customer declined, still pending
+- `milestone` (gray) - OEM recommended interval passed
+
+**UI/UX Design:**
+- Vertical scrolling timeline, newest at top
+- Each entry shows: date, mileage, service description, source badge
+- Expandable details for full RO/CARFAX record
+- Filter by service category (oil, brakes, tires, etc.)
+- "Print" or "Share" button for customer-facing PDF/link
+
+**Timeline Entry Schema:**
+```typescript
+{
+  date: Date,
+  mileage: number | null,
+  serviceKey: string,        // normalized service category
+  description: string,       // display text
+  source: 'shop' | 'carfax' | 'deferred' | 'oem',
+  sourceRef: string,         // RO number, CARFAX record ID, etc.
+  status: 'completed' | 'external' | 'declined' | 'milestone'
+}
+```
+
+**Key Features:**
+- **Gap Detection** - Highlight periods with no service activity
+- **Pattern Recognition** - "This vehicle typically gets oil changes every 4 months"
+- **Service Consistency** - Show if customer is loyal vs. shopping around
+- **Upcoming Preview** - Project future milestones based on driving patterns
+
+**Customer-Facing Version:**
+- Simplified view without pricing or internal notes
+- Shareable link with expiration
+- QR code on oil sticker links to timeline
+- Builds trust and transparency
+
+**Implementation Phases:**
+1. Phase 1: Shop RO history only (quick win)
+2. Phase 2: Add CARFAX integration
+3. Phase 3: Add deferred work overlay
+4. Phase 4: Customer sharing + QR integration
+
 ### Deferred Work vs CARFAX Comparison
 **Priority:** Medium | **Status:** Idea
 
