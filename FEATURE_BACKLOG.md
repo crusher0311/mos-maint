@@ -638,6 +638,106 @@ Each new integration implements `ISMSAdapter` interface. Data flows through exis
 
 ---
 
+## Appendix: Development & Deployment Workflow
+
+### Strategy: "Train How You Fight"
+Three isolated environments, but QA mirrors production data for realistic testing.
+
+### Environments
+
+| Environment | Platform | Database | Stripe Mode | Purpose |
+|-------------|----------|----------|-------------|---------|
+| **Dev** | Replit | Replit PostgreSQL | Test | Active development, experimentation |
+| **QA** | Render | QA PostgreSQL (prod mirror) | Test | Pre-production testing with real data patterns |
+| **Prod** | Render | Production PostgreSQL | Live | Real customers (24 shops) |
+
+### Render Service IDs
+- **QA:** `srv-d5hb86i4d50c738vm4o0`
+- **Prod:** `srv-d55jaqkhg0os73a5dd8g`
+
+### Database Mirroring (Prod → QA)
+Before testing migrations or major features, sync QA database from production:
+
+```bash
+# 1. Dump production database
+pg_dump $PROD_DATABASE_URL --no-owner --no-acl > prod_backup.sql
+
+# 2. Restore to QA database (destructive - replaces QA data)
+psql $QA_DATABASE_URL -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+psql $QA_DATABASE_URL < prod_backup.sql
+
+# 3. Verify row counts match
+psql $PROD_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
+psql $QA_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
+```
+
+**When to sync:**
+- Before testing database migrations
+- Before testing billing changes
+- Weekly (recommended) to keep QA data fresh
+- After major production data changes
+
+### Deployment Flow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  1. DEVELOP (Replit)                                    │
+│     - Write code, test locally                          │
+│     - Use Replit's PostgreSQL for dev data              │
+│     - Stripe test mode for billing work                 │
+└────────────────────────┬────────────────────────────────┘
+                         │ Deploy to QA
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│  2. TEST (Render QA)                                    │
+│     - Sync prod data to QA database first               │
+│     - Test with real data patterns                      │
+│     - Verify migrations don't break anything            │
+│     - Test billing flows (Stripe test mode)             │
+└────────────────────────┬────────────────────────────────┘
+                         │ Deploy to Prod (after QA passes)
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│  3. PRODUCTION (Render Prod)                            │
+│     - Real customers, real data                         │
+│     - Stripe live mode                                  │
+│     - Monitor for issues                                │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Environment Variables by Environment
+
+**Dev (Replit):**
+- `DATABASE_URL` - Replit's built-in PostgreSQL
+- `STRIPE_SECRET_KEY` - Test mode key (`sk_test_...`)
+- `DEV_AUTO_LOGIN=true` - Skip auth for faster dev
+
+**QA (Render):**
+- `DATABASE_URL` - QA PostgreSQL (mirrored from prod)
+- `STRIPE_SECRET_KEY` - Test mode key (`sk_test_...`)
+- `NODE_ENV=production`
+
+**Prod (Render):**
+- `DATABASE_URL` - Production PostgreSQL
+- `STRIPE_SECRET_KEY` - Live mode key (`sk_live_...`)
+- `NODE_ENV=production`
+
+### Pre-Deployment Checklist
+
+**Before deploying to QA:**
+- [ ] Code tested locally in Replit
+- [ ] No console errors
+- [ ] Database migrations tested (if any)
+
+**Before deploying to Prod:**
+- [ ] QA testing complete
+- [ ] Database sync verified (if migration involved)
+- [ ] Stripe billing flows verified (if billing changes)
+- [ ] Chrome extension tested (if UI changes)
+- [ ] Rollback plan ready
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
