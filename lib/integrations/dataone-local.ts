@@ -248,10 +248,44 @@ export async function getEnhancedVehicleDataLocal(vin: string): Promise<{
   };
 }
 
+export interface VehicleRecall {
+  nhtsa_recall_id: number;
+  nhtsa_campaign_number: string;
+  report_manufacturer: string;
+  component_description: string;
+  defect_summary: string;
+  consequence_summary: string;
+  corrective_action_summary: string;
+  potential_units_affected: number;
+  report_received_date: string | null;
+  record_creation_date: string | null;
+  regulation_part_number: string | null;
+  fmvvs_number: string | null;
+  isSafetyCritical?: boolean;
+}
+
+const SAFETY_CRITICAL_KEYWORDS = [
+  "fire", "crash", "injury", "death", "fatal", "rollover", "brake", "steering",
+  "airbag", "seatbelt", "seat belt", "fuel leak", "loss of control", "collision",
+  "explosion", "burn", "electrocution", "entrapment"
+];
+
+function isSafetyCriticalRecall(recall: VehicleRecall): boolean {
+  const textToCheck = [
+    recall.consequence_summary || "",
+    recall.defect_summary || "",
+    recall.component_description || ""
+  ].join(" ").toLowerCase();
+  
+  return SAFETY_CRITICAL_KEYWORDS.some(keyword => textToCheck.includes(keyword));
+}
+
 export async function getVehicleRecallsLocal(vin: string): Promise<{
   ok: boolean;
   vin: string;
-  recalls: any[];
+  recalls: VehicleRecall[];
+  count: number;
+  safetyCriticalCount: number;
   error?: string;
   source: "local";
 }> {
@@ -259,23 +293,204 @@ export async function getVehicleRecallsLocal(vin: string): Promise<{
     const decoded = await decodeVinLocal(vin);
     
     if (!decoded.ok || !decoded.decoded) {
-      return { ok: false, vin, recalls: [], error: "Cannot decode VIN", source: "local" };
+      return { ok: false, vin, recalls: [], count: 0, safetyCriticalCount: 0, error: "Cannot decode VIN", source: "local" };
     }
     
     const vehicleId = decoded.decoded.vehicle_id;
     
-    const recalls = await sql`
-      SELECT r.*
+    const recalls = await sql<VehicleRecall[]>`
+      SELECT DISTINCT r.nhtsa_recall_id, r.nhtsa_campaign_number, r.report_manufacturer,
+             r.component_description, r.defect_summary, r.consequence_summary,
+             r.corrective_action_summary, r.potential_units_affected,
+             r.report_received_date, r.record_creation_date,
+             r.regulation_part_number, r.fmvvs_number
       FROM dataone_def_nhtsa_recall r
       JOIN dataone_lkp_veh_nhtsa_recall vr ON r.nhtsa_recall_id = vr.nhtsa_recall_id
       WHERE vr.vehicle_id = ${vehicleId}
       ORDER BY r.record_creation_date DESC
     `;
     
-    return { ok: true, vin, recalls, source: "local" };
+    // Mark safety-critical recalls
+    const recallsWithSeverity = recalls.map(r => ({
+      ...r,
+      isSafetyCritical: isSafetyCriticalRecall(r)
+    }));
+    
+    // Sort: safety-critical first, then by date
+    recallsWithSeverity.sort((a, b) => {
+      if (a.isSafetyCritical && !b.isSafetyCritical) return -1;
+      if (!a.isSafetyCritical && b.isSafetyCritical) return 1;
+      return 0;
+    });
+    
+    const safetyCriticalCount = recallsWithSeverity.filter(r => r.isSafetyCritical).length;
+    
+    return { 
+      ok: true, 
+      vin, 
+      recalls: recallsWithSeverity, 
+      count: recallsWithSeverity.length,
+      safetyCriticalCount,
+      source: "local" 
+    };
   } catch (error) {
     console.error("DataOne recalls error:", error);
-    return { ok: false, vin, recalls: [], error: String(error), source: "local" };
+    return { ok: false, vin, recalls: [], count: 0, safetyCriticalCount: 0, error: String(error), source: "local" };
+  }
+}
+
+export interface VehicleSpecification {
+  specification_id: number;
+  specification_category: string;
+  specification_name: string;
+  specification_value: string;
+}
+
+export interface VehicleSpecsGrouped {
+  weightsAndCapacities: {
+    fuelTankCapacity?: string;
+    baseTowingCapacity?: string;
+    maxTowingCapacity?: string;
+    maxPayload?: string;
+    curbWeight?: string;
+    gvwr?: string;
+    gcwr?: string;
+    tonnage?: string;
+  };
+  wheelsAndTires: {
+    frontTireDescription?: string;
+    rearTireDescription?: string;
+    frontWheelDiameter?: string;
+    rearWheelDiameter?: string;
+    frontWheelSize?: string;
+    rearWheelSize?: string;
+    tireType?: string;
+  };
+  brakes: {
+    frontBrakeDiameter?: string;
+    rearBrakeDiameter?: string;
+  };
+  dimensions: {
+    length?: string;
+    width?: string;
+    height?: string;
+    wheelbase?: string;
+    groundClearance?: string;
+    frontTrackWidth?: string;
+    rearTrackWidth?: string;
+  };
+  truckSpecs: {
+    bedLength?: string;
+  };
+  seating: {
+    maxSeating?: string;
+    standardSeating?: string;
+  };
+  interior: {
+    cargoVolume?: string;
+    passengerVolume?: string;
+  };
+}
+
+export async function getVehicleSpecsLocal(vin: string): Promise<{
+  ok: boolean;
+  vin: string;
+  specs: VehicleSpecification[];
+  grouped: VehicleSpecsGrouped;
+  error?: string;
+  source: "local";
+}> {
+  const emptyGrouped: VehicleSpecsGrouped = {
+    weightsAndCapacities: {},
+    wheelsAndTires: {},
+    brakes: {},
+    dimensions: {},
+    truckSpecs: {},
+    seating: {},
+    interior: {},
+  };
+  
+  try {
+    const decoded = await decodeVinLocal(vin);
+    
+    if (!decoded.ok || !decoded.decoded) {
+      return { ok: false, vin, specs: [], grouped: emptyGrouped, error: "Cannot decode VIN", source: "local" };
+    }
+    
+    const vehicleId = decoded.decoded.vehicle_id;
+    
+    const specs = await sql<VehicleSpecification[]>`
+      SELECT DISTINCT s.specification_id, s.specification_category, 
+             s.specification_name, s.specification_value
+      FROM dataone_def_specification s
+      JOIN dataone_lkp_veh_standard_specification vs ON s.specification_id = vs.specification_id
+      WHERE vs.vehicle_id = ${vehicleId}
+      ORDER BY s.specification_category, s.specification_name
+    `;
+    
+    // Group specs into structured object
+    const grouped: VehicleSpecsGrouped = {
+      weightsAndCapacities: {},
+      wheelsAndTires: {},
+      brakes: {},
+      dimensions: {},
+      truckSpecs: {},
+      seating: {},
+      interior: {},
+    };
+    
+    for (const spec of specs) {
+      const name = spec.specification_name;
+      const value = spec.specification_value;
+      
+      // Weights and Capacities
+      if (name === "Fuel Tank Capacity") grouped.weightsAndCapacities.fuelTankCapacity = value;
+      else if (name === "Base Towing Capacity") grouped.weightsAndCapacities.baseTowingCapacity = value;
+      else if (name === "Max Towing Capacity") grouped.weightsAndCapacities.maxTowingCapacity = value;
+      else if (name === "Max Payload") grouped.weightsAndCapacities.maxPayload = value;
+      else if (name === "Curb Weight") grouped.weightsAndCapacities.curbWeight = value;
+      else if (name === "Gross Vehicle Weight Rating") grouped.weightsAndCapacities.gvwr = value;
+      else if (name === "Gross Combined Weight Rating") grouped.weightsAndCapacities.gcwr = value;
+      else if (name === "Tonnage") grouped.weightsAndCapacities.tonnage = value;
+      
+      // Wheels and Tires
+      else if (name === "Front Tire Description") grouped.wheelsAndTires.frontTireDescription = value;
+      else if (name === "Rear Tire Description") grouped.wheelsAndTires.rearTireDescription = value;
+      else if (name === "Front Wheel Diameter") grouped.wheelsAndTires.frontWheelDiameter = value;
+      else if (name === "Rear Wheel Diameter") grouped.wheelsAndTires.rearWheelDiameter = value;
+      else if (name === "Front Wheel Size") grouped.wheelsAndTires.frontWheelSize = value;
+      else if (name === "Rear Wheel Size") grouped.wheelsAndTires.rearWheelSize = value;
+      else if (name === "Tire Type") grouped.wheelsAndTires.tireType = value;
+      
+      // Brakes
+      else if (name === "Front Brake Diameter") grouped.brakes.frontBrakeDiameter = value;
+      else if (name === "Rear Brake Diameter") grouped.brakes.rearBrakeDiameter = value;
+      
+      // Dimensions
+      else if (name === "Length") grouped.dimensions.length = value;
+      else if (name === "Width") grouped.dimensions.width = value;
+      else if (name === "Height") grouped.dimensions.height = value;
+      else if (name === "Wheelbase") grouped.dimensions.wheelbase = value;
+      else if (name === "Ground Clearance") grouped.dimensions.groundClearance = value;
+      else if (name === "Front Track Width") grouped.dimensions.frontTrackWidth = value;
+      else if (name === "Rear Track Width") grouped.dimensions.rearTrackWidth = value;
+      
+      // Truck Specs
+      else if (name === "Bed Length") grouped.truckSpecs.bedLength = value;
+      
+      // Seating
+      else if (name === "Max Seating") grouped.seating.maxSeating = value;
+      else if (name === "Standard Seating") grouped.seating.standardSeating = value;
+      
+      // Interior
+      else if (name === "Cargo Volume") grouped.interior.cargoVolume = value;
+      else if (name === "Passenger Volume") grouped.interior.passengerVolume = value;
+    }
+    
+    return { ok: true, vin, specs, grouped, source: "local" };
+  } catch (error) {
+    console.error("DataOne specs error:", error);
+    return { ok: false, vin, specs: [], grouped: emptyGrouped, error: String(error), source: "local" };
   }
 }
 
