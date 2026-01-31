@@ -11,7 +11,7 @@ import {
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
-import { getVehicleRecallsLocal, type VehicleRecall } from "@/lib/integrations/dataone-local";
+import { getVehicleRecallsLocal, getEnhancedVehicleDataLocal, type VehicleRecall } from "@/lib/integrations/dataone-local";
 import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
@@ -1291,11 +1291,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
   }
 
-  // Vehicle info fallback: try all sources - cache, vehicles collection, and OEM data
-  const vehicleYear = cachedPlan?.plan?.vehicle?.year ?? vehicle?.year ?? oemData.vehicle?.year;
-  const vehicleMake = cachedPlan?.plan?.vehicle?.make ?? vehicle?.make ?? oemData.vehicle?.make;
-  const vehicleModel = cachedPlan?.plan?.vehicle?.model ?? vehicle?.model ?? oemData.vehicle?.model;
-  const vehicleEngine = cachedPlan?.plan?.vehicle?.engine ?? oemData.vehicle?.engine;
+  // Always fetch vehicle info from DataOne local for accurate make/model (fast local query)
+  const dataoneVehicle = await getEnhancedVehicleDataLocal(vin);
+  
+  // Vehicle info fallback: try all sources - DataOne local, cache, vehicles collection, and OEM data
+  const vehicleYear = dataoneVehicle.vehicle?.year ?? cachedPlan?.plan?.vehicle?.year ?? vehicle?.year ?? oemData.vehicle?.year;
+  const vehicleMake = dataoneVehicle.vehicle?.make ?? cachedPlan?.plan?.vehicle?.make ?? vehicle?.make ?? oemData.vehicle?.make;
+  const vehicleModel = dataoneVehicle.vehicle?.model ?? cachedPlan?.plan?.vehicle?.model ?? vehicle?.model ?? oemData.vehicle?.model;
+  const vehicleEngine = dataoneVehicle.vehicle?.engine ?? cachedPlan?.plan?.vehicle?.engine ?? oemData.vehicle?.engine;
 
   // Build normalized inputs
 
