@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
+import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch } from "@/lib/plan-prefetch";
 
@@ -1001,9 +1002,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                         {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
-                        <code className="text-xs bg-gray-100 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono text-gray-700">
-                          {vin}
-                        </code>
+                        <VinSpecsTooltip vin={vin} />
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {r.displayRo ? (

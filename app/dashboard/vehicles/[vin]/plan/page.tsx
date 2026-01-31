@@ -11,6 +11,7 @@ import {
   fetchCarfaxWithCache 
 } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
+import { getVehicleRecallsLocal, type VehicleRecall } from "@/lib/integrations/dataone-local";
 import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
@@ -1103,6 +1104,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
   let carfaxCfg: any = { configured: false };
   let protractorCfg: any = { configured: false };
   let autoVitalsCfg: any = { configured: false };
+  
+  // Fetch NHTSA recalls from local PostgreSQL (always fast, no caching needed)
+  const recallsResult = await getVehicleRecallsLocal(vin);
+  const recalls: VehicleRecall[] = recallsResult.ok ? recallsResult.recalls : [];
+  const recallCount = recallsResult.ok ? recallsResult.count : 0;
+  const safetyCriticalCount = recallsResult.ok ? recallsResult.safetyCriticalCount : 0;
 
   // CACHE HIT: Only fetch cheap local data needed for UI (shop branding, config status)
   // Also fetch Protractor vehicle info for deferred work (deferred work is dynamic, not cached)
@@ -1543,8 +1550,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold truncate">
-                {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Plan
+              <h1 className="text-xl sm:text-2xl font-bold truncate flex items-center gap-2">
+                <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-8 h-8" />
+                {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Vehicle Health Intelligence
               </h1>
               <div className="text-sm text-neutral-600">
                 {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
@@ -1558,6 +1566,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <div className="flex items-center gap-3">
               <PrintButton />
               <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
+                <a href="#recalls" className={`rounded-full px-3 py-1 ${recallCount > 0 ? 'bg-red-700' : 'bg-green-600'} text-white`}>
+                  {recallCount > 0 ? `Recalls ${recallCount}` : '✓ No Recalls'}
+                </a>
                 <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
                   Overdue {counts.overdue}
                 </a>
@@ -1585,15 +1596,16 @@ async function PlanContent({ params, searchParams }: PageProps) {
           {shopLogo ? (
             <img src={shopLogo} alt="Shop Logo" className="h-12" />
           ) : (
-            <div className="text-lg font-bold text-neutral-800">Maintenance Report</div>
+            <div className="text-lg font-bold text-neutral-800">Vehicle Health Intelligence Report</div>
           )}
           <div className="text-right text-sm text-neutral-600">
             <div>Report Date: {new Date().toLocaleDateString()}</div>
           </div>
         </div>
         <div className="mt-4">
-          <h1 className="text-2xl font-bold">
-            {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Maintenance Plan
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-8 h-8" />
+            {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Vehicle Health Intelligence
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
             VIN: {vin}
@@ -1604,6 +1616,80 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
       {/* Buckets (single column for easy scanning) */}
       <div className="mx-auto max-w-5xl px-4 sm:px-6 space-y-8">
+        {/* NHTSA Recalls Section */}
+        <section id="recalls" className="space-y-3">
+          <h2 className="text-lg font-semibold text-neutral-700 flex items-center gap-2">
+            <span className="text-xl">🚨</span> NHTSA Recalls ({recallCount})
+          </h2>
+          {recallCount === 0 ? (
+            <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className="flex items-center gap-2 text-green-700">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="font-medium">No open recalls for this vehicle</span>
+              </div>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {recalls.map((recall) => (
+                <li 
+                  key={recall.nhtsa_recall_id} 
+                  className={`rounded-xl border-2 p-4 ${
+                    recall.isSafetyCritical 
+                      ? 'border-red-500 bg-red-50' 
+                      : 'border-amber-400 bg-amber-50'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${
+                          recall.isSafetyCritical 
+                            ? 'bg-red-600 text-white' 
+                            : 'bg-amber-500 text-white'
+                        }`}>
+                          {recall.isSafetyCritical ? '⚠️ SAFETY' : 'RECALL'}
+                        </span>
+                        <code className="text-sm font-mono bg-white/50 px-2 py-0.5 rounded">
+                          {recall.nhtsa_campaign_number}
+                        </code>
+                        <span className="text-sm text-neutral-600">{recall.component_description}</span>
+                      </div>
+                      
+                      {recall.consequence_summary && (
+                        <div className="mt-2">
+                          <span className="text-xs font-semibold text-red-700 uppercase">Risk: </span>
+                          <span className="text-sm text-neutral-700">{recall.consequence_summary}</span>
+                        </div>
+                      )}
+                      
+                      {recall.corrective_action_summary && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-sm text-blue-600 hover:underline">
+                            View fix details
+                          </summary>
+                          <div className="mt-1 text-sm text-neutral-600 bg-white/50 p-2 rounded">
+                            <span className="font-semibold">Fix: </span>
+                            {recall.corrective_action_summary}
+                          </div>
+                        </details>
+                      )}
+                      
+                      {recall.potential_units_affected && recall.potential_units_affected > 0 && (
+                        <div className="mt-2 text-xs text-neutral-500">
+                          {recall.potential_units_affected.toLocaleString()} vehicles affected
+                          {recall.record_creation_date && ` • Issued ${new Date(recall.record_creation_date).toLocaleDateString()}`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Overdue (non-deferred) */}
         <section id="overdue" className="space-y-3">
           <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2">

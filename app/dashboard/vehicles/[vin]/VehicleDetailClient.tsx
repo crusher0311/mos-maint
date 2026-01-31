@@ -139,7 +139,53 @@ interface VehicleDetailClientProps {
   protractorConnected?: boolean;
 }
 
-type TabId = "oe" | "dvi" | "carfax";
+type TabId = "oe" | "dvi" | "carfax" | "specs";
+
+interface VehicleSpecsGrouped {
+  weightsAndCapacities: {
+    fuelTankCapacity?: string;
+    baseTowingCapacity?: string;
+    maxTowingCapacity?: string;
+    maxPayload?: string;
+    curbWeight?: string;
+    gvwr?: string;
+    gcwr?: string;
+    tonnage?: string;
+  };
+  wheelsAndTires: {
+    frontTireDescription?: string;
+    rearTireDescription?: string;
+    frontWheelDiameter?: string;
+    rearWheelDiameter?: string;
+    frontWheelSize?: string;
+    rearWheelSize?: string;
+    tireType?: string;
+  };
+  brakes: {
+    frontBrakeDiameter?: string;
+    rearBrakeDiameter?: string;
+  };
+  dimensions: {
+    length?: string;
+    width?: string;
+    height?: string;
+    wheelbase?: string;
+    groundClearance?: string;
+    frontTrackWidth?: string;
+    rearTrackWidth?: string;
+  };
+  truckSpecs: {
+    bedLength?: string;
+  };
+  seating: {
+    maxSeating?: string;
+    standardSeating?: string;
+  };
+  interior: {
+    cargoVolume?: string;
+    passengerVolume?: string;
+  };
+}
 
 export default function VehicleDetailClient({
   vehicle,
@@ -160,13 +206,30 @@ export default function VehicleDetailClient({
 }: VehicleDetailClientProps) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as TabId | null;
-  const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax"].includes(tabParam) ? tabParam : "oe");
+  const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax", "specs"].includes(tabParam) ? tabParam : "oe");
+  const [specsData, setSpecsData] = useState<VehicleSpecsGrouped | null>(null);
+  const [specsLoading, setSpecsLoading] = useState(false);
 
   useEffect(() => {
-    if (tabParam && ["oe", "dvi", "carfax"].includes(tabParam)) {
+    if (tabParam && ["oe", "dvi", "carfax", "specs"].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
+
+  useEffect(() => {
+    if (activeTab === "specs" && !specsData && !specsLoading) {
+      setSpecsLoading(true);
+      fetch(`/api/vehicles/${vehicle.vin}/specs`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            setSpecsData(data.grouped);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setSpecsLoading(false));
+    }
+  }, [activeTab, vehicle.vin, specsData, specsLoading]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [hasComponents, setHasComponents] = useState<Record<string, boolean>>(
     vehicle.hasComponents || {}
@@ -215,7 +278,8 @@ export default function VehicleDetailClient({
   const tabs = [
     { id: "oe" as TabId, label: "OE" },
     { id: "dvi" as TabId, label: "DVI" },
-    { id: "carfax" as TabId, label: "CARFAX" }
+    { id: "carfax" as TabId, label: "CARFAX" },
+    { id: "specs" as TabId, label: "Specs" }
   ];
 
   const oemByCategory = localOe?.items?.reduce((acc: any, item: any) => {
@@ -254,9 +318,10 @@ export default function VehicleDetailClient({
           <div className="flex items-center gap-2">
             <Link
               href={`/dashboard/vehicles/${vehicle.vin}/plan`}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
             >
-              View Plan
+              <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-5 h-5" />
+              Vehicle Health Intelligence
             </Link>
           </div>
         </div>
@@ -739,6 +804,225 @@ export default function VehicleDetailClient({
                       Connect CARFAX
                     </Link>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "specs" && (
+            <div className="space-y-6">
+              {specsLoading ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+                  <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-sm text-gray-500">Loading specifications...</p>
+                </div>
+              ) : specsData ? (
+                <>
+                  {Object.keys(specsData.weightsAndCapacities).length > 0 && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>⚖️</span> Weights & Capacities
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {specsData.weightsAndCapacities.fuelTankCapacity && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Fuel Tank</div>
+                            <div className="font-semibold text-gray-900">{specsData.weightsAndCapacities.fuelTankCapacity} gal</div>
+                          </div>
+                        )}
+                        {specsData.weightsAndCapacities.maxTowingCapacity && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Max Towing</div>
+                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.maxTowingCapacity).toLocaleString()} lbs</div>
+                          </div>
+                        )}
+                        {specsData.weightsAndCapacities.maxPayload && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Max Payload</div>
+                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.maxPayload).toLocaleString()} lbs</div>
+                          </div>
+                        )}
+                        {specsData.weightsAndCapacities.curbWeight && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Curb Weight</div>
+                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.curbWeight).toLocaleString()} lbs</div>
+                          </div>
+                        )}
+                        {specsData.weightsAndCapacities.gvwr && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">GVWR</div>
+                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.gvwr).toLocaleString()} lbs</div>
+                          </div>
+                        )}
+                        {specsData.weightsAndCapacities.gcwr && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">GCWR</div>
+                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.gcwr).toLocaleString()} lbs</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {Object.keys(specsData.wheelsAndTires).length > 0 && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>🛞</span> Wheels & Tires
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {specsData.wheelsAndTires.frontTireDescription && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Front Tires</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.frontTireDescription}</div>
+                          </div>
+                        )}
+                        {specsData.wheelsAndTires.rearTireDescription && specsData.wheelsAndTires.rearTireDescription !== specsData.wheelsAndTires.frontTireDescription && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Rear Tires</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.rearTireDescription}</div>
+                          </div>
+                        )}
+                        {specsData.wheelsAndTires.frontWheelSize && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Wheel Size</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.frontWheelSize}"</div>
+                          </div>
+                        )}
+                        {specsData.wheelsAndTires.tireType && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Tire Type</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.tireType}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {Object.keys(specsData.brakes).length > 0 && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-red-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>🛑</span> Brakes
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 gap-4">
+                        {specsData.brakes.frontBrakeDiameter && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Front Brake Diameter</div>
+                            <div className="font-semibold text-gray-900">{specsData.brakes.frontBrakeDiameter}"</div>
+                          </div>
+                        )}
+                        {specsData.brakes.rearBrakeDiameter && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Rear Brake Diameter</div>
+                            <div className="font-semibold text-gray-900">{specsData.brakes.rearBrakeDiameter}"</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {Object.keys(specsData.dimensions).length > 0 && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-green-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>📐</span> Dimensions
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {specsData.dimensions.length && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Length</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.length}"</div>
+                          </div>
+                        )}
+                        {specsData.dimensions.width && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Width</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.width}"</div>
+                          </div>
+                        )}
+                        {specsData.dimensions.height && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Height</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.height}"</div>
+                          </div>
+                        )}
+                        {specsData.dimensions.wheelbase && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Wheelbase</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.wheelbase}"</div>
+                          </div>
+                        )}
+                        {specsData.dimensions.groundClearance && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Ground Clearance</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.groundClearance}"</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {specsData.truckSpecs.bedLength && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-amber-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>🛻</span> Truck Specifications
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-xs text-gray-500 uppercase">Bed Length</div>
+                          <div className="font-semibold text-gray-900">{specsData.truckSpecs.bedLength}"</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(specsData.seating.maxSeating || specsData.interior.cargoVolume) && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-purple-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>🪑</span> Interior
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {specsData.seating.maxSeating && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Max Seating</div>
+                            <div className="font-semibold text-gray-900">{specsData.seating.maxSeating} passengers</div>
+                          </div>
+                        )}
+                        {specsData.interior.cargoVolume && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Cargo Volume</div>
+                            <div className="font-semibold text-gray-900">{specsData.interior.cargoVolume} cu ft</div>
+                          </div>
+                        )}
+                        {specsData.interior.passengerVolume && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Passenger Volume</div>
+                            <div className="font-semibold text-gray-900">{specsData.interior.passengerVolume} cu ft</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <h3 className="font-medium text-gray-900 mb-2">No Specifications Available</h3>
+                  <p className="text-sm text-gray-500">
+                    Vehicle specifications are not available for this VIN.
+                  </p>
                 </div>
               )}
             </div>
