@@ -119,6 +119,8 @@ export async function resolveAutoflowConfig(shopId: number) {
 
   const subdomain = domain ? domain.split(".")[0] : "";
 
+  console.log(`[AutoFlow Config] Shop ${shopId}: domain=${domain}, base=${base}, configured=${configured}`);
+  
   return {
     base,
     domain,
