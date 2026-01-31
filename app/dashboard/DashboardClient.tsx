@@ -1065,39 +1065,48 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <HeartPulse className="w-4 h-4" />
                             </span>
                           )}
-                          <button
-                            onClick={() => {
-                              // Use structured vehicle fields with fallback parsing for legacy data
-                              let year = r.vehicle?.year;
-                              let make = r.vehicle?.make;
-                              let model = r.vehicle?.model;
-                              
-                              // Fallback: parse displayVehicle if structured data is missing
-                              if (!year && !make && !model && r.displayVehicle) {
-                                const vehicleStr = r.displayVehicle || "";
-                                const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                const parts = afterYear.split(" ").filter(Boolean);
-                                make = parts[0] || undefined;
-                                model = parts.slice(1).join(" ") || undefined;
-                              }
-                              
-                              setJobLookupVehicle({
-                                vin,
-                                year,
-                                make,
-                                model,
-                                engine: r.vehicle?.engine || r.engine || undefined,
-                                workOrderId: r.workOrderGuid || r.displayRo,
-                                displayName: r.displayName,
-                              });
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
-                            title="Job Lookup"
-                          >
-                            <Wrench className="w-4 h-4" />
-                          </button>
+                          {data.enabledFeatures?.includes('job_lookup') ? (
+                            <button
+                              onClick={() => {
+                                // Use structured vehicle fields with fallback parsing for legacy data
+                                let year = r.vehicle?.year;
+                                let make = r.vehicle?.make;
+                                let model = r.vehicle?.model;
+                                
+                                // Fallback: parse displayVehicle if structured data is missing
+                                if (!year && !make && !model && r.displayVehicle) {
+                                  const vehicleStr = r.displayVehicle || "";
+                                  const yearMatch = vehicleStr.match(/^(\d{4})/);
+                                  year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+                                  const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+                                  const parts = afterYear.split(" ").filter(Boolean);
+                                  make = parts[0] || undefined;
+                                  model = parts.slice(1).join(" ") || undefined;
+                                }
+                                
+                                setJobLookupVehicle({
+                                  vin,
+                                  year,
+                                  make,
+                                  model,
+                                  engine: r.vehicle?.engine || r.engine || undefined,
+                                  workOrderId: r.workOrderGuid || r.displayRo,
+                                  displayName: r.displayName,
+                                });
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                              title="Job Lookup"
+                            >
+                              <Wrench className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span
+                              className="p-1.5 text-gray-300 cursor-not-allowed"
+                              title="Job Lookup not enabled for this shop"
+                            >
+                              <Wrench className="w-4 h-4" />
+                            </span>
+                          )}
                           {data.enabledFeatures?.includes('common_failures') ? (
                             <button
                               onClick={() => {
