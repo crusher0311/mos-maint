@@ -73,7 +73,87 @@ Make the Stripe billing integration more robust with automatic feature control, 
 
 ---
 
-## 2. [Add Next Feature Here]
+## 2. MongoDB to PostgreSQL Migration
+
+**Priority:** High  
+**Status:** Planned
+
+### Overview
+Migrate core relational data from MongoDB Atlas to PostgreSQL for improved performance, data integrity, and simpler querying. MongoDB will remain for caching purposes.
+
+### Migration Phases
+
+#### Phase 1: Schema Design
+- Design PostgreSQL schema for all core entities
+- Map MongoDB collections to PostgreSQL tables:
+  - `shops` → `shops` table
+  - `users` → `users` table
+  - `vehicles` → `vehicles` table (if applicable)
+  - `billing records` → `billing` table
+  - `feature flags` → `feature_flags` table
+  - `audit_log` → `audit_logs` table
+  - `platform_settings` → `platform_settings` table
+- Define foreign key relationships
+- Create indexes for common queries
+
+#### Phase 2: Data Access Layer
+- Create Drizzle ORM schema definitions
+- Build repository pattern for each entity
+- Create migration scripts for existing data
+- Implement dual-write during transition (write to both MongoDB and PostgreSQL)
+
+#### Phase 3: Read Migration
+- Switch reads from MongoDB to PostgreSQL for each entity (one at a time)
+- Validate data consistency between both databases
+- Monitor performance
+
+#### Phase 4: Write Migration
+- Switch writes from MongoDB to PostgreSQL
+- Remove dual-write code
+- Keep MongoDB for:
+  - Caching (plan_cache, dataone_cache)
+  - Session data (if applicable)
+  - Any document-heavy data that benefits from flexible schema
+
+#### Phase 5: Cleanup
+- Remove MongoDB queries for migrated entities
+- Update all API routes to use PostgreSQL
+- Archive MongoDB collections (keep for rollback safety)
+- Update documentation
+
+### Entities to Migrate
+| MongoDB Collection | PostgreSQL Table | Priority |
+|--------------------|------------------|----------|
+| `shops` | `shops` | High |
+| `users` | `users` | High |
+| `platform_settings` | `platform_settings` | High |
+| `audit_log` | `audit_logs` | Medium |
+| `stripe_webhook_events` | `stripe_events` | Medium |
+| `pending_signups` | `pending_signups` | Medium |
+| `vin_usage` | `vin_usage` | Medium |
+| `support_tickets` | `support_tickets` | Low |
+| `notifications` | `notifications` | Low |
+
+### Keep in MongoDB (Caching)
+- `plan_cache` - Vehicle maintenance plan cache
+- `dataone_cache` - VIN decoding/OEM schedule cache
+- `carfax_cache` - CARFAX response cache
+- `dvi_cache` - DVI inspection cache
+
+### Technical Considerations
+- Use Drizzle ORM for PostgreSQL (already in project)
+- Implement transactions for multi-table operations
+- Create data validation scripts to ensure consistency
+- Plan for zero-downtime migration with feature flags
+
+### Rollback Plan
+- Keep MongoDB running in parallel for 30 days post-migration
+- Feature flag to switch back to MongoDB if issues arise
+- Daily consistency checks during transition
+
+---
+
+## 3. [Add Next Feature Here]
 
 **Priority:** TBD  
 **Status:** Planned
