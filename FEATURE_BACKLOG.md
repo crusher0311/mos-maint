@@ -358,6 +358,66 @@ Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integr
 - **Weights and Capacities:** Curb Weight, Fuel Tank Capacity, Max Towing Capacity
 - **Seating:** Max Seating, Head/Hip/Leg Room by row
 
+### OEM Service Schedule Tables
+
+**DEF_MAINTENANCE** - Service definitions
+| Field | Type | Description |
+|-------|------|-------------|
+| maintenance_id | int | Primary key |
+| maintenance_category | varchar(128) | Engine, Exhaust System, Coolant System, etc. |
+| maintenance_name | text | Service description |
+| maintenance_notes | text | Additional info |
+
+**DEF_MAINTENANCE_INTERVAL** - Service intervals
+| Field | Type | Description |
+|-------|------|-------------|
+| maintenance_interval_id | int | Primary key |
+| interval_type | varchar(32) | "At" or "Every" |
+| value | float | Numeric value |
+| units | varchar(32) | Miles, Months, Hours |
+| initial_value | float | Initial interval if different |
+
+**DEF_MAINTENANCE_SCHEDULE** - OEM maintenance patterns
+| Field | Type | Description |
+|-------|------|-------------|
+| maintenance_schedule_id | int | Primary key |
+| schedule_name | varchar(255) | e.g., "Premium Maintenance" |
+| schedule_description | text | Description |
+
+**DEF_MAINTENANCE_OPERATING_PARAMETER** - Special conditions
+| Field | Type | Description |
+|-------|------|-------------|
+| maintenance_operating_parameter_id | int | Primary key |
+| operating_parameter | text | e.g., "Dusty driving conditions" |
+| operating_parameter_notes | text | Notes |
+
+**LKP_VIN_MAINTENANCE** - VIN-to-maintenance lookup (primary)
+| Field | Type | Description |
+|-------|------|-------------|
+| vin_maintenance_id | int | Primary key |
+| squish | varchar(16) | VIN pattern (positions 1-8,10,11) |
+| trans_notes | varchar(255) | Transmission-specific notes |
+| maintenance_schedule_id | int | Links to DEF_MAINTENANCE_SCHEDULE |
+| maintenance_id | int | Links to DEF_MAINTENANCE |
+
+**LKP_VIN_MAINTENANCE_INTERVAL** - VIN maintenance intervals
+| Field | Type | Description |
+|-------|------|-------------|
+| vin_maintenance_interval_id | int | Primary key |
+| vin_maintenance_id | int | Links to LKP_VIN_MAINTENANCE |
+| maintenance_interval_id | int | Links to DEF_MAINTENANCE_INTERVAL |
+| maintenance_operating_parameter_id | int | Links to operating conditions |
+
+**LKP_YMM_MAINTENANCE** - Year/Make/Model fallback lookup
+| Field | Type | Description |
+|-------|------|-------------|
+| ymm_maintenance_id | int | Primary key |
+| year | smallint | Model year |
+| make | varchar(24) | Make |
+| model | varchar(32) | Model |
+| eng_notes | varchar(128) | Engine-specific notes |
+| maintenance_id | int | Links to DEF_MAINTENANCE |
+
 ---
 
 ## 9. MongoDB to PostgreSQL Migration
