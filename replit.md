@@ -36,7 +36,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Database**: MongoDB Atlas (planned migration to PostgreSQL)
 *   **AI**: OpenAI API
 *   **Payments**: Stripe
-*   **VIN Decoding & OEM Schedules**: DataOne API
+*   **VIN Decoding & OEM Schedules**: DataOne (local PostgreSQL, SFTP sync weekly)
 *   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
