@@ -1,0 +1,145 @@
+OEM Service Schedules
+
+DataOne's OEM Service Schedules data contains vehicle-referenced maintenance information, including descriptions of service to be performed, the condition upon which to perform service, special operating cases under which maintenance must be performed, and OEM-specific naming for maintenance patterns (for example, Premium Maintenance or Maintenance Schedule II). Service conditions include:
+
+Miles
+Months
+Operating hours
+Computer code
+Special events
+Data Tables
+
+The DataOne service schedules database includes several database tables, listed and described as follows:
+
+DEF_MAINTENANCE
+
+This table contains the definition of a service to be performed on the vehicle. Datapoints include a maintenance category name (Engine, Exhaust System, Coolant System, etc...), a maintenance name (Replace engine oil and oil filter, etc...), and an additional 'maintenance_notes' field to display any additional relevant information.
+
+Field	Type	Description
+maintenance_id	int unsigned
+maintenance_category	varchar(128)
+maintenance_name	text
+maintenance_notes	text
+
+
+DEF_MAINTENANCE_SCHEDULE
+
+This table contains OEM labeling for specific maintenance patterns. Datapoints include schedule name and schedule description. Schedules are not used for all OEMs/services, and should be joined to the corresponding maintenence lookup table using an outer join, not an inner join.
+
+Field	Type	Description
+maintenance_schedule_id	int unsigned
+schedule_name	varchar(255)
+schedule_description	text
+
+
+DEF_MAINTENANCE_INTERVAL
+
+This table defines the interval at which a service may be performed. The table is composed of all unique interval records, and shares a many-to-many relationship with the corresponding maintenence lookup table. Records in the maintenence lookup table are referenced to records in DEF_MAINTENANCE_INTERVAL by way of the corresponding maintenence interval lookup table. Datapoints in DEF_MAINTENANCE_INTERVAL include interval_type (the "At/Every" component of "At 3000 miles" vs. "Every 3000 miles"), a value, units for the value (months, miles, hours), and an initial offset value (for example, you may want to perform an oil change every 3000 miles, but start at 5000 miles).
+
+Field	Type	Description
+maintenance_interval_id	int unsigned
+interval_type	varchar(32)
+value	float unsigned
+units	varchar(32)
+initial_value	float unsigned
+
+
+DEF_MAINTENANCE_OPERATING_PARAMETER
+
+This table defines special operating conditions, for example "dusty driving conditions." Operating parameters often affect the interval at which a service is performed. Data in this table is referenced to the corresponding maintenence lookup table by way of the corresponding maintenence interval lookup table.
+
+Field	Type	Description
+maintenance_operating_parameter_id	int
+operating_parameter	text
+operating_parameter_notes	text
+
+
+DEF_MAINTENANCE_COMPUTER_CODE
+
+This table defines special computer codes issued by the vehicle in order to indicate that service is needed. These computer codes are often displayed on the instrumental panel of the vehicle. Records in this table are referenced to the corresponding maintenence lookup table by way of the corresponding maintenence event computer code lookup table.
+
+Field	Type	Description
+maintenance_computer_code_id	int
+computer_code	varchar(32)
+
+
+DEF_MAINTENANCE_EVENT
+
+This table defines events that may cause service to be necessary. For example: submersion of vehicle in water. Records in this table are referenced to the corresponding maintenence lookup table by way of the corresponding maintenence event computer code lookup table.
+
+Field	Type	Description
+maintenance_event_id	int
+event	varchar(255)
+
+
+LKP_VIN_MAINTENANCE
+
+This table provides a lookup between a DataOne Software vehicle_id and engine_id, and a unique service definition. It includes foreign keys maintenance_id and maintenance_schedule_id, which reference DEF_MAINTENANCE and DEF_MAINTENANCE_SCHEDULE, respectively. Each of these two tables shares a one-to-many relationship with LKP_VIN_MAINTENANCE. Note that some services may be transmission specific; these will be identified using the trans_notes field.
+
+Field	Type	Description
+vin_maintenance_id	int unsigned
+squish	varchar(16)
+trans_notes	varchar(255)
+trim_notes	text
+maintenance_schedule_id	int unsigned
+maintenance_id	int unsigned
+
+
+LKP_VIN_MAINTENANCE_INTERVAL
+
+This table is used to join records in LKP_VIN_MAINTENANCE with records in DEF_MAINTENANCE_INTERVAL and DEF_MAINTENANCE_OPERATING_PARAMETER. Note that some records in LKP_VIN_MAINTENANCE may be based upon computer code or event only, and thus will not have corresponding records in LKP_VIN_MAINTENANCE_INTERAVAL. Therefore, this table should be joined using an outer join, not an inner join.
+
+Field	Type	Description
+vin_maintenance_interval_id	int unsigned
+vin_maintenance_id	int unsigned
+maintenance_interval_id	int unsigned
+maintenance_operating_parameter_id	int
+
+
+LKP_VIN_MAINTENANCE_EVENT_COMPUTER_CODE
+
+This table is used to join records in LKP_VIN_MAINTENANCE with records in DEF_MAINTENANCE_COMPUTER_CODE and DEF_MAINTENANCE_EVENT. Note that some records in LKP_VIN_MAINTENANCE may be based upon a regular service interval only, and thus will not have corresponding records in LKP_VIN_MAINTENANCE_EVENT_COMPUTER_CODE. Therefore, this table should be joined using an outer join, not an inner join.
+
+Field	Type	Description
+vin_maintenance_event_computer_code_id	int
+maintenance_computer_code_id	int
+maintenance_event_id	int
+vin_maintenance_id	int
+
+
+LKP_YMM_MAINTENANCE
+
+This table provides a lookup between a DataOne Software vehicle_id and engine_id, and a unique service definition. It includes foreign keys maintenance_id and maintenance_schedule_id, which reference DEF_MAINTENANCE and DEF_MAINTENANCE_SCHEDULE, respectively. Each of these two tables shares a one-to-many relationship with LKP_YMM_MAINTENANCE. Note that some services may be transmission specific; these will be identified using the trans_notes field.
+
+Field	Type	Description
+ymm_maintenance_id	int unsigned
+year	smallint
+make	varchar(24)
+model	varchar(32)
+eng_notes	varchar(128)
+trans_notes	varchar(255)
+trim_notes	mediumtext
+maintenance_schedule_id	int unsigned
+maintenance_id	int unsigned
+
+
+LKP_YMM_MAINTENANCE_INTERVAL
+
+This table is used to join records in LKP_YMM_MAINTENANCE with records in DEF_MAINTENANCE_INTERVAL and DEF_MAINTENANCE_OPERATING_PARAMETER. Note that some records in LKP_YMM_MAINTENANCE may be based upon computer code or event only, and thus will not have corresponding records in LKP_YMM_MAINTENANCE_INTERAVAL. Therefore, this table should be joined using an outer join, not an inner join.
+
+Field	Type	Description
+ymm_maintenance_interval_id	int unsigned
+ymm_maintenance_id	int unsigned
+maintenance_interval_id	int unsigned
+maintenance_operating_parameter_id	int
+
+
+LKP_YMM_MAINTENANCE_EVENT_COMPUTER_CODE
+
+This table is used to join records in LKP_YMM_MAINTENANCE with records in DEF_MAINTENANCE_COMPUTER_CODE and DEF_MAINTENANCE_EVENT. Note that some records in LKP_YMM_MAINTENANCE may be based upon a regular service interval only, and thus will not have corresponding records in LKP_YMM_MAINTENANCE_EVENT_COMPUTER_CODE. Therefore, this table should be joined using an outer join, not an inner join.
+
+Field	Type	Description
+ymm_maintenance_event_computer_code_id	int
+maintenance_computer_code_id	int
+maintenance_event_id	int
+ymm_maintenance_id	int

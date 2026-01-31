@@ -336,6 +336,28 @@ Replace external DataOne API server (EC2) with direct SFTP → PostgreSQL integr
 | vehicle_id | int | Links to VEH_TRIM_STYLES |
 | mfr_model_num | varchar(32) | Manufacturer model number |
 
+**DEF_SPECIFICATION** - Specification definitions
+| Field | Type | Description |
+|-------|------|-------------|
+| specification_id | int | Primary key |
+| specification_category | varchar(32) | Category grouping |
+| specification_name | varchar(32) | Name (e.g., Length, Curb Weight) |
+| specification_value | varchar(32) | Value |
+
+**LKP_VEH_STANDARD_SPECIFICATION** - Vehicle-to-spec lookup
+| Field | Type | Description |
+|-------|------|-------------|
+| veh_specification_id | int | Primary key |
+| vehicle_id | int | Links to VEH_TRIM_STYLES |
+| specification_id | int | Links to DEF_SPECIFICATION |
+
+**Key Specification Categories:**
+- **Brakes:** Front/Rear Brake Diameter
+- **Wheels and Tires:** Front/Rear Tire Description, Wheel Diameter, Wheel Size
+- **Exterior Dimensions:** Length, Width, Height, Wheelbase, Ground Clearance
+- **Weights and Capacities:** Curb Weight, Fuel Tank Capacity, Max Towing Capacity
+- **Seating:** Max Seating, Head/Hip/Leg Room by row
+
 ---
 
 ## 9. MongoDB to PostgreSQL Migration
