@@ -79,7 +79,36 @@ Make the Stripe billing integration more robust with automatic feature control, 
 **Status:** Idea
 
 ### Overview
-Use AI to automatically suggest and populate repair order line items based on vehicle data, maintenance history, and common patterns.
+An AI automation bot that analyzes vehicle context and automatically populates repair orders with relevant services.
+
+### Data Sources
+- Maintenance plan (overdue, due soon, upcoming)
+- Deferred work (previously declined services)
+- Common failures for year/make/model/mileage
+- Shop's canned jobs
+
+### Shop Preference Modes
+| Mode | Description |
+|------|-------------|
+| `off` | Feature disabled |
+| `suggest` | Shows recommendations, requires manual approval |
+| `auto` | Automatically adds to every new RO (like auto booking) |
+
+### Configuration Options
+- Maximum items to auto-add
+- Priority/confidence threshold
+- Categories to include/exclude
+- Manager approval for items over $X
+
+### Implementation
+1. Trigger on new RO creation
+2. Gather all data sources for the vehicle
+3. Send to OpenAI for analysis and ranking
+4. Based on mode: show suggestions or auto-add items
+5. Log all AI-added items for tracking
+
+### Feature Flag
+Add `auto_populate` to existing feature flags system
 
 ---
 
