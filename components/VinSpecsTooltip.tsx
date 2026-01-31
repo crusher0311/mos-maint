@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
 export interface QuickSpecs {
@@ -19,7 +19,8 @@ interface VinSpecsTooltipProps {
 }
 
 export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipProps) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const hasSpecs = specs && (
     specs.fuelTankCapacity ||
@@ -27,11 +28,38 @@ export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipP
     specs.frontTireDescription
   );
 
+  // Close tooltip when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsVisible(false);
+      }
+    }
+    
+    if (isVisible) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isVisible]);
+
+  const handleTouch = (e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsVisible(prev => !prev);
+  };
+
   return (
     <div 
+      ref={containerRef}
       className="relative inline-block"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+      onTouchStart={handleTouch}
     >
       <Link
         href={`/dashboard/vehicles/${vin}?tab=specs`}
@@ -40,7 +68,7 @@ export function VinSpecsTooltip({ vin, specs, className = "" }: VinSpecsTooltipP
         {vin}
       </Link>
       
-      {isHovered && (
+      {isVisible && (
         <div className="absolute z-50 left-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-left">
           <div className="text-xs font-semibold text-gray-500 uppercase mb-2">
             Quick Specs
