@@ -4,7 +4,7 @@ This document tracks planned features and enhancements for MOS Maintenance MVP.
 
 ---
 
-## 1. Stripe Billing Robustness
+## 1. Robust Stripe Billing with Grace Periods
 
 **Priority:** High  
 **Status:** Planned
@@ -73,90 +73,187 @@ Make the Stripe billing integration more robust with automatic feature control, 
 
 ---
 
-## 2. MongoDB to PostgreSQL Migration
+## 2. AI Auto-Populate for Repair Orders
 
-**Priority:** High  
-**Status:** Planned
+**Priority:** Medium  
+**Status:** Idea
 
 ### Overview
-Migrate core relational data from MongoDB Atlas to PostgreSQL for improved performance, data integrity, and simpler querying. MongoDB will remain for caching purposes.
-
-### Migration Phases
-
-#### Phase 1: Schema Design
-- Design PostgreSQL schema for all core entities
-- Map MongoDB collections to PostgreSQL tables:
-  - `shops` → `shops` table
-  - `users` → `users` table
-  - `vehicles` → `vehicles` table (if applicable)
-  - `billing records` → `billing` table
-  - `feature flags` → `feature_flags` table
-  - `audit_log` → `audit_logs` table
-  - `platform_settings` → `platform_settings` table
-- Define foreign key relationships
-- Create indexes for common queries
-
-#### Phase 2: Data Access Layer
-- Create Drizzle ORM schema definitions
-- Build repository pattern for each entity
-- Create migration scripts for existing data
-- Implement dual-write during transition (write to both MongoDB and PostgreSQL)
-
-#### Phase 3: Read Migration
-- Switch reads from MongoDB to PostgreSQL for each entity (one at a time)
-- Validate data consistency between both databases
-- Monitor performance
-
-#### Phase 4: Write Migration
-- Switch writes from MongoDB to PostgreSQL
-- Remove dual-write code
-- Keep MongoDB for:
-  - Caching (plan_cache, dataone_cache)
-  - Session data (if applicable)
-  - Any document-heavy data that benefits from flexible schema
-
-#### Phase 5: Cleanup
-- Remove MongoDB queries for migrated entities
-- Update all API routes to use PostgreSQL
-- Archive MongoDB collections (keep for rollback safety)
-- Update documentation
-
-### Entities to Migrate
-| MongoDB Collection | PostgreSQL Table | Priority |
-|--------------------|------------------|----------|
-| `shops` | `shops` | High |
-| `users` | `users` | High |
-| `platform_settings` | `platform_settings` | High |
-| `audit_log` | `audit_logs` | Medium |
-| `stripe_webhook_events` | `stripe_events` | Medium |
-| `pending_signups` | `pending_signups` | Medium |
-| `vin_usage` | `vin_usage` | Medium |
-| `support_tickets` | `support_tickets` | Low |
-| `notifications` | `notifications` | Low |
-
-### Keep in MongoDB (Caching)
-- `plan_cache` - Vehicle maintenance plan cache
-- `dataone_cache` - VIN decoding/OEM schedule cache
-- `carfax_cache` - CARFAX response cache
-- `dvi_cache` - DVI inspection cache
-
-### Technical Considerations
-- Use Drizzle ORM for PostgreSQL (already in project)
-- Implement transactions for multi-table operations
-- Create data validation scripts to ensure consistency
-- Plan for zero-downtime migration with feature flags
-
-### Rollback Plan
-- Keep MongoDB running in parallel for 30 days post-migration
-- Feature flag to switch back to MongoDB if issues arise
-- Daily consistency checks during transition
+Use AI to automatically suggest and populate repair order line items based on vehicle data, maintenance history, and common patterns.
 
 ---
 
-## 3. [Add Next Feature Here]
+## 3. CARFAX-Based Mileage Estimation
 
-**Priority:** TBD  
-**Status:** Planned
+**Priority:** Medium  
+**Status:** Idea
+
+### Overview
+Use CARFAX service history data to estimate current vehicle mileage when odometer reading is unavailable or outdated.
+
+---
+
+## 4. Service History Timeline
+
+**Priority:** Medium  
+**Status:** Idea
+
+### Overview
+Visual timeline display of all service history for a vehicle, combining data from CARFAX, shop records, and DVI inspections.
+
+---
+
+## 5. Cross-Shop Customer View
+
+**Priority:** Medium  
+**Status:** Idea
+
+### Overview
+For enterprise accounts with multiple locations, show unified customer view across all shops including all their vehicles and service history.
+
+---
+
+## 6. AI-Powered KPI Dashboard
+
+**Priority:** Medium  
+**Status:** Idea
+
+### Overview
+Dashboard with AI-analyzed key performance indicators including revenue trends, service patterns, and customer retention insights.
+
+---
+
+## 7. Deferred Work vs CARFAX Comparison
+
+**Priority:** Medium  
+**Status:** Idea
+
+### Overview
+Compare deferred/declined work against CARFAX records to identify services that were later performed elsewhere.
+
+---
+
+## 8. MongoDB to PostgreSQL Migration
+
+**Priority:** High  
+**Status:** Planning
+
+### Strategy: Lift and Shift, Then Normalize
+
+**Phase 1: Lift and Shift (Raw Data)**
+Move all data to PostgreSQL as-is using JSONB columns. No transformation during migration.
+
+**Phase 2: Normalize Incrementally**
+Add normalized columns alongside raw JSONB, backfill, update queries one at a time.
+
+### Current MongoDB Collections
+
+**Raw API Response Caches:**
+| Collection | Source | Data |
+|------------|--------|------|
+| `tekmetric_work_orders` | Tekmetric API | Raw RO/job data |
+| `tekmetric_vehicle_cache` | Tekmetric API | Raw vehicle data |
+| `tekmetric_customer_cache` | Tekmetric API | Raw customer data |
+| `protractor_work_orders` | Protractor API | Raw work order data |
+| `protractor_ro_cache` | Protractor API | Raw RO cache |
+| `dataone_cache` | DataOne API | VIN decode/maintenance |
+| `events` | AutoFlow webhooks | Raw webhook payloads |
+| `sms_historical_work_orders` | Backfill scripts | Historical RO data |
+
+**Already Normalized:**
+| Collection | Status |
+|------------|--------|
+| `customers` | Partially normalized |
+| `vehicles` | Partially normalized |
+| `repair_orders` | Partially normalized |
+| `normalized_work_orders` | Fully normalized |
+
+**Core Business (Migrate):**
+- `shops`, `users`, `sessions`, `enterprise_accounts`
+- `viewed_vins`, `job_index`, `shop_features`
+- `notifications`, `support_chat_sessions`
+
+**Keep in MongoDB (Cache Only):**
+- `cached_plans`, `plan_prefetch_cache`
+- All `*_cache` collections for API responses
+
+### Phase 1 Schema (JSONB-First)
+
+```sql
+-- Raw data tables - preserve everything
+CREATE TABLE raw_work_orders (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) NOT NULL,
+  source VARCHAR(20) NOT NULL,  -- 'tekmetric' | 'protractor' | 'autoflow'
+  external_id VARCHAR(100),
+  raw_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(shop_id, source, external_id)
+);
+
+CREATE TABLE raw_vehicles (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) NOT NULL,
+  vin VARCHAR(17),
+  source VARCHAR(20) NOT NULL,
+  external_id VARCHAR(100),
+  raw_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE raw_customers (
+  id SERIAL PRIMARY KEY,
+  shop_id VARCHAR(50) NOT NULL,
+  source VARCHAR(20) NOT NULL,
+  external_id VARCHAR(100),
+  raw_data JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes for querying JSONB
+CREATE INDEX idx_raw_wo_shop ON raw_work_orders(shop_id);
+CREATE INDEX idx_raw_wo_vin ON raw_work_orders((raw_data->>'vin'));
+CREATE INDEX idx_raw_vehicles_vin ON raw_vehicles(vin);
+```
+
+### Phase 2 Schema (Add Normalized Columns)
+
+```sql
+-- Add normalized columns alongside raw_data
+ALTER TABLE raw_vehicles ADD COLUMN year INTEGER;
+ALTER TABLE raw_vehicles ADD COLUMN make VARCHAR(50);
+ALTER TABLE raw_vehicles ADD COLUMN model VARCHAR(100);
+ALTER TABLE raw_vehicles ADD COLUMN mileage INTEGER;
+
+-- Backfill from JSONB (Tekmetric example)
+UPDATE raw_vehicles SET
+  year = (raw_data->>'year')::INTEGER,
+  make = raw_data->>'make',
+  model = raw_data->>'model',
+  mileage = (raw_data->>'mileage')::INTEGER
+WHERE source = 'tekmetric';
+
+-- Add indexes on normalized columns
+CREATE INDEX idx_vehicles_make_model ON raw_vehicles(make, model);
+```
+
+### Migration Timeline
+
+| Phase | Duration | Deliverable |
+|-------|----------|-------------|
+| 1. Lift & Shift | 2 weeks | All data in PostgreSQL JSONB |
+| 2. Validation | 1 week | Row counts match, queries work |
+| 3. Normalize vehicles | 1 week | VIN, year, make, model columns |
+| 4. Normalize customers | 1 week | Phone, email, name columns |
+| 5. Normalize ROs | 1 week | RO number, status, amounts |
+| 6. Cutover reads | 1 week | PostgreSQL primary for reads |
+| 7. Cutover writes | 1 week | MongoDB becomes cache-only |
+
+### Rollback Plan
+- MongoDB stays fully synced for 30 days
+- Feature flag to switch back to MongoDB reads
+- Documented rollback procedure
 
 ---
 
