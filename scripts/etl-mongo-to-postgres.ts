@@ -1,13 +1,13 @@
 /**
  * ETL Script: MongoDB Normalized Collections -> PostgreSQL Tables
- * 
- * Migrates historical data from MongoDB normalized_* collections
- * to the PostgreSQL normalized schema.
+ * Uses batch inserts for performance (1000 records at a time)
  */
 
 import { getDb } from "../lib/mongo";
 import sql from "../lib/db/postgres";
 import { NORMALIZED_COLLECTIONS } from "../lib/normalized-schema";
+
+const BATCH_SIZE = 1000;
 
 interface MigrationStats {
   collection: string;
@@ -100,59 +100,79 @@ async function migrateCustomers(db: any, shopUuidMap: Map<number, string>) {
   console.log("\n=== Migrating Customers ===");
   const collectionStats: MigrationStats = { collection: "customers", total: 0, migrated: 0, skipped: 0, failed: 0 };
   
-  const customers = await db.collection(NORMALIZED_COLLECTIONS.customers).find({}).toArray();
-  collectionStats.total = customers.length;
+  const totalCount = await db.collection(NORMALIZED_COLLECTIONS.customers).countDocuments();
+  collectionStats.total = totalCount;
+  console.log(`Total customers to process: ${totalCount}`);
   
-  for (const customer of customers) {
+  const existingExternalIds = await sql`SELECT external_id FROM customers WHERE external_id IS NOT NULL`;
+  const existingIds = new Set(existingExternalIds.map((c: any) => c.external_id));
+  console.log(`Existing customers in PostgreSQL: ${existingIds.size}`);
+  
+  let processed = 0;
+  const cursor = db.collection(NORMALIZED_COLLECTIONS.customers).find({}).batchSize(BATCH_SIZE);
+  let batch: any[] = [];
+  
+  while (await cursor.hasNext()) {
+    const customer = await cursor.next();
+    processed++;
+    
     const shopUuid = shopUuidMap.get(customer.shopId);
     if (!shopUuid) {
       collectionStats.skipped++;
       continue;
     }
     
-    try {
-      const primaryContact = customer.contacts?.find((c: any) => c.isPrimary) || customer.contacts?.[0];
-      
-      await sql`
-        INSERT INTO customers (
-          id, shop_id, external_id, first_name, last_name, email, phone,
-          address, notes, source_system, source_id, is_deleted, metadata,
-          created_at, updated_at
-        ) VALUES (
-          gen_random_uuid(),
-          ${shopUuid}::uuid,
-          ${customer._id},
-          ${customer.firstName || primaryContact?.firstName || ""},
-          ${customer.lastName || primaryContact?.lastName || ""},
-          ${primaryContact?.email || null},
-          ${primaryContact?.phone || null},
-          ${JSON.stringify(customer.billingAddress || customer.mailingAddress || null)}::jsonb,
-          ${customer.notes || null},
-          ${customer.provenance?.sourceSystem || "unknown"},
-          ${customer.provenance?.sourceIds?.[0]?.idValue || null},
-          ${customer.softDelete?.isDeleted || false},
-          ${JSON.stringify({
-            companyName: customer.companyName,
-            customerType: customer.customerType,
-            contacts: customer.contacts,
-            totalVisits: customer.totalVisits,
-            totalSpent: customer.totalSpent,
-            averageTicket: customer.averageTicket,
-            lastVisitDate: customer.lastVisitDate,
-            tags: customer.tags,
-            customFields: customer.customFields,
-          })}::jsonb,
-          ${customer.createdAt ? new Date(customer.createdAt) : new Date()},
-          ${customer.updatedAt ? new Date(customer.updatedAt) : new Date()}
-        )
-        ON CONFLICT (shop_id, external_id) DO NOTHING
-      `;
-      collectionStats.migrated++;
-    } catch (error: any) {
-      if (!error.message?.includes("duplicate")) {
-        console.error(`Failed to migrate customer ${customer._id}:`, error.message);
+    if (existingIds.has(customer._id)) {
+      collectionStats.skipped++;
+      continue;
+    }
+    
+    const primaryContact = customer.contacts?.find((c: any) => c.isPrimary) || customer.contacts?.[0];
+    
+    batch.push({
+      shop_id: shopUuid,
+      external_id: customer._id,
+      first_name: customer.firstName || primaryContact?.firstName || "",
+      last_name: customer.lastName || primaryContact?.lastName || "",
+      email: primaryContact?.email || null,
+      phone: primaryContact?.phone || null,
+      address: customer.billingAddress || customer.mailingAddress || null,
+      notes: customer.notes || null,
+      source_system: customer.provenance?.sourceSystem || "unknown",
+      source_id: customer.provenance?.sourceIds?.[0]?.idValue || null,
+      is_deleted: customer.softDelete?.isDeleted || false,
+      metadata: {
+        companyName: customer.companyName,
+        customerType: customer.customerType,
+        contacts: customer.contacts,
+        totalVisits: customer.totalVisits,
+        totalSpent: customer.totalSpent,
+        tags: customer.tags,
+      },
+      created_at: customer.createdAt ? new Date(customer.createdAt) : new Date(),
+      updated_at: customer.updatedAt ? new Date(customer.updatedAt) : new Date(),
+    });
+    
+    if (batch.length >= BATCH_SIZE) {
+      try {
+        await insertCustomerBatch(batch);
+        collectionStats.migrated += batch.length;
+      } catch (error: any) {
+        console.error(`Batch insert failed:`, error.message);
+        collectionStats.failed += batch.length;
       }
-      collectionStats.failed++;
+      batch = [];
+      console.log(`Customers: ${processed}/${totalCount} processed (${collectionStats.migrated} migrated)`);
+    }
+  }
+  
+  if (batch.length > 0) {
+    try {
+      await insertCustomerBatch(batch);
+      collectionStats.migrated += batch.length;
+    } catch (error: any) {
+      console.error(`Final batch insert failed:`, error.message);
+      collectionStats.failed += batch.length;
     }
   }
   
@@ -160,12 +180,43 @@ async function migrateCustomers(db: any, shopUuidMap: Map<number, string>) {
   stats.push(collectionStats);
 }
 
+async function insertCustomerBatch(batch: any[]) {
+  const values = batch.map(c => `(
+    gen_random_uuid(),
+    '${c.shop_id}'::uuid,
+    '${c.external_id.replace(/'/g, "''")}',
+    '${(c.first_name || "").replace(/'/g, "''")}',
+    '${(c.last_name || "").replace(/'/g, "''")}',
+    ${c.email ? `'${c.email.replace(/'/g, "''")}'` : 'NULL'},
+    ${c.phone ? `'${c.phone.replace(/'/g, "''")}'` : 'NULL'},
+    ${c.address ? `'${JSON.stringify(c.address).replace(/'/g, "''")}'::jsonb` : 'NULL'},
+    ${c.notes ? `'${c.notes.replace(/'/g, "''")}'` : 'NULL'},
+    '${c.source_system}',
+    ${c.source_id ? `'${c.source_id.replace(/'/g, "''")}'` : 'NULL'},
+    ${c.is_deleted},
+    '${JSON.stringify(c.metadata).replace(/'/g, "''")}'::jsonb,
+    '${c.created_at.toISOString()}',
+    '${c.updated_at.toISOString()}'
+  )`).join(',\n');
+  
+  await sql.unsafe(`
+    INSERT INTO customers (id, shop_id, external_id, first_name, last_name, email, phone, address, notes, source_system, source_id, is_deleted, metadata, created_at, updated_at)
+    VALUES ${values}
+    ON CONFLICT (shop_id, external_id) DO NOTHING
+  `);
+}
+
 async function migrateVehicles(db: any, shopUuidMap: Map<number, string>) {
   console.log("\n=== Migrating Vehicles ===");
   const collectionStats: MigrationStats = { collection: "vehicles", total: 0, migrated: 0, skipped: 0, failed: 0 };
   
-  const vehicles = await db.collection(NORMALIZED_COLLECTIONS.vehicles).find({}).toArray();
-  collectionStats.total = vehicles.length;
+  const totalCount = await db.collection(NORMALIZED_COLLECTIONS.vehicles).countDocuments();
+  collectionStats.total = totalCount;
+  console.log(`Total vehicles to process: ${totalCount}`);
+  
+  const existingVins = await sql`SELECT vin, shop_id FROM vehicles WHERE vin IS NOT NULL`;
+  const existingVinSet = new Set(existingVins.map((v: any) => `${v.shop_id}:${v.vin}`));
+  console.log(`Existing vehicles in PostgreSQL: ${existingVinSet.size}`);
   
   const customerMap = new Map<string, string>();
   const pgCustomers = await sql`SELECT id, external_id FROM customers WHERE external_id IS NOT NULL`;
@@ -173,66 +224,74 @@ async function migrateVehicles(db: any, shopUuidMap: Map<number, string>) {
     customerMap.set(c.external_id as string, c.id as string);
   }
   
-  for (const vehicle of vehicles) {
+  let processed = 0;
+  const cursor = db.collection(NORMALIZED_COLLECTIONS.vehicles).find({}).batchSize(BATCH_SIZE);
+  let batch: any[] = [];
+  
+  while (await cursor.hasNext()) {
+    const vehicle = await cursor.next();
+    processed++;
+    
     const shopUuid = shopUuidMap.get(vehicle.shopId);
     if (!shopUuid) {
       collectionStats.skipped++;
       continue;
     }
     
-    try {
-      const customerUuid = vehicle.customerId ? customerMap.get(vehicle.customerId) : null;
-      
-      await sql`
-        INSERT INTO vehicles (
-          id, shop_id, customer_id, vin, year, make, model, trim, body_style,
-          engine, transmission, fuel_type, drive_type, exterior_color,
-          license_plate, license_plate_state, current_mileage, last_service_date,
-          source_system, source_id, is_deleted, is_closed, raw_data, metadata,
-          created_at, updated_at
-        ) VALUES (
-          gen_random_uuid(),
-          ${shopUuid}::uuid,
-          ${customerUuid || null}::uuid,
-          ${vehicle.vin || null},
-          ${vehicle.year || null},
-          ${vehicle.make || null},
-          ${vehicle.model || null},
-          ${vehicle.trim || null},
-          ${vehicle.bodyStyle || null},
-          ${vehicle.engineDescription || null},
-          ${vehicle.transmission || null},
-          ${vehicle.fuelType || null},
-          ${vehicle.drivetrain || null},
-          ${vehicle.exteriorColor || null},
-          ${vehicle.licensePlate || null},
-          ${vehicle.licensePlateState || null},
-          ${vehicle.currentOdometer || null},
-          ${vehicle.lastServiceDate ? new Date(vehicle.lastServiceDate) : null},
-          ${vehicle.provenance?.sourceSystem || "unknown"},
-          ${vehicle.provenance?.sourceIds?.[0]?.idValue || vehicle._id},
-          ${vehicle.softDelete?.isDeleted || false},
-          ${false},
-          ${JSON.stringify(vehicle.vinDecodeData || null)}::jsonb,
-          ${JSON.stringify({
-            tags: vehicle.tags,
-            customFields: vehicle.customFields,
-            odometerHistory: vehicle.odometerHistory,
-            ownershipType: vehicle.ownershipType,
-            isFleet: vehicle.isFleet,
-            fleetId: vehicle.fleetId,
-          })}::jsonb,
-          ${vehicle.createdAt ? new Date(vehicle.createdAt) : new Date()},
-          ${vehicle.updatedAt ? new Date(vehicle.updatedAt) : new Date()}
-        )
-        ON CONFLICT DO NOTHING
-      `;
-      collectionStats.migrated++;
-    } catch (error: any) {
-      if (!error.message?.includes("duplicate")) {
-        console.error(`Failed to migrate vehicle ${vehicle.vin || vehicle._id}:`, error.message);
+    if (vehicle.vin && existingVinSet.has(`${shopUuid}:${vehicle.vin}`)) {
+      collectionStats.skipped++;
+      continue;
+    }
+    
+    const customerUuid = vehicle.customerId ? customerMap.get(vehicle.customerId) : null;
+    
+    batch.push({
+      shop_id: shopUuid,
+      customer_id: customerUuid,
+      vin: vehicle.vin || null,
+      year: vehicle.year || null,
+      make: vehicle.make || null,
+      model: vehicle.model || null,
+      trim: vehicle.trim || null,
+      body_style: vehicle.bodyStyle || null,
+      engine: vehicle.engineDescription || null,
+      transmission: vehicle.transmission || null,
+      fuel_type: vehicle.fuelType || null,
+      drive_type: vehicle.drivetrain || null,
+      exterior_color: vehicle.exteriorColor || null,
+      license_plate: vehicle.licensePlate || null,
+      license_plate_state: vehicle.licensePlateState || null,
+      current_mileage: vehicle.currentOdometer || null,
+      last_service_date: vehicle.lastServiceDate ? new Date(vehicle.lastServiceDate) : null,
+      source_system: vehicle.provenance?.sourceSystem || "unknown",
+      source_id: vehicle.provenance?.sourceIds?.[0]?.idValue || vehicle._id,
+      is_deleted: vehicle.softDelete?.isDeleted || false,
+      raw_data: vehicle.vinDecodeData || null,
+      metadata: { tags: vehicle.tags, isFleet: vehicle.isFleet, fleetId: vehicle.fleetId },
+      created_at: vehicle.createdAt ? new Date(vehicle.createdAt) : new Date(),
+      updated_at: vehicle.updatedAt ? new Date(vehicle.updatedAt) : new Date(),
+    });
+    
+    if (batch.length >= BATCH_SIZE) {
+      try {
+        await insertVehicleBatch(batch);
+        collectionStats.migrated += batch.length;
+      } catch (error: any) {
+        console.error(`Batch insert failed:`, error.message);
+        collectionStats.failed += batch.length;
       }
-      collectionStats.failed++;
+      batch = [];
+      console.log(`Vehicles: ${processed}/${totalCount} processed (${collectionStats.migrated} migrated)`);
+    }
+  }
+  
+  if (batch.length > 0) {
+    try {
+      await insertVehicleBatch(batch);
+      collectionStats.migrated += batch.length;
+    } catch (error: any) {
+      console.error(`Final batch insert failed:`, error.message);
+      collectionStats.failed += batch.length;
     }
   }
   
@@ -240,12 +299,50 @@ async function migrateVehicles(db: any, shopUuidMap: Map<number, string>) {
   stats.push(collectionStats);
 }
 
+async function insertVehicleBatch(batch: any[]) {
+  const values = batch.map(v => `(
+    gen_random_uuid(),
+    '${v.shop_id}'::uuid,
+    ${v.customer_id ? `'${v.customer_id}'::uuid` : 'NULL'},
+    ${v.vin ? `'${v.vin.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.year || 'NULL'},
+    ${v.make ? `'${v.make.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.model ? `'${v.model.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.trim ? `'${v.trim.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.body_style ? `'${v.body_style.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.engine ? `'${v.engine.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.transmission ? `'${v.transmission.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.fuel_type ? `'${v.fuel_type.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.drive_type ? `'${v.drive_type.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.exterior_color ? `'${v.exterior_color.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.license_plate ? `'${v.license_plate.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.license_plate_state ? `'${v.license_plate_state.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.current_mileage || 'NULL'},
+    ${v.last_service_date ? `'${v.last_service_date.toISOString()}'` : 'NULL'},
+    '${v.source_system}',
+    ${v.source_id ? `'${v.source_id.replace(/'/g, "''")}'` : 'NULL'},
+    ${v.is_deleted},
+    false,
+    ${v.raw_data ? `'${JSON.stringify(v.raw_data).replace(/'/g, "''")}'::jsonb` : 'NULL'},
+    '${JSON.stringify(v.metadata).replace(/'/g, "''")}'::jsonb,
+    '${v.created_at.toISOString()}',
+    '${v.updated_at.toISOString()}'
+  )`).join(',\n');
+  
+  await sql.unsafe(`
+    INSERT INTO vehicles (id, shop_id, customer_id, vin, year, make, model, trim, body_style, engine, transmission, fuel_type, drive_type, exterior_color, license_plate, license_plate_state, current_mileage, last_service_date, source_system, source_id, is_deleted, is_closed, raw_data, metadata, created_at, updated_at)
+    VALUES ${values}
+    ON CONFLICT DO NOTHING
+  `);
+}
+
 async function migrateWorkOrders(db: any, shopUuidMap: Map<number, string>) {
   console.log("\n=== Migrating Work Orders ===");
   const collectionStats: MigrationStats = { collection: "work_orders", total: 0, migrated: 0, skipped: 0, failed: 0 };
   
-  const workOrders = await db.collection(NORMALIZED_COLLECTIONS.workOrders).find({}).toArray();
-  collectionStats.total = workOrders.length;
+  const totalCount = await db.collection(NORMALIZED_COLLECTIONS.workOrders).countDocuments();
+  collectionStats.total = totalCount;
+  console.log(`Total work orders to process: ${totalCount}`);
   
   const vehicleMap = new Map<string, string>();
   const pgVehicles = await sql`SELECT id, source_id FROM vehicles WHERE source_id IS NOT NULL`;
@@ -259,68 +356,66 @@ async function migrateWorkOrders(db: any, shopUuidMap: Map<number, string>) {
     customerMap.set(c.external_id as string, c.id as string);
   }
   
-  for (const wo of workOrders) {
+  let processed = 0;
+  const cursor = db.collection(NORMALIZED_COLLECTIONS.workOrders).find({}).batchSize(BATCH_SIZE);
+  let batch: any[] = [];
+  
+  while (await cursor.hasNext()) {
+    const wo = await cursor.next();
+    processed++;
+    
     const shopUuid = shopUuidMap.get(wo.shopId);
     if (!shopUuid) {
       collectionStats.skipped++;
       continue;
     }
     
-    try {
-      const vehicleUuid = wo.vehicleId ? vehicleMap.get(wo.vehicleId) : null;
-      const customerUuid = wo.customerId ? customerMap.get(wo.customerId) : null;
-      
-      await sql`
-        INSERT INTO work_orders (
-          id, shop_id, vehicle_id, customer_id, order_number, status,
-          odometer_in, odometer_out, opened_date, closed_date,
-          labor_total, parts_total, total, source_system, source_id,
-          content_hash, is_deleted, raw_payload, metadata,
-          created_at, updated_at
-        ) VALUES (
-          gen_random_uuid(),
-          ${shopUuid}::uuid,
-          ${vehicleUuid || null}::uuid,
-          ${customerUuid || null}::uuid,
-          ${wo.workOrderNumber || ""},
-          ${wo.status || "closed"},
-          ${wo.odometerIn || null},
-          ${wo.odometerOut || null},
-          ${wo.checkInDate ? new Date(wo.checkInDate) : wo.createdAt ? new Date(wo.createdAt) : new Date()},
-          ${wo.closedDate ? new Date(wo.closedDate) : null},
-          ${wo.laborTotal || 0},
-          ${wo.partsTotal || 0},
-          ${wo.grandTotal || 0},
-          ${wo.provenance?.sourceSystem || "unknown"},
-          ${wo.provenance?.sourceIds?.[0]?.idValue || wo._id},
-          ${wo.provenance?.contentHash || null},
-          ${wo.softDelete?.isDeleted || false},
-          ${JSON.stringify({
-            workOrderType: wo.workOrderType,
-            customerConcern: wo.customerConcern,
-            technicianNotes: wo.technicianNotes,
-            serviceAdvisorName: wo.serviceAdvisorName,
-            technicians: wo.technicians,
-          })}::jsonb,
-          ${JSON.stringify({
-            tags: wo.tags,
-            customFields: wo.customFields,
-            statusHistory: wo.statusHistory,
-            isWarranty: wo.isWarranty,
-            isInternal: wo.isInternal,
-            isComeback: wo.isComeback,
-          })}::jsonb,
-          ${wo.createdAt ? new Date(wo.createdAt) : new Date()},
-          ${wo.updatedAt ? new Date(wo.updatedAt) : new Date()}
-        )
-        ON CONFLICT DO NOTHING
-      `;
-      collectionStats.migrated++;
-    } catch (error: any) {
-      if (!error.message?.includes("duplicate")) {
-        console.error(`Failed to migrate work order ${wo.workOrderNumber}:`, error.message);
+    const vehicleUuid = wo.vehicleId ? vehicleMap.get(wo.vehicleId) : null;
+    const customerUuid = wo.customerId ? customerMap.get(wo.customerId) : null;
+    
+    batch.push({
+      shop_id: shopUuid,
+      vehicle_id: vehicleUuid,
+      customer_id: customerUuid,
+      order_number: wo.workOrderNumber || "",
+      status: wo.status || "closed",
+      odometer_in: wo.odometerIn || null,
+      odometer_out: wo.odometerOut || null,
+      opened_date: wo.checkInDate ? new Date(wo.checkInDate) : wo.createdAt ? new Date(wo.createdAt) : new Date(),
+      closed_date: wo.closedDate ? new Date(wo.closedDate) : null,
+      labor_total: wo.laborTotal || 0,
+      parts_total: wo.partsTotal || 0,
+      total: wo.grandTotal || 0,
+      source_system: wo.provenance?.sourceSystem || "unknown",
+      source_id: wo.provenance?.sourceIds?.[0]?.idValue || wo._id,
+      content_hash: wo.provenance?.contentHash || null,
+      is_deleted: wo.softDelete?.isDeleted || false,
+      raw_payload: { workOrderType: wo.workOrderType, customerConcern: wo.customerConcern },
+      metadata: { tags: wo.tags, isWarranty: wo.isWarranty, isInternal: wo.isInternal },
+      created_at: wo.createdAt ? new Date(wo.createdAt) : new Date(),
+      updated_at: wo.updatedAt ? new Date(wo.updatedAt) : new Date(),
+    });
+    
+    if (batch.length >= BATCH_SIZE) {
+      try {
+        await insertWorkOrderBatch(batch);
+        collectionStats.migrated += batch.length;
+      } catch (error: any) {
+        console.error(`Batch insert failed:`, error.message);
+        collectionStats.failed += batch.length;
       }
-      collectionStats.failed++;
+      batch = [];
+      console.log(`Work Orders: ${processed}/${totalCount} processed (${collectionStats.migrated} migrated)`);
+    }
+  }
+  
+  if (batch.length > 0) {
+    try {
+      await insertWorkOrderBatch(batch);
+      collectionStats.migrated += batch.length;
+    } catch (error: any) {
+      console.error(`Final batch insert failed:`, error.message);
+      collectionStats.failed += batch.length;
     }
   }
   
@@ -328,79 +423,41 @@ async function migrateWorkOrders(db: any, shopUuidMap: Map<number, string>) {
   stats.push(collectionStats);
 }
 
-async function migrateServiceJobs(db: any, shopUuidMap: Map<number, string>) {
-  console.log("\n=== Migrating Service Jobs ===");
-  const collectionStats: MigrationStats = { collection: "service_jobs", total: 0, migrated: 0, skipped: 0, failed: 0 };
+async function insertWorkOrderBatch(batch: any[]) {
+  const values = batch.map(wo => `(
+    gen_random_uuid(),
+    '${wo.shop_id}'::uuid,
+    ${wo.vehicle_id ? `'${wo.vehicle_id}'::uuid` : 'NULL'},
+    ${wo.customer_id ? `'${wo.customer_id}'::uuid` : 'NULL'},
+    '${(wo.order_number || "").replace(/'/g, "''")}',
+    '${wo.status}',
+    ${wo.odometer_in || 'NULL'},
+    ${wo.odometer_out || 'NULL'},
+    '${wo.opened_date.toISOString()}',
+    ${wo.closed_date ? `'${wo.closed_date.toISOString()}'` : 'NULL'},
+    ${wo.labor_total},
+    ${wo.parts_total},
+    ${wo.total},
+    '${wo.source_system}',
+    '${(wo.source_id || "").replace(/'/g, "''")}',
+    ${wo.content_hash ? `'${wo.content_hash}'` : 'NULL'},
+    ${wo.is_deleted},
+    '${JSON.stringify(wo.raw_payload).replace(/'/g, "''")}'::jsonb,
+    '${JSON.stringify(wo.metadata).replace(/'/g, "''")}'::jsonb,
+    '${wo.created_at.toISOString()}',
+    '${wo.updated_at.toISOString()}'
+  )`).join(',\n');
   
-  const serviceJobs = await db.collection(NORMALIZED_COLLECTIONS.serviceJobs).find({}).toArray();
-  collectionStats.total = serviceJobs.length;
-  
-  const workOrderMap = new Map<string, string>();
-  const pgWorkOrders = await sql`SELECT id, source_id FROM work_orders WHERE source_id IS NOT NULL`;
-  for (const wo of pgWorkOrders) {
-    workOrderMap.set(wo.source_id as string, wo.id as string);
-  }
-  
-  for (const job of serviceJobs) {
-    const shopUuid = shopUuidMap.get(job.shopId);
-    if (!shopUuid) {
-      collectionStats.skipped++;
-      continue;
-    }
-    
-    try {
-      const workOrderUuid = job.workOrderId ? workOrderMap.get(job.workOrderId) : null;
-      
-      await sql`
-        INSERT INTO service_jobs (
-          id, work_order_id, shop_id, title, description,
-          labor_amount, parts_amount, total_amount, labor_hours,
-          status, is_declined, declined_reason, source_system, source_id,
-          content_hash, is_deleted, metadata, created_at
-        ) VALUES (
-          gen_random_uuid(),
-          ${workOrderUuid || null}::uuid,
-          ${shopUuid}::uuid,
-          ${job.title || job.description?.substring(0, 100) || "Service"},
-          ${job.description || null},
-          ${job.laborTotal || 0},
-          ${job.partsTotal || 0},
-          ${job.total || 0},
-          ${job.laborHours || 0},
-          ${job.status || "completed"},
-          ${job.status === "declined"},
-          ${job.declineReason || null},
-          ${job.provenance?.sourceSystem || "unknown"},
-          ${job.provenance?.sourceIds?.[0]?.idValue || job._id},
-          ${job.provenance?.contentHash || null},
-          ${job.softDelete?.isDeleted || false},
-          ${JSON.stringify({
-            jobType: job.jobType,
-            cannedJobId: job.cannedJobId,
-            technicianId: job.technicianId,
-            lineItems: job.lineItems,
-            tags: job.tags,
-          })}::jsonb,
-          ${job.createdAt ? new Date(job.createdAt) : new Date()}
-        )
-        ON CONFLICT DO NOTHING
-      `;
-      collectionStats.migrated++;
-    } catch (error: any) {
-      if (!error.message?.includes("duplicate")) {
-        console.error(`Failed to migrate service job ${job._id}:`, error.message);
-      }
-      collectionStats.failed++;
-    }
-  }
-  
-  console.log(`Service Jobs: ${collectionStats.migrated} migrated, ${collectionStats.skipped} skipped, ${collectionStats.failed} failed`);
-  stats.push(collectionStats);
+  await sql.unsafe(`
+    INSERT INTO work_orders (id, shop_id, vehicle_id, customer_id, order_number, status, odometer_in, odometer_out, opened_date, closed_date, labor_total, parts_total, total, source_system, source_id, content_hash, is_deleted, raw_payload, metadata, created_at, updated_at)
+    VALUES ${values}
+    ON CONFLICT DO NOTHING
+  `);
 }
 
 async function main() {
   console.log("=====================================================");
-  console.log("ETL: MongoDB Normalized Collections -> PostgreSQL");
+  console.log("ETL: MongoDB -> PostgreSQL (Batch Mode)");
   console.log("=====================================================");
   console.log("Started at:", new Date().toISOString());
   
@@ -415,7 +472,6 @@ async function main() {
     await migrateCustomers(db, shopUuidMap);
     await migrateVehicles(db, shopUuidMap);
     await migrateWorkOrders(db, shopUuidMap);
-    await migrateServiceJobs(db, shopUuidMap);
     
     console.log("\n=====================================================");
     console.log("Migration Summary");
