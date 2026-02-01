@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs";
@@ -14,9 +14,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing pending ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-    
-    const pending = await db.collection("pending_signups").findOne({ pendingId });
+    let pendingResult = await sql`
+      SELECT * FROM pending_signups WHERE pending_id = ${pendingId} LIMIT 1
+    `;
+    let pending = pendingResult[0];
     
     if (!pending) {
       return NextResponse.json({ error: "Invalid or expired setup link" }, { status: 404 });
@@ -27,9 +28,12 @@ export async function POST(req: NextRequest) {
     
     while (!pending.completed && attempts < maxAttempts) {
       await new Promise(r => setTimeout(r, 1000));
-      const updated = await db.collection("pending_signups").findOne({ pendingId });
+      const updatedResult = await sql`
+        SELECT * FROM pending_signups WHERE pending_id = ${pendingId} LIMIT 1
+      `;
+      const updated = updatedResult[0];
       if (updated?.completed) {
-        Object.assign(pending, updated);
+        pending = updated;
         break;
       }
       attempts++;
@@ -41,11 +45,13 @@ export async function POST(req: NextRequest) {
       }, { status: 202 });
     }
 
-    const shopId = pending.shopId || pending.reservedShopId;
-    const user = await db.collection("users").findOne({ 
-      emailLower: pending.adminEmail,
-      shopId 
-    });
+    const shopId = pending.shop_id || pending.reserved_shop_id;
+    const userResult = await sql`
+      SELECT id FROM users 
+      WHERE LOWER(email) = ${pending.admin_email} AND shop_id = ${String(shopId)}
+      LIMIT 1
+    `;
+    const user = userResult[0];
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -56,13 +62,10 @@ export async function POST(req: NextRequest) {
     const ttlDays = 30;
     const expiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
     
-    await db.collection("sessions").insertOne({
-      token: sessionId,
-      userId: user._id,
-      shopId,
-      createdAt: now,
-      expiresAt,
-    });
+    await sql`
+      INSERT INTO sessions (token, user_id, shop_id, created_at, expires_at)
+      VALUES (${sessionId}, ${user.id}, ${String(shopId)}, ${now}, ${expiresAt})
+    `;
 
     const res = NextResponse.json({ ok: true, shopId });
     
@@ -75,8 +78,9 @@ export async function POST(req: NextRequest) {
     });
     
     return res;
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
     console.error("Setup complete error:", e);
-    return NextResponse.json({ error: e?.message || "Setup failed" }, { status: 500 });
+    return NextResponse.json({ error: message || "Setup failed" }, { status: 500 });
   }
 }

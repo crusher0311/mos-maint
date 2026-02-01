@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { getEnterpriseByShopId } from "@/lib/enterprise";
+import { getEnterpriseByShopId } from "@/lib/enterprise-pg";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,36 +12,38 @@ export async function GET() {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = await getDb();
-  const shopId = Number(sess.shopId);
-  const shop = await db.collection("shops").findOne({ shopId });
+  const shopId = String(sess.shopId);
+  const shopResult = await sql`SELECT * FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+  const shop = shopResult[0];
+  const settings = shop?.settings as Record<string, unknown> | null;
+  const preferences = settings?.preferences as Record<string, unknown> | null;
   
-  // Get enterprise info for job history location selection
-  let enterpriseShops: { shopId: number; name: string }[] = [];
-  const enterprise = await getEnterpriseByShopId(shopId);
-  if (enterprise && enterprise.shopIds.length > 1) {
-    const siblingShops = await db.collection("shops")
-      .find({ shopId: { $in: enterprise.shopIds } })
-      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
-      .toArray();
-    enterpriseShops = siblingShops.map((s: any) => ({ 
-      shopId: s.shopId, 
+  let enterpriseShops: { shopId: number; name: string; locationIdentifier: string | null }[] = [];
+  const enterprise = await getEnterpriseByShopId(Number(sess.shopId));
+  if (enterprise && enterprise.shop_ids.length > 1) {
+    const siblingShops = await sql`
+      SELECT shop_id, name, location_identifier 
+      FROM shops 
+      WHERE shop_id = ANY(${enterprise.shop_ids.map(String)})
+    `;
+    enterpriseShops = siblingShops.map(s => ({ 
+      shopId: s.shop_id ? parseInt(s.shop_id, 10) : 0, 
       name: s.name,
-      locationIdentifier: s.locationIdentifier || null
+      locationIdentifier: s.location_identifier || null
     }));
   }
 
   return NextResponse.json({
-    distanceUnit: shop?.preferences?.distanceUnit || "miles",
-    timezone: shop?.preferences?.timezone || "America/New_York",
-    workflowStages: shop?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES,
-    showInspectItems: shop?.preferences?.showInspectItems !== false, // default true
-    showOnlyWithMileage: shop?.preferences?.showOnlyWithMileage !== false, // default true
-    showRecalls: shop?.preferences?.showRecalls !== false, // default true
-    recallsExpanded: shop?.preferences?.recallsExpanded !== false, // default true
-    tekmetricLabels: shop?.preferences?.tekmetricLabels || [], // empty = show all
-    jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null, // null = all enterprise shops
-    enterpriseShops, // for UI to display options
+    distanceUnit: (preferences?.distanceUnit as string) || "miles",
+    timezone: (preferences?.timezone as string) || "America/New_York",
+    workflowStages: (preferences?.workflowStages as string[]) || DEFAULT_WORKFLOW_STAGES,
+    showInspectItems: preferences?.showInspectItems !== false,
+    showOnlyWithMileage: preferences?.showOnlyWithMileage !== false,
+    showRecalls: preferences?.showRecalls !== false,
+    recallsExpanded: preferences?.recallsExpanded !== false,
+    tekmetricLabels: (preferences?.tekmetricLabels as string[]) || [],
+    jobHistoryShopIds: preferences?.jobHistoryShopIds || null,
+    enterpriseShops,
   });
 }
 
@@ -68,23 +70,28 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Invalid workflow stages" }, { status: 400 });
   }
 
-  const db = await getDb();
-  const updates: Record<string, any> = {};
+  const shopId = String(sess.shopId);
+  const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+  const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+  const existingPreferences = (existingSettings.preferences as Record<string, unknown>) || {};
 
-  if (distanceUnit) updates["preferences.distanceUnit"] = distanceUnit;
-  if (timezone) updates["preferences.timezone"] = timezone;
-  if (workflowStages !== undefined) updates["preferences.workflowStages"] = workflowStages;
-  if (showInspectItems !== undefined) updates["preferences.showInspectItems"] = showInspectItems;
-  if (showOnlyWithMileage !== undefined) updates["preferences.showOnlyWithMileage"] = showOnlyWithMileage;
-  if (showRecalls !== undefined) updates["preferences.showRecalls"] = showRecalls;
-  if (recallsExpanded !== undefined) updates["preferences.recallsExpanded"] = recallsExpanded;
-  if (tekmetricLabels !== undefined) updates["preferences.tekmetricLabels"] = tekmetricLabels;
-  if (jobHistoryShopIds !== undefined) updates["preferences.jobHistoryShopIds"] = jobHistoryShopIds;
+  const updatedPreferences = { ...existingPreferences };
+  if (distanceUnit) updatedPreferences.distanceUnit = distanceUnit;
+  if (timezone) updatedPreferences.timezone = timezone;
+  if (workflowStages !== undefined) updatedPreferences.workflowStages = workflowStages;
+  if (showInspectItems !== undefined) updatedPreferences.showInspectItems = showInspectItems;
+  if (showOnlyWithMileage !== undefined) updatedPreferences.showOnlyWithMileage = showOnlyWithMileage;
+  if (showRecalls !== undefined) updatedPreferences.showRecalls = showRecalls;
+  if (recallsExpanded !== undefined) updatedPreferences.recallsExpanded = recallsExpanded;
+  if (tekmetricLabels !== undefined) updatedPreferences.tekmetricLabels = tekmetricLabels;
+  if (jobHistoryShopIds !== undefined) updatedPreferences.jobHistoryShopIds = jobHistoryShopIds;
 
-  await db.collection("shops").updateOne(
-    { shopId: Number(sess.shopId) },
-    { $set: updates }
-  );
+  const updatedSettings = { ...existingSettings, preferences: updatedPreferences };
+
+  await sql`
+    UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = ${new Date()}
+    WHERE shop_id = ${shopId}
+  `;
 
   return NextResponse.json({ success: true });
 }

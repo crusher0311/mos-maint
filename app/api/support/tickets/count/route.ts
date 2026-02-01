@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export async function GET() {
   try {
@@ -9,18 +9,19 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
+    const result = await sql<{count: string}[]>`
+      SELECT COUNT(*) as count FROM support_tickets 
+      WHERE user_email = ${session.email} AND status IN ('open', 'in_progress')
+    `;
 
-    const openCount = await db.collection("support_tickets").countDocuments({
-      userEmail: session.email,
-      status: { $in: ["open", "in_progress"] }
-    });
+    const openCount = parseInt(result[0]?.count || "0", 10);
 
     return NextResponse.json({
       ok: true,
       openCount
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    console.error("Error getting ticket count:", error);
     return NextResponse.json({ error: "Failed to get count" }, { status: 500 });
   }
 }

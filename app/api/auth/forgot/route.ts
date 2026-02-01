@@ -1,36 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { sendEmail, makeResetEmail } from "@/lib/email";
 import { clientIp, rateLimit } from "@/lib/rate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * POST /api/auth/forgot
- * Body: { email: string, shopId?: number }
- *
- * Behavior:
- * - Normalizes email → emailLower
- * - If shopId is provided, looks up that exact account; otherwise tries to infer
- * - Always returns 200 to avoid user/email enumeration
- * - Creates a single-use token in password_reset_tokens (2h TTL by default)
- * - Returns { ok: true, resetUrl, expiresAt, note? } and tries to send an email
- */
 export async function POST(req: NextRequest) {
   try {
-    const db = await getDb();
-    const users = db.collection("users");
-    const pwTokens = db.collection("password_reset_tokens"); // ← renamed collection
-
     const body = await req.json().catch(() => ({}));
     const rawEmail = String(body?.email || "");
     const emailLower = rawEmail.trim().toLowerCase();
     const rawShopId = body?.shopId;
     const shopId = Number.isFinite(rawShopId) ? Number(rawShopId) : undefined;
 
-    // ---- Rate limit (5 reqs / hour per IP + email + shop) ----
     const ip = clientIp(req);
     const rl = await rateLimit({
       id: `forgot:${ip}:${emailLower || "_"}:${shopId ?? "_"}`,
@@ -38,14 +22,12 @@ export async function POST(req: NextRequest) {
       windowSeconds: 60 * 60,
     });
     if (!rl.allowed) {
-      // Still avoid enumeration; just say "try later"
       return NextResponse.json(
         { ok: false, error: "Too many requests. Try again later." },
         { status: 429 }
       );
     }
 
-    // If no email provided, return 200 (do not leak)
     if (!emailLower) {
       return NextResponse.json({
         ok: true,
@@ -53,27 +35,30 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Find the target user while avoiding leaks
-    let user: any = null;
+    let user: Record<string, unknown> | null = null;
     let note: string | undefined;
 
     if (typeof shopId === "number") {
-      user = await users.findOne({ emailLower, shopId });
+      const result = await sql`
+        SELECT id, email, shop_id FROM users 
+        WHERE LOWER(email) = ${emailLower} AND shop_id = ${String(shopId)}
+        LIMIT 1
+      `;
+      user = result[0] || null;
     } else {
-      // No shopId: see how many shops match this email (cap to 2 to detect ambiguity)
-      const matches = await users.find({ emailLower }).project({ _id: 1, shopId: 1, emailLower: 1 }).limit(2).toArray();
+      const matches = await sql`
+        SELECT id, email, shop_id FROM users 
+        WHERE LOWER(email) = ${emailLower}
+        LIMIT 2
+      `;
       if (matches.length === 1) {
-        user = await users.findOne({ _id: matches[0]._id });
+        user = matches[0];
       } else if (matches.length > 1) {
-        // Ambiguous—return 200 with a soft hint but no enumeration
         note = "Multiple accounts found for this email. Please include your Shop ID.";
-        // Don't proceed with token creation without a specific shopId
         return NextResponse.json({ ok: true, note });
       }
-      // If 0 matches: continue and return ok:true below (no leak)
     }
 
-    // If user not found, still return ok:true (avoid enumeration)
     if (!user) {
       return NextResponse.json({
         ok: true,
@@ -81,29 +66,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Create a secure, single-use token
     const token = crypto.randomBytes(24).toString("hex");
     const now = new Date();
-
-    // Default: 2 hours (adjust as needed)
     const expiresMinutes = 120;
     const expiresAt = new Date(now.getTime() + expiresMinutes * 60 * 1000);
 
-    await pwTokens.insertOne({
-      token,
-      userId: user._id,
-      shopId: user.shopId,
-      emailLower,
-      createdAt: now,
-      expiresAt,
-      usedAt: null,
-    });
+    await sql`
+      INSERT INTO password_reset_tokens (token, user_id, shop_id, email_lower, created_at, expires_at, used_at)
+      VALUES (${token}, ${user.id as string}, ${user.shop_id as string}, ${emailLower}, ${now}, ${expiresAt}, NULL)
+    `;
 
-    // Build the reset URL
     const base = process.env.PUBLIC_BASE_URL || req.nextUrl.origin;
     const resetUrl = `${base}/reset?token=${token}`;
 
-    // Try to send an email (non-blocking for success)
     try {
       const { subject, html, text } = makeResetEmail(resetUrl);
       await sendEmail({ to: user.email as string, subject, html, text });
@@ -115,11 +90,12 @@ export async function POST(req: NextRequest) {
       ok: true,
       resetUrl,
       expiresAt,
-      note, // includes the soft hint only when applicable
+      note,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json(
-      { ok: false, error: e?.message || "Unknown error" },
+      { ok: false, error: message },
       { status: 500 }
     );
   }

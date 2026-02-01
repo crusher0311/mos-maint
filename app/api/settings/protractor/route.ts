@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import sql from "@/lib/db/postgres";
 import { testConnection, resolveProtractorConfig } from "@/lib/integrations/protractor";
 import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 import crypto from "crypto";
@@ -8,7 +8,7 @@ import crypto from "crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getSession();
     if (!session) {
@@ -18,32 +18,35 @@ export async function GET(req: NextRequest) {
     const shopId = Number(session.shopId);
     const config = await resolveProtractorConfig(shopId);
 
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { protractor: 1, protractorWebhookToken: 1 } }
-    );
+    const shopResult = await sql`
+      SELECT protractor_config, settings FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
+    const shop = shopResult[0];
+    const protractorConfig = shop?.protractor_config as Record<string, unknown> | null;
+    const settings = shop?.settings as Record<string, unknown> | null;
 
-    let webhookToken = shop?.protractorWebhookToken;
+    let webhookToken = settings?.protractorWebhookToken as string | undefined;
     if (config.configured && !webhookToken) {
       webhookToken = crypto.randomBytes(16).toString("hex");
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: { protractorWebhookToken: webhookToken } }
-      );
+      const updatedSettings = { ...settings, protractorWebhookToken: webhookToken };
+      await sql`
+        UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb
+        WHERE shop_id = ${String(shopId)}
+      `;
     }
 
     return NextResponse.json({
       configured: config.configured,
       connectionId: config.connectionId ? `${config.connectionId.slice(0, 8)}...` : null,
       hasApiKey: Boolean(config.apiKey),
-      updateWorkOrderPackage: shop?.protractor?.updateWorkOrderPackage ?? false,
-      updateWorkOrderLine: shop?.protractor?.updateWorkOrderLine ?? false,
+      updateWorkOrderPackage: (protractorConfig?.updateWorkOrderPackage as boolean) ?? false,
+      updateWorkOrderLine: (protractorConfig?.updateWorkOrderLine as boolean) ?? false,
       webhookToken: config.configured ? webhookToken : null,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Protractor Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -65,7 +68,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = await getDb();
     const cleanConnectionId = connectionId.trim().toLowerCase();
     const cleanApiKey = apiKey.trim().toLowerCase();
 
@@ -78,48 +80,49 @@ export async function POST(req: NextRequest) {
     }
 
     const webhookToken = crypto.randomBytes(16).toString("hex");
+    const now = new Date();
     
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          protractorConnectionId: cleanConnectionId,
-          protractorApiKey: cleanApiKey,
-          protractorWebhookToken: webhookToken,
-          "protractor.configured": true,
-          "protractor.configuredAt": new Date(),
-          "protractor.locations": testResult.locations,
-          "protractor.updateWorkOrderPackage": true,
-          "protractor.updateWorkOrderLine": true,
-          protractorBackfillComplete: false,
-          updatedAt: new Date(),
-          integrationProvider: "protractor",
-        },
-        $unset: {
-          protractorBackfillCompletedAt: "",
-        },
-        $setOnInsert: {
-          createdAt: new Date(),
-        },
-      },
-      { upsert: true }
-    );
+    const shopResult = await sql`SELECT settings, protractor_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1`;
+    const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+    
+    const updatedProtractorConfig = {
+      configured: true,
+      configuredAt: now.toISOString(),
+      locations: testResult.locations,
+      updateWorkOrderPackage: true,
+      updateWorkOrderLine: true,
+      connectionId: cleanConnectionId,
+      apiKey: cleanApiKey,
+    };
+    
+    const updatedSettings = {
+      ...existingSettings,
+      protractorWebhookToken: webhookToken,
+      protractorBackfillComplete: false,
+      integrationProvider: "protractor",
+    };
 
-    // Clear all cached data and reset backfill progress for fresh start
+    await sql`
+      UPDATE shops 
+      SET protractor_config = ${JSON.stringify(updatedProtractorConfig)}::jsonb,
+          settings = ${JSON.stringify(updatedSettings)}::jsonb,
+          updated_at = ${now}
+      WHERE shop_id = ${String(shopId)}
+    `;
+
     await Promise.all([
-      db.collection("protractor_canned_jobs").deleteOne({ shopId }),
-      db.collection("protractor_vehicles").deleteMany({ shopId }),
-      db.collection("protractor_work_orders").deleteMany({ shopId }),
-      db.collection("protractor_deferred_work").deleteMany({ shopId }),
-      db.collection("backfill_progress").deleteOne({ shopId }),
-      db.collection("cached_plans").deleteMany({ shopId }),
+      sql`DELETE FROM protractor_canned_jobs WHERE shop_id = ${String(shopId)}`,
+      sql`DELETE FROM protractor_vehicles WHERE shop_id = ${String(shopId)}`,
+      sql`DELETE FROM protractor_work_orders WHERE shop_id = ${String(shopId)}`,
+      sql`DELETE FROM backfill_progress WHERE shop_id = ${String(shopId)}`,
+      sql`DELETE FROM cached_plans WHERE shop_id = ${String(shopId)}`,
     ]);
 
-    // Run job history backfill inline (fire-and-forget, runs in background)
     runProtractorBackfill(shopId).then(result => {
       console.log(`[Protractor Settings] Backfill completed for shop ${shopId}:`, result);
     }).catch(err => {
-      console.error(`[Protractor Settings] Backfill failed for shop ${shopId}:`, err.message);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[Protractor Settings] Backfill failed for shop ${shopId}:`, message);
     });
 
     return NextResponse.json({
@@ -128,45 +131,50 @@ export async function POST(req: NextRequest) {
       locations: testResult.locations,
       jobHistoryBackfill: "started"
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Protractor Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
+    const now = new Date();
 
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $unset: {
-          protractorConnectionId: "",
-          protractorApiKey: "",
-          "protractor.configured": "",
-        },
-        $set: {
-          "protractor.disconnectedAt": new Date(),
-          updatedAt: new Date(),
-        },
-      }
-    );
+    const shopResult = await sql`SELECT protractor_config FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+    const existingConfig = (shopResult[0]?.protractor_config as Record<string, unknown>) || {};
+    
+    const updatedConfig = {
+      ...existingConfig,
+      configured: false,
+      disconnectedAt: now.toISOString(),
+      connectionId: null,
+      apiKey: null,
+    };
 
-    await db.collection("protractor_canned_jobs").deleteOne({ shopId });
-    await db.collection("protractor_vehicles").deleteMany({ shopId });
-    await db.collection("protractor_work_orders").deleteMany({ shopId });
-    await db.collection("protractor_deferred_work").deleteMany({ shopId });
+    await sql`
+      UPDATE shops 
+      SET protractor_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = ${now}
+      WHERE shop_id = ${shopId}
+    `;
+
+    await Promise.all([
+      sql`DELETE FROM protractor_canned_jobs WHERE shop_id = ${shopId}`,
+      sql`DELETE FROM protractor_vehicles WHERE shop_id = ${shopId}`,
+      sql`DELETE FROM protractor_work_orders WHERE shop_id = ${shopId}`,
+    ]);
 
     return NextResponse.json({ ok: true, message: "Protractor disconnected" });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Protractor Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,40 +1,48 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
     
-    const shop = await db.collection("shops").findOne(
-      { shopId: { $in: [String(shopId), Number(shopId)] } },
-      { projection: { protractor: 1, tekmetric: 1, autoflow: 1, smsProvider: 1 } }
-    );
+    const shopResult = await sql`
+      SELECT settings, protractor_config, tekmetric_config, autoflow_config 
+      FROM shops 
+      WHERE shop_id = ${shopId}
+      LIMIT 1
+    `;
+    const shop = shopResult[0];
+
+    const settings = shop?.settings as Record<string, unknown> | null;
+    const protractorConfig = shop?.protractor_config as Record<string, unknown> | null;
+    const tekmetricConfig = shop?.tekmetric_config as Record<string, unknown> | null;
+    const autoflowConfig = shop?.autoflow_config as Record<string, unknown> | null;
 
     return NextResponse.json({
-      smsProvider: shop?.smsProvider || null,
+      smsProvider: settings?.smsProvider || null,
       protractor: {
-        configured: !!shop?.protractor?.configured
+        configured: !!protractorConfig?.configured
       },
       tekmetric: {
-        configured: !!(shop?.tekmetric?.configured || shop?.tekmetric?.shopId)
+        configured: !!(tekmetricConfig?.configured || tekmetricConfig?.shopId)
       },
       autoflow: {
-        configured: !!shop?.autoflow?.configured
+        configured: !!autoflowConfig?.configured
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Integrations Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -45,8 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
     const body = await req.json();
     
     const { smsProvider } = body;
@@ -55,19 +62,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid SMS provider" }, { status: 400 });
     }
 
-    await db.collection("shops").updateOne(
-      { shopId: { $in: [String(shopId), Number(shopId)] } },
-      { 
-        $set: { 
-          smsProvider: smsProvider || null,
-          updatedAt: new Date()
-        } 
-      }
-    );
+    const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+    const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+    const updatedSettings = { ...existingSettings, smsProvider: smsProvider || null };
+
+    await sql`
+      UPDATE shops 
+      SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = ${new Date()}
+      WHERE shop_id = ${shopId}
+    `;
 
     return NextResponse.json({ ok: true, smsProvider });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Integrations Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
