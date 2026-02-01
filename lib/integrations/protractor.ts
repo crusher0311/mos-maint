@@ -4,6 +4,10 @@ import https from "node:https";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
+import { 
+  upsertProtractorWorkOrderToPostgres, 
+  upsertProtractorVehicleToPostgres 
+} from "@/lib/postgres-ingestion";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
@@ -894,6 +898,16 @@ export async function upsertProtractorVehicleSnapshot(
     },
     { upsert: true }
   );
+  
+  await upsertProtractorVehicleToPostgres(shopId, vehicle.ID, {
+    vin: vin.toUpperCase(),
+    year: vehicle.Year ?? undefined,
+    make: vehicle.Make ?? undefined,
+    model: vehicle.Model ?? undefined,
+    licensePlate: vehicle.LicensePlate ?? undefined,
+    customerId: vehicle.OwnerID ?? undefined,
+    rawData: vehicle
+  });
 }
 
 export async function upsertProtractorWorkOrderSnapshot(
@@ -1010,6 +1024,22 @@ export async function upsertProtractorWorkOrderSnapshot(
     },
     { upsert: true }
   );
+  
+  await upsertProtractorWorkOrderToPostgres(shopId, workOrder.ID, {
+    workOrderNumber: workOrder.WorkOrderNumber ? String(workOrder.WorkOrderNumber) : undefined,
+    vin: vin ?? undefined,
+    status: workOrder.WorkflowStage ?? workOrder.Status ?? undefined,
+    customerId: workOrder.ContactID ?? undefined,
+    vehicleId: workOrder.ServiceItemID ?? undefined,
+    customerName: contactName ?? undefined,
+    vehicleYear: workOrder.ServiceItem?.Year ?? undefined,
+    vehicleMake: workOrder.ServiceItem?.Make ?? undefined,
+    vehicleModel: workOrder.ServiceItem?.Model ?? undefined,
+    mileage: workOrder.InUsage ?? workOrder.Odometer ?? undefined,
+    createdDate: workOrder.ScheduledTime ?? undefined,
+    closedDate: workOrder.Completed ? now.toISOString() : undefined,
+    rawData: workOrder
+  });
 }
 
 export async function upsertProtractorInvoiceSnapshot(

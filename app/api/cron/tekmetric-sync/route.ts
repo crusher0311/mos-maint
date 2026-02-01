@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { 
   getRepairOrders, 
   getVehicle, 
@@ -14,6 +15,7 @@ import {
   checkAndRunBackfillForNewShops 
 } from "@/lib/tekmetric-job-index";
 import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import { upsertTekmetricWorkOrderToPostgres } from "@/lib/postgres-ingestion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +118,26 @@ async function upsertTekmetricWorkOrderSnapshot(
     },
     { upsert: true }
   );
+  
+  await upsertTekmetricWorkOrderToPostgres(shopId, String(ro.id), {
+    workOrderNumber: ro.repairOrderNumber,
+    vin,
+    status: statusName,
+    statusCode,
+    label,
+    labelColor: ro.color || "",
+    customerId: ro.customerId,
+    vehicleId: ro.vehicleId,
+    customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
+    vehicleYear: vehicle.year,
+    vehicleMake: vehicle.make,
+    vehicleModel: vehicle.model,
+    mileageIn: ro.milesIn,
+    mileageOut: ro.milesOut,
+    createdDate: ro.createdDate,
+    closedDate: ro.completedDate,
+    rawData: ro
+  });
 }
 
 export async function GET(req: NextRequest) {
