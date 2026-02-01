@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sql from "@/lib/db/postgres";
 import pLimit from "p-limit";
 import crypto from "crypto";
-import { createIngestionService } from "@/lib/normalized-ingestion";
+import { NormalizedIngestionServicePg } from "@/lib/normalized-ingestion-pg";
 import { getValidToken } from "@/lib/tekmetric-auth";
 
 export const runtime = "nodejs";
@@ -169,10 +169,7 @@ async function backfillShopChunk(
   const shop = shopRows[0] as any;
   const enterpriseId = shop?.enterprise_id;
   
-  const { getDb } = await import("@/lib/mongo");
-  const db = await getDb();
-  const ingestionService = createIngestionService(
-    db,
+  const ingestionService = new NormalizedIngestionServicePg(
     'tekmetric',
     shopId,
     enterpriseId,
