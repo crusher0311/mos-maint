@@ -28,6 +28,8 @@ This file tracks migration sessions, key decisions, and checkpoint history for t
 - `lib/integrations/autovitals.ts` - AutoVitals integration (vehicles, appointments, inspections)
 - `lib/integrations/autoflow.ts` - AutoFlow DVI fetching and caching
 - `lib/integrations/dataone.ts` - DataOne OE service schedules
+- `lib/integrations/autoflow/client.ts` - AutoFlow client module
+- `lib/integrations/dataone-api.ts` - DataOne API with PostgreSQL caching
 
 ### Key Decisions:
 1. **Atomic operations:** Use single-statement upserts with ON CONFLICT for critical operations
@@ -42,8 +44,8 @@ This file tracks migration sessions, key decisions, and checkpoint history for t
 
 ### Migration Progress:
 - Started session: ~174 MongoDB files remaining
-- Current: ~169 MongoDB files remaining
-- New PostgreSQL tables: shop_features, ratelimits, counters, carfax_reports, dvi, dvi_results, dataone_oe, autovitals_vehicles, autovitals_appointments, autovitals_inspections
+- Current: ~167 MongoDB files remaining
+- New PostgreSQL tables: shop_features, ratelimits, counters, carfax_reports, dvi, dvi_results, dataone_oe, dataone_cache, autovitals_vehicles, autovitals_appointments, autovitals_inspections
 
 ---
 

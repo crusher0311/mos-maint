@@ -71,7 +71,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - Dashboard routes: `/api/dashboard/updates`
   - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
   
-**Migration Progress:** ~169 MongoDB files remaining
+**Migration Progress:** ~167 MongoDB files remaining
 
 **Recently Migrated (This Session):**
 - Core libraries: `lib/features.ts`, `lib/enterprise.ts`, `lib/stripe.ts`, `lib/api-usage-tracker.ts`

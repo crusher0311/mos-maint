@@ -1,20 +1,20 @@
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import type { AutoflowConfig, DviResult } from "./types";
 
 type Fetcher = typeof fetch;
 
-function toInt(val: any): number | null {
+function toInt(val: unknown): number | null {
   if (val === null || val === undefined) return null;
   const n = Number(String(val).replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-function nonEmpty(s: any): string | null {
+function nonEmpty(s: unknown): string | null {
   const t = s == null ? "" : String(s).trim();
   return t ? t : null;
 }
 
-function normalizeTime(s: any): string | null {
+function normalizeTime(s: unknown): string | null {
   const t = nonEmpty(s);
   if (!t) return null;
   if (/^0{4}-0{2}-0{2}T0{2}:0{2}:0{2}/.test(t)) return null;
@@ -36,41 +36,34 @@ function normalizeAutoflowDomain(input?: string | null): string {
   return d;
 }
 
-export async function resolveAutoflowConfig(shopId: number): Promise<AutoflowConfig> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    {
-      projection: {
-        autoflow: 1,
-        autoflowDomain: 1,
-        autoflowApiKey: 1,
-        autoflowApiPassword: 1,
-      },
-    }
-  );
+export async function resolveAutoflowConfig(shopId: number | string): Promise<AutoflowConfig> {
+  const shopIdStr = String(shopId);
+  const result = await sql`
+    SELECT settings FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
+  `;
+
+  const shop = result[0];
+  const settings = shop?.settings as Record<string, unknown> | undefined;
+  const autoflow = settings?.autoflow as Record<string, unknown> | undefined;
 
   const domainRaw =
-    shop?.autoflowDomain ??
-    shop?.autoflow?.domain ??
-    shop?.autoflow?.subdomain ??
+    autoflow?.domain ??
+    autoflow?.subdomain ??
     process.env.AUTOFLOW_DOMAIN ??
     process.env.AUTOFLOW_SUBDOMAIN ??
     "";
 
   const apiKey =
-    shop?.autoflowApiKey ??
-    shop?.autoflow?.apiKey ??
+    autoflow?.apiKey ??
     process.env.AUTOFLOW_API_KEY ??
     "";
 
   const apiPassword =
-    shop?.autoflowApiPassword ??
-    shop?.autoflow?.apiPassword ??
+    autoflow?.apiPassword ??
     process.env.AUTOFLOW_API_PASSWORD ??
     "";
 
-  const domain = normalizeAutoflowDomain(domainRaw);
+  const domain = normalizeAutoflowDomain(domainRaw as string);
   const base = domain ? `https://${domain}` : "";
   const configured = Boolean(domain && apiKey && apiPassword);
   const subdomain = domain ? domain.split(".")[0] : "";
@@ -79,14 +72,14 @@ export async function resolveAutoflowConfig(shopId: number): Promise<AutoflowCon
     base,
     domain,
     subdomain,
-    apiKey: apiKey || null,
-    apiPassword: apiPassword || null,
+    apiKey: (apiKey as string) || null,
+    apiPassword: (apiPassword as string) || null,
     configured,
   };
 }
 
 export async function fetchDviByInvoice(
-  shopId: number,
+  shopId: number | string,
   invoice: string | number,
   doFetch: Fetcher = fetch
 ): Promise<DviResult> {
@@ -107,9 +100,10 @@ export async function fetchDviByInvoice(
       },
       cache: "no-store",
     });
-  } catch (err: any) {
-    console.error(`[AutoFlow] Network error fetching DVI for invoice ${inv}:`, err?.message || err);
-    return { ok: false, error: `AutoFlow connection failed: ${err?.message || 'Network error'}` };
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    console.error(`[AutoFlow] Network error fetching DVI for invoice ${inv}:`, error?.message || err);
+    return { ok: false, error: `AutoFlow connection failed: ${error?.message || 'Network error'}` };
   }
 
   if (!res.ok) {
@@ -117,10 +111,11 @@ export async function fetchDviByInvoice(
     return { ok: false, error: `HTTP ${res.status}: ${text || res.statusText}` };
   }
 
-  const json = await res.json().catch(() => null);
+  const json = await res.json().catch(() => null) as Record<string, unknown> | null;
   if (!json || typeof json !== "object") return { ok: false, error: "Invalid JSON from AutoFlow." };
+  
   const success = Number(json.success || 0) === 1;
-  const content = json.content || {};
+  const content = (json.content || {}) as Record<string, unknown>;
   if (!success) {
     return { ok: false, error: nonEmpty(json.message) || "AutoFlow returned success=0", raw: json };
   }
@@ -131,8 +126,9 @@ export async function fetchDviByInvoice(
   const shopUrl = nonEmpty(content.shop_url);
   const customerUrl = nonEmpty(content.customer_url);
 
-  const hunter = Array.isArray(content.hunter_results)
-    ? content.hunter_results.map((h: any) => ({
+  const hunterResults = content.hunter_results as Record<string, unknown>[] | undefined;
+  const hunter = Array.isArray(hunterResults)
+    ? hunterResults.map((h) => ({
         vin: nonEmpty(h.vin),
         orderNumber: nonEmpty(h.order_number),
         odometer: toInt(h.odometer),
@@ -141,10 +137,10 @@ export async function fetchDviByInvoice(
       }))
     : null;
 
-  const dvis = Array.isArray(content.dvis) ? content.dvis : [];
+  const dvis = Array.isArray(content.dvis) ? content.dvis as Record<string, unknown>[] : [];
   const primary =
-    dvis.find((d: any) => Array.isArray(d?.dvi_category) && d.dvi_category.length > 0) ||
-    dvis.find((d: any) => normalizeTime(d?.completed_datetime)) || 
+    dvis.find((d) => Array.isArray(d?.dvi_category) && (d.dvi_category as unknown[]).length > 0) ||
+    dvis.find((d) => normalizeTime(d?.completed_datetime)) || 
     dvis[0] || null;
 
   const sheetName = nonEmpty(primary?.dvi_name);
@@ -152,23 +148,26 @@ export async function fetchDviByInvoice(
   const completedBy = nonEmpty(primary?.completed_by);
   const pdfUrl = nonEmpty(primary?.pdf_url);
 
-  const rawCategories = primary?.dvi_category || primary?.categories || primary?.dvi_items || [];
+  const rawCategories = (primary?.dvi_category || primary?.categories || primary?.dvi_items || []) as Record<string, unknown>[];
   
   const categories = Array.isArray(rawCategories)
-    ? rawCategories.map((c: any) => {
-        const items = Array.isArray(c?.dvi_items)
-          ? c.dvi_items.map((it: any) => {
+    ? rawCategories.map((c) => {
+        const dviItems = c?.dvi_items as Record<string, unknown>[] | undefined;
+        const items = Array.isArray(dviItems)
+          ? dviItems.map((it) => {
               const status = it?.item_status ?? it?.status ?? null;
 
               let pictures: string[] | null = null;
-              if (Array.isArray(it?.item_picture)) {
-                pictures = it.item_picture.map((u: any) => nonEmpty(u)).filter(Boolean) as string[];
+              const itemPicture = it?.item_picture as unknown[] | undefined;
+              if (Array.isArray(itemPicture)) {
+                pictures = itemPicture.map((u) => nonEmpty(u)).filter(Boolean) as string[];
               } else if (nonEmpty(it?.image)) {
                 pictures = [String(nonEmpty(it.image))];
               }
 
-              const videos = Array.isArray(it?.item_video)
-                ? it.item_video.map((u: any) => nonEmpty(u)).filter(Boolean) as string[]
+              const itemVideo = it?.item_video as unknown[] | undefined;
+              const videos = Array.isArray(itemVideo)
+                ? itemVideo.map((u) => nonEmpty(u)).filter(Boolean) as string[]
                 : null;
 
               const extras: string[] = [];
@@ -187,9 +186,9 @@ export async function fetchDviByInvoice(
                 .join("\n");
 
               return {
-                itemId: it?.item_id ?? null,
+                itemId: (it?.item_id ?? null) as string | number | null,
                 name: nonEmpty(it?.item_name),
-                status,
+                status: status as string | number | null,
                 notes: combinedNotes || null,
                 pictures: pictures && pictures.length ? pictures : null,
                 videos: videos && videos.length ? videos : null,
@@ -198,7 +197,7 @@ export async function fetchDviByInvoice(
           : null;
 
         return {
-          categoryId: c?.category_id ?? null,
+          categoryId: (c?.category_id ?? null) as string | number | null,
           name: nonEmpty(c?.category_name),
           video: nonEmpty(c?.category_video),
           videoStatus: nonEmpty(c?.category_video_status),
@@ -226,7 +225,7 @@ export async function fetchDviByInvoice(
   };
 }
 
-export async function testConnection(shopId: number): Promise<{ ok: boolean; error?: string }> {
+export async function testConnection(shopId: number | string): Promise<{ ok: boolean; error?: string }> {
   const config = await resolveAutoflowConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: 'AutoFlow credentials not configured' };
