@@ -1,7 +1,7 @@
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com';
-const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 minutes before expiry
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 interface TekmetricToken {
   accessToken: string;
@@ -9,16 +9,6 @@ interface TekmetricToken {
   scope: string;
   expiresAt: Date;
   createdAt: Date;
-}
-
-interface TokenDocument {
-  _id: string;
-  accessToken: string;
-  tokenType: string;
-  scope: string;
-  expiresAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 let cachedToken: TekmetricToken | null = null;
@@ -57,8 +47,6 @@ async function fetchNewToken(): Promise<TekmetricToken> {
   }
   
   const data = await response.json();
-  
-  // Tekmetric tokens typically expire in 1 hour, but we'll set a 55-minute expiry to be safe
   const expiresAt = new Date(Date.now() + 55 * 60 * 1000);
   
   const token: TekmetricToken = {
@@ -76,22 +64,28 @@ async function fetchNewToken(): Promise<TekmetricToken> {
 
 async function persistToken(token: TekmetricToken): Promise<void> {
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").updateOne(
-      { tokenKey: "current" },
-      {
-        $set: {
-          tokenKey: "current",
-          accessToken: token.accessToken,
-          tokenType: token.tokenType,
-          scope: token.scope,
-          expiresAt: token.expiresAt,
-          createdAt: token.createdAt,
-          updatedAt: new Date(),
-        }
-      },
-      { upsert: true }
-    );
+    const scopes = token.scope ? token.scope.split(' ') : [];
+    
+    await sql`
+      INSERT INTO tekmetric_tokens (shop_id, external_shop_id, access_token, refresh_token, token_type, expires_at, scopes, updated_at)
+      VALUES (
+        NULL,
+        0,
+        ${token.accessToken},
+        '',
+        ${token.tokenType},
+        ${token.expiresAt},
+        ${scopes},
+        NOW()
+      )
+      ON CONFLICT (external_shop_id) WHERE external_shop_id = 0
+      DO UPDATE SET
+        access_token = EXCLUDED.access_token,
+        token_type = EXCLUDED.token_type,
+        expires_at = EXCLUDED.expires_at,
+        scopes = EXCLUDED.scopes,
+        updated_at = NOW()
+    `;
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to persist token:', err);
   }
@@ -99,17 +93,24 @@ async function persistToken(token: TekmetricToken): Promise<void> {
 
 async function loadPersistedToken(): Promise<TekmetricToken | null> {
   try {
-    const db = await getDb();
-    const doc = await db.collection("tekmetric_tokens").findOne({ tokenKey: "current" }) as TokenDocument | null;
+    const rows = await sql`
+      SELECT access_token, token_type, scopes, expires_at, created_at
+      FROM tekmetric_tokens
+      WHERE external_shop_id = 0
+      LIMIT 1
+    `;
     
+    const doc = rows[0];
     if (!doc) return null;
     
+    const scopes = doc.scopes as string[] | null;
+    
     return {
-      accessToken: doc.accessToken,
-      tokenType: doc.tokenType,
-      scope: doc.scope,
-      expiresAt: new Date(doc.expiresAt),
-      createdAt: new Date(doc.createdAt),
+      accessToken: doc.access_token as string,
+      tokenType: doc.token_type as string,
+      scope: scopes ? scopes.join(' ') : '',
+      expiresAt: new Date(doc.expires_at as string),
+      createdAt: new Date(doc.created_at as string),
     };
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to load persisted token:', err);
@@ -122,19 +123,16 @@ function isTokenExpired(token: TekmetricToken): boolean {
 }
 
 export async function getValidToken(): Promise<string> {
-  // Check in-memory cache first
   if (cachedToken && !isTokenExpired(cachedToken)) {
     return cachedToken.accessToken;
   }
   
-  // Try loading from database
   const persistedToken = await loadPersistedToken();
   if (persistedToken && !isTokenExpired(persistedToken)) {
     cachedToken = persistedToken;
     return cachedToken.accessToken;
   }
   
-  // Need to fetch a new token
   const newToken = await fetchNewToken();
   cachedToken = newToken;
   await persistToken(newToken);
@@ -156,8 +154,7 @@ export async function invalidateToken(): Promise<void> {
   cachedToken = null;
   
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").deleteOne({ tokenKey: "current" });
+    await sql`DELETE FROM tekmetric_tokens WHERE external_shop_id = 0`;
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to invalidate token:', err);
   }

@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 interface UsageRecord {
   timestamp: Date;
@@ -18,8 +18,8 @@ interface UsageStats {
   requestsPerMinuteLimit: number;
   usagePercent: number;
   is429Count: number;
-  topShops: { shopId: number; count: number }[];
-  recentErrors: { timestamp: Date; endpoint: string; shopId?: number }[];
+  topShops: { shopId: string; count: number }[];
+  recentErrors: { timestamp: Date; endpoint: string; shopId?: string }[];
 }
 
 const REQUEST_LIMIT_PER_MINUTE = 600;
@@ -29,10 +29,10 @@ let inMemoryBuffer: UsageRecord[] = [];
 let lastFlush = Date.now();
 const FLUSH_INTERVAL_MS = 10000;
 
-function getMinuteBucket(date: Date): string {
+function getMinuteBucket(date: Date): Date {
   const d = new Date(date);
   d.setSeconds(0, 0);
-  return d.toISOString();
+  return d;
 }
 
 export async function trackTekmetricRequest(
@@ -51,7 +51,7 @@ export async function trackTekmetricRequest(
     statusCode,
     latencyMs,
     is429: statusCode === 429,
-    minuteBucket: getMinuteBucket(now)
+    minuteBucket: getMinuteBucket(now).toISOString()
   };
 
   inMemoryBuffer.push(record);
@@ -69,8 +69,20 @@ async function flushToDb(): Promise<void> {
   lastFlush = Date.now();
 
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_api_usage").insertMany(toFlush);
+    for (const record of toFlush) {
+      const shopIdStr = record.shopId ? String(record.shopId) : null;
+      
+      await sql`
+        INSERT INTO tekmetric_api_usage (shop_id, endpoint, is_429, response_time, timestamp)
+        VALUES (
+          ${shopIdStr ? sql`(SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1)` : sql`NULL`},
+          ${record.endpoint},
+          ${record.is429},
+          ${record.latencyMs},
+          ${record.timestamp}
+        )
+      `;
+    }
   } catch (err) {
     console.error("[TekmetricUsageTracker] Failed to flush:", err);
     inMemoryBuffer = [...toFlush, ...inMemoryBuffer];
@@ -78,7 +90,6 @@ async function flushToDb(): Promise<void> {
 }
 
 export async function getTekmetricUsageStats(): Promise<UsageStats> {
-  const db = await getDb();
   const now = new Date();
   
   const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
@@ -89,21 +100,32 @@ export async function getTekmetricUsageStats(): Promise<UsageStats> {
   const inMemory5Min = inMemoryBuffer.filter(r => r.timestamp >= fiveMinutesAgo).length;
   const inMemory60Min = inMemoryBuffer.filter(r => r.timestamp >= sixtyMinutesAgo).length;
 
-  const [currentMinute, last5Minutes, last60Minutes, errors429, topShopsAgg] = await Promise.all([
-    db.collection("tekmetric_api_usage").countDocuments({ timestamp: { $gte: oneMinuteAgo } }),
-    db.collection("tekmetric_api_usage").countDocuments({ timestamp: { $gte: fiveMinutesAgo } }),
-    db.collection("tekmetric_api_usage").countDocuments({ timestamp: { $gte: sixtyMinutesAgo } }),
-    db.collection("tekmetric_api_usage").find({ 
-      is429: true, 
-      timestamp: { $gte: sixtyMinutesAgo } 
-    }).sort({ timestamp: -1 }).limit(10).toArray(),
-    db.collection("tekmetric_api_usage").aggregate([
-      { $match: { timestamp: { $gte: sixtyMinutesAgo }, shopId: { $exists: true } } },
-      { $group: { _id: "$shopId", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]).toArray()
+  const [currentMinuteRows, last5MinutesRows, last60MinutesRows, errors429Rows, topShopsRows] = await Promise.all([
+    sql`SELECT COUNT(*) as count FROM tekmetric_api_usage WHERE timestamp >= ${oneMinuteAgo}`,
+    sql`SELECT COUNT(*) as count FROM tekmetric_api_usage WHERE timestamp >= ${fiveMinutesAgo}`,
+    sql`SELECT COUNT(*) as count FROM tekmetric_api_usage WHERE timestamp >= ${sixtyMinutesAgo}`,
+    sql`
+      SELECT timestamp, endpoint, s.shop_id
+      FROM tekmetric_api_usage u
+      LEFT JOIN shops s ON u.shop_id = s.id
+      WHERE u.is_429 = true AND u.timestamp >= ${sixtyMinutesAgo}
+      ORDER BY u.timestamp DESC
+      LIMIT 10
+    `,
+    sql`
+      SELECT s.shop_id, COUNT(*) as count
+      FROM tekmetric_api_usage u
+      JOIN shops s ON u.shop_id = s.id
+      WHERE u.timestamp >= ${sixtyMinutesAgo}
+      GROUP BY s.shop_id
+      ORDER BY count DESC
+      LIMIT 10
+    `
   ]);
+
+  const currentMinute = Number(currentMinuteRows[0]?.count || 0);
+  const last5Minutes = Number(last5MinutesRows[0]?.count || 0);
+  const last60Minutes = Number(last60MinutesRows[0]?.count || 0);
 
   const currentMinuteRequests = currentMinute + inMemoryCurrent;
   const last5MinutesRequests = last5Minutes + inMemory5Min;
@@ -115,12 +137,12 @@ export async function getTekmetricUsageStats(): Promise<UsageStats> {
     last60MinutesRequests,
     requestsPerMinuteLimit: REQUEST_LIMIT_PER_MINUTE,
     usagePercent: Math.round((currentMinuteRequests / REQUEST_LIMIT_PER_MINUTE) * 100),
-    is429Count: errors429.length,
-    topShops: topShopsAgg.map(s => ({ shopId: s._id, count: s.count })),
-    recentErrors: errors429.map(e => ({ 
-      timestamp: e.timestamp, 
-      endpoint: e.endpoint, 
-      shopId: e.shopId 
+    is429Count: errors429Rows.length,
+    topShops: topShopsRows.map(s => ({ shopId: s.shop_id as string, count: Number(s.count) })),
+    recentErrors: errors429Rows.map(e => ({ 
+      timestamp: new Date(e.timestamp as string), 
+      endpoint: e.endpoint as string, 
+      shopId: e.shop_id as string | undefined
     }))
   };
 }

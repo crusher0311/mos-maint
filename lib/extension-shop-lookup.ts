@@ -1,8 +1,8 @@
-import { getDb } from '@/lib/mongo';
+import sql from "@/lib/db/postgres";
 
 export type ShopLookupResult = {
   mosShopId: number;
-  shopDoc: any;
+  shopDoc: Record<string, unknown>;
   provider: 'tekmetric' | 'protractor' | 'autoflow';
 } | null;
 
@@ -13,44 +13,74 @@ export async function findShopBySmsId(
     isPlatformAdmin?: boolean;
   } = {}
 ): Promise<ShopLookupResult> {
-  const db = await getDb();
   const { userShopIds = [], isPlatformAdmin = false } = options;
   
   const tekShopIdNum = parseInt(smsShopId);
   const tekShopIdStr = String(smsShopId);
   
-  const shopQuery: any = {
-    $or: [
-      { "tekmetric.shopId": tekShopIdNum },
-      { "tekmetric.shopId": tekShopIdStr },
-      { tekmetricShopId: tekShopIdNum },
-      { tekmetricShopId: tekShopIdStr },
-      { "protractor.connectionId": smsShopId },
-      { protractorConnectionId: smsShopId },
-      { "autoflow.shopId": smsShopId },
-      { "autoflow.domain": smsShopId },
-    ]
-  };
+  let rows;
   
   if (!isPlatformAdmin && userShopIds.length > 0) {
-    shopQuery.shopId = { $in: userShopIds };
+    const shopIdStrs = userShopIds.map(id => String(id));
+    rows = await sql`
+      SELECT id, shop_id, name, integration_provider, tekmetric_shop_id, protractor_connection_id, settings
+      FROM shops
+      WHERE shop_id = ANY(${shopIdStrs})
+        AND (
+          tekmetric_shop_id = ${tekShopIdNum}
+          OR tekmetric_shop_id = ${tekShopIdStr}::int
+          OR protractor_connection_id = ${smsShopId}
+          OR settings->'autoflow'->>'shopId' = ${smsShopId}
+          OR settings->'autoflow'->>'domain' = ${smsShopId}
+        )
+      LIMIT 1
+    `;
+  } else {
+    rows = await sql`
+      SELECT id, shop_id, name, integration_provider, tekmetric_shop_id, protractor_connection_id, settings
+      FROM shops
+      WHERE (
+        tekmetric_shop_id = ${tekShopIdNum}
+        OR protractor_connection_id = ${smsShopId}
+        OR settings->'autoflow'->>'shopId' = ${smsShopId}
+        OR settings->'autoflow'->>'domain' = ${smsShopId}
+      )
+      LIMIT 1
+    `;
   }
   
-  const shopDoc = await db.collection("shops").findOne(shopQuery);
-  
+  const shopDoc = rows[0];
   if (!shopDoc) {
     return null;
   }
   
-  const provider = shopDoc.integrationProvider 
-    || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
-      : shopDoc.protractor?.connectionId ? 'protractor' 
-      : shopDoc.autoflow?.domain ? 'autoflow' 
-      : 'tekmetric') as 'tekmetric' | 'protractor' | 'autoflow';
+  const settings = shopDoc.settings as Record<string, unknown> | null;
+  const hasAutoflow = settings?.autoflow ? true : false;
+  
+  let provider: 'tekmetric' | 'protractor' | 'autoflow' = 'tekmetric';
+  const storedProvider = shopDoc.integration_provider as string | null;
+  
+  if (storedProvider === 'tekmetric' || storedProvider === 'protractor' || storedProvider === 'autoflow') {
+    provider = storedProvider;
+  } else if (shopDoc.tekmetric_shop_id) {
+    provider = 'tekmetric';
+  } else if (shopDoc.protractor_connection_id) {
+    provider = 'protractor';
+  } else if (hasAutoflow) {
+    provider = 'autoflow';
+  }
   
   return {
-    mosShopId: shopDoc.shopId,
-    shopDoc,
+    mosShopId: parseInt(shopDoc.shop_id as string),
+    shopDoc: {
+      id: shopDoc.id,
+      shopId: parseInt(shopDoc.shop_id as string),
+      name: shopDoc.name,
+      integrationProvider: shopDoc.integration_provider,
+      tekmetricShopId: shopDoc.tekmetric_shop_id,
+      protractorConnectionId: shopDoc.protractor_connection_id,
+      settings: settings,
+    },
     provider
   };
 }

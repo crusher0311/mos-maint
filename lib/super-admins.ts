@@ -1,6 +1,5 @@
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
-// Fallback list in case database query fails
 export const SUPER_ADMIN_EMAILS = [
   "brandoncrusha@gmail.com",
   "brandoncrusha+1@gmail.com"
@@ -13,14 +12,13 @@ export function isSuperAdmin(email: string | undefined | null): boolean {
 
 export async function getPlatformAdminEmails(): Promise<string[]> {
   try {
-    const db = await getDb();
-    const platformAdmins = await db.collection("users")
-      .find({ isPlatformAdmin: true })
-      .project({ email: 1 })
-      .toArray();
+    const rows = await sql`
+      SELECT email FROM users
+      WHERE is_platform_admin = true
+    `;
     
-    const emails = platformAdmins
-      .map(admin => admin.email?.toLowerCase())
+    const emails = rows
+      .map(row => (row.email as string)?.toLowerCase())
       .filter((email): email is string => Boolean(email));
     
     if (emails.length === 0) {

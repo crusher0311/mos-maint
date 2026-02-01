@@ -1,4 +1,4 @@
-import { getDb } from "./mongo";
+import sql from "@/lib/db/postgres";
 
 export interface PushToROEvent {
   shopId: number;
@@ -18,12 +18,31 @@ export interface PushToROEvent {
 }
 
 export async function trackPushToRO(event: Omit<PushToROEvent, "timestamp">): Promise<void> {
-  const db = await getDb();
-  await db.collection("extension_analytics").insertOne({
-    eventType: "push_to_ro",
-    ...event,
-    timestamp: new Date(),
-  });
+  const shopIdStr = String(event.shopId);
+  
+  const eventData = {
+    vin: event.vin,
+    vehicleYear: event.vehicleYear,
+    vehicleMake: event.vehicleMake,
+    vehicleModel: event.vehicleModel,
+    jobTitle: event.jobTitle,
+    jobSource: event.jobSource,
+    repairOrderId: event.repairOrderId,
+    laborAmount: event.laborAmount,
+    partsAmount: event.partsAmount,
+    totalAmount: event.totalAmount,
+  };
+  
+  await sql`
+    INSERT INTO extension_analytics (shop_id, user_id, event_type, event_data, created_at)
+    VALUES (
+      (SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1),
+      ${event.userId ? sql`(SELECT id FROM users WHERE id::text = ${event.userId} LIMIT 1)` : sql`NULL`},
+      'push_to_ro',
+      ${JSON.stringify(eventData)}::jsonb,
+      NOW()
+    )
+  `;
 }
 
 export async function getPushToROStats(params: {
@@ -37,54 +56,53 @@ export async function getPushToROStats(params: {
   byDay: Array<{ date: string; count: number }>;
   topJobs: Array<{ jobTitle: string; count: number }>;
 }> {
-  const db = await getDb();
+  const shopIdStr = params.shopId ? String(params.shopId) : null;
   
-  const matchStage: any = { eventType: "push_to_ro" };
-  if (params.shopId) matchStage.shopId = params.shopId;
-  if (params.enterpriseId) matchStage.enterpriseId = params.enterpriseId;
-  if (params.startDate || params.endDate) {
-    matchStage.timestamp = {};
-    if (params.startDate) matchStage.timestamp.$gte = params.startDate;
-    if (params.endDate) matchStage.timestamp.$lte = params.endDate;
-  }
+  const baseFilter = sql`
+    WHERE event_type = 'push_to_ro'
+    ${shopIdStr ? sql`AND shop_id = (SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1)` : sql``}
+    ${params.startDate ? sql`AND created_at >= ${params.startDate}` : sql``}
+    ${params.endDate ? sql`AND created_at <= ${params.endDate}` : sql``}
+  `;
 
-  const [totalResult, bySourceResult, byDayResult, topJobsResult] = await Promise.all([
-    db.collection("extension_analytics").countDocuments(matchStage),
+  const [totalRows, bySourceRows, byDayRows, topJobsRows] = await Promise.all([
+    sql`SELECT COUNT(*) as count FROM extension_analytics ${baseFilter}`,
     
-    db.collection("extension_analytics").aggregate([
-      { $match: matchStage },
-      { $group: { _id: "$jobSource", count: { $sum: 1 } } },
-    ]).toArray(),
+    sql`
+      SELECT event_data->>'jobSource' as source, COUNT(*) as count
+      FROM extension_analytics
+      ${baseFilter}
+      GROUP BY event_data->>'jobSource'
+    `,
     
-    db.collection("extension_analytics").aggregate([
-      { $match: matchStage },
-      { 
-        $group: { 
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } }, 
-          count: { $sum: 1 } 
-        } 
-      },
-      { $sort: { _id: -1 } },
-      { $limit: 30 },
-    ]).toArray(),
+    sql`
+      SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as day, COUNT(*) as count
+      FROM extension_analytics
+      ${baseFilter}
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+      ORDER BY day DESC
+      LIMIT 30
+    `,
     
-    db.collection("extension_analytics").aggregate([
-      { $match: matchStage },
-      { $group: { _id: "$jobTitle", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 20 },
-    ]).toArray(),
+    sql`
+      SELECT event_data->>'jobTitle' as job_title, COUNT(*) as count
+      FROM extension_analytics
+      ${baseFilter}
+      GROUP BY event_data->>'jobTitle'
+      ORDER BY count DESC
+      LIMIT 20
+    `,
   ]);
 
   const bySource: Record<string, number> = {};
-  for (const row of bySourceResult) {
-    bySource[row._id || "unknown"] = row.count;
+  for (const row of bySourceRows) {
+    bySource[(row.source as string) || "unknown"] = Number(row.count);
   }
 
   return {
-    totalPushes: totalResult,
+    totalPushes: Number(totalRows[0]?.count || 0),
     bySource,
-    byDay: byDayResult.map(r => ({ date: r._id, count: r.count })),
-    topJobs: topJobsResult.map(r => ({ jobTitle: r._id, count: r.count })),
+    byDay: byDayRows.map(r => ({ date: r.day as string, count: Number(r.count) })),
+    topJobs: topJobsRows.map(r => ({ jobTitle: r.job_title as string, count: Number(r.count) })),
   };
 }
