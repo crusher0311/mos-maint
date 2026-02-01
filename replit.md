@@ -71,7 +71,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - Dashboard routes: `/api/dashboard/updates`
   - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
   
-**Migration Progress:** ~35 MongoDB lib files remaining (3 API routes use dynamic imports for NormalizedIngestionService)
+**Migration Progress:** ~20 MongoDB files remaining (admin pages, dashboard pages, legacy scripts)
 
 **Recently Migrated (This Session):**
 - API Sync Routes migrated (9 routes):
@@ -94,12 +94,19 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - Callbacks: `/api/callbacks/protractor`
   - Jobs: `/api/jobs/search-normalized`
 
-**Dynamic Import Pattern:**
-3 cron routes use dynamic imports for `NormalizedIngestionService` (which still requires MongoDB):
-- `app/api/cron/tekmetric-sync/route.ts`
-- `app/api/cron/protractor-sync/route.ts`
-- `app/api/cron/tekmetric-backfill/route.ts`
-This pattern allows the core sync functionality to use PostgreSQL while maintaining normalized ingestion compatibility.
+**Normalized Ingestion PostgreSQL Migration (COMPLETED):**
+All cron routes now use `NormalizedIngestionServicePg` (PostgreSQL-only):
+- `app/api/cron/tekmetric-sync/route.ts` - Uses PostgreSQL ingestion
+- `app/api/cron/protractor-sync/route.ts` - Uses PostgreSQL ingestion
+- `app/api/cron/tekmetric-backfill/route.ts` - Uses PostgreSQL ingestion
+
+New PostgreSQL ingestion files:
+- `lib/normalized-ingestion-pg.ts` - PostgreSQL-based normalized data ingestion (1115 lines)
+- `lib/normalized-adapters-pg.ts` - PostgreSQL-compatible adapters using UUID IDs
+
+Original MongoDB versions remain for backward compatibility:
+- `lib/normalized-ingestion.ts` - MongoDB version (can be removed after full migration)
+- `lib/normalized-adapters.ts` - MongoDB version (can be removed after full migration)
 
 **New PostgreSQL Tables Created:**
 - `shop_features` - Shop feature toggles and subscriptions
