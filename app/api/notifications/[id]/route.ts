@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { ObjectId } from "mongodb";
 import { markAsRead, deleteNotification } from "@/lib/notifications";
 
 export async function PATCH(
@@ -14,7 +13,8 @@ export async function PATCH(
 
   const { id } = params;
   
-  if (!ObjectId.isValid(id)) {
+  const numId = Number(id);
+  if (isNaN(numId)) {
     return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });
   }
 
@@ -40,7 +40,8 @@ export async function DELETE(
 
   const { id } = params;
   
-  if (!ObjectId.isValid(id)) {
+  const numId = Number(id);
+  if (isNaN(numId)) {
     return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });
   }
 

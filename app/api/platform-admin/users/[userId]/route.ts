@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { ObjectId } from "mongodb";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,71 +18,63 @@ export async function GET(
   }
 
   try {
-    const db = await getDb();
     const userId = params.userId;
     
-    let user;
-    try {
-      user = await db.collection("users").findOne(
-        { _id: new ObjectId(userId) },
-        { projection: { passwordHash: 0, password: 0 } }
-      );
-    } catch {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
+    const users = await sql`
+      SELECT id, email, role, shop_id as "shopId", shop_ids as "shopIds", 
+             is_super_admin as "isPlatformAdmin", created_at as "createdAt", last_login as "lastLogin"
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
     
-    if (!user) {
+    if (users.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     
+    const user = users[0];
     const userShopIds = [user.shopId, ...(user.shopIds || [])].filter(Boolean);
-    const uniqueUserShopIds = [...new Set(userShopIds.map(id => String(id)))];
+    const uniqueUserShopIds = [...new Set(userShopIds.map((id: string | number) => String(id)))];
     
-    // Fetch all shops and enterprises in parallel
     const [allShops, enterprises] = await Promise.all([
-      db.collection("shops").find().project({ shopId: 1, name: 1, locationIdentifier: 1, enterpriseId: 1 }).toArray(),
-      db.collection("enterprise_accounts").find().toArray()
+      sql`SELECT shop_id as "shopId", name, location_identifier as "locationIdentifier", enterprise_id as "enterpriseId" FROM shops`,
+      sql`SELECT id, name, shop_ids as "shopIds" FROM enterprise_accounts`
     ]);
     
-    // Build enterprise lookup
-    const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
+    const enterpriseMap = new Map(enterprises.map((e: Record<string, unknown>) => [String(e.id), e]));
     
-    // Find which enterprise the user's primary shop belongs to
-    const primaryShop = allShops.find(s => String(s.shopId) === String(user.shopId));
-    const userEnterpriseId = primaryShop?.enterpriseId?.toString();
+    const primaryShop = allShops.find((s: Record<string, unknown>) => String(s.shopId) === String(user.shopId));
+    const userEnterpriseId = primaryShop?.enterpriseId ? String(primaryShop.enterpriseId) : null;
     const userEnterprise = userEnterpriseId ? enterpriseMap.get(userEnterpriseId) : null;
     
-    // Get enterprise shop IDs
     const enterpriseShopIds = new Set<string>();
-    if (userEnterprise && userEnterprise.shopIds) {
-      for (const sid of userEnterprise.shopIds) {
+    if (userEnterprise && (userEnterprise as Record<string, unknown>).shopIds) {
+      for (const sid of (userEnterprise as Record<string, unknown>).shopIds as string[]) {
         enterpriseShopIds.add(String(sid));
       }
     }
     
-    // Build shop metadata with enterprise flags
-    const shopMetadata = allShops.map(shop => ({
+    const shopMetadata = allShops.map((shop: Record<string, unknown>) => ({
       shopId: String(shop.shopId),
-      name: shop.name || `Shop ${shop.shopId}`,
+      name: (shop.name as string) || `Shop ${shop.shopId}`,
       locationIdentifier: shop.locationIdentifier || null,
       isInUserEnterprise: enterpriseShopIds.has(String(shop.shopId)),
       isUserPrimary: String(shop.shopId) === String(user.shopId),
       isSelected: uniqueUserShopIds.includes(String(shop.shopId)),
     }));
     
-    // Sort: user primary first, then enterprise locations, then others
-    shopMetadata.sort((a, b) => {
+    shopMetadata.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
       if (a.isUserPrimary && !b.isUserPrimary) return -1;
       if (!a.isUserPrimary && b.isUserPrimary) return 1;
       if (a.isInUserEnterprise && !b.isInUserEnterprise) return -1;
       if (!a.isInUserEnterprise && b.isInUserEnterprise) return 1;
-      return a.name.localeCompare(b.name);
+      return (a.name as string).localeCompare(b.name as string);
     });
     
     return NextResponse.json({
       ok: true,
       user: {
-        _id: user._id,
+        _id: user.id,
         email: user.email,
         role: user.role || "user",
         shopId: user.shopId,
@@ -93,15 +84,15 @@ export async function GET(
         lastLogin: user.lastLogin,
       },
       enterprise: userEnterprise ? {
-        _id: userEnterprise._id,
-        name: userEnterprise.name,
-        shopIds: userEnterprise.shopIds?.map((id: any) => String(id)) || [],
+        _id: (userEnterprise as Record<string, unknown>).id,
+        name: (userEnterprise as Record<string, unknown>).name,
+        shopIds: ((userEnterprise as Record<string, unknown>).shopIds as string[] || []).map((id: string) => String(id)),
       } : null,
       shops: shopMetadata,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error fetching user:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }
 }
 
@@ -118,23 +109,18 @@ export async function PATCH(
   }
 
   try {
-    const db = await getDb();
     const userId = params.userId;
     const body = await request.json();
     
-    let objectId;
-    try {
-      objectId = new ObjectId(userId);
-    } catch {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
-    
-    const existingUser = await db.collection("users").findOne({ _id: objectId });
-    if (!existingUser) {
+    const existingUsers = await sql`
+      SELECT id, email FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (existingUsers.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    const existingUser = existingUsers[0];
     
-    const updateFields: Record<string, any> = {};
+    const updateFields: Record<string, unknown> = {};
     
     if (body.role !== undefined) {
       const validRoles = ["owner", "admin", "manager", "user", "viewer"];
@@ -145,31 +131,30 @@ export async function PATCH(
     }
     
     if (body.shopId !== undefined) {
-      updateFields.shopId = body.shopId;
+      updateFields.shop_id = body.shopId;
     }
     
     if (body.shopIds !== undefined) {
       if (!Array.isArray(body.shopIds)) {
         return NextResponse.json({ error: "shopIds must be an array" }, { status: 400 });
       }
-      updateFields.shopIds = body.shopIds;
+      updateFields.shop_ids = body.shopIds;
     }
     
     if (body.isPlatformAdmin !== undefined) {
-      updateFields.isPlatformAdmin = Boolean(body.isPlatformAdmin);
+      updateFields.is_super_admin = Boolean(body.isPlatformAdmin);
     }
     
     if (Object.keys(updateFields).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
     
-    updateFields.updatedAt = new Date();
-    updateFields.updatedBy = session.email;
+    updateFields.updated_at = new Date();
+    updateFields.updated_by = session.email;
     
-    await db.collection("users").updateOne(
-      { _id: objectId },
-      { $set: updateFields }
-    );
+    await sql`
+      UPDATE users SET ${sql(updateFields)} WHERE id = ${userId}
+    `;
     
     console.log(`[Platform Admin] User ${session.email} updated user ${existingUser.email}:`, updateFields);
     
@@ -177,9 +162,9 @@ export async function PATCH(
       ok: true,
       message: "User updated successfully",
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error updating user:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }
 }
 
@@ -196,26 +181,21 @@ export async function DELETE(
   }
 
   try {
-    const db = await getDb();
     const userId = params.userId;
     
-    let objectId;
-    try {
-      objectId = new ObjectId(userId);
-    } catch {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
-    
-    const user = await db.collection("users").findOne({ _id: objectId });
-    if (!user) {
+    const users = await sql`
+      SELECT id, email FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (users.length === 0) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    const user = users[0];
     
     if (user.email === session.email) {
       return NextResponse.json({ error: "Cannot delete yourself" }, { status: 400 });
     }
     
-    await db.collection("users").deleteOne({ _id: objectId });
+    await sql`DELETE FROM users WHERE id = ${userId}`;
     
     console.log(`[Platform Admin] User ${session.email} deleted user ${user.email}`);
     
@@ -223,8 +203,8 @@ export async function DELETE(
       ok: true,
       message: "User deleted successfully",
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error deleting user:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }
 }

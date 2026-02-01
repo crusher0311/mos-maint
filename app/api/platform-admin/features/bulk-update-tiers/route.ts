@@ -1,21 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { ObjectId } from "mongodb";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 
 const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
 const VALID_TIERS = ["starter", "plus", "elite", "enterprise"];
-
-function isValidObjectId(id: string): boolean {
-  try {
-    new ObjectId(id);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(req: NextRequest) {
   const sess = await getSession();
@@ -33,11 +23,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid updates format" }, { status: 400 });
     }
 
-    const db = await getDb();
-    const collection = db.collection("platform_features");
-
-    const validUpdates = updates.filter((update: { id: string; includedInTiers: string[] }) => {
-      if (!update.id || !isValidObjectId(update.id)) {
+    const validUpdates = updates.filter((update: { id: string | number; includedInTiers: string[] }) => {
+      const numId = Number(update.id);
+      if (isNaN(numId)) {
         return false;
       }
       if (!Array.isArray(update.includedInTiers)) {
@@ -52,19 +40,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No valid updates provided" }, { status: 400 });
     }
 
-    const bulkOps = validUpdates.map((update: { id: string; includedInTiers: string[] }) => ({
-      updateOne: {
-        filter: { _id: new ObjectId(update.id) },
-        update: { $set: { includedInTiers: update.includedInTiers } },
-      },
-    }));
-
-    const result = await collection.bulkWrite(bulkOps);
+    let modifiedCount = 0;
+    for (const update of validUpdates) {
+      const numId = Number(update.id);
+      const result = await sql`
+        UPDATE platform_features 
+        SET included_in_tiers = ${JSON.stringify(update.includedInTiers)}, updated_at = NOW()
+        WHERE id = ${numId}
+      `;
+      modifiedCount += result.count;
+    }
 
     return NextResponse.json({ 
       ok: true, 
       message: "Features updated successfully",
-      modified: result.modifiedCount
+      modified: modifiedCount
     });
   } catch (err) {
     console.error("Error bulk updating feature tiers:", err);
