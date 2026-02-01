@@ -1,19 +1,12 @@
-// app/api/cron/data-quality/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { runDataQualityCheck, autoCleanupData } from "@/lib/data-quality";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * POST /api/cron/data-quality
- * Cron job endpoint for automated data quality checks
- * Headers: { Authorization: "Bearer CRON_SECRET" }
- */
 export async function POST(req: NextRequest) {
   try {
-    // Verify cron secret
     const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET || "default-cron-secret";
     
@@ -21,55 +14,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-    const results = [];
+    const results: any[] = [];
 
-    // Get all active shops
-    const shops = await db.collection("shops").find({}).toArray();
+    const shops = await sql`SELECT * FROM shops`;
 
     for (const shop of shops) {
       try {
-        console.log(`Running data quality check for shop ${shop.shopId}: ${shop.name}`);
+        console.log(`Running data quality check for shop ${shop.shop_id}: ${shop.name}`);
         
-        // Run quality check
-        const report = await runDataQualityCheck(shop.shopId);
+        const report = await runDataQualityCheck(Number(shop.shop_id));
         
-        // Auto-cleanup if enabled
         const autoCleanup = process.env.AUTO_CLEANUP_ENABLED === "true";
         let cleanupResult = null;
         
         if (autoCleanup) {
-          cleanupResult = await autoCleanupData(shop.shopId, false); // Not dry run
+          cleanupResult = await autoCleanupData(Number(shop.shop_id), false);
         }
 
-        // Store report in database for historical tracking
-        await db.collection("data_quality_reports").insertOne({
-          shopId: shop.shopId,
-          shopName: shop.name,
-          report,
-          cleanupResult,
-          createdAt: new Date(),
-          runType: "automated"
-        });
+        await sql`
+          INSERT INTO data_quality_reports (shop_id, shop_name, report, cleanup_result, created_at, run_type)
+          VALUES (${shop.shop_id}, ${shop.name}, ${JSON.stringify(report)}::jsonb, ${cleanupResult ? JSON.stringify(cleanupResult) : null}::jsonb, ${new Date()}, 'automated')
+        `;
 
         results.push({
-          shopId: shop.shopId,
+          shopId: shop.shop_id,
           shopName: shop.name,
           issues: report.issues.length,
           cleaned: cleanupResult?.cleaned || 0,
           status: "success"
         });
 
-        // Log critical issues
-        const criticalIssues = report.issues.filter(i => i.severity === "critical");
+        const criticalIssues = report.issues.filter((i: any) => i.severity === "critical");
         if (criticalIssues.length > 0) {
-          console.warn(`Shop ${shop.shopId} has ${criticalIssues.length} critical data quality issues`);
+          console.warn(`Shop ${shop.shop_id} has ${criticalIssues.length} critical data quality issues`);
         }
 
-      } catch (error) {
-        console.error(`Data quality check failed for shop ${shop.shopId}:`, error);
+      } catch (error: any) {
+        console.error(`Data quality check failed for shop ${shop.shop_id}:`, error);
         results.push({
-          shopId: shop.shopId,
+          shopId: shop.shop_id,
           shopName: shop.name,
           status: "error",
           error: error.message

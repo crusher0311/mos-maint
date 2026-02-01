@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import {
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = await getDb();
     const results: Record<string, { status: string; duration: number; cached: string[] }> = {};
 
     const CARFAX_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
@@ -48,11 +46,9 @@ export async function POST(req: NextRequest) {
       resolveProtractorConfig(shopId),
     ]);
 
-    // Process up to 50 VINs per call (matches dashboard page size)
     const vinLimit = Math.min(vins.length, 50);
-    const BATCH_SIZE = 5; // Process 5 VINs concurrently
+    const BATCH_SIZE = 5;
     
-    // Helper to process a single VIN
     async function processVin(vin: string): Promise<void> {
       const cleanVin = vin.toUpperCase();
       if (cleanVin.length !== 17) return;
@@ -108,7 +104,6 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    // Process VINs in parallel batches
     const vinsToProcess = vins.slice(0, vinLimit).map(v => String(v));
     for (let i = 0; i < vinsToProcess.length; i += BATCH_SIZE) {
       const batch = vinsToProcess.slice(i, i + BATCH_SIZE);

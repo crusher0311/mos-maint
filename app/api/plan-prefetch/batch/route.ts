@@ -1,5 +1,4 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getSession } from "@/lib/auth";
@@ -38,7 +37,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No valid VINs provided" }, { status: 400 });
     }
 
-    const db = await getDb();
     const results: Record<string, { status: string; duration?: number }> = {};
 
     const carfaxCfg = await resolveCarfaxConfig(shopId);

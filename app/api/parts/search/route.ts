@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/features";
 import { updatePartCrossReferences, JobIndexEntry } from "@/lib/job-index";
@@ -21,43 +21,37 @@ type PartCrossRef = {
   updatedAt: Date;
 };
 
-async function ensurePartsIndexed(shopId: number): Promise<void> {
-  const db = await getDb();
-  const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
+async function ensurePartsIndexed(shopId: string): Promise<void> {
+  const partsCountRows = await sql`SELECT COUNT(*)::int as count FROM part_cross_ref WHERE shop_id = ${shopId}`;
+  const partsCount = partsCountRows[0]?.count || 0;
   
   if (partsCount === 0) {
-    let jobEntries: JobIndexEntry[] = await db.collection<JobIndexEntry>("job_index")
-      .find({ shopId })
-      .toArray();
+    const jobEntries = await sql`SELECT * FROM job_index WHERE shop_id = ${shopId}`;
     
     if (jobEntries.length === 0) {
-      const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
-      const cachedWOs = await db.collection("protractor_work_orders")
-        .find({ shopId })
-        .toArray();
+      const cachedWOs = await sql`SELECT * FROM protractor_work_orders WHERE shop_id = ${shopId}`;
       
       if (cachedWOs.length > 0) {
         console.log(`[Parts] Building job index from ${cachedWOs.length} cached work orders`);
         
-        const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
-        const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
+        const vehicles = await sql`SELECT * FROM protractor_vehicles WHERE shop_id = ${shopId}`;
+        const vehicleByVin = new Map(vehicles.map((v: any) => [v.vin?.toUpperCase(), v]));
         
+        const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
         const allEntries: JobIndexEntry[] = [];
         for (const wo of cachedWOs) {
           const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
-          const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
+          const entries = extractJobIndexFromCachedWorkOrder(Number(shopId), wo, vehicle);
           allEntries.push(...entries);
         }
         if (allEntries.length > 0) {
           await upsertJobIndexEntries(allEntries);
-          jobEntries = allEntries;
+          await updatePartCrossReferences(allEntries);
         }
       }
-    }
-    
-    if (jobEntries.length > 0) {
+    } else {
       console.log(`[Parts] Auto-indexing ${jobEntries.length} jobs for shop ${shopId}`);
-      await updatePartCrossReferences(jobEntries);
+      await updatePartCrossReferences(jobEntries as unknown as JobIndexEntry[]);
     }
   }
 }
@@ -68,9 +62,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = session.shopId;
+  const shopId = String(session.shopId);
   
-  const enabled = await isFeatureEnabled(shopId, "part_xref");
+  const enabled = await isFeatureEnabled(session.shopId, "part_xref");
   if (!enabled) {
     return NextResponse.json({ error: "Feature not enabled for this shop" }, { status: 403 });
   }
@@ -85,52 +79,52 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Please provide a search query or vehicle filter" }, { status: 400 });
   }
 
-  const db = await getDb();
-  
   await ensurePartsIndexed(shopId);
-  const collection = db.collection<PartCrossRef>("part_cross_ref");
 
-  const filter: Record<string, any> = { shopId };
-
+  let results: any[];
+  
   if (query) {
     const normalizedQuery = query.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-    filter.$or = [
-      { normalizedPartNumber: { $regex: normalizedQuery, $options: "i" } },
-      { partNumber: { $regex: query, $options: "i" } },
-      { description: { $regex: query, $options: "i" } },
-    ];
+    const searchPattern = `%${query}%`;
+    const normalizedPattern = `%${normalizedQuery}%`;
+    
+    results = await sql`
+      SELECT * FROM part_cross_ref
+      WHERE shop_id = ${shopId}
+        AND (
+          normalized_part_number ILIKE ${normalizedPattern}
+          OR part_number ILIKE ${searchPattern}
+          OR description ILIKE ${searchPattern}
+        )
+        ${make ? sql`AND EXISTS (SELECT 1 FROM jsonb_array_elements(used_on) u WHERE u->>'make' ILIKE ${`%${make}%`})` : sql``}
+        ${model ? sql`AND EXISTS (SELECT 1 FROM jsonb_array_elements(used_on) u WHERE u->>'model' ILIKE ${`%${model}%`})` : sql``}
+        ${year ? sql`AND EXISTS (SELECT 1 FROM jsonb_array_elements(used_on) u WHERE (u->>'year')::int = ${parseInt(year, 10)})` : sql``}
+      ORDER BY usage_count DESC, last_used_at DESC NULLS LAST
+      LIMIT 50
+    `;
+  } else {
+    results = await sql`
+      SELECT * FROM part_cross_ref
+      WHERE shop_id = ${shopId}
+        ${make ? sql`AND EXISTS (SELECT 1 FROM jsonb_array_elements(used_on) u WHERE u->>'make' ILIKE ${`%${make}%`})` : sql``}
+        ${model ? sql`AND EXISTS (SELECT 1 FROM jsonb_array_elements(used_on) u WHERE u->>'model' ILIKE ${`%${model}%`})` : sql``}
+        ${year ? sql`AND EXISTS (SELECT 1 FROM jsonb_array_elements(used_on) u WHERE (u->>'year')::int = ${parseInt(year, 10)})` : sql``}
+      ORDER BY usage_count DESC, last_used_at DESC NULLS LAST
+      LIMIT 50
+    `;
   }
-
-  if (make) {
-    filter["usedOn.make"] = { $regex: make, $options: "i" };
-  }
-  if (model) {
-    filter["usedOn.model"] = { $regex: model, $options: "i" };
-  }
-  if (year) {
-    const yearNum = parseInt(year, 10);
-    if (!isNaN(yearNum)) {
-      filter["usedOn.year"] = yearNum;
-    }
-  }
-
-  const results = await collection
-    .find(filter)
-    .sort({ usageCount: -1, lastUsedAt: -1 })
-    .limit(50)
-    .toArray();
 
   return NextResponse.json({
     ok: true,
-    results: results.map(r => ({
-      partNumber: r.partNumber,
-      normalizedPartNumber: r.normalizedPartNumber,
+    results: results.map((r: any) => ({
+      partNumber: r.part_number,
+      normalizedPartNumber: r.normalized_part_number,
       description: r.description,
       manufacturer: r.manufacturer,
-      usedOn: r.usedOn,
-      crossReferences: r.crossReferences,
-      usageCount: r.usageCount,
-      lastUsedAt: r.lastUsedAt,
+      usedOn: r.used_on,
+      crossReferences: r.cross_references,
+      usageCount: r.usage_count,
+      lastUsedAt: r.last_used_at,
     })),
     count: results.length,
   });

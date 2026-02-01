@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,121 +13,93 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const shopId = parseInt(url.searchParams.get("shopId") || "0", 10);
+  const shopId = url.searchParams.get("shopId") || "0";
   const limit = parseInt(url.searchParams.get("limit") || "50", 10);
 
-  if (!shopId) {
+  if (shopId === "0") {
     return NextResponse.json({ error: "shopId required" }, { status: 400 });
   }
 
   try {
-    const db = await getDb();
+    const protractorVehicles = await sql`
+      WITH ranked_wo AS (
+        SELECT DISTINCT ON (pwo.vin)
+          pwo.vin,
+          COALESCE(pv.mileage, pwo.mileage) as mileage,
+          pv.year,
+          pv.make,
+          pv.model,
+          pwo.updated_at
+        FROM protractor_work_orders pwo
+        LEFT JOIN protractor_vehicles pv ON pwo.vehicle_id = pv.vehicle_id
+        WHERE pwo.shop_id = ${shopId}
+          AND pwo.vin IS NOT NULL AND pwo.vin != ''
+        ORDER BY pwo.vin, pwo.updated_at DESC
+      )
+      SELECT * FROM ranked_wo 
+      WHERE mileage IS NOT NULL AND mileage > 0
+      ORDER BY updated_at DESC
+      LIMIT ${limit}
+    `;
     
-    // Match both string and number versions of shopId
-    const shopIdMatch = { $in: [String(shopId), Number(shopId)] };
+    const TERMINAL_STATUSES = ['Invoice', 'Invoiced', 'Posted', 'Deleted', 'Void'];
     
-    // Get vehicles from Protractor work orders
-    const protractorVehicles = await db.collection("protractor_work_orders").aggregate([
-      { 
-        $match: { 
-          shopId: shopIdMatch,
-          vin: { $exists: true, $type: "string", $ne: "" }
-        } 
-      },
-      { $sort: { updatedAt: -1 } },
-      {
-        $lookup: {
-          from: "protractor_vehicles",
-          localField: "vehicleId",
-          foreignField: "vehicleId",
-          as: "vehicleData"
-        }
-      },
-      { $unwind: { path: "$vehicleData", preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: "$vin",
-          mileage: { $first: { $ifNull: ["$vehicleData.mileage", "$mileage"] } },
-          year: { $first: "$vehicleData.year" },
-          make: { $first: "$vehicleData.make" },
-          model: { $first: "$vehicleData.model" },
-          updatedAt: { $first: "$updatedAt" }
-        }
-      },
-      { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
-      { $sort: { updatedAt: -1 } },
-      { $limit: limit }
-    ]).toArray();
+    const tekmetricActiveVehicles = await sql`
+      WITH ranked_wo AS (
+        SELECT DISTINCT ON (vin)
+          vin,
+          mileage_in as mileage,
+          vehicle_year as year,
+          vehicle_make as make,
+          vehicle_model as model,
+          updated_date as updated_at,
+          true as is_active
+        FROM tekmetric_work_orders
+        WHERE shop_id = ${shopId}
+          AND vin IS NOT NULL AND vin != ''
+          AND status NOT IN ('Invoice', 'Invoiced', 'Posted', 'Deleted', 'Void')
+        ORDER BY vin, updated_date DESC
+      )
+      SELECT * FROM ranked_wo 
+      WHERE mileage IS NOT NULL AND mileage > 0
+      ORDER BY updated_at DESC
+      LIMIT ${limit}
+    `;
     
-    // Get vehicles from Tekmetric work orders - prioritize active (in-shop) vehicles
-    const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
+    const activeVins = new Set(tekmetricActiveVehicles.map((v: any) => v.vin));
     
-    // First: Active vehicles (currently in shop)
-    const tekmetricActiveVehicles = await db.collection("tekmetric_work_orders").aggregate([
-      { 
-        $match: { 
-          shopId: shopIdMatch,
-          vin: { $exists: true, $type: "string", $ne: "" },
-          status: { $nin: TERMINAL_STATUSES }
-        } 
-      },
-      { $sort: { updatedDate: -1 } },
-      {
-        $group: {
-          _id: "$vin",
-          mileage: { $first: "$mileageIn" },
-          year: { $first: "$vehicleYear" },
-          make: { $first: "$vehicleMake" },
-          model: { $first: "$vehicleModel" },
-          updatedAt: { $first: "$updatedDate" },
-          isActive: { $first: { $literal: true } }
-        }
-      },
-      { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
-      { $sort: { updatedAt: -1 } },
-      { $limit: limit }
-    ]).toArray();
+    const tekmetricRecentVehicles = await sql`
+      WITH ranked_wo AS (
+        SELECT DISTINCT ON (vin)
+          vin,
+          mileage_in as mileage,
+          vehicle_year as year,
+          vehicle_make as make,
+          vehicle_model as model,
+          updated_date as updated_at
+        FROM tekmetric_work_orders
+        WHERE shop_id = ${shopId}
+          AND vin IS NOT NULL AND vin != ''
+        ORDER BY vin, updated_date DESC
+      )
+      SELECT * FROM ranked_wo 
+      WHERE mileage IS NOT NULL AND mileage > 0
+      ORDER BY updated_at DESC
+      LIMIT ${limit * 2}
+    `;
     
-    const activeVins = new Set(tekmetricActiveVehicles.map(v => v._id));
-    
-    // Then: Recent vehicles (to fill remaining slots)
-    const tekmetricRecentVehicles = await db.collection("tekmetric_work_orders").aggregate([
-      { 
-        $match: { 
-          shopId: shopIdMatch,
-          vin: { $exists: true, $type: "string", $ne: "" }
-        } 
-      },
-      { $sort: { updatedDate: -1 } },
-      {
-        $group: {
-          _id: "$vin",
-          mileage: { $first: "$mileageIn" },
-          year: { $first: "$vehicleYear" },
-          make: { $first: "$vehicleMake" },
-          model: { $first: "$vehicleModel" },
-          updatedAt: { $first: "$updatedDate" }
-        }
-      },
-      { $match: { mileage: { $exists: true, $ne: null, $gt: 0 } } },
-      { $sort: { updatedAt: -1 } },
-      { $limit: limit * 2 }
-    ]).toArray();
-    
-    // Combine: active first, then recent (deduped)
     const tekmetricVehicles = [
       ...tekmetricActiveVehicles,
-      ...tekmetricRecentVehicles.filter(v => !activeVins.has(v._id))
+      ...tekmetricRecentVehicles.filter((v: any) => !activeVins.has(v.vin))
     ].slice(0, limit);
 
-    // Combine and dedupe by VIN
     const vinMap = new Map<string, any>();
     
     for (const v of [...protractorVehicles, ...tekmetricVehicles]) {
-      const vin = v._id;
+      const vin = v.vin;
       if (!vin || vin.length !== 17) continue;
       
-      if (!vinMap.has(vin) || (v.updatedAt && vinMap.get(vin).updatedAt && v.updatedAt > vinMap.get(vin).updatedAt)) {
+      if (!vinMap.has(vin) || (v.updated_at && vinMap.get(vin).updated_at && new Date(v.updated_at) > new Date(vinMap.get(vin).updated_at))) {
         vinMap.set(vin, {
           vin,
           mileage: v.mileage,
@@ -140,15 +112,13 @@ export async function GET(req: Request) {
 
     const rows = Array.from(vinMap.values()).slice(0, limit);
     
-    // Also try getting vehicles that were already cached in plans
-    const cachedPlans = await db.collection("cached_plans")
-      .find({ shopId: shopIdMatch })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .project({ vin: 1, mileage: 1, "plan.vehicle.year": 1, "plan.vehicle.make": 1, "plan.vehicle.model": 1 })
-      .toArray();
+    const cachedPlans = await sql`
+      SELECT vin, mileage, plan FROM cached_plans
+      WHERE shop_id = ${shopId}
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `;
     
-    // Add any vehicles from cached plans that aren't already in our list
     for (const plan of cachedPlans) {
       if (plan.vin && plan.vin.length === 17 && plan.mileage > 0 && !vinMap.has(plan.vin)) {
         vinMap.set(plan.vin, {

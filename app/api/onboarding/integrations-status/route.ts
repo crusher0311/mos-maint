@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export async function GET() {
   try {
@@ -10,29 +10,32 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-    const sessions = db.collection("sessions");
-    const users = db.collection("users");
     const now = new Date();
 
-    const sess = await sessions.findOne({ token: sid, expiresAt: { $gt: now } });
+    const sessRows = await sql`
+      SELECT * FROM sessions WHERE token = ${sid} AND expires_at > ${now} LIMIT 1
+    `;
+    const sess = sessRows[0];
     if (!sess) {
       return NextResponse.json({ error: "Session expired" }, { status: 401 });
     }
 
-    const user = await users.findOne({ _id: sess.userId });
+    const userRows = await sql`SELECT * FROM users WHERE id = ${sess.user_id} LIMIT 1`;
+    const user = userRows[0];
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const shop = await db.collection("shops").findOne({
-      $or: [{ _id: user.shopId }, { shopId: user.shopId }]
-    });
+    const shopRows = await sql`
+      SELECT settings FROM shops WHERE shop_id = ${String(user.shop_id)} LIMIT 1
+    `;
+    const shop = shopRows[0];
+    const settings = shop?.settings || {};
 
-    const hasProtractor = !!(shop?.protractor?.baseUrl && shop?.protractor?.apiKey);
-    const hasTekmetric = !!shop?.tekmetric?.shopId;
-    const hasAutoFlow = !!shop?.autoflow?.apiKey;
-    const hasCarfax = !!shop?.carfax?.locationId;
+    const hasProtractor = !!(settings.protractor?.baseUrl && settings.protractor?.apiKey);
+    const hasTekmetric = !!settings.tekmetric?.shopId;
+    const hasAutoFlow = !!settings.autoflow?.apiKey;
+    const hasCarfax = !!settings.carfax?.locationId;
 
     return NextResponse.json({
       hasIntegration: hasProtractor || hasTekmetric || hasAutoFlow || hasCarfax,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import { 
   updatePartCrossReferences, 
@@ -16,21 +16,16 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(session.shopId);
+  const shopId = String(session.shopId);
   
   try {
-    const db = await getDb();
-    
-    let jobIndexEntries: JobIndexEntry[] = await db.collection<JobIndexEntry>("job_index")
-      .find({ shopId })
-      .toArray();
+    const jobIndexRows = await sql`SELECT * FROM job_index WHERE shop_id = ${shopId}`;
+    let jobIndexEntries = jobIndexRows as unknown as JobIndexEntry[];
     
     if (jobIndexEntries.length === 0) {
       console.log(`[Parts Rebuild] No job_index entries, checking protractor_work_orders...`);
       
-      const cachedWorkOrders = await db.collection("protractor_work_orders")
-        .find({ shopId })
-        .toArray();
+      const cachedWorkOrders = await sql`SELECT * FROM protractor_work_orders WHERE shop_id = ${shopId}`;
       
       if (cachedWorkOrders.length === 0) {
         return NextResponse.json({ 
@@ -44,13 +39,13 @@ export async function POST() {
       
       console.log(`[Parts Rebuild] Found ${cachedWorkOrders.length} cached work orders, building job index...`);
       
-      const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
-      const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
+      const vehicles = await sql`SELECT * FROM protractor_vehicles WHERE shop_id = ${shopId}`;
+      const vehicleByVin = new Map(vehicles.map((v: any) => [v.vin?.toUpperCase(), v]));
       
       const allEntries: JobIndexEntry[] = [];
       for (const wo of cachedWorkOrders) {
         const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
-        const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
+        const entries = extractJobIndexFromCachedWorkOrder(Number(shopId), wo, vehicle);
         allEntries.push(...entries);
       }
       

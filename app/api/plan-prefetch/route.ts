@@ -1,5 +1,4 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { prefetchPlanData, isPlanPrefetched } from "@/lib/plan-builder";
 
@@ -35,10 +34,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = await getDb();
-
-    // Check if already prefetched and still valid
-    const alreadyPrefetched = await isPlanPrefetched(db, vin, shopId);
+    const alreadyPrefetched = await isPlanPrefetched(vin, shopId);
     if (alreadyPrefetched) {
       console.log(`[Prefetch] ${vin} already cached, skipping`);
       return NextResponse.json({
@@ -52,7 +48,7 @@ export async function POST(req: NextRequest) {
     
     console.log(`[Prefetch] Starting prefetch for ${vin} at ${mileage} miles`);
 
-    const result = await prefetchPlanData(db, shopId, vin, mileage);
+    const result = await prefetchPlanData(shopId, vin, mileage);
 
     console.log(`[Prefetch] VIN ${vin} at ${mileage} miles completed in ${result.duration}ms:`, result.results);
 

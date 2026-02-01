@@ -1,63 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/features";
 import { updatePartCrossReferences, JobIndexEntry } from "@/lib/job-index";
 
 export const dynamic = "force-dynamic";
 
-type PartCrossRef = {
-  shopId: number;
-  partNumber: string;
-  normalizedPartNumber: string;
-  description?: string;
-  manufacturer?: string;
-  usedOn: { year: number; make: string; model: string; engine?: string }[];
-  crossReferences: string[];
-  usageCount: number;
-  workOrderIds: string[];
-  lastUsedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-async function ensurePartsIndexed(shopId: number): Promise<void> {
-  const db = await getDb();
-  const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
+async function ensurePartsIndexed(shopId: string): Promise<void> {
+  const partsCountRows = await sql`SELECT COUNT(*)::int as count FROM part_cross_ref WHERE shop_id = ${shopId}`;
+  const partsCount = partsCountRows[0]?.count || 0;
   
   if (partsCount === 0) {
-    let jobEntries: JobIndexEntry[] = await db.collection<JobIndexEntry>("job_index")
-      .find({ shopId })
-      .toArray();
+    const jobEntries = await sql`SELECT * FROM job_index WHERE shop_id = ${shopId}`;
     
     if (jobEntries.length === 0) {
-      const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
-      const cachedWOs = await db.collection("protractor_work_orders")
-        .find({ shopId })
-        .toArray();
+      const cachedWOs = await sql`SELECT * FROM protractor_work_orders WHERE shop_id = ${shopId}`;
       
       if (cachedWOs.length > 0) {
         console.log(`[Parts] Building job index from ${cachedWOs.length} cached work orders`);
         
-        const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
-        const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
+        const vehicles = await sql`SELECT * FROM protractor_vehicles WHERE shop_id = ${shopId}`;
+        const vehicleByVin = new Map(vehicles.map((v: any) => [v.vin?.toUpperCase(), v]));
         
+        const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
         const allEntries: JobIndexEntry[] = [];
         for (const wo of cachedWOs) {
           const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
-          const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
+          const entries = extractJobIndexFromCachedWorkOrder(Number(shopId), wo, vehicle);
           allEntries.push(...entries);
         }
         if (allEntries.length > 0) {
           await upsertJobIndexEntries(allEntries);
-          jobEntries = allEntries;
+          await updatePartCrossReferences(allEntries);
         }
       }
-    }
-    
-    if (jobEntries.length > 0) {
+    } else {
       console.log(`[Parts] Auto-indexing ${jobEntries.length} jobs for shop ${shopId}`);
-      await updatePartCrossReferences(jobEntries);
+      await updatePartCrossReferences(jobEntries as unknown as JobIndexEntry[]);
     }
   }
 }
@@ -68,9 +47,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = session.shopId;
+  const shopId = String(session.shopId);
   
-  const enabled = await isFeatureEnabled(shopId, "part_xref");
+  const enabled = await isFeatureEnabled(session.shopId, "part_xref");
   if (!enabled) {
     return NextResponse.json({ error: "Feature not enabled for this shop" }, { status: 403 });
   }
@@ -84,23 +63,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "year, make, and model are required" }, { status: 400 });
   }
 
-  const db = await getDb();
-  
   await ensurePartsIndexed(shopId);
-  const collection = db.collection<PartCrossRef>("part_cross_ref");
 
-  const results = await collection
-    .find({
-      shopId,
-      "usedOn.year": year,
-      "usedOn.make": { $regex: `^${make}$`, $options: "i" },
-      "usedOn.model": { $regex: `^${model}$`, $options: "i" },
-    })
-    .sort({ usageCount: -1 })
-    .limit(100)
-    .toArray();
+  const results = await sql`
+    SELECT * FROM part_cross_ref
+    WHERE shop_id = ${shopId}
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(used_on) u 
+        WHERE (u->>'year')::int = ${year}
+          AND u->>'make' ILIKE ${make}
+          AND u->>'model' ILIKE ${model}
+      )
+    ORDER BY usage_count DESC
+    LIMIT 100
+  `;
 
-  const grouped: Record<string, typeof results> = {};
+  const grouped: Record<string, any[]> = {};
   for (const part of results) {
     const category = categorizePartByDescription(part.description || "");
     if (!grouped[category]) {
@@ -114,12 +92,12 @@ export async function GET(req: NextRequest) {
     vehicle: { year, make, model },
     categories: Object.entries(grouped).map(([category, parts]) => ({
       category,
-      parts: parts.map(p => ({
-        partNumber: p.partNumber,
+      parts: parts.map((p: any) => ({
+        partNumber: p.part_number,
         description: p.description,
         manufacturer: p.manufacturer,
-        usageCount: p.usageCount,
-        lastUsedAt: p.lastUsedAt,
+        usageCount: p.usage_count,
+        lastUsedAt: p.last_used_at,
       })),
     })),
     totalParts: results.length,

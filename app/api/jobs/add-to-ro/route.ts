@@ -1,6 +1,3 @@
-// app/api/jobs/add-to-ro/route.ts
-// Add historical job to an open work order
-
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { 
@@ -9,6 +6,7 @@ import {
   protractorFetch 
 } from "@/lib/integrations/protractor";
 import { trackPushToRO } from "@/lib/extension-analytics";
+import sql from "@/lib/db/postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +114,6 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  // Try to extract shop's current labor rate from existing work order lines
   let shopLaborRate = 0;
   for (const pkg of existingPackages) {
     const linesRaw = pkg.ServicePackageLines;
@@ -130,20 +127,16 @@ export async function POST(req: NextRequest) {
     if (shopLaborRate > 0) break;
   }
   
-  // If no rate found from WO, use cached labor rate from shop document (fast)
   if (shopLaborRate === 0) {
-    const { getDb } = await import("@/lib/mongo");
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { cachedLaborRate: 1 } }
-    );
-    if (shop?.cachedLaborRate && shop.cachedLaborRate > 0) {
-      shopLaborRate = shop.cachedLaborRate;
+    const shopRows = await sql`
+      SELECT settings->'cachedLaborRate' as cached_labor_rate FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
+    const cachedRate = shopRows[0]?.cached_labor_rate;
+    if (cachedRate && Number(cachedRate) > 0) {
+      shopLaborRate = Number(cachedRate);
     }
   }
   
-  // Final fallback: use historical rate from the job being added
   if (shopLaborRate === 0) {
     const laborLine = job.lines.find(l => l.lineType === "labor");
     if (laborLine && laborLine.unitPrice > 0) {
@@ -170,7 +163,6 @@ export async function POST(req: NextRequest) {
     };
 
     if (line.lineType === "labor") {
-      // Use shop's labor rate (from WO or fallback to historical)
       const laborTotal = line.quantity * shopLaborRate;
       return {
         ID: ZERO_GUID,

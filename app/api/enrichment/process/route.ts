@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -8,26 +8,21 @@ export async function POST(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const shopId = parseInt(String(session.shopId), 10);
+    const shopId = String(session.shopId);
 
-    const db = await getDb();
     const now = new Date();
 
     const body = await request.json().catch(() => ({}));
     const batchSize = Math.min(body.batchSize || 5, 20);
 
-    const pendingItems = await db.collection("enrichment_queue")
-      .find({ 
-        shopId, 
-        status: "pending",
-        $or: [
-          { nextAttemptAt: { $exists: false } },
-          { nextAttemptAt: { $lte: now } }
-        ]
-      })
-      .sort({ priority: 1, createdAt: 1 })
-      .limit(batchSize)
-      .toArray();
+    const pendingItems = await sql`
+      SELECT * FROM enrichment_queue
+      WHERE shop_id = ${shopId} 
+        AND status = 'pending'
+        AND (next_attempt_at IS NULL OR next_attempt_at <= ${now})
+      ORDER BY priority ASC, created_at ASC
+      LIMIT ${batchSize}
+    `;
 
     if (pendingItems.length === 0) {
       return NextResponse.json({
@@ -44,32 +39,37 @@ export async function POST(request: NextRequest) {
     let carfaxFetched = 0;
     const errors: string[] = [];
 
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+    const shop = shopRows[0];
+    const settings = shop?.settings || {};
 
     for (const item of pendingItems) {
       try {
-        await db.collection("enrichment_queue").updateOne(
-          { _id: item._id },
-          { $set: { status: "processing", startedAt: now } }
-        );
+        await sql`
+          UPDATE enrichment_queue SET status = 'processing', started_at = ${now}
+          WHERE id = ${item.id}
+        `;
 
-        const vehicle = await db.collection("vehicles").findOne({
-          shopId,
-          vin: item.vin
-        });
+        const vehicleRows = await sql`
+          SELECT * FROM vehicles WHERE shop_id = ${shopId} AND vin = ${item.vin} LIMIT 1
+        `;
+        const vehicle = vehicleRows[0];
 
         if (!vehicle) {
-          await db.collection("enrichment_queue").updateOne(
-            { _id: item._id },
-            { $set: { status: "failed", error: "Vehicle not found", completedAt: now } }
-          );
+          await sql`
+            UPDATE enrichment_queue SET 
+              status = 'failed', 
+              error = 'Vehicle not found', 
+              completed_at = ${now}
+            WHERE id = ${item.id}
+          `;
           continue;
         }
 
         let oemSuccess = false;
         let carfaxSuccess = false;
 
-        if (!vehicle.oemScheduleFetchedAt && shop?.dataone?.enabled) {
+        if (!vehicle.oem_schedule_fetched_at && settings.dataone?.enabled) {
           try {
             const oemResponse = await fetch(
               `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:5000'}/api/dataone/schedule?vin=${item.vin}&shopId=${shopId}`,
@@ -80,10 +80,10 @@ export async function POST(request: NextRequest) {
             );
             
             if (oemResponse.ok) {
-              await db.collection("vehicles").updateOne(
-                { _id: vehicle._id },
-                { $set: { oemScheduleFetchedAt: now } }
-              );
+              await sql`
+                UPDATE vehicles SET oem_schedule_fetched_at = ${now}
+                WHERE id = ${vehicle.id}
+              `;
               oemSuccess = true;
               oemFetched++;
             }
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (!vehicle.carfaxFetchedAt && shop?.carfax?.enabled) {
+        if (!vehicle.carfax_fetched_at && settings.carfax?.enabled) {
           try {
             const carfaxResponse = await fetch(
               `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:5000'}/api/carfax/history?vin=${item.vin}`,
@@ -103,10 +103,10 @@ export async function POST(request: NextRequest) {
             );
             
             if (carfaxResponse.ok) {
-              await db.collection("vehicles").updateOne(
-                { _id: vehicle._id },
-                { $set: { carfaxFetchedAt: now } }
-              );
+              await sql`
+                UPDATE vehicles SET carfax_fetched_at = ${now}
+                WHERE id = ${vehicle.id}
+              `;
               carfaxSuccess = true;
               carfaxFetched++;
             }
@@ -115,17 +115,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        await db.collection("enrichment_queue").updateOne(
-          { _id: item._id },
-          { 
-            $set: { 
-              status: "completed",
-              completedAt: now,
-              oemFetched: oemSuccess,
-              carfaxFetched: carfaxSuccess,
-            } 
-          }
-        );
+        await sql`
+          UPDATE enrichment_queue SET 
+            status = 'completed',
+            completed_at = ${now},
+            oem_fetched = ${oemSuccess},
+            carfax_fetched = ${carfaxSuccess}
+          WHERE id = ${item.id}
+        `;
 
         processed++;
 
@@ -136,18 +133,15 @@ export async function POST(request: NextRequest) {
         const attempts = (item.attempts || 0) + 1;
         const nextAttemptAt = new Date(now.getTime() + Math.min(attempts * 60000, 3600000));
         
-        await db.collection("enrichment_queue").updateOne(
-          { _id: item._id },
-          { 
-            $set: { 
-              status: attempts >= 3 ? "failed" : "pending",
-              error: errMsg,
-              attempts,
-              nextAttemptAt,
-              lastAttemptAt: now,
-            } 
-          }
-        );
+        await sql`
+          UPDATE enrichment_queue SET 
+            status = ${attempts >= 3 ? 'failed' : 'pending'},
+            error = ${errMsg},
+            attempts = ${attempts},
+            next_attempt_at = ${nextAttemptAt},
+            last_attempt_at = ${now}
+          WHERE id = ${item.id}
+        `;
       }
     }
 
@@ -174,21 +168,26 @@ export async function GET(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const shopId = parseInt(String(session.shopId), 10);
+    const shopId = String(session.shopId);
 
-    const db = await getDb();
-
-    const pending = await db.collection("enrichment_queue").countDocuments({ shopId, status: "pending" });
-    const processing = await db.collection("enrichment_queue").countDocuments({ shopId, status: "processing" });
-    const completed = await db.collection("enrichment_queue").countDocuments({ shopId, status: "completed" });
-    const failed = await db.collection("enrichment_queue").countDocuments({ shopId, status: "failed" });
+    const countRows = await sql`
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'pending')::int as pending,
+        COUNT(*) FILTER (WHERE status = 'processing')::int as processing,
+        COUNT(*) FILTER (WHERE status = 'completed')::int as completed,
+        COUNT(*) FILTER (WHERE status = 'failed')::int as failed,
+        COUNT(*)::int as total
+      FROM enrichment_queue 
+      WHERE shop_id = ${shopId}
+    `;
+    const counts = countRows[0];
 
     return NextResponse.json({
-      pending,
-      processing,
-      completed,
-      failed,
-      total: pending + processing + completed + failed,
+      pending: counts.pending,
+      processing: counts.processing,
+      completed: counts.completed,
+      failed: counts.failed,
+      total: counts.total,
     });
   } catch (error) {
     console.error("[Enrichment GET] Error:", error);

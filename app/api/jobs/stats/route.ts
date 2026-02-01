@@ -1,9 +1,6 @@
-// app/api/jobs/stats/route.ts
-// Job index statistics
-
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +10,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(session.shopId);
-  const db = await getDb();
+  const shopId = String(session.shopId);
 
-  const [jobsIndexed, partsIndexed] = await Promise.all([
-    db.collection("job_index").countDocuments({ shopId }),
-    db.collection("part_cross_ref").countDocuments({ shopId }),
-  ]);
+  const countRows = await sql`
+    SELECT 
+      (SELECT COUNT(*)::int FROM job_index WHERE shop_id = ${shopId}) as jobs_indexed,
+      (SELECT COUNT(*)::int FROM part_cross_ref WHERE shop_id = ${shopId}) as parts_indexed
+  `;
+  const counts = countRows[0];
 
   return NextResponse.json({
     ok: true,
-    jobsIndexed,
-    partsIndexed,
+    jobsIndexed: counts?.jobs_indexed || 0,
+    partsIndexed: counts?.parts_indexed || 0,
   });
 }
