@@ -71,13 +71,13 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - Dashboard routes: `/api/dashboard/updates`
   - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
   
-**Migration Progress:** ~171 MongoDB files remaining
+**Migration Progress:** ~169 MongoDB files remaining
 
 **Recently Migrated (This Session):**
 - Core libraries: `lib/features.ts`, `lib/enterprise.ts`, `lib/stripe.ts`, `lib/api-usage-tracker.ts`
 - Utility libraries: `lib/rate.ts`, `lib/evidence.ts`, `lib/data-quality.ts`, `lib/ids.ts`
 - Models: `lib/models/customers.ts` (customer upsert from AutoFlow)
-- Integrations: `lib/integrations/carfax.ts`, `lib/integrations/dvi.ts`, `lib/integrations/autovitals.ts`
+- Integrations: `lib/integrations/carfax.ts`, `lib/integrations/dvi.ts`, `lib/integrations/autovitals.ts`, `lib/integrations/autoflow.ts`, `lib/integrations/dataone.ts`
 - API routes: `/api/features`, `/api/support/tickets/count`
 - Platform admin routes: features, tickets, notifications, knowledge-base, enterprises, users
 - Callbacks: `/api/callbacks/protractor`
@@ -89,6 +89,8 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 - `counters` - Sequential ID generation
 - `carfax_reports` - CARFAX vehicle history snapshots
 - `dvi` - Digital vehicle inspections from AutoFlow
+- `dvi_results` - AutoFlow DVI results cache
+- `dataone_oe` - DataOne OE service schedules cache
 - `autovitals_vehicles`, `autovitals_appointments`, `autovitals_inspections` - AutoVitals cache
 
 **Remaining Work:**
