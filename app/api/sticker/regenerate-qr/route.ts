@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 
 export const runtime = "nodejs";
@@ -9,41 +9,6 @@ export const dynamic = "force-dynamic";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 const HOVERCODE_WORKSPACE_ID = process.env.HOVERCODE_WORKSPACE_ID;
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
-
-async function getExistingHovercodeQR(hovercodeId: string): Promise<{ dataUri: string | null }> {
-  if (!HOVERCODE_API_TOKEN) {
-    return { dataUri: null };
-  }
-
-  try {
-    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
-      method: "GET",
-      headers: {
-        Authorization: `Token ${HOVERCODE_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      return { dataUri: null };
-    }
-
-    const data = await response.json();
-    
-    if (data.png) {
-      const imageResponse = await fetch(data.png);
-      if (imageResponse.ok) {
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const base64 = Buffer.from(imageBuffer).toString("base64");
-        return { dataUri: `data:image/png;base64,${base64}` };
-      }
-    }
-    return { dataUri: null };
-  } catch (error) {
-    console.error("[Regenerate QR] HoverCode retrieve failed:", error);
-    return { dataUri: null };
-  }
-}
 
 interface HovercodeCreateResult {
   id: string;
@@ -122,29 +87,26 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`
+      SELECT name, sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
 
-    if (!shop) {
+    if (shopRows.length === 0) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const config = shop.stickerConfig || {};
+    const shop = shopRows[0];
+    const config = (shop.sticker_config as any) || {};
     const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-    const qrColor = config.colors?.primary || "#1976d2";
     const qrBgColor = config.colors?.background || "#ffffff";
     const shopName = shop.name || `Shop ${shopId}`;
 
     let qrDataUrl: string | null = null;
 
-    // Use the appointment logo via API route (publicly accessible)
-    // Use the dev domain which serves the current development code
     const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
     const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
     console.log("[Regenerate QR] Using logo URL:", logoUrl);
 
-    // Always create a new HoverCode QR with proper styling (dynamic + Squares pattern)
-    // This ensures existing static QR codes get replaced with properly styled dynamic ones
     console.log("[Regenerate QR] Creating new HoverCode QR with Squares pattern, dynamic=true, logo:", logoUrl);
     const newQR = await createHovercodeQR(redirectUrl, {
       size: 300,
@@ -154,12 +116,12 @@ export async function POST(req: NextRequest) {
       logoUrl: logoUrl,
     });
 
-    // Save HoverCode ID even if we don't get dataUri
     if (newQR?.id) {
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-      );
+      const updatedConfig = { ...config, hovercodeQRId: newQR.id };
+      await sql`
+        UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
+        WHERE shop_id = ${String(shopId)}
+      `;
       console.log(`[Regenerate QR] Saved new HoverCode ID: ${newQR.id}`);
     }
 
@@ -167,17 +129,16 @@ export async function POST(req: NextRequest) {
       qrDataUrl = newQR.dataUri;
     }
 
-    // Require a valid QR code - no fallback
     if (!qrDataUrl) {
       console.error("[Regenerate QR] Failed to get QR code from HoverCode");
       return NextResponse.json({ error: "Failed to generate QR code from HoverCode" }, { status: 500 });
     }
 
-    // Cache the QR code
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
-    );
+    const finalConfig = { ...config, hovercodeQRId: newQR?.id, cachedQrCodeDataUri: qrDataUrl };
+    await sql`
+      UPDATE shops SET sticker_config = ${JSON.stringify(finalConfig)}::jsonb, updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
 
     console.log("[Regenerate QR] Successfully cached QR code");
 
