@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 let stripeInstance: Stripe | null = null;
 
@@ -47,7 +47,6 @@ export type VinPackConfig = {
 };
 
 export type BillingSettings = {
-  // Tier-specific pricing (Starter, Plus, Elite)
   starterProductId: string;
   starterPriceId: string;
   starterPrice: number;
@@ -60,12 +59,10 @@ export type BillingSettings = {
   elitePriceId: string;
   elitePrice: number;
   eliteIncludedVins: number;
-  // Legacy mosPro fields (for backward compatibility)
   mosProProductId: string;
   mosProPriceId: string;
   mosProPrice: number;
   mosProIncludedVins: number;
-  // VIN packs
   vinPack100ProductId: string;
   vinPack100PriceId: string;
   vinPack100Price: number;
@@ -75,11 +72,9 @@ export type BillingSettings = {
   vinPack500ProductId: string;
   vinPack500PriceId: string;
   vinPack500Price: number;
-  // Onboarding
   onboardingProductId: string;
   onboardingPriceId: string;
   onboardingPrice: number;
-  // Trial settings
   trialDays: number;
   trialVinLimit: number;
   defaultVinLimit: number;
@@ -88,7 +83,6 @@ export type BillingSettings = {
 };
 
 const DEFAULT_BILLING_SETTINGS: BillingSettings = {
-  // Tier-specific pricing
   starterProductId: "",
   starterPriceId: "",
   starterPrice: 199.95,
@@ -101,12 +95,10 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   elitePriceId: "",
   elitePrice: 279.95,
   eliteIncludedVins: 300,
-  // Legacy mosPro fields
   mosProProductId: "",
   mosProPriceId: "",
   mosProPrice: 199,
   mosProIncludedVins: 300,
-  // VIN packs
   vinPack100ProductId: "",
   vinPack100PriceId: "",
   vinPack100Price: 39,
@@ -116,11 +108,9 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   vinPack500ProductId: "",
   vinPack500PriceId: "",
   vinPack500Price: 149,
-  // Onboarding
   onboardingProductId: "",
   onboardingPriceId: "",
   onboardingPrice: 495,
-  // Trial settings
   trialDays: 14,
   trialVinLimit: 10,
   defaultVinLimit: 300,
@@ -130,52 +120,49 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
 
 export async function getBillingSettings(): Promise<BillingSettings> {
   try {
-    const db = await getDb();
-    const settings = await db.collection("platform_settings").findOne({ type: "billing" });
+    const result = await sql`
+      SELECT * FROM platform_settings WHERE type = 'billing' LIMIT 1
+    `;
     
-    if (!settings) {
+    if (result.length === 0) {
       return DEFAULT_BILLING_SETTINGS;
     }
 
+    const settings = result[0];
     return {
-      // Tier-specific pricing
-      starterProductId: settings.starterProductId || "",
-      starterPriceId: settings.starterPriceId || "",
-      starterPrice: settings.starterPrice ?? 199.95,
-      starterIncludedVins: settings.starterIncludedVins ?? 300,
-      plusProductId: settings.plusProductId || "",
-      plusPriceId: settings.plusPriceId || "",
-      plusPrice: settings.plusPrice ?? 229.95,
-      plusIncludedVins: settings.plusIncludedVins ?? 300,
-      eliteProductId: settings.eliteProductId || "",
-      elitePriceId: settings.elitePriceId || "",
-      elitePrice: settings.elitePrice ?? 279.95,
-      eliteIncludedVins: settings.eliteIncludedVins ?? 300,
-      // Legacy mosPro fields
-      mosProProductId: settings.mosProProductId || "",
-      mosProPriceId: settings.mosProPriceId || "",
-      mosProPrice: settings.mosProPrice ?? 199,
-      mosProIncludedVins: settings.mosProIncludedVins ?? 300,
-      // VIN packs
-      vinPack100ProductId: settings.vinPack100ProductId || "",
-      vinPack100PriceId: settings.vinPack100PriceId || "",
-      vinPack100Price: settings.vinPack100Price ?? 39,
-      vinPack250ProductId: settings.vinPack250ProductId || "",
-      vinPack250PriceId: settings.vinPack250PriceId || "",
-      vinPack250Price: settings.vinPack250Price ?? 79,
-      vinPack500ProductId: settings.vinPack500ProductId || "",
-      vinPack500PriceId: settings.vinPack500PriceId || "",
-      vinPack500Price: settings.vinPack500Price ?? 149,
-      // Onboarding
-      onboardingProductId: settings.onboardingProductId || "",
-      onboardingPriceId: settings.onboardingPriceId || "",
-      onboardingPrice: settings.onboardingPrice ?? 495,
-      // Trial settings
-      trialDays: settings.trialDays ?? 14,
-      trialVinLimit: settings.trialVinLimit ?? 10,
-      defaultVinLimit: settings.defaultVinLimit ?? 300,
-      foundingShopPricing: settings.foundingShopPricing ?? true,
-      skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
+      starterProductId: settings.starter_product_id || "",
+      starterPriceId: settings.starter_price_id || "",
+      starterPrice: settings.starter_price ?? 199.95,
+      starterIncludedVins: settings.starter_included_vins ?? 300,
+      plusProductId: settings.plus_product_id || "",
+      plusPriceId: settings.plus_price_id || "",
+      plusPrice: settings.plus_price ?? 229.95,
+      plusIncludedVins: settings.plus_included_vins ?? 300,
+      eliteProductId: settings.elite_product_id || "",
+      elitePriceId: settings.elite_price_id || "",
+      elitePrice: settings.elite_price ?? 279.95,
+      eliteIncludedVins: settings.elite_included_vins ?? 300,
+      mosProProductId: settings.mos_pro_product_id || "",
+      mosProPriceId: settings.mos_pro_price_id || "",
+      mosProPrice: settings.mos_pro_price ?? 199,
+      mosProIncludedVins: settings.mos_pro_included_vins ?? 300,
+      vinPack100ProductId: settings.vin_pack_100_product_id || "",
+      vinPack100PriceId: settings.vin_pack_100_price_id || "",
+      vinPack100Price: settings.vin_pack_100_price ?? 39,
+      vinPack250ProductId: settings.vin_pack_250_product_id || "",
+      vinPack250PriceId: settings.vin_pack_250_price_id || "",
+      vinPack250Price: settings.vin_pack_250_price ?? 79,
+      vinPack500ProductId: settings.vin_pack_500_product_id || "",
+      vinPack500PriceId: settings.vin_pack_500_price_id || "",
+      vinPack500Price: settings.vin_pack_500_price ?? 149,
+      onboardingProductId: settings.onboarding_product_id || "",
+      onboardingPriceId: settings.onboarding_price_id || "",
+      onboardingPrice: settings.onboarding_price ?? 495,
+      trialDays: settings.trial_days ?? 14,
+      trialVinLimit: settings.trial_vin_limit ?? 10,
+      defaultVinLimit: settings.default_vin_limit ?? 300,
+      foundingShopPricing: settings.founding_shop_pricing ?? true,
+      skipTrialBonusVins: settings.skip_trial_bonus_vins ?? 50,
     };
   } catch (error) {
     console.error("Error loading billing settings:", error);
@@ -184,12 +171,46 @@ export async function getBillingSettings(): Promise<BillingSettings> {
 }
 
 export async function saveBillingSettings(settings: Partial<BillingSettings>): Promise<void> {
-  const db = await getDb();
-  await db.collection("platform_settings").updateOne(
-    { type: "billing" },
-    { $set: { ...settings, type: "billing", updatedAt: new Date() } },
-    { upsert: true }
-  );
+  const updateData: Record<string, unknown> = { type: "billing" };
+  
+  if (settings.starterProductId !== undefined) updateData.starter_product_id = settings.starterProductId;
+  if (settings.starterPriceId !== undefined) updateData.starter_price_id = settings.starterPriceId;
+  if (settings.starterPrice !== undefined) updateData.starter_price = settings.starterPrice;
+  if (settings.starterIncludedVins !== undefined) updateData.starter_included_vins = settings.starterIncludedVins;
+  if (settings.plusProductId !== undefined) updateData.plus_product_id = settings.plusProductId;
+  if (settings.plusPriceId !== undefined) updateData.plus_price_id = settings.plusPriceId;
+  if (settings.plusPrice !== undefined) updateData.plus_price = settings.plusPrice;
+  if (settings.plusIncludedVins !== undefined) updateData.plus_included_vins = settings.plusIncludedVins;
+  if (settings.eliteProductId !== undefined) updateData.elite_product_id = settings.eliteProductId;
+  if (settings.elitePriceId !== undefined) updateData.elite_price_id = settings.elitePriceId;
+  if (settings.elitePrice !== undefined) updateData.elite_price = settings.elitePrice;
+  if (settings.eliteIncludedVins !== undefined) updateData.elite_included_vins = settings.eliteIncludedVins;
+  if (settings.mosProProductId !== undefined) updateData.mos_pro_product_id = settings.mosProProductId;
+  if (settings.mosProPriceId !== undefined) updateData.mos_pro_price_id = settings.mosProPriceId;
+  if (settings.mosProPrice !== undefined) updateData.mos_pro_price = settings.mosProPrice;
+  if (settings.mosProIncludedVins !== undefined) updateData.mos_pro_included_vins = settings.mosProIncludedVins;
+  if (settings.vinPack100ProductId !== undefined) updateData.vin_pack_100_product_id = settings.vinPack100ProductId;
+  if (settings.vinPack100PriceId !== undefined) updateData.vin_pack_100_price_id = settings.vinPack100PriceId;
+  if (settings.vinPack100Price !== undefined) updateData.vin_pack_100_price = settings.vinPack100Price;
+  if (settings.vinPack250ProductId !== undefined) updateData.vin_pack_250_product_id = settings.vinPack250ProductId;
+  if (settings.vinPack250PriceId !== undefined) updateData.vin_pack_250_price_id = settings.vinPack250PriceId;
+  if (settings.vinPack250Price !== undefined) updateData.vin_pack_250_price = settings.vinPack250Price;
+  if (settings.vinPack500ProductId !== undefined) updateData.vin_pack_500_product_id = settings.vinPack500ProductId;
+  if (settings.vinPack500PriceId !== undefined) updateData.vin_pack_500_price_id = settings.vinPack500PriceId;
+  if (settings.vinPack500Price !== undefined) updateData.vin_pack_500_price = settings.vinPack500Price;
+  if (settings.onboardingProductId !== undefined) updateData.onboarding_product_id = settings.onboardingProductId;
+  if (settings.onboardingPriceId !== undefined) updateData.onboarding_price_id = settings.onboardingPriceId;
+  if (settings.onboardingPrice !== undefined) updateData.onboarding_price = settings.onboardingPrice;
+  if (settings.trialDays !== undefined) updateData.trial_days = settings.trialDays;
+  if (settings.trialVinLimit !== undefined) updateData.trial_vin_limit = settings.trialVinLimit;
+  if (settings.defaultVinLimit !== undefined) updateData.default_vin_limit = settings.defaultVinLimit;
+  if (settings.foundingShopPricing !== undefined) updateData.founding_shop_pricing = settings.foundingShopPricing;
+  if (settings.skipTrialBonusVins !== undefined) updateData.skip_trial_bonus_vins = settings.skipTrialBonusVins;
+  
+  await sql`
+    INSERT INTO platform_settings ${sql(updateData)}
+    ON CONFLICT (type) DO UPDATE SET ${sql(updateData)}, updated_at = NOW()
+  `;
 }
 
 export function getBaseUrl() {
@@ -202,39 +223,3 @@ export function getBaseUrl() {
   }
   return "http://localhost:5000";
 }
-
-export async function fetchStripeProducts() {
-  const stripeClient = getStripe();
-  
-  const [products, prices] = await Promise.all([
-    stripeClient.products.list({ active: true, limit: 100 }),
-    stripeClient.prices.list({ active: true, limit: 100, expand: ["data.product"] }),
-  ]);
-
-  return {
-    products: products.data.map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      metadata: p.metadata,
-      active: p.active,
-    })),
-    prices: prices.data.map(p => ({
-      id: p.id,
-      productId: typeof p.product === "string" ? p.product : p.product.id,
-      productName: typeof p.product === "object" && "name" in p.product ? p.product.name : null,
-      unitAmount: p.unit_amount,
-      currency: p.currency,
-      type: p.type,
-      recurring: p.recurring ? {
-        interval: p.recurring.interval,
-        intervalCount: p.recurring.interval_count,
-      } : null,
-      metadata: p.metadata,
-    })),
-  };
-}
-
-export const STRIPE_PRODUCTS = {
-  professional: "prod_TgrceDug91whUy",
-};
