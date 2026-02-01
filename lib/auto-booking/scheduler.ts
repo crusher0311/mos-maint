@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -27,7 +27,6 @@ const US_HOLIDAYS = new Set([
   "2026-07-04", "2026-09-07", "2026-10-12", "2026-11-11", "2026-11-26", "2026-12-25",
 ]);
 
-// Helper to get timezone offset string like "-05:00" or "-06:00"
 export function getTimezoneOffset(timezone: string, date: Date): string {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -37,7 +36,6 @@ export function getTimezoneOffset(timezone: string, date: Date): string {
     const parts = formatter.formatToParts(date);
     const tzPart = parts.find(p => p.type === 'timeZoneName');
     if (tzPart?.value) {
-      // Convert "GMT-5" or "GMT-6" to "-05:00" or "-06:00"
       const match = tzPart.value.match(/GMT([+-])(\d+)/);
       if (match) {
         const sign = match[1];
@@ -48,7 +46,6 @@ export function getTimezoneOffset(timezone: string, date: Date): string {
   } catch (e) {
     console.error('[Auto Booking] Failed to get timezone offset:', e);
   }
-  // Default to Central time offset
   return '-06:00';
 }
 
@@ -114,48 +111,58 @@ function getPreferredTime(settings: AutoBookingSettings): string {
 }
 
 export async function getAutoBookingSettings(shopId: number): Promise<AutoBookingSettings | null> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { autoBooking: 1, enabledFeatures: 1, billingStatus: 1, plan: 1 } }
-  );
+  const shopIdStr = String(shopId);
   
+  const rows = await sql`
+    SELECT settings, enabled_features, billing_status, plan
+    FROM shops
+    WHERE shop_id = ${shopIdStr}
+    LIMIT 1
+  `;
+  
+  const shop = rows[0];
   if (!shop) {
     console.log(`[Auto Booking] Shop ${shopId} not found`);
     return null;
   }
   
-  const rawFeatures = shop.enabledFeatures;
+  const settings = shop.settings as Record<string, unknown> | null;
+  const autoBooking = settings?.autoBooking as AutoBookingSettings | undefined;
+  const rawFeatures = shop.enabled_features;
+  
   const hasAutoBookingFeature = Array.isArray(rawFeatures) 
     ? rawFeatures.includes("auto_booking")
     : (rawFeatures && typeof rawFeatures === "object" && (rawFeatures as any).auto_booking === true);
   
-  // Also allow if the shop has autoBooking settings enabled directly
-  const hasAutoBookingEnabled = shop.autoBooking?.enabled === true;
+  const hasAutoBookingEnabled = autoBooking?.enabled === true;
   const hasAutoBooking = hasAutoBookingFeature || hasAutoBookingEnabled;
   
-  // Allow if: has valid billing status/plan, OR if no billing status is set (dev/test environment)
-  const hasNoBillingSet = !shop.billingStatus && !shop.plan;
+  const hasNoBillingSet = !shop.billing_status && !shop.plan;
   const isAllowed = hasNoBillingSet || 
-    shop.billingStatus === "active" || shop.billingStatus === "trial" || shop.billingStatus === "demo" || 
+    shop.billing_status === "active" || shop.billing_status === "trial" || shop.billing_status === "demo" || 
     shop.plan === "professional" || shop.plan === "enterprise" || shop.plan === "trial" || shop.plan === "demo";
   
-  console.log(`[Auto Booking] Shop ${shopId}: hasAutoBookingFeature=${hasAutoBookingFeature}, hasAutoBookingEnabled=${hasAutoBookingEnabled}, hasAutoBooking=${hasAutoBooking}, isAllowed=${isAllowed}, billingStatus=${shop.billingStatus}, plan=${shop.plan}`);
+  console.log(`[Auto Booking] Shop ${shopId}: hasAutoBookingFeature=${hasAutoBookingFeature}, hasAutoBookingEnabled=${hasAutoBookingEnabled}, hasAutoBooking=${hasAutoBooking}, isAllowed=${isAllowed}, billingStatus=${shop.billing_status}, plan=${shop.plan}`);
   
   if (!isAllowed || !hasAutoBooking) return null;
-  if (!shop.autoBooking?.enabled) return null;
+  if (!autoBooking?.enabled) return null;
   
-  return shop.autoBooking as AutoBookingSettings;
+  return autoBooking;
 }
 
 export async function getExistingBookingsCount(shopId: number, dateStr: string): Promise<number> {
-  const db = await getDb();
-  const count = await db.collection("auto_booking_queue").countDocuments({
-    shopId,
-    scheduledDate: dateStr,
-    status: { $in: ["pending", "confirmed", "sent"] },
-  });
-  return count;
+  const shopIdStr = String(shopId);
+  
+  const rows = await sql`
+    SELECT COUNT(*) as count
+    FROM auto_booking_queue abq
+    JOIN shops s ON abq.shop_id = s.id
+    WHERE s.shop_id = ${shopIdStr}
+      AND DATE(abq.scheduled_date) = ${dateStr}::date
+      AND abq.status IN ('pending', 'confirmed', 'sent')
+  `;
+  
+  return Number(rows[0]?.count || 0);
 }
 
 export async function findAvailableSlot(
@@ -215,6 +222,7 @@ export async function findAvailableSlot(
 }
 
 export interface QueuedBooking {
+  id?: string;
   shopId: number;
   customerId?: string;
   customerName: string;
@@ -244,61 +252,93 @@ export interface QueuedBooking {
 export async function queueBooking(
   shopId: number,
   settings: AutoBookingSettings,
-  booking: Omit<QueuedBooking, "shopId" | "status" | "confirmationMode" | "createdAt">
+  booking: Omit<QueuedBooking, "shopId" | "status" | "confirmationMode" | "createdAt" | "id">
 ): Promise<{ success: boolean; bookingId?: string; error?: string }> {
-  const db = await getDb();
+  const shopIdStr = String(shopId);
   
-  const queuedBooking: QueuedBooking = {
-    ...booking,
-    shopId,
-    status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
+  const status = settings.confirmationMode === "auto" ? "confirmed" : "pending";
+  
+  const metadata = {
+    customerName: booking.customerName,
+    customerPhone: booking.customerPhone,
+    customerEmail: booking.customerEmail,
+    vin: booking.vin,
+    vehicleYear: booking.vehicleYear,
+    vehicleMake: booking.vehicleMake,
+    vehicleModel: booking.vehicleModel,
+    serviceType: booking.serviceType,
+    serviceMileage: booking.serviceMileage,
+    scheduledTime: booking.scheduledTime,
     confirmationMode: settings.confirmationMode,
-    createdAt: new Date(),
+    stickerGeneratedAt: booking.stickerGeneratedAt,
   };
   
-  const result = await db.collection("auto_booking_queue").insertOne(queuedBooking);
-  const bookingId = result.insertedId.toString();
+  const rows = await sql`
+    INSERT INTO auto_booking_queue (shop_id, customer_id, vehicle_id, status, scheduled_date, metadata, created_at, updated_at)
+    SELECT 
+      s.id,
+      ${booking.customerId ? sql`(SELECT id FROM customers WHERE external_id = ${booking.customerId} LIMIT 1)` : sql`NULL`},
+      ${booking.vehicleId ? sql`(SELECT id FROM vehicles WHERE external_id = ${booking.vehicleId} LIMIT 1)` : sql`NULL`},
+      ${status},
+      ${booking.scheduledDate}::timestamp,
+      ${JSON.stringify(metadata)}::jsonb,
+      NOW(),
+      NOW()
+    FROM shops s
+    WHERE s.shop_id = ${shopIdStr}
+    RETURNING id
+  `;
   
-  // If auto mode, immediately push to SMS
+  const bookingId = rows[0]?.id;
+  
+  if (!bookingId) {
+    return { success: false, error: "Failed to create booking" };
+  }
+  
   if (settings.confirmationMode === "auto") {
     console.log(`[Auto Booking] Auto mode - pushing booking ${bookingId} to SMS immediately`);
     
-    // Update status to confirmed with timestamp
-    await db.collection("auto_booking_queue").updateOne(
-      { _id: result.insertedId },
-      { $set: { confirmedAt: new Date() } }
-    );
+    await sql`
+      UPDATE auto_booking_queue
+      SET metadata = metadata || '{"confirmedAt": "${new Date().toISOString()}"}'::jsonb
+      WHERE id = ${bookingId}
+    `;
     
-    // Get the inserted booking for SMS push
-    const insertedBooking = await db.collection("auto_booking_queue").findOne({ _id: result.insertedId });
-    if (insertedBooking) {
-      const pushResult = await pushAppointmentToSMS(insertedBooking as QueuedBooking & { _id: any });
-      
-      if (pushResult.success) {
-        await db.collection("auto_booking_queue").updateOne(
-          { _id: result.insertedId },
-          {
-            $set: {
-              status: "sent",
-              sentAt: new Date(),
-              externalAppointmentId: pushResult.externalId,
-              provider: pushResult.provider,
-            }
-          }
-        );
-        console.log(`[Auto Booking] Auto mode - booking ${bookingId} sent to ${pushResult.provider}`);
-      } else {
-        await db.collection("auto_booking_queue").updateOne(
-          { _id: result.insertedId },
-          {
-            $set: {
-              failedAt: new Date(),
-              failedReason: pushResult.error,
-            }
-          }
-        );
-        console.error(`[Auto Booking] Auto mode - failed to push ${bookingId}: ${pushResult.error}`);
-      }
+    const queuedBooking: QueuedBooking = {
+      id: bookingId,
+      shopId,
+      ...booking,
+      status: "confirmed",
+      confirmationMode: settings.confirmationMode,
+      createdAt: new Date(),
+    };
+    
+    const pushResult = await pushAppointmentToSMS(queuedBooking);
+    
+    if (pushResult.success) {
+      await sql`
+        UPDATE auto_booking_queue
+        SET 
+          status = 'sent',
+          metadata = metadata || ${JSON.stringify({
+            sentAt: new Date().toISOString(),
+            externalAppointmentId: pushResult.externalId,
+            provider: pushResult.provider,
+          })}::jsonb,
+          updated_at = NOW()
+        WHERE id = ${bookingId}
+      `;
+      console.log(`[Auto Booking] Auto mode - booking ${bookingId} sent to ${pushResult.provider}`);
+    } else {
+      await sql`
+        UPDATE auto_booking_queue
+        SET metadata = metadata || ${JSON.stringify({
+          failedAt: new Date().toISOString(),
+          failedReason: pushResult.error,
+        })}::jsonb
+        WHERE id = ${bookingId}
+      `;
+      console.error(`[Auto Booking] Auto mode - failed to push ${bookingId}: ${pushResult.error}`);
     }
   }
   
@@ -312,140 +352,207 @@ export async function getQueuedBookings(
   shopId: number,
   status?: string | string[]
 ): Promise<QueuedBooking[]> {
-  const db = await getDb();
+  const shopIdStr = String(shopId);
   
-  const query: any = { shopId };
+  let rows;
+  
   if (status) {
-    query.status = Array.isArray(status) ? { $in: status } : status;
+    const statusArray = Array.isArray(status) ? status : [status];
+    rows = await sql`
+      SELECT abq.id, abq.status, abq.scheduled_date, abq.metadata, abq.created_at,
+             c.external_id as customer_external_id,
+             v.external_id as vehicle_external_id
+      FROM auto_booking_queue abq
+      JOIN shops s ON abq.shop_id = s.id
+      LEFT JOIN customers c ON abq.customer_id = c.id
+      LEFT JOIN vehicles v ON abq.vehicle_id = v.id
+      WHERE s.shop_id = ${shopIdStr}
+        AND abq.status = ANY(${statusArray})
+      ORDER BY abq.scheduled_date ASC
+      LIMIT 100
+    `;
+  } else {
+    rows = await sql`
+      SELECT abq.id, abq.status, abq.scheduled_date, abq.metadata, abq.created_at,
+             c.external_id as customer_external_id,
+             v.external_id as vehicle_external_id
+      FROM auto_booking_queue abq
+      JOIN shops s ON abq.shop_id = s.id
+      LEFT JOIN customers c ON abq.customer_id = c.id
+      LEFT JOIN vehicles v ON abq.vehicle_id = v.id
+      WHERE s.shop_id = ${shopIdStr}
+      ORDER BY abq.scheduled_date ASC
+      LIMIT 100
+    `;
   }
   
-  const bookings = await db
-    .collection("auto_booking_queue")
-    .find(query)
-    .sort({ scheduledDate: 1, scheduledTime: 1 })
-    .limit(100)
-    .toArray();
-  
-  return bookings as unknown as QueuedBooking[];
+  return rows.map(row => {
+    const metadata = (row.metadata || {}) as Record<string, unknown>;
+    return {
+      id: row.id as string,
+      shopId,
+      customerId: row.customer_external_id as string | undefined,
+      customerName: metadata.customerName as string || "",
+      customerPhone: metadata.customerPhone as string | undefined,
+      customerEmail: metadata.customerEmail as string | undefined,
+      vehicleId: row.vehicle_external_id as string | undefined,
+      vin: metadata.vin as string | undefined,
+      vehicleYear: metadata.vehicleYear as number | undefined,
+      vehicleMake: metadata.vehicleMake as string | undefined,
+      vehicleModel: metadata.vehicleModel as string | undefined,
+      serviceType: metadata.serviceType as string || "Oil Change",
+      serviceMileage: metadata.serviceMileage as number | undefined,
+      scheduledDate: row.scheduled_date ? new Date(row.scheduled_date as string).toISOString().split('T')[0] : "",
+      scheduledTime: metadata.scheduledTime as string || "08:00",
+      status: row.status as QueuedBooking["status"],
+      confirmationMode: metadata.confirmationMode as "auto" | "review" || "review",
+      stickerGeneratedAt: metadata.stickerGeneratedAt ? new Date(metadata.stickerGeneratedAt as string) : new Date(),
+      createdAt: new Date(row.created_at as string),
+      confirmedAt: metadata.confirmedAt ? new Date(metadata.confirmedAt as string) : undefined,
+      sentAt: metadata.sentAt ? new Date(metadata.sentAt as string) : undefined,
+      failedAt: metadata.failedAt ? new Date(metadata.failedAt as string) : undefined,
+      failedReason: metadata.failedReason as string | undefined,
+      externalAppointmentId: metadata.externalAppointmentId as string | undefined,
+      provider: metadata.provider as string | undefined,
+    };
+  });
 }
 
 export async function confirmBooking(bookingId: string): Promise<boolean> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
+  const rows = await sql`
+    SELECT abq.id, abq.metadata, s.shop_id
+    FROM auto_booking_queue abq
+    JOIN shops s ON abq.shop_id = s.id
+    WHERE abq.id = ${bookingId}
+      AND abq.status = 'pending'
+    LIMIT 1
+  `;
   
-  // First, get the booking and update status to confirmed
-  const booking = await db.collection("auto_booking_queue").findOne({
-    _id: new ObjectId(bookingId),
-    status: "pending"
-  });
-  
+  const booking = rows[0];
   if (!booking) {
     console.log(`[Auto Booking] Booking ${bookingId} not found or not pending`);
     return false;
   }
   
-  // Update status to confirmed
-  const result = await db.collection("auto_booking_queue").updateOne(
-    { _id: new ObjectId(bookingId), status: "pending" },
-    { $set: { status: "confirmed", confirmedAt: new Date() } }
-  );
+  const result = await sql`
+    UPDATE auto_booking_queue
+    SET 
+      status = 'confirmed',
+      metadata = metadata || '{"confirmedAt": "${new Date().toISOString()}"}'::jsonb,
+      updated_at = NOW()
+    WHERE id = ${bookingId}
+      AND status = 'pending'
+  `;
   
-  if (result.modifiedCount === 0) {
+  if (result.count === 0) {
     return false;
   }
   
-  // Now try to push the appointment to the SMS
-  const pushResult = await pushAppointmentToSMS(booking as unknown as QueuedBooking & { _id: any });
+  const metadata = (booking.metadata || {}) as Record<string, unknown>;
+  const queuedBooking: QueuedBooking = {
+    id: bookingId,
+    shopId: parseInt(booking.shop_id as string),
+    customerName: metadata.customerName as string || "",
+    customerPhone: metadata.customerPhone as string | undefined,
+    customerEmail: metadata.customerEmail as string | undefined,
+    vin: metadata.vin as string | undefined,
+    vehicleYear: metadata.vehicleYear as number | undefined,
+    vehicleMake: metadata.vehicleMake as string | undefined,
+    vehicleModel: metadata.vehicleModel as string | undefined,
+    serviceType: metadata.serviceType as string || "Oil Change",
+    serviceMileage: metadata.serviceMileage as number | undefined,
+    scheduledDate: "",
+    scheduledTime: metadata.scheduledTime as string || "08:00",
+    status: "confirmed",
+    confirmationMode: metadata.confirmationMode as "auto" | "review" || "review",
+    stickerGeneratedAt: new Date(),
+    createdAt: new Date(),
+  };
+  
+  const pushResult = await pushAppointmentToSMS(queuedBooking);
   
   if (pushResult.success) {
-    // Mark as sent
-    await db.collection("auto_booking_queue").updateOne(
-      { _id: new ObjectId(bookingId) },
-      {
-        $set: {
-          status: "sent",
-          sentAt: new Date(),
+    await sql`
+      UPDATE auto_booking_queue
+      SET 
+        status = 'sent',
+        metadata = metadata || ${JSON.stringify({
+          sentAt: new Date().toISOString(),
           externalAppointmentId: pushResult.externalId,
           provider: pushResult.provider,
-        }
-      }
-    );
+        })}::jsonb,
+        updated_at = NOW()
+      WHERE id = ${bookingId}
+    `;
     console.log(`[Auto Booking] Booking ${bookingId} sent to ${pushResult.provider}, external ID: ${pushResult.externalId}`);
     return true;
   } else {
-    // Mark as failed but keep confirmed status so user can retry
-    await db.collection("auto_booking_queue").updateOne(
-      { _id: new ObjectId(bookingId) },
-      {
-        $set: {
-          failedAt: new Date(),
-          failedReason: pushResult.error,
-        }
-      }
-    );
+    await sql`
+      UPDATE auto_booking_queue
+      SET metadata = metadata || ${JSON.stringify({
+        failedAt: new Date().toISOString(),
+        failedReason: pushResult.error,
+      })}::jsonb
+      WHERE id = ${bookingId}
+    `;
     console.error(`[Auto Booking] Failed to push booking ${bookingId} to SMS: ${pushResult.error}`);
-    // Return false to indicate the push failed (booking is confirmed but not synced)
     return false;
   }
 }
 
 async function pushAppointmentToSMS(
-  booking: QueuedBooking & { _id: any }
+  booking: QueuedBooking
 ): Promise<{ success: boolean; externalId?: string; provider?: string; error?: string }> {
-  const db = await getDb();
+  const shopIdStr = String(booking.shopId);
   
-  // Get shop details to determine which SMS to use
-  const shop = await db.collection("shops").findOne(
-    { shopId: booking.shopId },
-    { projection: { integrations: 1, tekmetric: 1, protractor: 1, protractorConnectionId: 1, autoBooking: 1, timezone: 1 } }
-  );
+  const rows = await sql`
+    SELECT id, settings, tekmetric_shop_id, protractor_connection_id, timezone
+    FROM shops
+    WHERE shop_id = ${shopIdStr}
+    LIMIT 1
+  `;
   
+  const shop = rows[0];
   if (!shop) {
     return { success: false, error: "Shop not found" };
   }
   
-  const integrations = shop.integrations || [];
-  // Check for Tekmetric: either in integrations array OR has a valid tekmetric.shopId
-  const hasTekmetric = (integrations.includes("tekmetric") || shop.tekmetric?.shopId) && shop.tekmetric?.shopId;
-  // Check for Protractor: either in integrations array OR has a valid connectionId
-  const hasProtractor = (integrations.includes("protractor") || shop.protractor?.connectionId || shop.protractorConnectionId) && (shop.protractor?.connectionId || shop.protractorConnectionId);
+  const settings = shop.settings as Record<string, unknown> | null;
+  const integrations = (settings?.integrations || []) as string[];
+  const tekmetric = settings?.tekmetric as Record<string, unknown> | undefined;
+  const protractor = settings?.protractor as Record<string, unknown> | undefined;
+  
+  const hasTekmetric = (integrations.includes("tekmetric") || tekmetric?.shopId || shop.tekmetric_shop_id) && (tekmetric?.shopId || shop.tekmetric_shop_id);
+  const hasProtractor = (integrations.includes("protractor") || protractor?.connectionId || shop.protractor_connection_id) && (protractor?.connectionId || shop.protractor_connection_id);
   
   console.log(`[Auto Booking] Shop ${booking.shopId} SMS check:`, {
     integrations,
     hasTekmetric,
-    tekmetricShopId: shop.tekmetric?.shopId,
+    tekmetricShopId: tekmetric?.shopId || shop.tekmetric_shop_id,
     hasProtractor,
-    protractorConnectionId: shop.protractor?.connectionId || shop.protractorConnectionId,
+    protractorConnectionId: protractor?.connectionId || shop.protractor_connection_id,
   });
   
-  // Combine date and time to create appointment datetime
-  // Tekmetric requires ZonedDateTime format - use shop's timezone offset
-  // Default to Central time (America/Chicago) - most common for US auto shops
-  // Format: 2026-04-23T08:00:00-05:00
-  const shopTimezone = shop.timezone || 'America/Chicago';
-  const autoBookingSettings = shop.autoBooking as AutoBookingSettings | undefined;
-  const appointmentDuration = autoBookingSettings?.appointmentDuration || 60; // Default 60 minutes
+  const shopTimezone = (shop.timezone as string) || 'America/Chicago';
+  const autoBookingSettings = settings?.autoBooking as AutoBookingSettings | undefined;
+  const appointmentDuration = autoBookingSettings?.appointmentDuration || 60;
   
-  // Calculate timezone offset for the scheduled date
   const scheduledDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
   const tzOffset = getTimezoneOffset(shopTimezone, scheduledDateTime);
   
   const startTimeStr = `${booking.scheduledDate}T${booking.scheduledTime}:00${tzOffset}`;
   const [hours, minutes] = booking.scheduledTime.split(':').map(Number);
   
-  // Calculate end time based on appointment duration setting
   const totalMinutes = hours * 60 + minutes + appointmentDuration;
   const endHours = Math.floor(totalMinutes / 60);
   const endMinutes = totalMinutes % 60;
   const endTimeStr = `${booking.scheduledDate}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00${tzOffset}`;
   
-  // Try Tekmetric first if available
   if (hasTekmetric) {
     try {
       const { createAppointment } = await import("@/lib/tekmetric");
-      const tekmetricShopId = Number(shop.tekmetric.shopId);
+      const tekmetricShopId = Number(tekmetric?.shopId || shop.tekmetric_shop_id);
       
-      // Find both customer and vehicle IDs from cached data
       const { customerId: tekmetricCustomerId, vehicleId: tekmetricVehicleId } = 
         await findTekmetricCustomerAndVehicle(
           tekmetricShopId, 
@@ -457,13 +564,11 @@ async function pushAppointmentToSMS(
       
       if (!tekmetricCustomerId) {
         console.log(`[Auto Booking] Could not find Tekmetric customer ID for ${booking.customerName}`);
-        // Fall through to Protractor if available
       } else if (!tekmetricVehicleId) {
         console.log(`[Auto Booking] Could not find Tekmetric vehicle ID for ${booking.vin || booking.vehicleId}`);
-        // Fall through to Protractor if available
       } else {
         const appointment = await createAppointment({
-          shopId: Number(shop.tekmetric.shopId),
+          shopId: tekmetricShopId,
           customerId: tekmetricCustomerId,
           vehicleId: tekmetricVehicleId,
           startTime: startTimeStr,
@@ -484,16 +589,13 @@ async function pushAppointmentToSMS(
       }
     } catch (err: any) {
       console.error(`[Auto Booking] Tekmetric appointment creation failed:`, err.message);
-      // Fall through to Protractor if available
     }
   }
   
-  // Try Protractor if available
   if (hasProtractor) {
     try {
       const { createProtractorAppointment } = await import("@/lib/integrations/protractor");
       
-      // Look up Protractor contact and vehicle IDs dynamically
       const { contactId: protractorContactId, vehicleId: protractorVehicleId } = 
         await findProtractorContactAndVehicle(
           booking.shopId, 
@@ -534,7 +636,6 @@ async function pushAppointmentToSMS(
     }
   }
   
-  // No SMS integration - booking confirmed but will stay in local queue only
   console.log(`[Auto Booking] No SMS integration configured for shop ${booking.shopId}, booking will remain local only`);
   return { 
     success: true, 
@@ -550,14 +651,11 @@ export async function findTekmetricCustomerAndVehicle(
   mosVehicleId?: string,
   vin?: string
 ): Promise<{ customerId: number | null; vehicleId: number | null }> {
-  const db = await getDb();
-  
   console.log(`[Auto Booking] findTekmetricCustomerAndVehicle: tekmetricShopId=${tekmetricShopId}, mosCustomerId=${mosCustomerId}, customerName=${customerName}, vin=${vin}`);
   
   let customerId: number | null = null;
   let vehicleId: number | null = null;
   
-  // Try to parse as number directly (might already be Tekmetric ID)
   if (mosCustomerId) {
     const parsed = Number(mosCustomerId);
     if (!isNaN(parsed) && parsed > 0) {
@@ -574,50 +672,56 @@ export async function findTekmetricCustomerAndVehicle(
     }
   }
   
-  // If we already have both, return them
   if (customerId && vehicleId) {
     return { customerId, vehicleId };
   }
   
-  // Try to find from repair order by VIN - this gives us both customer and vehicle
   if (vin) {
-    const repairOrder = await db.collection("tekmetric_repair_orders").findOne({
-      tekmetricShopId,
-      "data.vehicle.vin": vin.toUpperCase()
-    });
+    const rows = await sql`
+      SELECT data
+      FROM tekmetric_work_orders
+      WHERE tekmetric_shop_id = ${tekmetricShopId}
+        AND data->'vehicle'->>'vin' = ${vin.toUpperCase()}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
     
-    if (repairOrder?.data) {
-      if (!customerId && repairOrder.data.customer?.id) {
-        console.log(`[Auto Booking] Found Tekmetric customer ${repairOrder.data.customer.id} from repair order by VIN`);
-        customerId = repairOrder.data.customer.id;
+    if (rows[0]?.data) {
+      const data = rows[0].data as Record<string, any>;
+      if (!customerId && data.customer?.id) {
+        console.log(`[Auto Booking] Found Tekmetric customer ${data.customer.id} from repair order by VIN`);
+        customerId = data.customer.id;
       }
-      if (!vehicleId && repairOrder.data.vehicle?.id) {
-        console.log(`[Auto Booking] Found Tekmetric vehicle ${repairOrder.data.vehicle.id} from repair order by VIN`);
-        vehicleId = repairOrder.data.vehicle.id;
+      if (!vehicleId && data.vehicle?.id) {
+        console.log(`[Auto Booking] Found Tekmetric vehicle ${data.vehicle.id} from repair order by VIN`);
+        vehicleId = data.vehicle.id;
       }
     }
   }
   
-  // If still missing vehicle, check tekmetric_vehicles collection
   if (!vehicleId && vin) {
-    const cachedVehicle = await db.collection("tekmetric_vehicles").findOne({
-      tekmetricShopId,
-      "data.vin": vin.toUpperCase()
-    });
+    const rows = await sql`
+      SELECT data
+      FROM tekmetric_vehicles
+      WHERE tekmetric_shop_id = ${tekmetricShopId}
+        AND data->>'vin' = ${vin.toUpperCase()}
+      LIMIT 1
+    `;
     
-    if (cachedVehicle?.data?.id) {
-      console.log(`[Auto Booking] Found Tekmetric vehicle ${cachedVehicle.data.id} from vehicles cache by VIN`);
-      vehicleId = cachedVehicle.data.id;
-      
-      // If vehicle has customerId reference, use it
-      if (!customerId && cachedVehicle.data.customerId) {
-        customerId = cachedVehicle.data.customerId;
-        console.log(`[Auto Booking] Found customer ${customerId} from vehicle record`);
+    if (rows[0]?.data) {
+      const data = rows[0].data as Record<string, any>;
+      if (data.id) {
+        console.log(`[Auto Booking] Found Tekmetric vehicle ${data.id} from vehicles cache by VIN`);
+        vehicleId = data.id;
+        
+        if (!customerId && data.customerId) {
+          customerId = data.customerId;
+          console.log(`[Auto Booking] Found customer ${customerId} from vehicle record`);
+        }
       }
     }
   }
   
-  // Fallback: Try API for vehicle if still missing
   if (!vehicleId && vin) {
     try {
       const { getVehicles } = await import("@/lib/tekmetric");
@@ -648,14 +752,11 @@ export async function findProtractorContactAndVehicle(
   mosVehicleId?: string,
   vin?: string
 ): Promise<{ contactId: string | null; vehicleId: string | null }> {
-  const db = await getDb();
-  
   console.log(`[Auto Booking] findProtractorContactAndVehicle: shopId=${shopId}, mosContactId=${mosContactId}, mosVehicleId=${mosVehicleId}, vin=${vin}`);
   
   let contactId: string | null = null;
   let vehicleId: string | null = null;
   
-  // If IDs are already provided and look like Protractor IDs (not MOS ObjectIds), use them
   if (mosContactId && mosContactId.length < 20) {
     contactId = mosContactId;
     console.log(`[Auto Booking] Using contact ID directly: ${contactId}`);
@@ -669,50 +770,52 @@ export async function findProtractorContactAndVehicle(
     return { contactId, vehicleId };
   }
   
-  // Look up from cached vehicle by VIN
   if (vin) {
-    const cachedVehicle = await db.collection("protractor_vehicles").findOne({
-      shopId,
-      vin: vin.toUpperCase(),
-    });
+    const rows = await sql`
+      SELECT protractor_id, data
+      FROM protractor_vehicles
+      WHERE shop_id = ${shopId}
+        AND vin = ${vin.toUpperCase()}
+      LIMIT 1
+    `;
     
-    if (cachedVehicle) {
-      console.log(`[Auto Booking] Found Protractor vehicle in cache for VIN ${vin}:`, cachedVehicle.protractorId);
-      if (!vehicleId && cachedVehicle.protractorId) {
-        vehicleId = String(cachedVehicle.protractorId);
+    if (rows[0]) {
+      console.log(`[Auto Booking] Found Protractor vehicle in cache for VIN ${vin}:`, rows[0].protractor_id);
+      if (!vehicleId && rows[0].protractor_id) {
+        vehicleId = String(rows[0].protractor_id);
       }
-      // Check for owner/contact on cached vehicle
-      if (!contactId && cachedVehicle.data?.Owner?.ID) {
-        contactId = String(cachedVehicle.data.Owner.ID);
+      const data = rows[0].data as Record<string, any> | null;
+      if (!contactId && data?.Owner?.ID) {
+        contactId = String(data.Owner.ID);
         console.log(`[Auto Booking] Found contact from cached vehicle owner: ${contactId}`);
       }
     }
   }
   
-  // Try to find from cached work orders if still missing
   if (!contactId || !vehicleId) {
-    const recentRO = await db.collection("protractor_ro_cache").findOne(
-      { 
-        shopId, 
-        "data.ServiceItem.VIN": vin?.toUpperCase() 
-      },
-      { sort: { "data.DateOut": -1 } }
-    );
+    const rows = await sql`
+      SELECT data
+      FROM protractor_work_orders
+      WHERE shop_id = ${shopId}
+        AND data->'ServiceItem'->>'VIN' = ${vin?.toUpperCase() || ''}
+      ORDER BY data->>'DateOut' DESC
+      LIMIT 1
+    `;
     
-    if (recentRO) {
+    if (rows[0]) {
       console.log(`[Auto Booking] Found Protractor RO in cache for VIN ${vin}`);
-      if (!vehicleId && recentRO.data?.ServiceItem?.ID) {
-        vehicleId = String(recentRO.data.ServiceItem.ID);
+      const data = rows[0].data as Record<string, any>;
+      if (!vehicleId && data?.ServiceItem?.ID) {
+        vehicleId = String(data.ServiceItem.ID);
         console.log(`[Auto Booking] Found vehicle ID from RO: ${vehicleId}`);
       }
-      if (!contactId && recentRO.data?.Contact?.ID) {
-        contactId = String(recentRO.data.Contact.ID);
+      if (!contactId && data?.Contact?.ID) {
+        contactId = String(data.Contact.ID);
         console.log(`[Auto Booking] Found contact ID from RO: ${contactId}`);
       }
     }
   }
   
-  // If we still don't have IDs, try to fetch from Protractor API
   if ((!contactId || !vehicleId) && vin) {
     try {
       const { fetchVehicleByVin } = await import("@/lib/integrations/protractor");
@@ -737,15 +840,14 @@ export async function findProtractorContactAndVehicle(
 }
 
 export async function cancelBooking(bookingId: string): Promise<boolean> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
+  const result = await sql`
+    UPDATE auto_booking_queue
+    SET status = 'cancelled', updated_at = NOW()
+    WHERE id = ${bookingId}
+      AND status IN ('pending', 'confirmed')
+  `;
   
-  const result = await db.collection("auto_booking_queue").updateOne(
-    { _id: new ObjectId(bookingId), status: { $in: ["pending", "confirmed"] } },
-    { $set: { status: "cancelled" } }
-  );
-  
-  return result.modifiedCount > 0;
+  return result.count > 0;
 }
 
 export async function markBookingSent(
@@ -753,43 +855,40 @@ export async function markBookingSent(
   externalAppointmentId: string,
   provider: string
 ): Promise<boolean> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
-  
-  const result = await db.collection("auto_booking_queue").updateOne(
-    { _id: new ObjectId(bookingId), status: "confirmed" },
-    {
-      $set: {
-        status: "sent",
-        sentAt: new Date(),
+  const result = await sql`
+    UPDATE auto_booking_queue
+    SET 
+      status = 'sent',
+      metadata = metadata || ${JSON.stringify({
+        sentAt: new Date().toISOString(),
         externalAppointmentId,
         provider,
-      },
-    }
-  );
+      })}::jsonb,
+      updated_at = NOW()
+    WHERE id = ${bookingId}
+      AND status = 'confirmed'
+  `;
   
-  return result.modifiedCount > 0;
+  return result.count > 0;
 }
 
 export async function markBookingFailed(
   bookingId: string,
   reason: string
 ): Promise<boolean> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
-  
-  const result = await db.collection("auto_booking_queue").updateOne(
-    { _id: new ObjectId(bookingId) },
-    {
-      $set: {
-        status: "failed",
-        failedAt: new Date(),
+  const result = await sql`
+    UPDATE auto_booking_queue
+    SET 
+      status = 'failed',
+      metadata = metadata || ${JSON.stringify({
+        failedAt: new Date().toISOString(),
         failedReason: reason,
-      },
-    }
-  );
+      })}::jsonb,
+      updated_at = NOW()
+    WHERE id = ${bookingId}
+  `;
   
-  return result.modifiedCount > 0;
+  return result.count > 0;
 }
 
 export interface StickerBookingData {
@@ -883,10 +982,8 @@ export async function triggerAutoBookingFromSticker(
       return { queued: false, error: "Customer info required for booking" };
     }
     
-    // Use the sticker's nextServiceDate directly as the target booking date
     const stickerDate = new Date(nextServiceDate);
     
-    // Find available slot starting from the sticker date (no leadTimeDays shift)
     const slotResult = await findAvailableSlotFromDate(shopId, stickerDate, settings);
     
     if (!slotResult.success || !slotResult.slot) {

@@ -1,12 +1,10 @@
 // lib/job-index.ts
 // Job Lookup / Parts Intelligence - Data Indexing Layer
 
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import crypto from "crypto";
 
-// Compute a deterministic hash of job entry content for change detection
 export function computeJobHash(entry: JobIndexEntry): string {
-  // Only hash the content that matters for equality (exclude metadata.indexedAt)
   const hashContent = {
     workOrderId: entry.workOrderId,
     servicePackageId: entry.servicePackageId,
@@ -24,7 +22,7 @@ export type JobIndexEntry = {
   workOrderNumber?: number;
   servicePackageId: string;
   performedAt: Date;
-  isDeferred?: boolean; // True if this was deferred/declined work (not completed)
+  isDeferred?: boolean;
   
   vehicle: {
     vin?: string;
@@ -143,12 +141,10 @@ export function extractJobIndexFromWorkOrder(
                           workOrder.ServicePackages || 
                           [];
   
-  // Also capture DeferredServicePackages - these are declined/recommended services with pricing
   const deferredPackages = workOrder.DeferredServicePackages?.ItemCollection || 
                            workOrder.DeferredServicePackages || 
                            [];
   
-  // Combine both completed and deferred packages for indexing
   const allPackages = [
     ...(Array.isArray(servicePackages) ? servicePackages.map(p => ({ ...p, _isDeferred: false })) : []),
     ...(Array.isArray(deferredPackages) ? deferredPackages.map(p => ({ ...p, _isDeferred: true })) : []),
@@ -186,7 +182,6 @@ export function extractJobIndexFromWorkOrder(
         const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
         const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
         
-        // Handle Protractor's nested PriceSummary structure and flat fields
         const priceSummary = line.PriceSummary || {};
         const unitPrice = parseFloat(
           priceSummary.SellPrice || 
@@ -216,7 +211,6 @@ export function extractJobIndexFromWorkOrder(
         });
         
         if (lineType === "labor") {
-          // Check for explicit hours field first, only fallback to quantity if no hours specified
           const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
           const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
           laborHours += hours;
@@ -236,7 +230,7 @@ export function extractJobIndexFromWorkOrder(
       workOrderNumber: workOrder.WorkOrderNumber || workOrder.workOrderNumber,
       servicePackageId: pkg.ID || pkg.id,
       performedAt: new Date(performedAt),
-      isDeferred, // Track if this was deferred/declined work
+      isDeferred,
       
       vehicle: {
         vin: vehicle.VIN || vehicle.vin,
@@ -313,7 +307,6 @@ export function extractJobIndexFromCachedWorkOrder(
         const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
         const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
         
-        // Handle Protractor's nested PriceSummary structure and flat fields
         const priceSummary = line.PriceSummary || {};
         const unitPrice = parseFloat(
           priceSummary.SellPrice || 
@@ -343,7 +336,6 @@ export function extractJobIndexFromCachedWorkOrder(
         });
         
         if (lineType === "labor") {
-          // Check for explicit hours field first, only fallback to quantity if no hours specified
           const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
           const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
           laborHours += hours;
@@ -405,35 +397,84 @@ export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{
     return { inserted: 0, updated: 0 };
   }
   
-  const db = await getDb();
-  const collection = db.collection("job_index");
-  
   let inserted = 0;
   let updated = 0;
   
-  // Track labor rates per shop to cache the most recent one
   const shopLaborRates = new Map<number, number>();
   
   for (const entry of entries) {
-    const filter = {
-      shopId: entry.shopId,
-      workOrderId: entry.workOrderId,
-      servicePackageId: entry.servicePackageId,
-    };
+    const shopIdStr = String(entry.shopId);
+    const contentHash = computeJobHash(entry);
     
-    const result = await collection.updateOne(
-      filter,
-      { $set: entry },
-      { upsert: true }
-    );
+    const existingRows = await sql`
+      SELECT id, content_hash
+      FROM job_index ji
+      JOIN shops s ON ji.shop_id = s.id
+      WHERE s.shop_id = ${shopIdStr}
+        AND ji.work_order_id = ${entry.workOrderId}
+        AND ji.job_label = ${entry.servicePackageId}
+      LIMIT 1
+    `;
     
-    if (result.upsertedCount > 0) {
+    const existing = existingRows[0];
+    
+    if (existing) {
+      if (existing.content_hash !== contentHash) {
+        await sql`
+          UPDATE job_index
+          SET 
+            job_title = ${entry.job.title},
+            keywords = ${entry.job.keywords},
+            vehicle_make = ${entry.vehicle.make || null},
+            vehicle_model = ${entry.vehicle.model || null},
+            vehicle_year = ${entry.vehicle.year || null},
+            labor_amount = ${entry.totals.laborAmount},
+            parts_amount = ${entry.totals.partsAmount},
+            total_amount = ${entry.totals.totalAmount},
+            labor_hours = ${entry.totals.laborHours},
+            performed_at = ${entry.performedAt},
+            job = ${JSON.stringify(entry.job)}::jsonb,
+            lines = ${JSON.stringify(entry.lines)}::jsonb,
+            totals = ${JSON.stringify(entry.totals)}::jsonb,
+            content_hash = ${contentHash}
+          WHERE id = ${existing.id}
+        `;
+        updated++;
+      }
+    } else {
+      await sql`
+        INSERT INTO job_index (
+          shop_id, vin, work_order_id, job_title, job_label, keywords,
+          vehicle_make, vehicle_model, vehicle_year,
+          labor_amount, parts_amount, total_amount, labor_hours,
+          performed_at, job, lines, totals, content_hash, created_at
+        )
+        SELECT 
+          s.id,
+          ${entry.vehicle.vin?.toUpperCase() || null},
+          ${entry.workOrderId},
+          ${entry.job.title},
+          ${entry.servicePackageId},
+          ${entry.job.keywords},
+          ${entry.vehicle.make || null},
+          ${entry.vehicle.model || null},
+          ${entry.vehicle.year || null},
+          ${entry.totals.laborAmount},
+          ${entry.totals.partsAmount},
+          ${entry.totals.totalAmount},
+          ${entry.totals.laborHours},
+          ${entry.performedAt},
+          ${JSON.stringify(entry.job)}::jsonb,
+          ${JSON.stringify(entry.lines)}::jsonb,
+          ${JSON.stringify(entry.totals)}::jsonb,
+          ${contentHash},
+          NOW()
+        FROM shops s
+        WHERE s.shop_id = ${shopIdStr}
+      `;
       inserted++;
-    } else if (result.modifiedCount > 0) {
-      updated++;
     }
     
-    // Extract labor rate from entry lines
     for (const line of entry.lines) {
       if (line.lineType === "labor" && line.unitPrice > 0) {
         shopLaborRates.set(entry.shopId, line.unitPrice);
@@ -442,14 +483,18 @@ export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{
     }
   }
   
-  // Cache labor rates at shop level for fast lookups
   if (shopLaborRates.size > 0) {
-    const shopsCollection = db.collection("shops");
     for (const [shopId, laborRate] of shopLaborRates) {
-      await shopsCollection.updateOne(
-        { shopId },
-        { $set: { cachedLaborRate: laborRate, cachedLaborRateUpdatedAt: new Date() } }
-      );
+      const shopIdStr = String(shopId);
+      await sql`
+        UPDATE shops
+        SET 
+          settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object(
+            'cachedLaborRate', ${laborRate},
+            'cachedLaborRateUpdatedAt', ${new Date().toISOString()}
+          )
+        WHERE shop_id = ${shopIdStr}
+      `;
     }
   }
   
@@ -457,9 +502,6 @@ export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{
 }
 
 export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promise<number> {
-  const db = await getDb();
-  const collection = db.collection("part_cross_ref");
-  
   let updatedCount = 0;
   
   const partsByShop = new Map<number, Map<string, { 
@@ -489,62 +531,30 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
   }
   
   for (const [shopId, shopParts] of partsByShop) {
+    const shopIdStr = String(shopId);
+    
     for (const [normalizedPartNumber, usages] of shopParts) {
       const firstUsage = usages[0];
       
-      const usedOn = usages
-        .filter(u => u.entry.vehicle.year && u.entry.vehicle.make && u.entry.vehicle.model)
-        .map(u => ({
-          year: u.entry.vehicle.year!,
-          make: u.entry.vehicle.make!,
-          model: u.entry.vehicle.model!,
-          engine: u.entry.vehicle.engine,
-        }));
+      const existingRows = await sql`
+        SELECT original_part_number
+        FROM part_cross_ref
+        WHERE original_part_number = ${normalizedPartNumber}
+        LIMIT 1
+      `;
       
-      const uniqueUsedOn = Array.from(
-        new Map(usedOn.map(u => [`${u.year}-${u.make}-${u.model}`, u])).values()
-      );
-      
-      const uniqueWorkOrderIds = [...new Set(usages.map(u => u.workOrderId))];
-      
-      const existing = await collection.findOne({ shopId, normalizedPartNumber });
-      const existingWorkOrderIds = new Set(existing?.workOrderIds || []);
-      const newWorkOrderIds = uniqueWorkOrderIds.filter(id => !existingWorkOrderIds.has(id));
-      const newUsageCount = newWorkOrderIds.length;
-      
-      if (newUsageCount === 0 && existing) {
-        await collection.updateOne(
-          { shopId, normalizedPartNumber },
-          {
-            $set: { updatedAt: new Date() },
-            $addToSet: { usedOn: { $each: uniqueUsedOn } },
-          }
-        );
-      } else {
-        await collection.updateOne(
-          { shopId, normalizedPartNumber },
-          {
-            $set: {
-              shopId,
-              partNumber: firstUsage.line.partNumber,
-              normalizedPartNumber,
-              description: firstUsage.line.description,
-              manufacturer: firstUsage.line.manufacturer,
-              updatedAt: new Date(),
-              lastUsedAt: new Date(),
-            },
-            $setOnInsert: {
-              crossReferences: [],
-              createdAt: new Date(),
-            },
-            $inc: { usageCount: newUsageCount || 1 },
-            $addToSet: { 
-              usedOn: { $each: uniqueUsedOn },
-              workOrderIds: { $each: uniqueWorkOrderIds },
-            },
-          },
-          { upsert: true }
-        );
+      if (existingRows.length === 0) {
+        await sql`
+          INSERT INTO part_cross_ref (original_part_number, manufacturer, notes, verified, created_at)
+          VALUES (
+            ${normalizedPartNumber},
+            ${firstUsage.line.manufacturer || null},
+            ${firstUsage.line.description || null},
+            false,
+            NOW()
+          )
+          ON CONFLICT DO NOTHING
+        `;
       }
       
       updatedCount++;
@@ -555,21 +565,5 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
 }
 
 export async function ensureJobIndexIndexes(): Promise<void> {
-  const db = await getDb();
-  
-  const jobIndex = db.collection("job_index");
-  await jobIndex.createIndex({ shopId: 1, "job.keywords": 1 });
-  await jobIndex.createIndex({ shopId: 1, "vehicle.make": 1, "vehicle.model": 1 });
-  await jobIndex.createIndex({ shopId: 1, "vehicle.year": 1, "vehicle.make": 1, "vehicle.model": 1 });
-  await jobIndex.createIndex({ shopId: 1, performedAt: -1 });
-  await jobIndex.createIndex({ shopId: 1, workOrderId: 1, servicePackageId: 1 }, { unique: true });
-  await jobIndex.createIndex({ "job.title": "text", "job.description": "text", "lines.description": "text" });
-  
-  const partXref = db.collection("part_cross_ref");
-  await partXref.createIndex({ shopId: 1, normalizedPartNumber: 1 }, { unique: true });
-  await partXref.createIndex({ shopId: 1, partNumber: 1 });
-  await partXref.createIndex({ shopId: 1, "usedOn.make": 1, "usedOn.model": 1 });
-  await partXref.createIndex({ shopId: 1, workOrderIds: 1 });
-  
-  console.log("[JobIndex] Database indexes created");
+  console.log("[JobIndex] PostgreSQL indexes managed by schema");
 }
