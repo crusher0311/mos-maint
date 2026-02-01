@@ -1,14 +1,12 @@
 // app/api/webhooks/autoflow/[token]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import crypto from "node:crypto";
 import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflow";
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// ---- Helpers -------------------------------------------------------------
 
 function timingSafeEqual(a: Buffer, b: Buffer) {
   if (a.length !== b.length) return false;
@@ -25,10 +23,10 @@ function verifyHmacSHA256(secret: string, rawBody: string, signatureHex: string)
 }
 
 async function findShopByToken(token: string) {
-  const db = await getDb();
-  return db
-    .collection("shops")
-    .findOne({ webhookToken: token }, { projection: { shopId: 1, name: 1 } });
+  const rows = await sql`
+    SELECT shop_id, name FROM shops WHERE webhook_token = ${token}
+  `;
+  return rows[0] as any;
 }
 
 function getEventName(payload: any): string {
@@ -60,8 +58,6 @@ function resolveVin(payload: any): string | null {
     : null;
 }
 
-// ---- GET: token validity ------------------------------------------------
-
 export async function GET(req: NextRequest, ctx: { params: { token: string } }) {
   const token = ctx.params?.token || "";
   if (!token) return NextResponse.json({ error: "missing token" }, { status: 400 });
@@ -71,12 +67,10 @@ export async function GET(req: NextRequest, ctx: { params: { token: string } }) 
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
 
   if (isPing) {
-    return NextResponse.json({ ok: true, shopId: shop.shopId, tokenValid: true });
+    return NextResponse.json({ ok: true, shopId: shop.shop_id, tokenValid: true });
   }
-  return NextResponse.json({ ok: true, shopId: shop.shopId });
+  return NextResponse.json({ ok: true, shopId: shop.shop_id });
 }
-
-// ---- POST: accept webhook -----------------------------------------------
 
 export async function POST(req: NextRequest, ctx: { params: { token: string } }) {
   const token = ctx.params?.token || "";
@@ -85,7 +79,6 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   const shop = await findShopByToken(token);
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
 
-  // Read raw body for optional HMAC verification and for safe logging
   const raw = await req.text();
   let payload: any = null;
   try {
@@ -94,7 +87,6 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     // keep payload as null; raw is still saved
   }
 
-  // OPTIONAL signature verification (enable by setting AUTOFLOW_SIGNING_SECRET)
   const secret = process.env.AUTOFLOW_SIGNING_SECRET || "";
   if (secret) {
     const sig =
@@ -106,26 +98,17 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     }
   }
 
-  const db = await getDb();
+  await sql`
+    INSERT INTO events (provider, shop_id, token, payload, raw, received_at)
+    VALUES ('autoflow', ${shop.shop_id}, ${token}, ${payload ? JSON.stringify(payload) : null}::jsonb, ${raw}, NOW())
+  `;
 
-  // Persist raw event for audit / console
-  await db.collection("events").insertOne({
-    provider: "autoflow",
-    shopId: shop.shopId,
-    token,
-    payload,
-    raw,
-    receivedAt: new Date(),
-  });
-
-  // ---- Normalize into first-class docs so dashboards light up ---------
   try {
     const eventName = String(getEventName(payload)).toLowerCase();
+    const shopId = Number(shop.shop_id);
 
-    // 1) Ensure/refresh a customer row for dashboard lists
-    await upsertCustomerFromEvent(db, Number(shop.shopId), payload);
+    await upsertCustomerFromEvent(shopId, payload);
 
-    // 2) Optionally mark a customer closed on terminal events
     const closeTypes = new Set<string>([
       "dvi_signoff",
       "dvi.signoff",
@@ -141,20 +124,15 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     if (closeTypes.has(eventName)) {
       const now = new Date();
       const vin = resolveVin(payload);
-      const shopOr = [{ shopId: shop.shopId }, { shopId: Number(shop.shopId) }];
 
-      await db.collection("customers").updateOne(
-        {
-          $and: [
-            { $or: shopOr as any },
-            vin ? { "vehicle.vin": vin } : {},
-          ],
-        },
-        { $set: { status: "closed", closedAt: now, updatedAt: now } }
-      );
+      if (vin) {
+        await sql`
+          UPDATE customers SET status = 'closed', closed_at = ${now}, updated_at = ${now}
+          WHERE shop_id = ${String(shopId)} AND vehicle_vin = ${vin}
+        `;
+      }
     }
 
-    // 3) Auto-fetch DVI snapshot on signoff/completion-ish events
     const isDviEvent = /dvi/i.test(eventName) && /(signoff|complete|completed|update)/i.test(eventName);
 
     const roNumber =
@@ -164,13 +142,12 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
       null;
 
     if (isDviEvent && roNumber != null) {
-      const dvi = await fetchDviByInvoice(Number(shop.shopId), String(roNumber));
-      await upsertDviSnapshot(Number(shop.shopId), String(roNumber), dvi);
+      const dvi = await fetchDviByInvoice(shopId, String(roNumber));
+      await upsertDviSnapshot(shopId, String(roNumber), dvi);
     }
   } catch (e) {
-    // Swallow normalization errors; raw event is still stored for replay
     console.error("Webhook normalization error:", e);
   }
 
-  return NextResponse.json({ ok: true, shopId: shop.shopId });
+  return NextResponse.json({ ok: true, shopId: shop.shop_id });
 }

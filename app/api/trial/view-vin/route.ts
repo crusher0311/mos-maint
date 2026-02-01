@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { checkAndTrackVin, getViewedVinCount } from "@/lib/plan-cache";
 
 export const runtime = "nodejs";
@@ -23,10 +23,10 @@ export async function POST(req: Request) {
     
     const normalizedRoId = roId && typeof roId === "string" ? roId.trim() : null;
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
 
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
+    const shop = shopRows[0] as any;
     const isPaid = shop?.billing?.plan === "professional" || shop?.billing?.plan === "enterprise";
 
     if (isPaid) {
@@ -42,11 +42,12 @@ export async function POST(req: Request) {
       });
     }
 
-    const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
-    const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
-    const shopLimit = shop?.trialVinLimit ?? defaultLimit;
+    const platformRows = await sql`SELECT * FROM platform_settings WHERE key = 'trial'`;
+    const platformSettings = platformRows[0] as any;
+    const defaultLimit = platformSettings?.vin_limit ?? DEFAULT_TRIAL_VIN_LIMIT;
+    const shopLimit = shop?.trial_vin_limit ?? defaultLimit;
 
-    const { count, isNew, allowed } = await checkAndTrackVin(db, shopId, vin.toUpperCase(), shopLimit, normalizedRoId);
+    const { count, isNew, allowed } = await checkAndTrackVin(Number(shopId), vin.toUpperCase(), shopLimit, normalizedRoId);
 
     const remaining = Math.max(0, shopLimit - count);
 
@@ -74,10 +75,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
 
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
+    const shop = shopRows[0] as any;
     const isPaid = shop?.billing?.plan === "professional" || shop?.billing?.plan === "enterprise";
 
     if (isPaid) {
@@ -90,11 +91,12 @@ export async function GET() {
       });
     }
 
-    const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
-    const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
-    const shopLimit = shop?.trialVinLimit ?? defaultLimit;
+    const platformRows = await sql`SELECT * FROM platform_settings WHERE key = 'trial'`;
+    const platformSettings = platformRows[0] as any;
+    const defaultLimit = platformSettings?.vin_limit ?? DEFAULT_TRIAL_VIN_LIMIT;
+    const shopLimit = shop?.trial_vin_limit ?? defaultLimit;
 
-    const count = await getViewedVinCount(db, shopId);
+    const count = await getViewedVinCount(Number(shopId));
     const remaining = Math.max(0, shopLimit - count);
 
     return NextResponse.json({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getCommonFailures } from "@/lib/common-failures";
 import { getNormalizedCache, CACHE_KEYS, CACHE_TTL } from "@/lib/normalized-cache";
 
@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid mileage" }, { status: 400 });
   }
 
-  const db = await getDb();
   const cache = getNormalizedCache();
   
   let shopIds: number[] = [shopId];
@@ -49,14 +48,13 @@ export async function GET(req: NextRequest) {
     let cachedEnterpriseShops = cache.get<number[]>(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey);
     
     if (!cachedEnterpriseShops) {
-      const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
-      const enterpriseId = shop?.enterpriseId as string | undefined;
+      const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
+      const shop = shopRows[0] as any;
+      const enterpriseId = shop?.enterprise_id as string | undefined;
       
       if (enterpriseId) {
-        const enterpriseShops = await db.collection("shops")
-          .find({ enterpriseId })
-          .toArray();
-        cachedEnterpriseShops = enterpriseShops.map(s => Number(s.shopId));
+        const enterpriseShops = await sql`SELECT * FROM shops WHERE enterprise_id = ${enterpriseId}`;
+        cachedEnterpriseShops = enterpriseShops.map((s: any) => Number(s.shop_id));
         cache.set(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey, cachedEnterpriseShops, CACHE_TTL.LONG);
       } else {
         cachedEnterpriseShops = [shopId];

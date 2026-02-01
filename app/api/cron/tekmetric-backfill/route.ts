@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
@@ -119,39 +119,35 @@ async function tekmetricRequest<T>(endpoint: string, retries = 3): Promise<{ ok:
   return { ok: false, error: "Max retries exceeded" };
 }
 
-async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
-  // Only fetch shops that don't have the completion flag set
-  const shops = await db.collection("shops").find({
-    $or: [
-      { "tekmetric.shopId": { $exists: true, $ne: null } },
-      { "tekmetricShopId": { $exists: true, $ne: null } }
-    ],
-    tekmetricBackfillComplete: { $ne: true }
-  }).toArray();
+async function getShopsNeedingBackfill(): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
+  const shops = await sql`
+    SELECT * FROM shops 
+    WHERE (tekmetric->>'shopId' IS NOT NULL OR tekmetric_shop_id IS NOT NULL)
+      AND (tekmetric_backfill_complete IS NULL OR tekmetric_backfill_complete = FALSE)
+  `;
 
   const shopsToBackfill: { shopId: number; name: string; tekmetricShopId: number; progressDate: Date | null }[] = [];
 
-  for (const shop of shops) {
-    const shopId = Number(shop.shopId);
-    const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
+  for (const shop of shops as any[]) {
+    const shopId = Number(shop.shop_id);
+    const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetric_shop_id;
     if (!tekmetricShopId) continue;
     
-    const progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+    const progressRows = await sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id = ${String(shopId)}`;
+    const progress = progressRows[0] as any;
     
-    // Include shops that are not completed OR have outdated logic version
-    const needsReprocess = !progress?.completed || progress?.logicVersion !== 2;
+    const needsReprocess = !progress?.completed || progress?.logic_version !== 2;
     
     if (needsReprocess) {
       shopsToBackfill.push({
         shopId,
-        name: shop.name || shop.locationIdentifier || `Shop ${shopId}`,
+        name: shop.name || shop.location_identifier || `Shop ${shopId}`,
         tekmetricShopId: Number(tekmetricShopId),
-        progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd) : null
+        progressDate: progress?.current_chunk_end ? new Date(progress.current_chunk_end) : null
       });
     }
   }
 
-  // Prioritize: shops with no progress first, then by most recent cursor
   shopsToBackfill.sort((a, b) => {
     if (!a.progressDate && !b.progressDate) return 0;
     if (!a.progressDate) return -1;
@@ -163,15 +159,18 @@ async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name:
 }
 
 async function backfillShopChunk(
-  db: any, 
   shopId: number, 
   tekmetricShopId: number
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
-  let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+  const progressRows = await sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id = ${String(shopId)}`;
+  let progress = progressRows[0] as any;
   
-  const shop = await db.collection("shops").findOne({ shopId });
-  const enterpriseId = shop?.enterpriseId;
+  const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
+  const shop = shopRows[0] as any;
+  const enterpriseId = shop?.enterprise_id;
   
+  const { getDb } = await import("@/lib/mongo");
+  const db = await getDb();
   const ingestionService = createIngestionService(
     db,
     'tekmetric',
@@ -185,7 +184,6 @@ async function backfillShopChunk(
     }
   );
   
-  // Calculate date boundaries
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
@@ -193,43 +191,35 @@ async function backfillShopChunk(
   oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
   oldestDate.setHours(0, 0, 0, 0);
   
-  // REVERSE CHRONOLOGICAL: Start from today, work backwards
   let chunkEnd: Date;
   
-  if (progress?.currentChunkEnd && progress?.logicVersion === 2) {
-    chunkEnd = new Date(progress.currentChunkEnd);
+  if (progress?.current_chunk_end && progress?.logic_version === 2) {
+    chunkEnd = new Date(progress.current_chunk_end);
   } else {
-    // Fresh start or upgrading from old logic
     chunkEnd = new Date(today);
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          shopId, 
-          startedAt: new Date(), 
-          currentChunkEnd: chunkEnd, 
-          completed: false,
-          logicVersion: 2
-        },
-        $unset: { currentChunkStart: "" }
-      },
-      { upsert: true }
-    );
+    await sql`
+      INSERT INTO tekmetric_backfill_progress (shop_id, started_at, current_chunk_end, completed, logic_version, updated_at)
+      VALUES (${String(shopId)}, NOW(), ${chunkEnd.toISOString()}, FALSE, 2, NOW())
+      ON CONFLICT (shop_id) DO UPDATE SET
+        started_at = NOW(),
+        current_chunk_end = EXCLUDED.current_chunk_end,
+        completed = FALSE,
+        logic_version = 2,
+        updated_at = NOW()
+    `;
   }
 
-  // Calculate chunk start (going backwards)
   const chunkStart = new Date(chunkEnd);
   chunkStart.setMonth(chunkStart.getMonth() - MONTHS_PER_RUN);
   if (chunkStart < oldestDate) {
     chunkStart.setTime(oldestDate.getTime());
   }
 
-  // Check if we've reached the oldest date
   if (chunkEnd <= oldestDate) {
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      { $set: { completed: true, completedAt: new Date() } }
-    );
+    await sql`
+      UPDATE tekmetric_backfill_progress SET completed = TRUE, completed_at = NOW(), updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
     return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0 };
   }
 
@@ -364,23 +354,43 @@ async function backfillShopChunk(
           }
         }
 
-        // Compute content hash for change detection
         const contentHash = computeContentHash(entry);
-        const filter = { shopId, workOrderId: String(ro.id), servicePackageId: String(job.id) };
         
-        // Check if record exists with same hash
-        const existing = await db.collection("job_index").findOne(filter);
+        const existingRows = await sql`
+          SELECT content_hash FROM job_index 
+          WHERE shop_id = ${String(shopId)} AND work_order_id = ${String(ro.id)} AND service_package_id = ${String(job.id)}
+        `;
+        const existing = existingRows[0] as any;
         
-        if (existing && existing.contentHash === contentHash) {
+        if (existing && existing.content_hash === contentHash) {
           skipped++;
           continue;
         }
 
-        await db.collection("job_index").updateOne(
-          filter,
-          { $set: { ...entry, contentHash } },
-          { upsert: true }
-        );
+        await sql`
+          INSERT INTO job_index (shop_id, source_system, work_order_id, work_order_number, service_package_id, job_name,
+            closed_at, vehicle, customer, total_amount, labor_amount, parts_amount, labor_hours, lines, indexed_at, content_hash,
+            created_at, updated_at)
+          VALUES (
+            ${String(shopId)}, 'tekmetric', ${String(ro.id)}, ${ro.repairOrderNumber}, ${String(job.id)}, ${job.name},
+            ${entry.closedAt ?? null}, ${JSON.stringify(entry.vehicle)}::jsonb, ${JSON.stringify(entry.customer)}::jsonb,
+            ${entry.totalAmount}, ${entry.laborAmount}, ${entry.partsAmount}, ${entry.laborHours},
+            ${JSON.stringify(entry.lines)}::jsonb, NOW(), ${contentHash}, NOW(), NOW()
+          )
+          ON CONFLICT (shop_id, work_order_id, service_package_id) DO UPDATE SET
+            job_name = EXCLUDED.job_name,
+            closed_at = EXCLUDED.closed_at,
+            vehicle = EXCLUDED.vehicle,
+            customer = EXCLUDED.customer,
+            total_amount = EXCLUDED.total_amount,
+            labor_amount = EXCLUDED.labor_amount,
+            parts_amount = EXCLUDED.parts_amount,
+            labor_hours = EXCLUDED.labor_hours,
+            lines = EXCLUDED.lines,
+            indexed_at = NOW(),
+            content_hash = EXCLUDED.content_hash,
+            updated_at = NOW()
+        `;
         indexed++;
       }
 
@@ -429,7 +439,6 @@ async function backfillShopChunk(
     await new Promise(r => setTimeout(r, 100));
   }
 
-  // Dual-write to normalized collections
   let normalizedCount = 0;
   try {
     const normalizedResult = await ingestionService.ingestWorkOrderBatchWithAllEntities(rosForNormalized);
@@ -439,29 +448,28 @@ async function backfillShopChunk(
     console.error(`[Tekmetric Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
-  // Move cursor backwards for next run
   const nextChunkEnd = chunkStart;
   const isComplete = nextChunkEnd <= oldestDate;
 
-  await db.collection("tekmetric_backfill_progress").updateOne(
-    { shopId },
-    {
-      $set: {
-        currentChunkEnd: nextChunkEnd,
-        lastRunAt: new Date(),
-        completed: isComplete,
-        ...(isComplete ? { completedAt: new Date() } : {}),
-      },
-      $inc: { totalJobsIndexed: jobsIndexed }
-    }
-  );
+  await sql`
+    UPDATE tekmetric_backfill_progress SET
+      current_chunk_end = ${nextChunkEnd.toISOString()},
+      last_run_at = NOW(),
+      completed = ${isComplete},
+      completed_at = ${isComplete ? new Date().toISOString() : null},
+      total_jobs_indexed = COALESCE(total_jobs_indexed, 0) + ${jobsIndexed},
+      updated_at = NOW()
+    WHERE shop_id = ${String(shopId)}
+  `;
 
-  // Set shop-level completion flag when backfill is done
   if (isComplete) {
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: { tekmetricBackfillComplete: true, tekmetricBackfillCompletedAt: new Date() } }
-    );
+    await sql`
+      UPDATE shops SET
+        tekmetric_backfill_complete = TRUE,
+        tekmetric_backfill_completed_at = NOW(),
+        updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
     console.log(`[Tekmetric Backfill] Shop ${shopId}: Marked tekmetricBackfillComplete=true`);
   }
 
@@ -484,11 +492,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Tekmetric OAuth credentials not configured" }, { status: 500 });
   }
 
-  const db = await getDb();
   const startTime = Date.now();
 
   try {
-    const shopsToProcess = await getShopsNeedingBackfill(db);
+    const shopsToProcess = await getShopsNeedingBackfill();
 
     if (shopsToProcess.length === 0) {
       return NextResponse.json({
@@ -504,7 +511,7 @@ export async function GET(req: NextRequest) {
 
     for (const shop of selectedShops) {
       console.log(`[Tekmetric Backfill] Processing: ${shop.name} (Shop ${shop.shopId})`);
-      const result = await backfillShopChunk(db, shop.shopId, shop.tekmetricShopId);
+      const result = await backfillShopChunk(shop.shopId, shop.tekmetricShopId);
       results.push({
         shopId: shop.shopId,
         name: shop.name,

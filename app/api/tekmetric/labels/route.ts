@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getRepairOrders } from "@/lib/tekmetric";
 
 export const dynamic = "force-dynamic";
@@ -11,39 +11,29 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(session.shopId);
-  const db = await getDb();
+  const shopId = String(session.shopId);
 
   try {
-    const shop = await db.collection("shops").findOne({
-      shopId: { $in: [String(shopId), Number(shopId)] }
-    });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
+    const shop = shopRows[0] as any;
     
-    const tekmetricShopId = shop?.tekmetric?.shopId;
+    const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetric_shop_id;
     if (!tekmetricShopId) {
       return NextResponse.json({ labels: [] });
     }
 
     const labelMap = new Map<string, { color: string; count: number }>();
 
-    const syncedLabels = await db.collection("tekmetric_work_orders").aggregate([
-      {
-        $match: {
-          shopId: { $in: [String(shopId), Number(shopId)] },
-          label: { $exists: true, $nin: ["", null] }
-        }
-      },
-      {
-        $group: {
-          _id: "$label",
-          color: { $first: "$labelColor" },
-          count: { $sum: 1 }
-        }
-      }
-    ]).toArray();
+    const syncedLabels = await sql`
+      SELECT label, label_color, COUNT(*)::int as count
+      FROM tekmetric_work_orders
+      WHERE shop_id = ${shopId} AND label IS NOT NULL AND label != ''
+      GROUP BY label, label_color
+    `;
 
     for (const l of syncedLabels) {
-      labelMap.set(l._id, { color: l.color || "", count: l.count });
+      const ll = l as any;
+      labelMap.set(ll.label, { color: ll.label_color || "", count: ll.count });
     }
 
     try {
@@ -79,8 +69,8 @@ export async function GET() {
       .sort((a, b) => b.count - a.count);
 
     return NextResponse.json({ labels });
-  } catch (err: any) {
-    console.error("[Tekmetric Labels] Error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (error) {
+    console.error("Error fetching labels:", error);
+    return NextResponse.json({ error: "Failed to fetch labels" }, { status: 500 });
   }
 }

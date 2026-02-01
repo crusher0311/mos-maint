@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
@@ -650,9 +650,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, vin, skipped: true, reason: "No mileage" }, { status: 200 });
     }
 
-    const db = await getDb();
-
-    const existingCache = await getCachedPlan(db, vin, shopId, mileage);
+    const existingCache = await getCachedPlan(vin, shopId, mileage);
     if (existingCache) {
       return NextResponse.json({
         ok: true,
@@ -665,7 +663,8 @@ export async function POST(req: NextRequest) {
     
     console.log(`[PlanBuild] Shop ${shopId}: Building full plan for ${vin} at ${mileage} miles`);
 
-    const shopDoc = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
+    const shopDoc = shopRows[0] as any;
     const soonMiles = shopDoc?.maintenance?.dueSoonMiles ?? shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
     const soonDays = shopDoc?.maintenance?.dueSoonDays ?? shopDoc?.settings?.planPage?.soonDays ?? DEFAULT_SOON_DAYS;
     const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
@@ -673,7 +672,6 @@ export async function POST(req: NextRequest) {
     const shopIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
 
     const vinUpper = vin.toUpperCase();
-    const vinRegex = new RegExp(`^${vinUpper}$`, 'i');
 
     const [autoCfg, carfaxCfg, protractorCfg, autoVitalsCfg, oemData] = await Promise.all([
       resolveAutoflowConfig(shopId),
@@ -683,26 +681,25 @@ export async function POST(req: NextRequest) {
       getMaintenanceScheduleCached(vin),
     ]);
 
-    const vehicleDoc = await db.collection("vehicles").findOne(
-      { shopId, vin: vinUpper },
-      { projection: { year: 1, make: 1, model: 1, declinedServices: 1 } }
-    );
+    const vehicleRows = await sql`
+      SELECT year, make, model, declined_services FROM vehicles 
+      WHERE shop_id = ${String(shopId)} AND vin = ${vinUpper}
+    `;
+    const vehicleDoc = vehicleRows[0] as any;
     const vehicleYear = vehicleDoc?.year ?? oemData.vehicle?.year ?? null;
 
-    const [protractorWOs, tekmetricWOs] = await Promise.all([
-      db.collection("protractor_work_orders").find({
-        shopId,
-        $or: [
-          { vin: vinUpper },
-          { "data.VIN": vinUpper },
-          { "ServiceItem.VIN": vinUpper }
-        ]
-      }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
-      db.collection("tekmetric_work_orders").find({
-        shopId: { $in: [String(shopId), Number(shopId)] },
-        vin: vinUpper
-      }).sort({ completedDate: -1 }).limit(50).toArray(),
+    const [protractorWORows, tekmetricWORows] = await Promise.all([
+      sql`SELECT * FROM protractor_work_orders 
+          WHERE shop_id = ${String(shopId)} AND (vin = ${vinUpper} OR data->>'VIN' = ${vinUpper})
+          ORDER BY data->'Header'->>'LastModifiedTime' DESC NULLS LAST
+          LIMIT 20`,
+      sql`SELECT * FROM tekmetric_work_orders
+          WHERE shop_id = ${String(shopId)} AND vin = ${vinUpper}
+          ORDER BY completed_date DESC NULLS LAST
+          LIMIT 50`,
     ]);
+    const protractorWOs = protractorWORows as any[];
+    const tekmetricWOs = tekmetricWORows as any[];
 
     const shopServiceHistory: ShopServiceHistory[] = [];
     for (const wo of protractorWOs) {
@@ -896,7 +893,7 @@ export async function POST(req: NextRequest) {
       })) : undefined,
     };
 
-    await setCachedPlan(db, vin, shopId, mileage, planData);
+    await setCachedPlan(vin, shopId, mileage, planData);
 
     const duration = Date.now() - startTime;
     console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, Deferred: ${protractorDeferredWork.length})`);

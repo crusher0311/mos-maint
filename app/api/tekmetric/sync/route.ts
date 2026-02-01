@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrderFull, TekmetricVehicle, TekmetricCustomer } from "@/lib/tekmetric";
 
 async function getUserShopId(): Promise<string | null> {
@@ -8,27 +8,26 @@ async function getUserShopId(): Promise<string | null> {
   const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
   if (!sid) return null;
 
-  const db = await getDb();
-  const now = new Date();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
+  const sessRows = await sql`
+    SELECT user_id FROM sessions WHERE token = ${sid} AND expires_at > NOW()
+  `;
+  const sess = sessRows[0] as any;
   if (!sess) return null;
 
-  const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.shopId ? String(user.shopId) : null;
+  const userRows = await sql`SELECT shop_id FROM users WHERE id = ${sess.user_id}`;
+  const user = userRows[0] as any;
+  return user?.shop_id ? String(user.shop_id) : null;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const db = await getDb();
-
     const userShopId = await getUserShopId();
     if (!userShopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shop = await db.collection("shops").findOne({
-      shopId: { $in: [userShopId, Number(userShopId)] }
-    });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(userShopId)}`;
+    const shop = shopRows[0] as any;
     if (!shop?.tekmetric?.shopId) {
       return NextResponse.json(
         { error: "Tekmetric not configured for your shop" },
@@ -93,97 +92,79 @@ export async function POST(request: NextRequest) {
 
     for (const { vehicle, ro, customer } of vehicleMap.values()) {
       const vin = vehicle.vin!.toUpperCase();
-      const existing = await db.collection("vehicles").findOne({ vin });
+      const existingRows = await sql`SELECT * FROM vehicles WHERE vin = ${vin}`;
+      const existing = existingRows[0] as any;
       
-      // Get status and label from the full repair order structure
       const roStatus = ro.repairOrderStatus?.name || "Work-In-Progress";
       const roLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || null;
       const roLabelColor = ro.color || null;
       const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
       
-      // Log first few for debugging
       if (vehicleMap.size <= 3) {
         console.log(`[Tekmetric Sync] Sample RO #${ro.repairOrderNumber}: status="${roStatus}", vin=${vin}, mileage=${roMileage}`);
       }
       
-      // Build the active source entry for this work order
       const workOrderSource = {
         provider: "tekmetric",
         workOrderId: String(ro.id),
         workOrderNumber: ro.repairOrderNumber,
         status: roStatus,
-        addedAt: new Date(),
+        addedAt: new Date().toISOString(),
       };
       
-      // Also upsert into tekmetric_work_orders (this is what the dashboard queries)
       const customerName = customer 
         ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer"
         : "Unknown Customer";
       
-      await db.collection("tekmetric_work_orders").updateOne(
-        { workOrderId: String(ro.id) },
-        {
-          $set: {
-            workOrderId: String(ro.id),
-            workOrderNumber: ro.repairOrderNumber,
-            shopId: String(userShopId),
-            tekmetricShopId: shopId,
-            vin,
-            vehicleYear: vehicle.year,
-            vehicleMake: vehicle.make,
-            vehicleModel: vehicle.model,
-            vehicleEngine: vehicle.engine,
-            customerName,
-            customerId: ro.customerId,
-            odometer: roMileage,
-            status: roStatus,
-            label: roLabel,
-            labelColor: roLabelColor,
-            fetchedAt: new Date(),
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            createdAt: new Date(),
-          }
-        },
-        { upsert: true }
-      );
-      
-      const vehicleData: Record<string, any> = {
-        vin,
-        year: vehicle.year,
-        make: vehicle.make,
-        model: vehicle.model,
-        subModel: vehicle.subModel,
-        engine: vehicle.engine,
-        transmission: vehicle.transmission,
-        drivetrain: vehicle.drivetrain,
-        licensePlate: vehicle.licensePlate,
-        licensePlateState: vehicle.licensePlateState,
-        color: vehicle.color,
-        mileage: roMileage,
-        customer: customer ? {
-          firstName: customer.firstName,
-          lastName: customer.lastName,
-          email: customer.email,
-          phone: customer.phone?.find(p => p.primary)?.number || customer.phone?.[0]?.number,
-        } : undefined,
-        tekmetric: {
-          vehicleId: vehicle.id,
-          customerId: vehicle.customerId,
-          shopId: vehicle.shopId,
-          repairOrderId: ro.id,
-          repairOrderNumber: ro.repairOrderNumber,
-          roStatus: roStatus,
-          roLabel: roLabel,
-          roLabelColor: roLabelColor,
-          lastSynced: new Date(),
-        },
-        updatedAt: new Date(),
+      await sql`
+        INSERT INTO tekmetric_work_orders (
+          work_order_id, work_order_number, shop_id, tekmetric_shop_id, vin,
+          vehicle_year, vehicle_make, vehicle_model, vehicle_engine, customer_name,
+          customer_id, odometer, status, label, label_color, fetched_at, updated_at, created_at
+        ) VALUES (
+          ${String(ro.id)}, ${String(ro.repairOrderNumber)}, ${String(userShopId)}, ${shopId}, ${vin},
+          ${vehicle.year}, ${vehicle.make}, ${vehicle.model}, ${vehicle.engine}, ${customerName},
+          ${ro.customerId}, ${roMileage}, ${roStatus}, ${roLabel}, ${roLabelColor}, NOW(), NOW(), NOW()
+        )
+        ON CONFLICT (work_order_id) DO UPDATE SET
+          work_order_number = EXCLUDED.work_order_number,
+          shop_id = EXCLUDED.shop_id,
+          tekmetric_shop_id = EXCLUDED.tekmetric_shop_id,
+          vin = EXCLUDED.vin,
+          vehicle_year = EXCLUDED.vehicle_year,
+          vehicle_make = EXCLUDED.vehicle_make,
+          vehicle_model = EXCLUDED.vehicle_model,
+          vehicle_engine = EXCLUDED.vehicle_engine,
+          customer_name = EXCLUDED.customer_name,
+          customer_id = EXCLUDED.customer_id,
+          odometer = EXCLUDED.odometer,
+          status = EXCLUDED.status,
+          label = EXCLUDED.label,
+          label_color = EXCLUDED.label_color,
+          fetched_at = NOW(),
+          updated_at = NOW()
+      `;
+
+      const tekmetricData = {
+        vehicleId: vehicle.id,
+        customerId: vehicle.customerId,
+        shopId: vehicle.shopId,
+        repairOrderId: ro.id,
+        repairOrderNumber: ro.repairOrderNumber,
+        roStatus: roStatus,
+        roLabel: roLabel,
+        roLabelColor: roLabelColor,
+        lastSynced: new Date().toISOString(),
       };
+
+      const customerData = customer ? {
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        phone: customer.phone?.find(p => p.primary)?.number || customer.phone?.[0]?.number,
+      } : null;
       
       if (existing) {
-        // Update existing vehicle, add/update this work order source
         const existingSources = existing.status?.sources || [];
         const sourceIndex = existingSources.findIndex(
           (s: any) => s.provider === "tekmetric" && s.workOrderId === String(ro.id)
@@ -191,45 +172,70 @@ export async function POST(request: NextRequest) {
         
         let updatedSources;
         if (sourceIndex >= 0) {
-          // Update existing source
           updatedSources = [...existingSources];
           updatedSources[sourceIndex] = workOrderSource;
         } else {
-          // Add new source
           updatedSources = [...existingSources, workOrderSource];
         }
 
-        await db.collection("vehicles").updateOne(
-          { vin },
-          { 
-            $set: {
-              ...vehicleData,
-              "status.active": true,
-              "status.sources": updatedSources,
-              "status.updatedAt": new Date(),
-            }
-          }
-        );
+        const statusData = {
+          active: true,
+          sources: updatedSources,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await sql`
+          UPDATE vehicles SET
+            year = COALESCE(${vehicle.year}, year),
+            make = COALESCE(${vehicle.make}, make),
+            model = COALESCE(${vehicle.model}, model),
+            sub_model = COALESCE(${vehicle.subModel}, sub_model),
+            engine = COALESCE(${vehicle.engine}, engine),
+            transmission = COALESCE(${vehicle.transmission}, transmission),
+            drivetrain = COALESCE(${vehicle.drivetrain}, drivetrain),
+            license_plate = COALESCE(${vehicle.licensePlate}, license_plate),
+            license_plate_state = COALESCE(${vehicle.licensePlateState}, license_plate_state),
+            color = COALESCE(${vehicle.color}, color),
+            last_mileage = COALESCE(${roMileage}, last_mileage),
+            customer = COALESCE(${customerData ? JSON.stringify(customerData) : null}::jsonb, customer),
+            tekmetric = ${JSON.stringify(tekmetricData)}::jsonb,
+            status = ${JSON.stringify(statusData)}::jsonb,
+            updated_at = NOW()
+          WHERE vin = ${vin}
+        `;
         stats.vehiclesUpdated++;
       } else {
-        await db.collection("vehicles").insertOne({
-          ...vehicleData,
-          shopId: shop._id,
-          status: {
-            active: true,
-            sources: [workOrderSource],
-            updatedAt: new Date(),
-          },
-          createdAt: new Date(),
-        });
+        const statusData = {
+          active: true,
+          sources: [workOrderSource],
+          updatedAt: new Date().toISOString(),
+        };
+
+        await sql`
+          INSERT INTO vehicles (
+            vin, shop_id, year, make, model, sub_model, engine, transmission, drivetrain,
+            license_plate, license_plate_state, color, last_mileage, customer, tekmetric, status,
+            created_at, updated_at
+          ) VALUES (
+            ${vin}, ${String(userShopId)}, ${vehicle.year}, ${vehicle.make}, ${vehicle.model},
+            ${vehicle.subModel}, ${vehicle.engine}, ${vehicle.transmission}, ${vehicle.drivetrain},
+            ${vehicle.licensePlate}, ${vehicle.licensePlateState}, ${vehicle.color}, ${roMileage},
+            ${customerData ? JSON.stringify(customerData) : null}::jsonb,
+            ${JSON.stringify(tekmetricData)}::jsonb,
+            ${JSON.stringify(statusData)}::jsonb,
+            NOW(), NOW()
+          )
+        `;
         stats.vehiclesImported++;
       }
     }
 
-    await db.collection("shops").updateOne(
-      { shopId: { $in: [userShopId, Number(userShopId)] } },
-      { $set: { "tekmetric.lastSync": new Date() } }
-    );
+    await sql`
+      UPDATE shops SET
+        tekmetric = jsonb_set(COALESCE(tekmetric, '{}')::jsonb, '{lastSync}', ${JSON.stringify(new Date().toISOString())}::jsonb),
+        updated_at = NOW()
+      WHERE shop_id = ${String(userShopId)}
+    `;
 
     console.log(`[Tekmetric Sync] Complete - ROs: ${stats.repairOrdersFound}, Imported: ${stats.vehiclesImported}, Updated: ${stats.vehiclesUpdated}, Errors: ${stats.errors.length}`);
     if (stats.errors.length > 0) {

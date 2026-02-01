@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import {
   fetchVehicleById,
   fetchWorkOrderById,
@@ -12,10 +12,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function findShopByToken(token: string) {
-  const db = await getDb();
-  return db
-    .collection("shops")
-    .findOne({ protractorWebhookToken: token }, { projection: { shopId: 1, name: 1 } });
+  const rows = await sql`
+    SELECT shop_id, name FROM shops WHERE protractor_webhook_token = ${token}
+  `;
+  return rows[0] as any;
 }
 
 function resolveVin(payload: any): string | null {
@@ -37,9 +37,9 @@ export async function GET(req: NextRequest, ctx: { params: { token: string } }) 
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
 
   if (isPing) {
-    return NextResponse.json({ ok: true, shopId: shop.shopId, tokenValid: true });
+    return NextResponse.json({ ok: true, shopId: shop.shop_id, tokenValid: true });
   }
-  return NextResponse.json({ ok: true, shopId: shop.shopId });
+  return NextResponse.json({ ok: true, shopId: shop.shop_id });
 }
 
 export async function POST(req: NextRequest, ctx: { params: { token: string } }) {
@@ -57,30 +57,19 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     payload = null;
   }
 
-  const db = await getDb();
-
   const connectionId = req.nextUrl.searchParams.get("connectionId") ?? null;
   const apiKey = req.nextUrl.searchParams.get("apiKey") ?? null;
   const objectType = req.nextUrl.searchParams.get("type") ?? null;
   const objectId = req.nextUrl.searchParams.get("id") ?? null;
   const operation = req.nextUrl.searchParams.get("operation") ?? null;
 
-  await db.collection("events").insertOne({
-    provider: "protractor",
-    shopId: shop.shopId,
-    token,
-    connectionId,
-    apiKey: apiKey ? `${apiKey.slice(0, 8)}...` : null,
-    objectType,
-    objectId,
-    operation,
-    payload,
-    raw,
-    receivedAt: new Date(),
-  });
+  await sql`
+    INSERT INTO events (provider, shop_id, token, connection_id, api_key, object_type, object_id, operation, payload, raw, received_at)
+    VALUES ('protractor', ${shop.shop_id}, ${token}, ${connectionId}, ${apiKey ? `${apiKey.slice(0, 8)}...` : null}, ${objectType}, ${objectId}, ${operation}, ${payload ? JSON.stringify(payload) : null}::jsonb, ${raw}, NOW())
+  `;
 
   try {
-    const shopId = Number(shop.shopId);
+    const shopId = Number(shop.shop_id);
 
     if (objectType === "ServiceItem" && objectId && operation === "Update") {
       const result = await fetchVehicleById(shopId, objectId);
@@ -99,17 +88,17 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
         if (result.workOrder.Completed) {
           const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
           if (vin) {
-            const savedWO = await db.collection("protractor_work_orders").findOne({
-              shopId,
-              workOrderId: objectId
-            });
+            const savedRows = await sql`
+              SELECT * FROM protractor_work_orders WHERE shop_id = ${String(shopId)} AND work_order_id = ${objectId}
+            `;
+            const savedWO = savedRows[0] as any;
             
-            if (savedWO?.packageSummaries?.length > 0) {
+            if (savedWO?.package_summaries?.length > 0) {
               const attribution = await attributeRevenueFromWorkOrder(
                 shopId,
                 objectId,
                 vin,
-                savedWO.packageSummaries,
+                savedWO.package_summaries,
                 "protractor"
               );
               if (attribution.matched > 0) {

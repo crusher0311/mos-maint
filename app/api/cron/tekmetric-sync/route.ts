@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import sql from "@/lib/db/postgres";
 import { 
   getRepairOrders, 
@@ -22,7 +21,6 @@ export const dynamic = "force-dynamic";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-// Early exit if Tekmetric sync is disabled for this deployment
 function isSyncDisabled() {
   return process.env.DISABLE_TEKMETRIC_SYNC === "true";
 }
@@ -57,7 +55,6 @@ interface TekmetricWorkOrderSnapshot {
 }
 
 async function upsertTekmetricWorkOrderSnapshot(
-  db: any,
   shopId: number,
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
@@ -70,54 +67,57 @@ async function upsertTekmetricWorkOrderSnapshot(
   const statusName = ro.repairOrderStatus?.name || ro.repairOrderStatus?.code || "Open";
   const statusCode = ro.repairOrderStatus?.code || "";
   const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
+  const customerName = customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : null;
+  const odometer = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
+  const dviDone = inspections && inspections.length > 0;
   
-  const snapshot: TekmetricWorkOrderSnapshot = {
-    shopId,
-    workOrderId: String(ro.id),
-    workOrderNumber: ro.repairOrderNumber,
-    vin,
-    status: statusName,
-    statusCode,
-    label,
-    labelColor: ro.color || "",
-    customerId: ro.customerId,
-    vehicleId: ro.vehicleId,
-    customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
-    vehicleYear: vehicle.year,
-    vehicleMake: vehicle.make,
-    vehicleModel: vehicle.model,
-    vehicleEngine: vehicle.engine,
-    odometer: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
-    createdDate: ro.createdDate,
-    updatedDate: ro.updatedDate,
-    completedDate: ro.completedDate,
-    fetchedAt: new Date(),
-    data: ro,
-    dviDone: inspections && inspections.length > 0,
-    inspections: inspections || []
-  };
-
-  const existing = await db.collection("tekmetric_work_orders").findOne({
-    shopId: { $in: [String(shopId), Number(shopId)] },
-    workOrderId: String(ro.id)
-  });
+  const existingRows = await sql`
+    SELECT dvi_done, inspections FROM tekmetric_work_orders 
+    WHERE shop_id = ${String(shopId)} AND work_order_id = ${String(ro.id)}
+  `;
+  const existing = existingRows[0] as any;
   
-  if (existing?.dviDone) {
-    snapshot.dviDone = true;
-    snapshot.inspections = existing.inspections || [];
-  }
+  const finalDviDone = existing?.dvi_done || dviDone;
+  const finalInspections = existing?.inspections || inspections || [];
   
-  await db.collection("tekmetric_work_orders").updateOne(
-    { 
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      workOrderId: String(ro.id)
-    },
-    { 
-      $set: snapshot,
-      $setOnInsert: { dviCompletedAt: null, lastInspection: null }
-    },
-    { upsert: true }
-  );
+  await sql`
+    INSERT INTO tekmetric_work_orders (
+      shop_id, work_order_id, work_order_number, vin, status, status_code,
+      label, label_color, customer_id, vehicle_id, customer_name,
+      vehicle_year, vehicle_make, vehicle_model, vehicle_engine, odometer,
+      created_date, updated_date, completed_date, fetched_at, data, dvi_done, inspections,
+      created_at, updated_at
+    ) VALUES (
+      ${String(shopId)}, ${String(ro.id)}, ${ro.repairOrderNumber}, ${vin}, ${statusName}, ${statusCode},
+      ${label}, ${ro.color || ""}, ${ro.customerId}, ${ro.vehicleId}, ${customerName},
+      ${vehicle.year ?? null}, ${vehicle.make ?? null}, ${vehicle.model ?? null}, ${vehicle.engine ?? null}, ${odometer ?? null},
+      ${ro.createdDate ?? null}, ${ro.updatedDate ?? null}, ${ro.completedDate ?? null}, NOW(), ${JSON.stringify(ro)}::jsonb, ${finalDviDone ?? false}, ${JSON.stringify(finalInspections)}::jsonb,
+      NOW(), NOW()
+    )
+    ON CONFLICT (work_order_id) DO UPDATE SET
+      shop_id = EXCLUDED.shop_id,
+      work_order_number = EXCLUDED.work_order_number,
+      vin = EXCLUDED.vin,
+      status = EXCLUDED.status,
+      status_code = EXCLUDED.status_code,
+      label = EXCLUDED.label,
+      label_color = EXCLUDED.label_color,
+      customer_id = EXCLUDED.customer_id,
+      vehicle_id = EXCLUDED.vehicle_id,
+      customer_name = EXCLUDED.customer_name,
+      vehicle_year = EXCLUDED.vehicle_year,
+      vehicle_make = EXCLUDED.vehicle_make,
+      vehicle_model = EXCLUDED.vehicle_model,
+      vehicle_engine = EXCLUDED.vehicle_engine,
+      odometer = EXCLUDED.odometer,
+      created_date = EXCLUDED.created_date,
+      updated_date = EXCLUDED.updated_date,
+      completed_date = EXCLUDED.completed_date,
+      fetched_at = NOW(),
+      data = EXCLUDED.data,
+      dvi_done = COALESCE(tekmetric_work_orders.dvi_done, EXCLUDED.dvi_done),
+      updated_at = NOW()
+  `;
   
   await upsertTekmetricWorkOrderToPostgres(shopId, String(ro.id), {
     workOrderNumber: ro.repairOrderNumber,
@@ -128,7 +128,7 @@ async function upsertTekmetricWorkOrderSnapshot(
     labelColor: ro.color || "",
     customerId: ro.customerId,
     vehicleId: ro.vehicleId,
-    customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
+    customerName: customerName || undefined,
     vehicleYear: vehicle.year,
     vehicleMake: vehicle.make,
     vehicleModel: vehicle.model,
@@ -141,7 +141,6 @@ async function upsertTekmetricWorkOrderSnapshot(
 }
 
 export async function GET(req: NextRequest) {
-  // Check if sync is disabled for this deployment
   if (isSyncDisabled()) {
     return NextResponse.json({
       ok: true,
@@ -155,25 +154,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = await getDb();
   const startTime = Date.now();
 
   try {
-    const shops = await db.collection("shops").find({
-      $or: [
-        { "tekmetric.shopId": { $exists: true, $ne: null } },
-        { tekmetricShopId: { $exists: true, $ne: null } }
-      ]
-    }).toArray();
+    const shops = await sql`
+      SELECT * FROM shops 
+      WHERE tekmetric->>'shopId' IS NOT NULL 
+         OR tekmetric_shop_id IS NOT NULL
+    `;
 
     const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; error?: string }[] = [];
     const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
     
     await checkAndRunBackfillForNewShops();
 
-    for (const shop of shops) {
-      const shopId = Number(shop.shopId);
-      const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
+    for (const shop of shops as any[]) {
+      const shopId = Number(shop.shop_id);
+      const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetric_shop_id;
       
       if (!tekmetricShopId) continue;
 
@@ -234,83 +231,86 @@ export async function GET(req: NextRequest) {
           const customer = customerCache.get(ro.customerId);
           
           if (vehicle?.vin) {
-            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, []);
+            await upsertTekmetricWorkOrderSnapshot(shopId, ro, vehicle, customer, []);
             shopSyncedVins.push(vehicle.vin.toUpperCase());
           }
         }
 
-        const activeWoIds = new Set(activeWOs.map(wo => String(wo.id)));
+        const activeWoIds = activeWOs.map(wo => String(wo.id));
         
-        const cachedWOs = await db.collection("tekmetric_work_orders").find({
-          shopId: { $in: [String(shopId), Number(shopId)] },
-          status: { $nin: TERMINAL_STATUSES }
-        }).toArray();
+        const cachedWOs = await sql`
+          SELECT * FROM tekmetric_work_orders 
+          WHERE shop_id = ${String(shopId)} AND status NOT IN ('Invoice', 'Invoiced', 'Posted', 'Deleted', 'Void')
+        `;
 
         let removedCount = 0;
         let indexedJobsCount = 0;
-        for (const cached of cachedWOs) {
-          if (!activeWoIds.has(cached.workOrderId)) {
-            await db.collection("tekmetric_work_orders").updateOne(
-              { _id: cached._id },
-              {
-                $set: {
-                  status: "Invoiced",
-                  closedAt: new Date(),
-                  updatedAt: new Date()
-                }
-              }
-            );
+        for (const cached of cachedWOs as any[]) {
+          if (!activeWoIds.includes(cached.work_order_id)) {
+            await sql`
+              UPDATE tekmetric_work_orders SET
+                status = 'Invoiced',
+                closed_at = NOW(),
+                updated_at = NOW()
+              WHERE id = ${cached.id}
+            `;
             removedCount++;
             
-            const retryCount = cached.jobIndexRetryCount || 0;
-            if (cached.vin && !cached.jobsIndexed && retryCount < 3) {
+            const retryCount = cached.job_index_retry_count || 0;
+            if (cached.vin && !cached.jobs_indexed && retryCount < 3) {
               try {
                 const jobsIndexed = await indexTekmetricWorkOrderJobs(
                   shopId,
                   tekmetricShopId,
-                  Number(cached.workOrderId),
-                  cached.workOrderNumber,
+                  Number(cached.work_order_id),
+                  cached.work_order_number,
                   {
                     vin: cached.vin,
-                    year: cached.vehicleYear,
-                    make: cached.vehicleMake,
-                    model: cached.vehicleModel,
-                    engine: cached.vehicleEngine
+                    year: cached.vehicle_year,
+                    make: cached.vehicle_make,
+                    model: cached.vehicle_model,
+                    engine: cached.vehicle_engine
                   },
-                  cached.completedDate || new Date().toISOString()
+                  cached.completed_date || new Date().toISOString()
                 );
                 
                 if (jobsIndexed > 0) {
                   indexedJobsCount += jobsIndexed;
-                  await db.collection("tekmetric_work_orders").updateOne(
-                    { _id: cached._id },
-                    { $set: { jobsIndexed: true, jobIndexRetryCount: 0 } }
-                  );
-                  console.log(`[Tekmetric] Indexed ${jobsIndexed} jobs for WO #${cached.workOrderNumber}`);
+                  await sql`
+                    UPDATE tekmetric_work_orders SET
+                      jobs_indexed = TRUE,
+                      job_index_retry_count = 0,
+                      updated_at = NOW()
+                    WHERE id = ${cached.id}
+                  `;
+                  console.log(`[Tekmetric] Indexed ${jobsIndexed} jobs for WO #${cached.work_order_number}`);
                 } else {
-                  await db.collection("tekmetric_work_orders").updateOne(
-                    { _id: cached._id },
-                    { $set: { jobsIndexed: true } }
-                  );
+                  await sql`
+                    UPDATE tekmetric_work_orders SET jobs_indexed = TRUE, updated_at = NOW()
+                    WHERE id = ${cached.id}
+                  `;
                 }
               } catch (err: any) {
-                console.log(`[Tekmetric] Failed to index jobs for WO ${cached.workOrderId} (attempt ${retryCount + 1}): ${err.message}`);
-                await db.collection("tekmetric_work_orders").updateOne(
-                  { _id: cached._id },
-                  { 
-                    $inc: { jobIndexRetryCount: 1 },
-                    $set: { jobIndexLastError: err.message, jobIndexLastAttempt: new Date() }
-                  }
-                );
+                console.log(`[Tekmetric] Failed to index jobs for WO ${cached.work_order_id} (attempt ${retryCount + 1}): ${err.message}`);
+                await sql`
+                  UPDATE tekmetric_work_orders SET
+                    job_index_retry_count = COALESCE(job_index_retry_count, 0) + 1,
+                    job_index_last_error = ${err.message},
+                    job_index_last_attempt = NOW(),
+                    updated_at = NOW()
+                  WHERE id = ${cached.id}
+                `;
               }
             }
           }
         }
 
-        await db.collection("shops").updateOne(
-          { shopId: String(shopId) },
-          { $set: { "tekmetric.lastSync": new Date() } }
-        );
+        await sql`
+          UPDATE shops SET
+            tekmetric = jsonb_set(COALESCE(tekmetric, '{}')::jsonb, '{lastSync}', ${JSON.stringify(new Date().toISOString())}::jsonb),
+            updated_at = NOW()
+          WHERE shop_id = ${String(shopId)}
+        `;
 
         results.push({ 
           shopId, 
@@ -325,7 +325,6 @@ export async function GET(req: NextRequest) {
           syncedVinsPerShop.push({ shopId, vins: uniqueVins });
         }
         
-        // Dual-write to normalized collections (enrich ROs with cached vehicle/customer data)
         try {
           const workOrdersForNormalized = activeWOs
             .filter(ro => vehicleCache.has(ro.vehicleId) && vehicleCache.get(ro.vehicleId)?.vin)
@@ -340,9 +339,11 @@ export async function GET(req: NextRequest) {
             });
           
           if (workOrdersForNormalized.length > 0) {
-            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
-            const enterpriseId = shop?.enterpriseId as string | undefined;
+            const shopData = await sql`SELECT enterprise_id FROM shops WHERE shop_id = ${String(shopId)}`;
+            const enterpriseId = (shopData[0] as any)?.enterprise_id as string | undefined;
             
+            const { getDb } = await import("@/lib/mongo");
+            const db = await getDb();
             const ingestionService = new NormalizedIngestionService(
               db,
               'tekmetric',
@@ -372,31 +373,28 @@ export async function GET(req: NextRequest) {
     const duration = Date.now() - startTime;
     console.log(`[Cron] Tekmetric sync completed in ${duration}ms:`, results);
 
-    // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
       try {
         const baseUrl = process.env.RENDER_EXTERNAL_URL 
           || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
           || `http://localhost:${process.env.PORT || 5000}`;
         
-        // Get all Tekmetric shops - use tekmetric.shopId as the shop identifier
-        const tekmetricShops = await db.collection("shops")
-          .find({ "tekmetric.shopId": { $exists: true, $ne: null } })
-          .project({ _id: 0, shopId: 1, tekmetric: 1 })
-          .toArray();
+        const tekmetricShops = await sql`
+          SELECT shop_id, tekmetric FROM shops
+          WHERE tekmetric->>'shopId' IS NOT NULL
+        `;
         
         console.log(`[Cron] Found ${tekmetricShops.length} Tekmetric shops for pregeneration`);
         
         const INTERNAL_SECRET = process.env.INTERNAL_WORKER_SECRET || "mos-prefetch-worker-2024";
         
         let triggeredCount = 0;
-        for (const shop of tekmetricShops) {
-          const internalShopId = shop.shopId;
+        for (const shop of tekmetricShops as any[]) {
+          const internalShopId = shop.shop_id;
           const tekShopId = shop.tekmetric?.shopId;
           if (!internalShopId) continue;
           
           try {
-            // Use the internal prefetch-vehicles endpoint (handles active vehicle priority)
             const vehiclesRes = await fetch(`${baseUrl}/api/internal/prefetch-vehicles?shopId=${internalShopId}&limit=50`, {
               headers: { 'x-internal-secret': INTERNAL_SECRET }
             });

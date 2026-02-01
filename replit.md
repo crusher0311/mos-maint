@@ -71,17 +71,35 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - Dashboard routes: `/api/dashboard/updates`
   - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
   
-**Migration Progress:** ~167 MongoDB files remaining
+**Migration Progress:** ~35 MongoDB lib files remaining (3 API routes use dynamic imports for NormalizedIngestionService)
 
 **Recently Migrated (This Session):**
-- Core libraries: `lib/features.ts`, `lib/enterprise.ts`, `lib/stripe.ts`, `lib/api-usage-tracker.ts`
-- Utility libraries: `lib/rate.ts`, `lib/evidence.ts`, `lib/data-quality.ts`, `lib/ids.ts`
-- Models: `lib/models/customers.ts` (customer upsert from AutoFlow)
-- Integrations: `lib/integrations/carfax.ts`, `lib/integrations/dvi.ts`, `lib/integrations/autovitals.ts`, `lib/integrations/autoflow.ts`, `lib/integrations/dataone.ts`, `lib/integrations/protractor.ts` (2543 lines, all 22 MongoDB calls migrated)
-- API routes: `/api/features`, `/api/support/tickets/count`
-- Platform admin routes: features, tickets, notifications, knowledge-base, enterprises, users
-- Callbacks: `/api/callbacks/protractor`
-- Jobs: `/api/jobs/search-normalized`
+- API Sync Routes migrated (9 routes):
+  - `/api/tekmetric/sync` - Manual Tekmetric sync
+  - `/api/protractor/sync` - Manual Protractor sync  
+  - `/api/cron/tekmetric-sync` - Cron-based Tekmetric sync
+  - `/api/cron/protractor-sync` - Cron-based Protractor sync
+  - `/api/cron/tekmetric-incremental-sync` - Incremental Tekmetric sync
+  - `/api/cron/tekmetric-backfill` - Historical Tekmetric data backfill
+  - `/api/cron/protractor-backfill` - Historical Protractor data backfill
+  - `/api/recommended/analyze-stream` - AI recommendation streaming
+  - `/api/plan-build` - Maintenance plan builder (929 lines migrated)
+- Previous session migrations:
+  - Core libraries: `lib/features.ts`, `lib/enterprise.ts`, `lib/stripe.ts`, `lib/api-usage-tracker.ts`
+  - Utility libraries: `lib/rate.ts`, `lib/evidence.ts`, `lib/data-quality.ts`, `lib/ids.ts`
+  - Models: `lib/models/customers.ts` (customer upsert from AutoFlow)
+  - Integrations: `lib/integrations/carfax.ts`, `lib/integrations/dvi.ts`, `lib/integrations/autovitals.ts`, `lib/integrations/autoflow.ts`, `lib/integrations/dataone.ts`, `lib/integrations/protractor.ts`
+  - API routes: `/api/features`, `/api/support/tickets/count`
+  - Platform admin routes: features, tickets, notifications, knowledge-base, enterprises, users
+  - Callbacks: `/api/callbacks/protractor`
+  - Jobs: `/api/jobs/search-normalized`
+
+**Dynamic Import Pattern:**
+3 cron routes use dynamic imports for `NormalizedIngestionService` (which still requires MongoDB):
+- `app/api/cron/tekmetric-sync/route.ts`
+- `app/api/cron/protractor-sync/route.ts`
+- `app/api/cron/tekmetric-backfill/route.ts`
+This pattern allows the core sync functionality to use PostgreSQL while maintaining normalized ingestion compatibility.
 
 **New PostgreSQL Tables Created:**
 - `shop_features` - Shop feature toggles and subscriptions

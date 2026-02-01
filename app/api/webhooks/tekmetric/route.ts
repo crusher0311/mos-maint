@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
 import { getVehicle, getCustomer } from "@/lib/tekmetric";
 
@@ -11,14 +11,12 @@ const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const db = await getDb();
     
     console.log("[Tekmetric Webhook] Received event:", JSON.stringify(body, null, 2).slice(0, 1000));
     
     const eventType = body.event || body.eventType || body.type || "";
     const data = body.data || body.payload || body;
     
-    // Handle both nested (data.repairOrder) and flat (data is the repair order) structures
     const repairOrder = data.repairOrder || body.repairOrder || 
       (data.id && data.repairOrderNumber && data.shopId ? data : null);
     
@@ -60,84 +58,71 @@ export async function POST(req: NextRequest) {
       if (isTerminal || isInvoicePosted) {
         console.log(`[Tekmetric Webhook] RO #${roNumber} is terminal/invoiced, updating cache immediately`);
         
-        const cached = await db.collection("tekmetric_work_orders").findOne({
-          workOrderId: String(roId)
-        });
+        const cachedRows = await sql`
+          SELECT * FROM tekmetric_work_orders WHERE work_order_id = ${String(roId)}
+        `;
+        const cached = cachedRows[0] as any;
         
-        if (cached && !cached.jobsIndexed && cached.vin) {
-          const shop = await db.collection("shops").findOne({
-            "tekmetric.shopId": tekmetricShopId
-          });
+        if (cached && !cached.jobs_indexed && cached.vin) {
+          const shopRows = await sql`
+            SELECT * FROM shops WHERE tekmetric_shop_id = ${String(tekmetricShopId)}
+          `;
+          const shop = shopRows[0] as any;
           
           if (shop) {
             try {
               const jobsIndexed = await indexTekmetricWorkOrderJobs(
-                Number(shop.shopId),
+                Number(shop.shop_id),
                 tekmetricShopId,
                 roId,
                 roNumber,
                 {
                   vin: cached.vin,
-                  year: cached.vehicleYear,
-                  make: cached.vehicleMake,
-                  model: cached.vehicleModel,
-                  engine: cached.vehicleEngine
+                  year: cached.vehicle_year,
+                  make: cached.vehicle_make,
+                  model: cached.vehicle_model,
+                  engine: cached.vehicle_engine
                 },
                 new Date().toISOString()
               );
               
               console.log(`[Tekmetric Webhook] Indexed ${jobsIndexed} jobs for RO #${roNumber}`);
               
-              await db.collection("tekmetric_work_orders").updateMany(
-                { workOrderId: String(roId) },
-                { $set: { jobsIndexed: true } }
-              );
+              await sql`
+                UPDATE tekmetric_work_orders SET jobs_indexed = true WHERE work_order_id = ${String(roId)}
+              `;
             } catch (err: any) {
               console.error(`[Tekmetric Webhook] Job indexing failed for RO #${roNumber}:`, err.message);
             }
           }
         }
         
-        const result = await db.collection("tekmetric_work_orders").updateMany(
-          { workOrderId: String(roId) },
-          { 
-            $set: { 
-              status: statusName || "Posted",
-              statusCode: statusCode || "POSTED",
-              closedAt: new Date(),
-              updatedAt: new Date()
-            }
-          }
-        );
+        await sql`
+          UPDATE tekmetric_work_orders
+          SET status = ${statusName || "Posted"}, status_code = ${statusCode || "POSTED"}, closed_at = NOW(), updated_at = NOW()
+          WHERE work_order_id = ${String(roId)}
+        `;
         
-        console.log(`[Tekmetric Webhook] Updated ${result.modifiedCount} cache entries for RO #${roNumber} to ${statusName || "Posted"}`);
+        console.log(`[Tekmetric Webhook] Updated cache entries for RO #${roNumber} to ${statusName || "Posted"}`);
       } else {
-        // Check if this work order already exists
-        const existingWO = await db.collection("tekmetric_work_orders").findOne({
-          workOrderId: String(roId)
-        });
+        const existingRows = await sql`
+          SELECT * FROM tekmetric_work_orders WHERE work_order_id = ${String(roId)}
+        `;
+        const existingWO = existingRows[0] as any;
         
         if (existingWO) {
-          // Update existing work order
           const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
-          const result = await db.collection("tekmetric_work_orders").updateOne(
-            { workOrderId: String(roId) },
-            { 
-              $set: { 
-                status: statusName,
-                statusCode: statusCode,
-                label: newLabel,
-                labelColor: repairOrder.color || null,
-                updatedAt: new Date()
-              }
-            }
-          );
-          console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
+          await sql`
+            UPDATE tekmetric_work_orders
+            SET status = ${statusName}, status_code = ${statusCode}, label = ${newLabel}, label_color = ${repairOrder.color || null}, updated_at = NOW()
+            WHERE work_order_id = ${String(roId)}
+          `;
+          console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}`);
         } else {
-          // New work order - fetch vehicle and customer details, then create
-          const shop = await db.collection("shops").findOne({
-            "tekmetric.shopId": tekmetricShopId
-          });
+          const shopRows = await sql`
+            SELECT * FROM shops WHERE tekmetric_shop_id = ${String(tekmetricShopId)}
+          `;
+          const shop = shopRows[0] as any;
           
           if (shop && repairOrder.vehicleId) {
             try {
@@ -148,33 +133,24 @@ export async function POST(req: NextRequest) {
                 try {
                   const customer = await getCustomer(repairOrder.customerId);
                   customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer";
-                } catch (e) {
-                  // Customer fetch failed, use default
-                }
+                } catch (e) {}
                 
-                const mileage = repairOrder.milesIn || repairOrder.milesOut || vehicle.mileageIn || vehicle.mileageOut;
+                const mileage = repairOrder.milesIn || repairOrder.milesOut || vehicle.mileageIn || vehicle.mileageOut || null;
                 
-                await db.collection("tekmetric_work_orders").insertOne({
-                  workOrderId: String(roId),
-                  workOrderNumber: roNumber,
-                  shopId: String(shop.shopId),
-                  tekmetricShopId: tekmetricShopId,
-                  vin: vehicle.vin.toUpperCase(),
-                  vehicleYear: vehicle.year,
-                  vehicleMake: vehicle.make,
-                  vehicleModel: vehicle.model,
-                  vehicleEngine: vehicle.engine,
-                  customerName,
-                  customerId: repairOrder.customerId,
-                  odometer: mileage,
-                  status: statusName || "Estimate",
-                  statusCode: statusCode,
-                  label: repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null,
-                  labelColor: repairOrder.color || null,
-                  fetchedAt: new Date(),
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                });
+                await sql`
+                  INSERT INTO tekmetric_work_orders (
+                    work_order_id, work_order_number, shop_id, tekmetric_shop_id, vin,
+                    vehicle_year, vehicle_make, vehicle_model, vehicle_engine,
+                    customer_name, customer_id, odometer, status, status_code,
+                    label, label_color, fetched_at, created_at, updated_at
+                  ) VALUES (
+                    ${String(roId)}, ${String(roNumber)}, ${shop.shop_id}, ${String(tekmetricShopId)}, ${vehicle.vin.toUpperCase()},
+                    ${vehicle.year || null}, ${vehicle.make || null}, ${vehicle.model || null}, ${vehicle.engine || null},
+                    ${customerName}, ${String(repairOrder.customerId)}, ${mileage}, ${statusName || "Estimate"}, ${statusCode || null},
+                    ${repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null}, ${repairOrder.color || null},
+                    NOW(), NOW(), NOW()
+                  )
+                `;
                 
                 console.log(`[Tekmetric Webhook] Created new work order #${roNumber} for VIN ${vehicle.vin}`);
               } else {
@@ -195,23 +171,13 @@ export async function POST(req: NextRequest) {
       const inspectionData = data;
       
       if (repairOrderId) {
-        const result = await db.collection("tekmetric_work_orders").updateMany(
-          { workOrderId: String(repairOrderId) },
-          { 
-            $set: { 
-              dviDone: true,
-              dviCompletedAt: new Date(),
-              lastInspection: inspectionData
-            },
-            $push: { 
-              inspections: {
-                ...inspectionData,
-                receivedAt: new Date()
-              } 
-            }
-          }
-        );
-        console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`);
+        await sql`
+          UPDATE tekmetric_work_orders
+          SET dvi_done = true, dvi_completed_at = NOW(), last_inspection = ${JSON.stringify(inspectionData)}::jsonb,
+              inspections = COALESCE(inspections, '[]'::jsonb) || ${JSON.stringify([{...inspectionData, receivedAt: new Date()}])}::jsonb
+          WHERE work_order_id = ${String(repairOrderId)}
+        `;
+        console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete.`);
       }
     }
     
@@ -219,31 +185,24 @@ export async function POST(req: NextRequest) {
       const repairOrderId = data.repairOrderId || data.repair_order_id || data.roId;
       
       if (repairOrderId) {
-        await db.collection("tekmetric_work_orders").updateOne(
-          { workOrderId: String(repairOrderId) },
-          { 
-            $set: { 
-              customerViewedDvi: true,
-              customerViewedDviAt: new Date()
-            }
-          }
-        );
+        await sql`
+          UPDATE tekmetric_work_orders
+          SET customer_viewed_dvi = true, customer_viewed_dvi_at = NOW()
+          WHERE work_order_id = ${String(repairOrderId)}
+        `;
         console.log(`[Tekmetric Webhook] Customer viewed DVI for RO ${repairOrderId}`);
       }
     }
     
-    await db.collection("tekmetric_webhook_logs").insertOne({
-      eventType,
-      data,
-      rawBody: body,
-      receivedAt: new Date()
-    });
+    await sql`
+      INSERT INTO tekmetric_webhook_logs (event_type, data, raw_body, received_at)
+      VALUES (${eventType}, ${JSON.stringify(data)}::jsonb, ${JSON.stringify(body)}::jsonb, NOW())
+    `;
     
-    await db.collection("dashboard_updates").updateOne(
-      { _id: "lastUpdate" },
-      { $set: { timestamp: Date.now() } },
-      { upsert: true }
-    );
+    await sql`
+      INSERT INTO dashboard_updates (id, timestamp) VALUES ('lastUpdate', ${Date.now()})
+      ON CONFLICT (id) DO UPDATE SET timestamp = ${Date.now()}
+    `;
     
     return NextResponse.json({ success: true });
   } catch (error: any) {

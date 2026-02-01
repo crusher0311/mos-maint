@@ -1,7 +1,7 @@
 // app/api/recommended/analyze-stream/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 
@@ -13,49 +13,45 @@ function toSquish(vin: string) {
   return v.slice(0, 8) + v.slice(9, 11);
 }
 
-async function getLocalOeFromMongo(vin: string) {
-  const db = await getDb();
+async function getLocalOeFromPostgres(vin: string) {
   const SQUISH = toSquish(vin);
 
-  const pipeline = [
-    { $match: { squish: SQUISH } },
-    { $project: { _id: 0, squish: 1, vin_maintenance_id: 1, maintenance_id: 1 } },
-    {
-      $lookup: {
-        from: "dataone_lkp_vin_maintenance_interval",
-        let: { vmi: "$vin_maintenance_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$vin_maintenance_id", "$$vmi"] } } },
-          { $project: { _id: 0, maintenance_interval_id: 1 } },
-        ],
-        as: "intervals",
-      },
-    },
-    { $unwind: "$intervals" },
-    {
-      $lookup: {
-        from: "dataone_lkp_maintenance_interval",
-        let: { mi: "$intervals.maintenance_interval_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$maintenance_interval_id", "$$mi"] } } },
-          { $project: { _id: 0, mileage: 1, service_items: 1 } },
-        ],
-        as: "schedule",
-      },
-    },
-    { $unwind: "$schedule" },
-    { $sort: { "schedule.mileage": 1 } },
-    {
-      $group: {
-        _id: null,
-        maintenance: { $push: { mileage: "$schedule.mileage", service_items: "$schedule.service_items" } },
-      },
-    },
-    { $project: { _id: 0, maintenance: 1 } },
-  ];
+  const items = await sql`
+    WITH vin_maint AS (
+      SELECT DISTINCT lvm.vin_maintenance_id, lvm.maintenance_id
+      FROM dataone_lkp_vin_maintenance lvm
+      WHERE lvm.squish = ${SQUISH}
+    ),
+    intervals AS (
+      SELECT vm.maintenance_id, lvi.maintenance_interval_id
+      FROM vin_maint vm
+      JOIN dataone_lkp_vin_maintenance_interval lvi ON lvi.vin_maintenance_id = vm.vin_maintenance_id
+    ),
+    interval_defs AS (
+      SELECT i.maintenance_id, dmi.interval_type, dmi.value, dmi.units, dmi.initial_value
+      FROM intervals i
+      JOIN dataone_def_maintenance_interval dmi ON dmi.maintenance_interval_id = i.maintenance_interval_id
+    ),
+    grouped AS (
+      SELECT 
+        vm.maintenance_id,
+        dm.maintenance_name as name,
+        dm.maintenance_category as category,
+        dm.maintenance_notes as notes,
+        MAX(CASE WHEN id.units = 'Miles' THEN id.value END) as miles,
+        MAX(CASE WHEN id.units = 'Months' THEN id.value END) as months
+      FROM vin_maint vm
+      JOIN dataone_def_maintenance dm ON dm.maintenance_id = vm.maintenance_id
+      LEFT JOIN interval_defs id ON id.maintenance_id = vm.maintenance_id
+      GROUP BY vm.maintenance_id, dm.maintenance_name, dm.maintenance_category, dm.maintenance_notes
+    )
+    SELECT maintenance_id, name, category, notes, miles, months
+    FROM grouped
+    ORDER BY category, name
+    LIMIT 200
+  `;
 
-  const result = await db.collection("dataone_lkp_squish_maintenance").aggregate(pipeline).toArray();
-  return result[0]?.maintenance || [];
+  return items;
 }
 
 export async function POST(request: NextRequest) {
@@ -71,9 +67,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "VIN is required" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    // Create a streaming response
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -95,13 +88,11 @@ export async function POST(request: NextRequest) {
         try {
           sendProgress("Looking up vehicle information...");
 
-          // Get vehicle data
-          const vehicle = await db
-            .collection("vehicles")
-            .findOne(
-              { shopId: Number(session.shopId), vin },
-              { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1 } }
-            );
+          const vehicleRows = await sql`
+            SELECT year, make, model, vin, last_mileage FROM vehicles
+            WHERE shop_id = ${String(session.shopId)} AND vin = ${vin.toUpperCase()}
+          `;
+          const vehicle = vehicleRows[0] as any;
 
           if (!vehicle) {
             sendError("Vehicle not found");
@@ -111,20 +102,16 @@ export async function POST(request: NextRequest) {
 
           sendProgress("Finding latest repair order...");
 
-          // Get latest RO
-          const ros = await db
-            .collection("repair_orders")
-            .find({ shopId: Number(session.shopId), $or: [{ vin }, { vehicleId: vehicle._id }] })
-            .project({ roNumber: 1, updatedAt: 1, createdAt: 1 })
-            .sort({ updatedAt: -1, createdAt: -1 })
-            .limit(1)
-            .toArray();
-
-          const latestRoNumber = ros[0]?.roNumber ?? null;
+          const roRows = await sql`
+            SELECT ro_number, updated_at, created_at FROM work_orders
+            WHERE shop_id = ${String(session.shopId)} AND vin = ${vin.toUpperCase()}
+            ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+            LIMIT 1
+          `;
+          const latestRoNumber = (roRows[0] as any)?.ro_number ?? null;
 
           sendProgress("Fetching DVI inspection data...");
 
-          // Fetch DVI data
           let dvi: any = { ok: false, error: "Not available" };
           try {
             const autoCfg = await resolveAutoflowConfig(Number(session.shopId));
@@ -138,7 +125,6 @@ export async function POST(request: NextRequest) {
 
           sendProgress("Fetching CARFAX vehicle history...");
 
-          // Fetch CARFAX data
           let carfax: any = { ok: false, error: "Not available" };
           try {
             const carfaxCfg = await resolveCarfaxConfig(Number(session.shopId));
@@ -152,10 +138,9 @@ export async function POST(request: NextRequest) {
 
           sendProgress("Loading OEM maintenance schedule...");
 
-          // Fetch OEM data
           let oem: any = [];
           try {
-            oem = await getLocalOeFromMongo(vin);
+            oem = await getLocalOeFromPostgres(vin);
           } catch (e) {
             console.warn('OEM data fetch failed:', e);
             oem = [];
@@ -163,7 +148,6 @@ export async function POST(request: NextRequest) {
 
           sendProgress("Running AI analysis...");
 
-          // Call the existing analyzer API
           const BASE =
             process.env.NEXT_PUBLIC_BASE_URL ||
             (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
