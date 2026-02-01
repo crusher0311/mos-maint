@@ -2,9 +2,17 @@
 
 This file tracks migration sessions, key decisions, and checkpoint history for the MongoDB to PostgreSQL migration project.
 
+**Dual Logging System:** This markdown file provides human-readable summaries. Structured data is also stored in the `conversation_log` PostgreSQL table for querying. Use `lib/conversation-logger.ts` for programmatic logging.
+
 ---
 
 ## Session: 2026-02-01
+
+### Checkpoint: 2ee919c328a4316c37f21d77e8cf2b206f9b43c0
+**Summary:** Add system for logging conversations and system events
+- Created `lib/conversation-logger.ts` utility module
+- Created `conversation_log` PostgreSQL table
+- Decision: Keep both markdown and database logging (dual system)
 
 ### Checkpoint: 7e9f238bedc56dca441964f27b30d56b5d8772a2
 **Summary:** Migrate integration services to use PostgreSQL instead of MongoDB
