@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import sql from "@/lib/db/postgres";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,26 +10,25 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { collection, filter = {}, limit = 20, skip = 0, sort = { _id: -1 } } = body;
+    const { collection, limit = 20, skip = 0 } = body;
 
     if (!collection || typeof collection !== "string") {
-      return NextResponse.json({ error: "Collection name required" }, { status: 400 });
+      return NextResponse.json({ error: "Table name required" }, { status: 400 });
     }
 
+    const safeTableName = collection.replace(/[^a-zA-Z0-9_]/g, '');
     const safeLimit = Math.min(Math.max(1, limit), 100);
     const safeSkip = Math.max(0, skip);
 
-    const db = await getDb();
-    const coll = db.collection(collection);
-
     const startTime = Date.now();
     
-    const [documents, totalCount] = await Promise.all([
-      coll.find(filter).sort(sort).skip(safeSkip).limit(safeLimit).toArray(),
-      coll.countDocuments(filter)
+    const [documents, countResult] = await Promise.all([
+      sql.unsafe(`SELECT * FROM "${safeTableName}" ORDER BY id DESC LIMIT ${safeLimit} OFFSET ${safeSkip}`),
+      sql.unsafe(`SELECT COUNT(*) as count FROM "${safeTableName}"`)
     ]);
 
     const executionTime = Date.now() - startTime;
+    const totalCount = Number(countResult[0]?.count || 0);
 
     return NextResponse.json({
       documents,

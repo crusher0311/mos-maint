@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPushToROStats } from "@/lib/extension-analytics";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,50 +34,67 @@ export async function GET(request: NextRequest) {
       endDate,
     });
 
-    const db = await getDb();
-    
-    const timestampQuery: any = { $gte: startDate };
-    if (endDate) timestampQuery.$lt = endDate;
-    
-    const matchStage: any = { 
-      eventType: "push_to_ro",
-      timestamp: timestampQuery
-    };
-    if (shopId) matchStage.shopId = Number(shopId);
-    if (enterpriseId) matchStage.enterpriseId = enterpriseId;
+    let recentEvents;
+    let topUsers;
 
-    const [recentEvents, topUsers] = await Promise.all([
-      db.collection("extension_analytics")
-        .find({ eventType: "push_to_ro" })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .toArray(),
-      db.collection("extension_analytics").aggregate([
-        { $match: matchStage },
-        { $group: { _id: "$userId", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 20 },
-      ]).toArray(),
-    ]);
+    if (shopId && endDate) {
+      recentEvents = await sql`
+        SELECT * FROM extension_analytics 
+        WHERE event_type = 'push_to_ro' AND shop_id = ${shopId}
+        AND timestamp >= ${startDate} AND timestamp < ${endDate}
+        ORDER BY timestamp DESC LIMIT 50
+      `;
+      topUsers = await sql`
+        SELECT user_id, COUNT(*) as count FROM extension_analytics
+        WHERE event_type = 'push_to_ro' AND shop_id = ${shopId}
+        AND timestamp >= ${startDate} AND timestamp < ${endDate}
+        GROUP BY user_id ORDER BY count DESC LIMIT 20
+      `;
+    } else if (shopId) {
+      recentEvents = await sql`
+        SELECT * FROM extension_analytics 
+        WHERE event_type = 'push_to_ro' AND shop_id = ${shopId}
+        AND timestamp >= ${startDate}
+        ORDER BY timestamp DESC LIMIT 50
+      `;
+      topUsers = await sql`
+        SELECT user_id, COUNT(*) as count FROM extension_analytics
+        WHERE event_type = 'push_to_ro' AND shop_id = ${shopId}
+        AND timestamp >= ${startDate}
+        GROUP BY user_id ORDER BY count DESC LIMIT 20
+      `;
+    } else {
+      recentEvents = await sql`
+        SELECT * FROM extension_analytics 
+        WHERE event_type = 'push_to_ro'
+        ORDER BY timestamp DESC LIMIT 50
+      `;
+      topUsers = await sql`
+        SELECT user_id, COUNT(*) as count FROM extension_analytics
+        WHERE event_type = 'push_to_ro' AND timestamp >= ${startDate}
+        GROUP BY user_id ORDER BY count DESC LIMIT 20
+      `;
+    }
 
     return NextResponse.json({
       stats,
       topUsers: topUsers
-        .filter(u => u._id)
-        .map(u => ({ userId: u._id, count: u.count })),
+        .filter(u => u.user_id)
+        .map(u => ({ userId: u.user_id, count: Number(u.count) })),
       recentEvents: recentEvents.map(e => ({
-        shopId: e.shopId,
-        userId: e.userId,
-        jobTitle: e.jobTitle,
-        jobSource: e.jobSource,
-        vehicleYear: e.vehicleYear,
-        vehicleMake: e.vehicleMake,
-        vehicleModel: e.vehicleModel,
+        shopId: e.shop_id,
+        userId: e.user_id,
+        jobTitle: e.job_title,
+        jobSource: e.job_source,
+        vehicleYear: e.vehicle_year,
+        vehicleMake: e.vehicle_make,
+        vehicleModel: e.vehicle_model,
         timestamp: e.timestamp,
       })),
     });
-  } catch (error: any) {
-    console.error("Error fetching extension analytics:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error fetching extension analytics:", message);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

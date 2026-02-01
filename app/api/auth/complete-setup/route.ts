@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       VALUES (${sessionToken}, ${userId}, ${shopId}, ${now}, ${expiresAt})
     `;
 
-    const res = NextResponse.json({ ok: true, redirect: "/dashboard", shopId: parseInt(shopId, 10), role });
+    const res = NextResponse.json({ ok: true, redirect: "/dashboard", shopId, role });
     res.cookies.set("session_token", sessionToken, sessionCookieOptions(ttlDays * 24 * 60 * 60));
     return res;
   } catch (e: unknown) {

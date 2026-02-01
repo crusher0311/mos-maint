@@ -1,49 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export async function GET() {
   try {
     const session = await requireSession();
-    const db = await getDb();
-    const shopId = Number(session.shopId);
+    const shopId = String(session.shopId);
 
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { branding: 1, locationIdentifier: 1, tekmetric: 1, protractor: 1 } }
-    );
+    const shopResult = await sql`
+      SELECT branding, location_identifier, tekmetric_config, protractor_config 
+      FROM shops WHERE shop_id = ${shopId} LIMIT 1
+    `;
+    const shop = shopResult[0];
 
-    // Determine SMS type for fallback logo
+    const branding = shop?.branding as Record<string, unknown> | null;
+    const tekmetricConfig = shop?.tekmetric_config as Record<string, unknown> | null;
+    const protractorConfig = shop?.protractor_config as Record<string, unknown> | null;
+
     let smsType = "none";
-    if (shop?.tekmetric?.configured || shop?.tekmetric?.shopId) {
+    if (tekmetricConfig?.configured || tekmetricConfig?.shopId) {
       smsType = "tekmetric";
-    } else if (shop?.protractor?.configured) {
+    } else if (protractorConfig?.configured) {
       smsType = "protractor";
     }
 
-    // Use Tekmetric logo as fallback only if: Tekmetric integration + no custom logo
-    const hasCustomLogo = Boolean(shop?.branding?.logo);
+    const hasCustomLogo = Boolean(branding?.logo);
     const isTekmetric = smsType === "tekmetric";
     const fallbackLogo = (!hasCustomLogo && isTekmetric) ? "/tekmetric-logo.png" : null;
 
     return NextResponse.json({
-      logo: shop?.branding?.logo || null,
+      logo: branding?.logo || null,
       fallbackLogo,
-      shopName: shop?.branding?.displayName || null,
-      locationIdentifier: shop?.locationIdentifier || null,
+      shopName: branding?.displayName || null,
+      locationIdentifier: shop?.location_identifier || null,
       smsType,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Error fetching branding:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    const db = await getDb();
-    const shopId = Number(session.shopId);
+    const shopId = String(session.shopId);
 
     const body = await req.json();
     const { logo, displayName, locationIdentifier } = body;
@@ -59,43 +61,60 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const updateFields: Record<string, any> = {};
+    const shopResult = await sql`SELECT branding FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+    const existingBranding = (shopResult[0]?.branding as Record<string, unknown>) || {};
+    
+    const updatedBranding = { ...existingBranding };
     if (logo !== undefined) {
-      updateFields["branding.logo"] = logo;
+      updatedBranding.logo = logo;
     }
     if (displayName !== undefined) {
-      updateFields["branding.displayName"] = displayName;
-    }
-    if (locationIdentifier !== undefined) {
-      updateFields["locationIdentifier"] = locationIdentifier;
+      updatedBranding.displayName = displayName;
     }
 
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: updateFields }
-    );
+    if (locationIdentifier !== undefined) {
+      await sql`
+        UPDATE shops 
+        SET branding = ${JSON.stringify(updatedBranding)}::jsonb, 
+            location_identifier = ${locationIdentifier},
+            updated_at = ${new Date()}
+        WHERE shop_id = ${shopId}
+      `;
+    } else {
+      await sql`
+        UPDATE shops 
+        SET branding = ${JSON.stringify(updatedBranding)}::jsonb, updated_at = ${new Date()}
+        WHERE shop_id = ${shopId}
+      `;
+    }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Error saving branding:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function DELETE() {
   try {
     const session = await requireSession();
-    const db = await getDb();
-    const shopId = Number(session.shopId);
+    const shopId = String(session.shopId);
 
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $unset: { "branding.logo": "" } }
-    );
+    const shopResult = await sql`SELECT branding FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+    const existingBranding = (shopResult[0]?.branding as Record<string, unknown>) || {};
+    const updatedBranding = { ...existingBranding };
+    delete updatedBranding.logo;
+
+    await sql`
+      UPDATE shops SET branding = ${JSON.stringify(updatedBranding)}::jsonb, updated_at = ${new Date()}
+      WHERE shop_id = ${shopId}
+    `;
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Error deleting logo:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

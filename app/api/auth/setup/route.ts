@@ -37,14 +37,20 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(adminPassword, 12);
-    const pendingId = crypto.randomBytes(16).toString("hex");
+    const token = crypto.randomBytes(16).toString("hex");
     const reservedShopId = await getNextShopId();
     const now = new Date();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    const signupData = {
+      reservedShopId,
+      passwordHash,
+      completed: false,
+    };
+
     await sql`
-      INSERT INTO pending_signups (pending_id, reserved_shop_id, shop_name, admin_email, password_hash, created_at, expires_at)
-      VALUES (${pendingId}, ${reservedShopId}, ${shopName}, ${adminEmail}, ${passwordHash}, ${now}, ${expiresAt})
+      INSERT INTO pending_signups (email, token, shop_name, signup_data, expires_at, created_at)
+      VALUES (${adminEmail}, ${token}, ${shopName}, ${JSON.stringify(signupData)}::jsonb, ${expiresAt}, ${now})
     `;
 
     const stripe = getStripe();
@@ -54,7 +60,7 @@ export async function POST(req: NextRequest) {
       email: adminEmail,
       name: shopName,
       metadata: {
-        pendingId,
+        pendingToken: token,
         reservedShopId: String(reservedShopId),
       },
     });
@@ -68,26 +74,32 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${baseUrl}/setup/complete?pending_id=${pendingId}`,
+      success_url: `${baseUrl}/setup/complete?token=${token}`,
       cancel_url: `${baseUrl}/setup?cancelled=true`,
       subscription_data: {
         metadata: {
-          pendingId,
+          pendingToken: token,
           reservedShopId: String(reservedShopId),
           bonusVins: String(billingSettings.skipTrialBonusVins || 50),
         },
       },
       metadata: {
-        pendingId,
+        pendingToken: token,
         reservedShopId: String(reservedShopId),
         signupFlow: "true",
       },
     });
 
+    const updatedSignupData = {
+      ...signupData,
+      stripeCustomerId: customer.id,
+      checkoutSessionId: session.id,
+    };
+
     await sql`
       UPDATE pending_signups 
-      SET stripe_customer_id = ${customer.id}, checkout_session_id = ${session.id}
-      WHERE pending_id = ${pendingId}
+      SET signup_data = ${JSON.stringify(updatedSignupData)}::jsonb
+      WHERE token = ${token}
     `;
 
     return NextResponse.json({ 

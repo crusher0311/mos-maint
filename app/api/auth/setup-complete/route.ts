@@ -8,14 +8,14 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
-    const pendingId = String(body?.pendingId || "").trim();
+    const token = String(body?.token || body?.pendingId || "").trim();
 
-    if (!pendingId) {
-      return NextResponse.json({ error: "Missing pending ID" }, { status: 400 });
+    if (!token) {
+      return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
     let pendingResult = await sql`
-      SELECT * FROM pending_signups WHERE pending_id = ${pendingId} LIMIT 1
+      SELECT * FROM pending_signups WHERE token = ${token} LIMIT 1
     `;
     let pending = pendingResult[0];
     
@@ -23,32 +23,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid or expired setup link" }, { status: 404 });
     }
 
+    const signupData = (pending.signup_data as Record<string, unknown>) || {};
     let attempts = 0;
     const maxAttempts = 10;
     
-    while (!pending.completed && attempts < maxAttempts) {
+    while (!signupData.completed && attempts < maxAttempts) {
       await new Promise(r => setTimeout(r, 1000));
       const updatedResult = await sql`
-        SELECT * FROM pending_signups WHERE pending_id = ${pendingId} LIMIT 1
+        SELECT * FROM pending_signups WHERE token = ${token} LIMIT 1
       `;
       const updated = updatedResult[0];
-      if (updated?.completed) {
+      const updatedData = (updated?.signup_data as Record<string, unknown>) || {};
+      if (updatedData.completed) {
         pending = updated;
+        Object.assign(signupData, updatedData);
         break;
       }
       attempts++;
     }
 
-    if (!pending.completed) {
+    if (!signupData.completed) {
       return NextResponse.json({ 
         error: "Payment is still processing. Please wait a moment and try again." 
       }, { status: 202 });
     }
 
-    const shopId = pending.shop_id || pending.reserved_shop_id;
+    const shopId = signupData.shopId || signupData.reservedShopId;
     const userResult = await sql`
       SELECT id FROM users 
-      WHERE LOWER(email) = ${pending.admin_email} AND shop_id = ${String(shopId)}
+      WHERE LOWER(email) = ${pending.email} AND shop_id = ${String(shopId)}
       LIMIT 1
     `;
     const user = userResult[0];

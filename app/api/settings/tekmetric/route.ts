@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import sql from "@/lib/db/postgres";
 import { validateShopAccess } from "@/lib/tekmetric";
 import { syncSingleShop } from "@/lib/tekmetric-sync";
 
-async function triggerJobHistoryBackfill(shopId: number) {
+async function triggerJobHistoryBackfill(shopId: string) {
   try {
     await sql`
       INSERT INTO tekmetric_backfill_progress (shop_id, queued_at, completed, logic_version)
@@ -15,13 +15,13 @@ async function triggerJobHistoryBackfill(shopId: number) {
         logic_version = 2
     `;
     
-    const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1`;
+    const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
     const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
     const updatedSettings = { ...existingSettings, tekmetricBackfillComplete: false };
     
     await sql`
       UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb
-      WHERE shop_id = ${String(shopId)}
+      WHERE shop_id = ${shopId}
     `;
     
     console.log(`[Tekmetric Settings] Queued job history backfill for shop ${shopId}`);
@@ -31,29 +31,13 @@ async function triggerJobHistoryBackfill(shopId: number) {
   }
 }
 
-async function getUserShopId(): Promise<string | null> {
-  const store = await cookies();
-  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-  if (!sid) return null;
-
-  const now = new Date();
-  const sessResult = await sql`
-    SELECT * FROM sessions WHERE token = ${sid} AND expires_at > ${now} LIMIT 1
-  `;
-  const sess = sessResult[0];
-  if (!sess) return null;
-
-  const userResult = await sql`SELECT shop_id FROM users WHERE id = ${sess.user_id} LIMIT 1`;
-  const user = userResult[0];
-  return user?.shop_id ? String(user.shop_id) : null;
-}
-
 export async function GET() {
   try {
-    const shopId = await getUserShopId();
-    if (!shopId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const shopId = String(session.shopId);
 
     const shopResult = await sql`
       SELECT tekmetric_config FROM shops WHERE shop_id = ${shopId} LIMIT 1
@@ -87,10 +71,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const userShopId = await getUserShopId();
-    if (!userShopId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userShopId = String(session.shopId);
 
     const body = await request.json();
     const { shopId } = body;
@@ -158,7 +143,7 @@ export async function POST(request: NextRequest) {
       syncResult.error = message;
     }
 
-    triggerJobHistoryBackfill(Number(userShopId)).catch(() => {});
+    triggerJobHistoryBackfill(userShopId).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -183,10 +168,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   try {
-    const userShopId = await getUserShopId();
-    if (!userShopId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userShopId = String(session.shopId);
 
     await sql`
       UPDATE shops SET tekmetric_config = NULL, updated_at = ${new Date()}

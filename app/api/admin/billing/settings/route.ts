@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
+import sql from "@/lib/db/postgres";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,11 +11,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const db = await getDb();
 
-    const updateData = {
+    const settings = {
       type: "billing",
-      // Tier-specific pricing
       starterProductId: body.starterProductId || "",
       starterPriceId: body.starterPriceId || "",
       starterPrice: body.starterPrice ?? 199.95,
@@ -28,12 +26,10 @@ export async function POST(req: NextRequest) {
       elitePriceId: body.elitePriceId || "",
       elitePrice: body.elitePrice ?? 279.95,
       eliteIncludedVins: body.eliteIncludedVins ?? 300,
-      // Legacy mosPro fields
       mosProProductId: body.mosProProductId || "",
       mosProPriceId: body.mosProPriceId || "",
       mosProPrice: body.mosProPrice ?? 199,
       mosProIncludedVins: body.mosProIncludedVins ?? 300,
-      // VIN packs
       vinPack100ProductId: body.vinPack100ProductId || "",
       vinPack100PriceId: body.vinPack100PriceId || "",
       vinPack100Price: body.vinPack100Price ?? 39,
@@ -43,31 +39,32 @@ export async function POST(req: NextRequest) {
       vinPack500ProductId: body.vinPack500ProductId || "",
       vinPack500PriceId: body.vinPack500PriceId || "",
       vinPack500Price: body.vinPack500Price ?? 149,
-      // Onboarding
       onboardingProductId: body.onboardingProductId || "",
       onboardingPriceId: body.onboardingPriceId || "",
       onboardingPrice: body.onboardingPrice ?? 495,
-      // Trial settings
       trialDays: body.trialDays ?? 14,
       trialVinLimit: body.trialVinLimit ?? 10,
       defaultVinLimit: body.defaultVinLimit ?? 300,
       foundingShopPricing: body.foundingShopPricing ?? true,
       skipTrialBonusVins: body.skipTrialBonusVins ?? 50,
-      updatedAt: new Date(),
+      updatedAt: new Date().toISOString(),
       updatedBy: session.email,
     };
 
-    await db.collection("platform_settings").updateOne(
-      { type: "billing" },
-      { $set: updateData },
-      { upsert: true }
-    );
+    await sql`
+      INSERT INTO platform_settings (type, settings, updated_at)
+      VALUES ('billing', ${JSON.stringify(settings)}::jsonb, ${new Date()})
+      ON CONFLICT (type) DO UPDATE SET 
+        settings = ${JSON.stringify(settings)}::jsonb,
+        updated_at = ${new Date()}
+    `;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Error saving billing settings:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to save settings" },
+      { error: message || "Failed to save settings" },
       { status: 500 }
     );
   }

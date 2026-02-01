@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,23 +20,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Key ID is required" }, { status: 400 });
   }
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: sess.shopId });
-  const matchingKey = (shop?.extensions?.apiKeys || []).find(
-    (k: any) => k.key.startsWith(keyId)
-  );
+  const shopId = String(sess.shopId);
+  const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+  const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+  const extensions = (existingSettings.extensions as Record<string, unknown>) || {};
+  const apiKeys = (extensions.apiKeys as Array<{ key: string; createdAt: string }>) || [];
+  
+  const matchingKey = apiKeys.find((k) => k.key.startsWith(keyId));
 
   if (!matchingKey) {
     return NextResponse.json({ error: "Key not found" }, { status: 404 });
   }
 
-  await db.collection("shops").updateOne(
-    { shopId: sess.shopId },
-    {
-      $pull: { "extensions.apiKeys": { key: matchingKey.key } } as any,
-      $set: { updatedAt: new Date() },
-    }
-  );
+  const updatedApiKeys = apiKeys.filter((k) => k.key !== matchingKey.key);
+  
+  const updatedSettings = {
+    ...existingSettings,
+    extensions: { ...extensions, apiKeys: updatedApiKeys }
+  };
+
+  await sql`
+    UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = ${new Date()}
+    WHERE shop_id = ${shopId}
+  `;
 
   return NextResponse.json({ ok: true });
 }
