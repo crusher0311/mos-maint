@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { acquireRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
 import type { ProtractorConfig } from "./types";
@@ -21,29 +21,19 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
 }
 
 export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-    {
-      projection: {
-        protractor: 1,
-        protractorConnectionId: 1,
-        protractorApiKey: 1,
-      },
-    }
-  );
-
-  const connectionId =
-    shop?.protractorConnectionId ??
-    shop?.protractor?.connectionId ??
-    process.env.PROTRACTOR_CONNECTION_ID ??
-    "";
-
-  const apiKey =
-    shop?.protractorApiKey ??
-    shop?.protractor?.apiKey ??
-    process.env.PROTRACTOR_API_KEY ??
-    "";
+  const shopIdStr = String(shopId);
+  
+  const rows = await sql`
+    SELECT protractor_connection_id, protractor_api_key
+    FROM shops
+    WHERE shop_id = ${shopIdStr}
+    LIMIT 1
+  `;
+  
+  const shop = rows[0];
+  
+  const connectionId = shop?.protractor_connection_id ?? process.env.PROTRACTOR_CONNECTION_ID ?? "";
+  const apiKey = shop?.protractor_api_key ?? process.env.PROTRACTOR_API_KEY ?? "";
 
   const configured = Boolean(connectionId && apiKey);
   const authentication = configured ? computeAuthentication(connectionId, apiKey) : "";
