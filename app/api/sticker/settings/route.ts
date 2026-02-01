@@ -263,14 +263,14 @@ export async function PUT(req: NextRequest) {
     }
     
     // Merge new fields into existing config
-    const newConfig: StickerConfig = { ...existingConfig };
+    const newConfig: Record<string, unknown> = { ...existingConfig };
     for (const field of allowedFields) {
       if (field in body) {
-        (newConfig as any)[field] = body[field as keyof StickerConfig];
+        newConfig[field] = body[field as keyof StickerConfig];
       }
     }
-    newConfig.updatedAt = new Date() as any;
-    newConfig.updatedBy = session.email as any;
+    newConfig.updatedAt = new Date();
+    newConfig.updatedBy = session.email;
     
     await sql`
       UPDATE shops 
