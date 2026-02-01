@@ -4,6 +4,8 @@ export * from './work-orders-pg';
 export * from './shops-pg';
 export * from './tekmetric-work-orders-pg';
 export * from './tekmetric-cache-pg';
+export * from './protractor-work-orders-pg';
+export * from './protractor-vehicles-pg';
 export * from './users-pg';
 export * from './sessions-pg';
 export { default as sql } from './postgres';

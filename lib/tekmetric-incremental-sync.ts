@@ -1,4 +1,3 @@
-import { getDb } from "@/lib/mongo";
 import { 
   getRepairOrders, 
   getVehicle, 
@@ -8,12 +7,23 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
+import {
+  upsertTekmetricWorkOrder,
+  getShopByShopId,
+  getShopTekmetricState,
+  updateShopTekmetricSyncState,
+  getTekmetricEnabledShops,
+  getCachedVehicle,
+  setCachedVehicle,
+  getCachedCustomer,
+  setCachedCustomer,
+  sql
+} from "@/lib/db";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_PAGES_PER_CYCLE = 3; // Process up to 3 pages (300 records) per shop per cycle
-const MAX_QUEUED_PAGES = 20; // Max pages to queue for later processing
+const MAX_PAGES_PER_CYCLE = 3;
+const MAX_QUEUED_PAGES = 20;
 const TERMINAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
 export interface ShopSyncState {
@@ -45,107 +55,11 @@ export interface IncrementalSyncResult {
   skipReason?: string;
 }
 
-async function getShopSyncState(db: any, shopId: number): Promise<ShopSyncState | null> {
-  const shop = await db.collection("shops").findOne({
-    shopId: { $in: [String(shopId), shopId] }
-  });
-  
-  if (!shop) return null;
-  
-  const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
-  if (!tekmetricShopId) return null;
-  
-  return {
-    shopId,
-    tekmetricShopId: Number(tekmetricShopId),
-    lastSyncCursor: shop.tekmetric?.lastSyncCursor || null,
-    overflowQueue: shop.tekmetric?.overflowQueue || [],
-    lastClosedSweepAt: shop.tekmetric?.lastClosedSweepAt || null,
-    consecutiveAuthFailures: shop.tekmetric?.consecutiveAuthFailures || 0,
-    pausedUntil: shop.tekmetric?.pausedUntil || null,
-  };
-}
-
-async function updateShopSyncState(
-  db: any, 
-  shopId: number, 
-  updates: Partial<ShopSyncState>
-): Promise<void> {
-  const setFields: Record<string, any> = {};
-  
-  if (updates.lastSyncCursor !== undefined) {
-    setFields["tekmetric.lastSyncCursor"] = updates.lastSyncCursor;
-  }
-  if (updates.overflowQueue !== undefined) {
-    setFields["tekmetric.overflowQueue"] = updates.overflowQueue;
-  }
-  if (updates.lastClosedSweepAt !== undefined) {
-    setFields["tekmetric.lastClosedSweepAt"] = updates.lastClosedSweepAt;
-  }
-  if (updates.consecutiveAuthFailures !== undefined) {
-    setFields["tekmetric.consecutiveAuthFailures"] = updates.consecutiveAuthFailures;
-  }
-  if (updates.pausedUntil !== undefined) {
-    setFields["tekmetric.pausedUntil"] = updates.pausedUntil;
-  }
-  setFields["tekmetric.lastSync"] = new Date();
-  
-  await db.collection("shops").updateOne(
-    { shopId: { $in: [String(shopId), shopId] } },
-    { $set: setFields }
-  );
-}
-
-async function getCachedVehicle(db: any, vehicleId: number): Promise<TekmetricVehicle | null> {
-  const cached = await db.collection("tekmetric_vehicle_cache").findOne({
-    vehicleId,
-    cachedAt: { $gt: new Date(Date.now() - CACHE_TTL_MS) }
-  });
-  return cached?.data || null;
-}
-
-async function cacheVehicle(db: any, vehicleId: number, vehicle: TekmetricVehicle): Promise<void> {
-  await db.collection("tekmetric_vehicle_cache").updateOne(
-    { vehicleId },
-    { 
-      $set: { 
-        vehicleId, 
-        data: vehicle, 
-        cachedAt: new Date() 
-      } 
-    },
-    { upsert: true }
-  );
-}
-
-async function getCachedCustomer(db: any, customerId: number): Promise<TekmetricCustomer | null> {
-  const cached = await db.collection("tekmetric_customer_cache").findOne({
-    customerId,
-    cachedAt: { $gt: new Date(Date.now() - CACHE_TTL_MS) }
-  });
-  return cached?.data || null;
-}
-
-async function cacheCustomer(db: any, customerId: number, customer: TekmetricCustomer): Promise<void> {
-  await db.collection("tekmetric_customer_cache").updateOne(
-    { customerId },
-    { 
-      $set: { 
-        customerId, 
-        data: customer, 
-        cachedAt: new Date() 
-      } 
-    },
-    { upsert: true }
-  );
-}
-
 export async function syncShopIncremental(
   shopId: number,
   tekmetricShopId: number,
   state: ShopSyncState
 ): Promise<IncrementalSyncResult> {
-  const db = await getDb();
   const result: IncrementalSyncResult = {
     shopId,
     tekmetricShopId,
@@ -159,6 +73,12 @@ export async function syncShopIncremental(
   if (state.pausedUntil && new Date() < state.pausedUntil) {
     result.skipped = true;
     result.skipReason = `Paused until ${state.pausedUntil.toISOString()} due to auth failures`;
+    return result;
+  }
+
+  const shop = await getShopByShopId(shopId);
+  if (!shop) {
+    result.error = `Shop ${shopId} not found`;
     return result;
   }
 
@@ -187,14 +107,13 @@ export async function syncShopIncremental(
 
     console.log(`[Tekmetric Incremental] Shop ${shopId}: Fetched page ${pageToFetch}, got ${response.content.length} ROs (updated since ${updatedDateFilter})`);
 
-    await updateShopSyncState(db, shopId, { consecutiveAuthFailures: 0 });
+    await updateShopTekmetricSyncState(shopId, { consecutiveAuthFailures: 0 });
 
     let newOverflowQueue = [...state.overflowQueue];
     if (state.overflowQueue.length > 0) {
       newOverflowQueue.shift();
     }
     
-    // Queue next pages if not at the end and within queue limits
     if (!response.last && newOverflowQueue.length < MAX_QUEUED_PAGES) {
       newOverflowQueue.push({
         page: pageToFetch + 1,
@@ -205,32 +124,32 @@ export async function syncShopIncremental(
     }
 
     for (const ro of response.content) {
-      let vehicle = await getCachedVehicle(db, ro.vehicleId);
+      let vehicle = await getCachedVehicle(ro.vehicleId) as TekmetricVehicle | null;
       if (vehicle) {
         result.fromCache.vehicles++;
       } else {
         try {
           vehicle = await getVehicle(ro.vehicleId);
-          await cacheVehicle(db, ro.vehicleId, vehicle);
+          await setCachedVehicle(ro.vehicleId, vehicle as unknown as Record<string, unknown>);
         } catch (err) {
           console.log(`[Tekmetric Incremental] Failed to fetch vehicle ${ro.vehicleId}`);
           continue;
         }
       }
 
-      let customer = await getCachedCustomer(db, ro.customerId);
+      let customer = await getCachedCustomer(ro.customerId) as TekmetricCustomer | null;
       if (customer) {
         result.fromCache.customers++;
       } else {
         try {
           customer = await getCustomer(ro.customerId);
-          await cacheCustomer(db, ro.customerId, customer);
+          await setCachedCustomer(ro.customerId, customer as unknown as Record<string, unknown>);
         } catch (err) {
         }
       }
 
       if (vehicle?.vin) {
-        await upsertWorkOrder(db, shopId, ro, vehicle, customer);
+        await upsertWorkOrderPg(shop.id, shopId, ro, vehicle, customer);
         result.synced++;
       }
     }
@@ -239,13 +158,13 @@ export async function syncShopIncremental(
       (Date.now() - state.lastClosedSweepAt.getTime()) > TERMINAL_SWEEP_INTERVAL_MS;
 
     if (shouldSweepTerminal && newOverflowQueue.length === 0) {
-      const swept = await sweepTerminalStatuses(db, shopId, tekmetricShopId);
+      const swept = await sweepTerminalStatuses(shop.id, shopId, tekmetricShopId);
       result.removed = swept;
       result.terminalSwept = true;
-      await updateShopSyncState(db, shopId, { lastClosedSweepAt: new Date() });
+      await updateShopTekmetricSyncState(shopId, { lastClosedSweepAt: new Date() });
     }
 
-    await updateShopSyncState(db, shopId, {
+    await updateShopTekmetricSyncState(shopId, {
       lastSyncCursor: new Date(),
       overflowQueue: newOverflowQueue,
     });
@@ -263,7 +182,7 @@ export async function syncShopIncremental(
         console.log(`[Tekmetric Incremental] Shop ${shopId}: Pausing sync for 1 hour due to repeated auth failures`);
       }
       
-      await updateShopSyncState(db, shopId, {
+      await updateShopTekmetricSyncState(shopId, {
         consecutiveAuthFailures: newFailures,
         pausedUntil: pauseUntil,
       });
@@ -274,8 +193,8 @@ export async function syncShopIncremental(
   }
 }
 
-async function upsertWorkOrder(
-  db: any,
+async function upsertWorkOrderPg(
+  shopUUID: string,
   shopId: number,
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
@@ -288,69 +207,56 @@ async function upsertWorkOrder(
   const statusCode = ro.repairOrderStatus?.code || "";
   const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
 
-  await db.collection("tekmetric_work_orders").updateOne(
-    { 
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      workOrderId: String(ro.id)
-    },
-    { 
-      $set: {
-        shopId,
-        workOrderId: String(ro.id),
-        workOrderNumber: ro.repairOrderNumber,
-        vin,
-        status: statusName,
-        statusCode,
-        label,
-        labelColor: ro.color || "",
-        customerId: ro.customerId,
-        vehicleId: ro.vehicleId,
-        customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
-        vehicleYear: vehicle.year,
-        vehicleMake: vehicle.make,
-        vehicleModel: vehicle.model,
-        vehicleEngine: vehicle.engine,
-        odometer: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
-        createdDate: ro.createdDate,
-        updatedDate: ro.updatedDate,
-        completedDate: ro.completedDate,
-        fetchedAt: new Date(),
-        data: ro,
-      },
-      $setOnInsert: { dviDone: false, dviCompletedAt: null, lastInspection: null }
-    },
-    { upsert: true }
-  );
+  await upsertTekmetricWorkOrder(shopUUID, shopId, {
+    workOrderId: String(ro.id),
+    workOrderNumber: ro.repairOrderNumber ? String(ro.repairOrderNumber) : null,
+    vin,
+    status: statusName,
+    statusCode,
+    label,
+    labelColor: ro.color || "",
+    customerId: ro.customerId,
+    vehicleId: ro.vehicleId,
+    customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
+    vehicleYear: vehicle.year,
+    vehicleMake: vehicle.make,
+    vehicleModel: vehicle.model,
+    vehicleSubmodel: vehicle.subModel,
+    mileageIn: ro.milesIn || vehicle.mileageIn,
+    mileageOut: ro.milesOut || vehicle.mileageOut,
+    createdDate: ro.createdDate ? new Date(ro.createdDate) : null,
+    closedDate: ro.completedDate ? new Date(ro.completedDate) : null,
+    rawData: ro as unknown as Record<string, unknown>,
+  });
 }
 
 async function sweepTerminalStatuses(
-  db: any,
+  shopUUID: string,
   shopId: number,
   tekmetricShopId: number
 ): Promise<number> {
-  const cachedWOs = await db.collection("tekmetric_work_orders").find({
-    shopId: { $in: [String(shopId), Number(shopId)] },
-    status: { $nin: TERMINAL_STATUSES },
-    fetchedAt: { $lt: new Date(Date.now() - 5 * 60 * 1000) }
-  }).limit(50).toArray();
+  const cachedWOs = await sql<{id: string; work_order_id: string; status: string}[]>`
+    SELECT id, work_order_id, status FROM tekmetric_work_orders
+    WHERE shop_id = ${shopUUID}
+    AND status NOT IN ('Invoice', 'Invoiced', 'Posted', 'Deleted', 'Void')
+    AND synced_at < ${new Date(Date.now() - 5 * 60 * 1000)}
+    LIMIT 50
+  `;
 
   let removedCount = 0;
   
   for (const cached of cachedWOs) {
     try {
-      const status = await getTekmetricWorkOrderStatus(tekmetricShopId, cached.workOrderId);
+      const status = await getTekmetricWorkOrderStatus(tekmetricShopId, cached.work_order_id);
       
       if (!status || TERMINAL_STATUSES.includes(status)) {
-        await db.collection("tekmetric_work_orders").updateOne(
-          { _id: cached._id },
-          {
-            $set: {
-              status: status || "Invoiced",
-              closedAt: new Date(),
-              updatedAt: new Date()
-            }
-          }
-        );
+        await sql`
+          UPDATE tekmetric_work_orders
+          SET status = ${status || 'Invoiced'},
+              closed_date = NOW(),
+              synced_at = NOW()
+          WHERE id = ${cached.id}
+        `;
         removedCount++;
       }
     } catch (err) {
@@ -360,37 +266,34 @@ async function sweepTerminalStatuses(
   return removedCount;
 }
 
-const CONCURRENT_SHOPS = 5; // Process 5 shops concurrently to stay under rate limits
+const CONCURRENT_SHOPS = 5;
 
 export async function runIncrementalSyncCycle(): Promise<{
   results: IncrementalSyncResult[];
   duration: number;
 }> {
-  const db = await getDb();
   const startTime = Date.now();
   const results: IncrementalSyncResult[] = [];
 
-  const shops = await db.collection("shops").find({
-    $or: [
-      { "tekmetric.shopId": { $exists: true, $ne: null } },
-      { tekmetricShopId: { $exists: true, $ne: null } }
-    ]
-  }).toArray();
+  const shops = await getTekmetricEnabledShops();
 
   const shopStates: ShopSyncState[] = [];
   for (const shop of shops) {
-    const state = await getShopSyncState(db, Number(shop.shopId));
-    if (state) {
-      shopStates.push(state);
+    if (!shop.shop_id) continue;
+    const state = await getShopTekmetricState(Number(shop.shop_id));
+    if (state && state.tekmetricShopId !== null) {
+      shopStates.push({
+        ...state,
+        tekmetricShopId: state.tekmetricShopId,
+        overflowQueue: state.overflowQueue as OverflowPage[],
+      });
     }
   }
 
-  // Process shops in concurrent batches
   for (let i = 0; i < shopStates.length; i += CONCURRENT_SHOPS) {
     const batch = shopStates.slice(i, i + CONCURRENT_SHOPS);
     
     const batchPromises = batch.map(async (state, index) => {
-      // Small stagger within batch (0-2 seconds) to avoid burst
       if (index > 0) {
         await new Promise(resolve => setTimeout(resolve, index * 400));
       }
@@ -400,7 +303,6 @@ export async function runIncrementalSyncCycle(): Promise<{
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
     
-    // Small pause between batches to avoid overwhelming API
     if (i + CONCURRENT_SHOPS < shopStates.length) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
@@ -410,26 +312,4 @@ export async function runIncrementalSyncCycle(): Promise<{
     results,
     duration: Date.now() - startTime,
   };
-}
-
-export async function ensureCacheIndexes(): Promise<void> {
-  const db = await getDb();
-  
-  await db.collection("tekmetric_vehicle_cache").createIndex(
-    { vehicleId: 1 },
-    { unique: true }
-  );
-  await db.collection("tekmetric_vehicle_cache").createIndex(
-    { cachedAt: 1 },
-    { expireAfterSeconds: 86400 }
-  );
-  
-  await db.collection("tekmetric_customer_cache").createIndex(
-    { customerId: 1 },
-    { unique: true }
-  );
-  await db.collection("tekmetric_customer_cache").createIndex(
-    { cachedAt: 1 },
-    { expireAfterSeconds: 86400 }
-  );
 }
