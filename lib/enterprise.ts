@@ -3,7 +3,7 @@ import sql from "@/lib/db/postgres";
 export interface EnterpriseAccount {
   id?: string;
   name: string;
-  shopIds: string[];
+  shopIds: number[];
   sharedMappings?: {
     cannedJobs: Record<string, string>;
     updatedAt: Date;
@@ -59,60 +59,92 @@ export interface RevenueAttributionDaily {
 
 export async function getEnterpriseById(enterpriseId: string): Promise<EnterpriseAccount | null> {
   const result = await sql`
-    SELECT id, name, shop_ids as "shopIds", shared_mappings as "sharedMappings",
-           shared_integrations as "sharedIntegrations", created_at as "createdAt", updated_at as "updatedAt"
+    SELECT id, name, shop_ids, shared_mappings, shared_integrations, created_at, updated_at
     FROM enterprise_accounts
-    WHERE id = ${enterpriseId}
+    WHERE id = ${enterpriseId}::uuid
     LIMIT 1
   `;
   
   if (result.length === 0) return null;
-  return result[0] as unknown as EnterpriseAccount;
+  
+  const row = result[0];
+  return {
+    id: row.id,
+    name: row.name,
+    shopIds: row.shop_ids || [],
+    sharedMappings: row.shared_mappings,
+    sharedIntegrations: row.shared_integrations,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 export async function getEnterpriseByShopId(shopId: number | string): Promise<EnterpriseAccount | null> {
-  const shopIdStr = String(shopId);
+  const shopIdNum = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
+  
+  if (isNaN(shopIdNum)) return null;
+  
   const result = await sql`
-    SELECT id, name, shop_ids as "shopIds", shared_mappings as "sharedMappings",
-           shared_integrations as "sharedIntegrations", created_at as "createdAt", updated_at as "updatedAt"
+    SELECT id, name, shop_ids, shared_mappings, shared_integrations, created_at, updated_at
     FROM enterprise_accounts
-    WHERE ${shopIdStr} = ANY(shop_ids)
+    WHERE ${shopIdNum} = ANY(shop_ids)
     LIMIT 1
   `;
   
   if (result.length === 0) return null;
-  return result[0] as unknown as EnterpriseAccount;
+  
+  const row = result[0];
+  return {
+    id: row.id,
+    name: row.name,
+    shopIds: row.shop_ids || [],
+    sharedMappings: row.shared_mappings,
+    sharedIntegrations: row.shared_integrations,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 export async function createEnterprise(name: string, shopIds: (number | string)[]): Promise<EnterpriseAccount> {
-  const shopIdStrs = shopIds.map(String);
+  const shopIdNums = shopIds.map(id => typeof id === "string" ? parseInt(id, 10) : id).filter(id => !isNaN(id));
   
   const result = await sql`
     INSERT INTO enterprise_accounts (name, shop_ids)
-    VALUES (${name}, ${shopIdStrs})
-    RETURNING id, name, shop_ids as "shopIds", created_at as "createdAt", updated_at as "updatedAt"
+    VALUES (${name}, ${shopIdNums}::int[])
+    RETURNING id, name, shop_ids, created_at, updated_at
   `;
   
-  return result[0] as unknown as EnterpriseAccount;
+  const row = result[0];
+  return {
+    id: row.id,
+    name: row.name,
+    shopIds: row.shop_ids || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 export async function addShopToEnterprise(enterpriseId: string, shopId: number | string): Promise<void> {
-  const shopIdStr = String(shopId);
+  const shopIdNum = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
+  
+  if (isNaN(shopIdNum)) return;
   
   await sql`
     UPDATE enterprise_accounts
-    SET shop_ids = array_append(shop_ids, ${shopIdStr}), updated_at = NOW()
-    WHERE id = ${enterpriseId} AND NOT (${shopIdStr} = ANY(shop_ids))
+    SET shop_ids = array_append(shop_ids, ${shopIdNum}), updated_at = NOW()
+    WHERE id = ${enterpriseId}::uuid AND NOT (${shopIdNum} = ANY(shop_ids))
   `;
 }
 
 export async function removeShopFromEnterprise(enterpriseId: string, shopId: number | string): Promise<void> {
-  const shopIdStr = String(shopId);
+  const shopIdNum = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
+  
+  if (isNaN(shopIdNum)) return;
   
   await sql`
     UPDATE enterprise_accounts
-    SET shop_ids = array_remove(shop_ids, ${shopIdStr}), updated_at = NOW()
-    WHERE id = ${enterpriseId}
+    SET shop_ids = array_remove(shop_ids, ${shopIdNum}), updated_at = NOW()
+    WHERE id = ${enterpriseId}::uuid
   `;
 }
 
@@ -133,7 +165,7 @@ export async function logRecommendationEvent(event: Omit<RecommendationEvent, "i
       line_item_id, price, labor_price, parts_price, total_price, added_by
     )
     VALUES (
-      ${event.shopId}, ${enterpriseId || null}, ${event.vin}, ${event.vehicleId || null},
+      ${event.shopId}, ${enterpriseId ? sql`${enterpriseId}::uuid` : null}, ${event.vin}, ${event.vehicleId || null},
       ${event.workOrderId}, ${event.workOrderNumber || null}, ${event.provider},
       ${event.eventType}, ${event.recommendationType}, ${event.serviceCode || null},
       ${event.serviceName}, ${event.lineItemId || null}, ${event.price || null},
@@ -147,43 +179,43 @@ export async function getEnterpriseAnalytics(enterpriseId: string, startDate?: D
   const enterprise = await getEnterpriseById(enterpriseId);
   if (!enterprise) return null;
   
-  const shopIds = enterprise.shopIds;
+  const shopIds = enterprise.shopIds.map(String);
   
   let events;
   if (startDate && endDate) {
     events = await sql`
-      SELECT shop_id as "shopId", event_type as "eventType", recommendation_type as "recommendationType",
-             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as "totalRevenue",
-             SUM(COALESCE(labor_price, 0)) as "laborRevenue", SUM(COALESCE(parts_price, 0)) as "partsRevenue"
+      SELECT shop_id, event_type, recommendation_type,
+             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as total_revenue,
+             SUM(COALESCE(labor_price, 0)) as labor_revenue, SUM(COALESCE(parts_price, 0)) as parts_revenue
       FROM recommendation_events
-      WHERE shop_id = ANY(${shopIds}) AND created_at >= ${startDate} AND created_at <= ${endDate}
+      WHERE shop_id = ANY(${shopIds}::text[]) AND created_at >= ${startDate} AND created_at <= ${endDate}
       GROUP BY shop_id, event_type, recommendation_type
     `;
   } else if (startDate) {
     events = await sql`
-      SELECT shop_id as "shopId", event_type as "eventType", recommendation_type as "recommendationType",
-             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as "totalRevenue",
-             SUM(COALESCE(labor_price, 0)) as "laborRevenue", SUM(COALESCE(parts_price, 0)) as "partsRevenue"
+      SELECT shop_id, event_type, recommendation_type,
+             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as total_revenue,
+             SUM(COALESCE(labor_price, 0)) as labor_revenue, SUM(COALESCE(parts_price, 0)) as parts_revenue
       FROM recommendation_events
-      WHERE shop_id = ANY(${shopIds}) AND created_at >= ${startDate}
+      WHERE shop_id = ANY(${shopIds}::text[]) AND created_at >= ${startDate}
       GROUP BY shop_id, event_type, recommendation_type
     `;
   } else {
     events = await sql`
-      SELECT shop_id as "shopId", event_type as "eventType", recommendation_type as "recommendationType",
-             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as "totalRevenue",
-             SUM(COALESCE(labor_price, 0)) as "laborRevenue", SUM(COALESCE(parts_price, 0)) as "partsRevenue"
+      SELECT shop_id, event_type, recommendation_type,
+             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as total_revenue,
+             SUM(COALESCE(labor_price, 0)) as labor_revenue, SUM(COALESCE(parts_price, 0)) as parts_revenue
       FROM recommendation_events
-      WHERE shop_id = ANY(${shopIds})
+      WHERE shop_id = ANY(${shopIds}::text[])
       GROUP BY shop_id, event_type, recommendation_type
     `;
   }
   
   const shops = await sql`
-    SELECT shop_id as "shopId", name FROM shops WHERE shop_id = ANY(${shopIds})
+    SELECT shop_id, name FROM shops WHERE shop_id = ANY(${shopIds}::text[])
   `;
   
-  const shopMap = new Map(shops.map((s: Record<string, unknown>) => [String(s.shopId), s.name as string]));
+  const shopMap = new Map(shops.map((s: Record<string, unknown>) => [String(s.shop_id), s.name as string]));
   
   const shopBreakdownMap = new Map<string, {
     shopId: string;
@@ -199,7 +231,7 @@ export async function getEnterpriseAnalytics(enterpriseId: string, startDate?: D
   let totalRevenue = 0;
   
   for (const event of events) {
-    const shopId = String(event.shopId);
+    const shopId = String(event.shop_id);
     if (!shopBreakdownMap.has(shopId)) {
       shopBreakdownMap.set(shopId, {
         shopId,
@@ -213,26 +245,27 @@ export async function getEnterpriseAnalytics(enterpriseId: string, startDate?: D
     
     const shop = shopBreakdownMap.get(shopId)!;
     shop.events.push({
-      eventType: event.eventType,
-      recommendationType: event.recommendationType,
+      eventType: event.event_type,
+      recommendationType: event.recommendation_type,
       count: Number(event.count),
-      totalRevenue: Number(event.totalRevenue),
-      laborRevenue: Number(event.laborRevenue),
-      partsRevenue: Number(event.partsRevenue)
+      totalRevenue: Number(event.total_revenue),
+      laborRevenue: Number(event.labor_revenue),
+      partsRevenue: Number(event.parts_revenue)
     });
     
-    if (event.eventType === "recommendation_added") {
+    if (event.event_type === "recommendation_added") {
       shop.jobsAdded += Number(event.count);
       totalJobsAdded += Number(event.count);
-    } else if (event.eventType === "recommendation_sold") {
+    } else if (event.event_type === "recommendation_sold") {
       shop.jobsSold += Number(event.count);
-      shop.revenue += Number(event.totalRevenue);
+      shop.revenue += Number(event.total_revenue);
       totalJobsSold += Number(event.count);
-      totalRevenue += Number(event.totalRevenue);
+      totalRevenue += Number(event.total_revenue);
     }
   }
   
-  for (const shopId of shopIds) {
+  for (const shopIdNum of enterprise.shopIds) {
+    const shopId = String(shopIdNum);
     if (!shopBreakdownMap.has(shopId)) {
       shopBreakdownMap.set(shopId, {
         shopId,
@@ -268,8 +301,10 @@ export async function getShopsForEnterprise(enterpriseId: string) {
   const enterprise = await getEnterpriseById(enterpriseId);
   if (!enterprise) return [];
   
+  const shopIds = enterprise.shopIds.map(String);
+  
   const shops = await sql`
-    SELECT * FROM shops WHERE shop_id = ANY(${enterprise.shopIds})
+    SELECT * FROM shops WHERE shop_id = ANY(${shopIds}::text[])
   `;
   
   return shops;

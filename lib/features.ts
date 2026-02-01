@@ -108,9 +108,8 @@ export function getAllFeatureIds(): FeatureId[] {
 export async function getShopFeatures(shopId: number | string): Promise<ShopFeatures | null> {
   const shopIdStr = String(shopId);
   const result = await sql`
-    SELECT shop_id as "shopId", enabled_features as "enabledFeatures", 
-           feature_settings as "featureSettings", subscriptions, 
-           created_at as "createdAt", updated_at as "updatedAt"
+    SELECT shop_id, enabled_features, feature_settings, subscriptions, 
+           created_at, updated_at
     FROM shop_features
     WHERE shop_id = ${shopIdStr}
     LIMIT 1
@@ -120,12 +119,12 @@ export async function getShopFeatures(shopId: number | string): Promise<ShopFeat
   
   const row = result[0];
   return {
-    shopId: row.shopId,
-    enabledFeatures: row.enabledFeatures || [],
-    featureSettings: row.featureSettings || {},
+    shopId: row.shop_id,
+    enabledFeatures: row.enabled_features || [],
+    featureSettings: row.feature_settings || {},
     subscriptions: row.subscriptions || [],
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -154,43 +153,26 @@ export async function getEnabledFeatures(shopId: number | string): Promise<Featu
 export async function enableFeature(shopId: number | string, featureId: FeatureId): Promise<void> {
   const shopIdStr = String(shopId);
   
-  const existing = await sql`
-    SELECT enabled_features FROM shop_features WHERE shop_id = ${shopIdStr} LIMIT 1
+  await sql`
+    INSERT INTO shop_features (shop_id, enabled_features, feature_settings, subscriptions)
+    VALUES (${shopIdStr}, ARRAY[${featureId}]::text[], '{}'::jsonb, '[]'::jsonb)
+    ON CONFLICT (shop_id) DO UPDATE SET
+      enabled_features = CASE 
+        WHEN ${featureId} = ANY(shop_features.enabled_features) THEN shop_features.enabled_features
+        ELSE array_append(shop_features.enabled_features, ${featureId})
+      END,
+      updated_at = NOW()
   `;
-  
-  if (existing.length === 0) {
-    await sql`
-      INSERT INTO shop_features (shop_id, enabled_features, feature_settings, subscriptions)
-      VALUES (${shopIdStr}, ${JSON.stringify([featureId])}, '{}', '[]')
-    `;
-  } else {
-    const enabledFeatures = existing[0].enabled_features || [];
-    if (!enabledFeatures.includes(featureId)) {
-      enabledFeatures.push(featureId);
-    }
-    await sql`
-      UPDATE shop_features 
-      SET enabled_features = ${JSON.stringify(enabledFeatures)}, updated_at = NOW()
-      WHERE shop_id = ${shopIdStr}
-    `;
-  }
 }
 
 export async function disableFeature(shopId: number | string, featureId: FeatureId): Promise<void> {
   const shopIdStr = String(shopId);
   
-  const existing = await sql`
-    SELECT enabled_features FROM shop_features WHERE shop_id = ${shopIdStr} LIMIT 1
+  await sql`
+    UPDATE shop_features 
+    SET enabled_features = array_remove(enabled_features, ${featureId}), updated_at = NOW()
+    WHERE shop_id = ${shopIdStr}
   `;
-  
-  if (existing.length > 0) {
-    const enabledFeatures = (existing[0].enabled_features || []).filter((f: FeatureId) => f !== featureId);
-    await sql`
-      UPDATE shop_features 
-      SET enabled_features = ${JSON.stringify(enabledFeatures)}, updated_at = NOW()
-      WHERE shop_id = ${shopIdStr}
-    `;
-  }
 }
 
 export async function setShopFeatures(shopId: number | string, featureIds: FeatureId[]): Promise<void> {
@@ -198,9 +180,9 @@ export async function setShopFeatures(shopId: number | string, featureIds: Featu
   
   await sql`
     INSERT INTO shop_features (shop_id, enabled_features, feature_settings, subscriptions)
-    VALUES (${shopIdStr}, ${JSON.stringify(featureIds)}, '{}', '[]')
+    VALUES (${shopIdStr}, ${featureIds}::text[], '{}'::jsonb, '[]'::jsonb)
     ON CONFLICT (shop_id) DO UPDATE SET
-      enabled_features = ${JSON.stringify(featureIds)},
+      enabled_features = ${featureIds}::text[],
       updated_at = NOW()
   `;
 }
@@ -221,19 +203,12 @@ export async function setFeatureSettings(
 ): Promise<void> {
   const shopIdStr = String(shopId);
   
-  const existing = await sql`
-    SELECT feature_settings FROM shop_features WHERE shop_id = ${shopIdStr} LIMIT 1
+  await sql`
+    UPDATE shop_features 
+    SET feature_settings = jsonb_set(COALESCE(feature_settings, '{}'::jsonb), ${[featureId]}::text[], ${JSON.stringify(settings)}::jsonb),
+        updated_at = NOW()
+    WHERE shop_id = ${shopIdStr}
   `;
-  
-  if (existing.length > 0) {
-    const featureSettings = existing[0].feature_settings || {};
-    featureSettings[featureId] = settings;
-    await sql`
-      UPDATE shop_features 
-      SET feature_settings = ${JSON.stringify(featureSettings)}, updated_at = NOW()
-      WHERE shop_id = ${shopIdStr}
-    `;
-  }
 }
 
 export function getFeatureConfig(featureId: FeatureId): FeatureConfig | undefined {
