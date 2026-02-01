@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,34 +15,20 @@ export async function GET() {
   }
 
   try {
-    const db = await getDb();
-    
-    const [shops, recentPayments, enterprises, billingSettings] = await Promise.all([
-      db.collection("shops").find().project({
-        shopId: 1,
-        name: 1,
-        locationIdentifier: 1,
-        enterpriseId: 1,
-        billing: 1,
-        stripeCustomerId: 1,
-        stripeSubscriptionId: 1,
-        stripeSubscriptionAmount: 1,
-        createdAt: 1,
-      }).toArray(),
-      db.collection("stripe_events").find({ type: { $regex: /^invoice\.|^checkout\.session\.completed/ } })
-        .sort({ createdAt: -1 })
-        .limit(20)
-        .toArray(),
-      db.collection("enterprise_accounts").find().project({ _id: 1, name: 1, shopIds: 1 }).toArray(),
-      db.collection("platform_settings").findOne({ type: "billing" }),
+    const [shops, recentPayments, enterprises, billingSettingsResult] = await Promise.all([
+      sql`SELECT id, shop_id, name, location_identifier, enterprise_id, billing, created_at FROM shops`,
+      sql`SELECT * FROM stripe_events WHERE type ~ '^invoice\\.|^checkout\\.session\\.completed' ORDER BY created_at DESC NULLS LAST LIMIT 20`,
+      sql`SELECT id, name, shop_ids FROM enterprise_accounts`,
+      sql`SELECT * FROM platform_settings WHERE type = 'billing' LIMIT 1`,
     ]);
 
-    const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e.name]));
+    const enterpriseMap = new Map(enterprises.map(e => [e.id, e.name]));
+    const billingSettings = billingSettingsResult[0]?.value as Record<string, unknown> | null;
     
     const configuredPricing: Record<string, number> = {
-      starter: billingSettings?.starterPrice ?? 49,
-      professional: billingSettings?.mosProPrice ?? 99,
-      enterprise: billingSettings?.enterprisePrice ?? 199,
+      starter: (billingSettings?.starterPrice as number) ?? 49,
+      professional: (billingSettings?.mosProPrice as number) ?? 99,
+      enterprise: (billingSettings?.enterprisePrice as number) ?? 199,
     };
 
     const planCounts: Record<string, number> = {
@@ -66,9 +52,9 @@ export async function GET() {
     let paidShopsCount = 0;
 
     const shopBillingData = shops.map(shop => {
-      const billing = shop.billing || {};
-      const plan = billing.plan || "trial";
-      const status = billing.status || "trial";
+      const billing = shop.billing as Record<string, unknown> | null || {};
+      const plan = (billing.plan as string) || "trial";
+      const status = (billing.status as string) || "trial";
       
       if (planCounts[plan] !== undefined) {
         planCounts[plan]++;
@@ -78,8 +64,8 @@ export async function GET() {
         statusCounts[status]++;
       }
       
-      const subscriptionAmount = shop.stripeSubscriptionAmount 
-        ? shop.stripeSubscriptionAmount / 100 
+      const subscriptionAmount = billing.stripeSubscriptionAmount 
+        ? (billing.stripeSubscriptionAmount as number) / 100 
         : configuredPricing[plan] || 0;
       
       if (billing.isPaid && (status === "active" || status === "past_due")) {
@@ -88,18 +74,18 @@ export async function GET() {
       }
 
       return {
-        shopId: shop.shopId,
-        name: shop.name || `Shop ${shop.shopId}`,
-        locationIdentifier: shop.locationIdentifier,
-        enterpriseName: shop.enterpriseId ? enterpriseMap.get(shop.enterpriseId.toString()) : null,
+        shopId: shop.shop_id ? parseInt(shop.shop_id, 10) : null,
+        name: shop.name || `Shop ${shop.shop_id}`,
+        locationIdentifier: shop.location_identifier,
+        enterpriseName: shop.enterprise_id ? enterpriseMap.get(shop.enterprise_id) : null,
         plan,
         status,
         isPaid: billing.isPaid || false,
         vinViewCount: billing.vinViewCount || 0,
         vinLimit: billing.vinLimit || 10,
-        stripeCustomerId: shop.stripeCustomerId,
-        stripeSubscriptionId: shop.stripeSubscriptionId,
-        createdAt: shop.createdAt,
+        stripeCustomerId: billing.stripeCustomerId,
+        stripeSubscriptionId: billing.stripeSubscriptionId,
+        createdAt: shop.created_at,
       };
     });
 
@@ -109,14 +95,14 @@ export async function GET() {
     });
 
     const recentEvents = recentPayments.map(event => ({
-      id: event._id.toString(),
+      id: event.id,
       type: event.type,
-      shopId: event.shopId,
-      shopName: event.shopName,
+      shopId: event.shop_id,
+      shopName: event.shop_name,
       amount: event.amount,
       currency: event.currency,
       status: event.status,
-      createdAt: event.createdAt,
+      createdAt: event.created_at,
     }));
 
     return NextResponse.json({
@@ -131,8 +117,9 @@ export async function GET() {
       shops: shopBillingData,
       recentEvents,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Platform billing error:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

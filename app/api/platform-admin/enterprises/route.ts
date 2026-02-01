@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { ObjectId } from "mongodb";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,23 +12,21 @@ export async function GET() {
   }
 
   try {
-    const db = await getDb();
-    
     const [enterprises, shops] = await Promise.all([
-      db.collection("enterprise_accounts").find({}).toArray(),
-      db.collection("shops").find({}).project({ shopId: 1, name: 1, enterpriseId: 1 }).toArray()
+      sql`SELECT * FROM enterprise_accounts`,
+      sql`SELECT id, shop_id, name, enterprise_id FROM shops`
     ]);
 
     const enrichedEnterprises = enterprises.map(e => ({
-      _id: e._id,
+      _id: e.id,
       name: e.name,
-      shopIds: e.shopIds || [],
-      shopCount: e.shopIds?.length || 0,
-      createdAt: e.createdAt || e._id.getTimestamp?.(),
+      shopIds: e.shop_ids || [],
+      shopCount: e.shop_ids?.length || 0,
+      createdAt: e.created_at,
     }));
 
-    const availableShops = shops.filter(s => !s.enterpriseId).map(s => ({
-      shopId: s.shopId,
+    const availableShops = shops.filter(s => !s.enterprise_id).map(s => ({
+      shopId: s.shop_id ? parseInt(s.shop_id, 10) : null,
       name: s.name,
     }));
 
@@ -37,11 +34,16 @@ export async function GET() {
       ok: true,
       enterprises: enrichedEnterprises,
       availableShops,
-      allShops: shops.map(s => ({ shopId: s.shopId, name: s.name, enterpriseId: s.enterpriseId })),
+      allShops: shops.map(s => ({ 
+        shopId: s.shop_id ? parseInt(s.shop_id, 10) : null, 
+        name: s.name, 
+        enterpriseId: s.enterprise_id 
+      })),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Platform admin enterprises error:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -58,39 +60,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enterprise name is required" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const enterprise = {
-      name: name.trim(),
-      shopIds: shopIds || [],
-      createdAt: new Date(),
-      createdBy: session.email,
-    };
-
-    const result = await db.collection("enterprise_accounts").insertOne(enterprise);
+    const now = new Date();
+    
+    const result = await sql`
+      INSERT INTO enterprise_accounts (name, shop_ids, created_at, created_by)
+      VALUES (${name.trim()}, ${shopIds || []}, ${now}, ${session.email})
+      RETURNING id
+    `;
+    
+    const enterpriseId = result[0].id;
 
     if (shopIds?.length > 0) {
-      await db.collection("shops").updateMany(
-        { shopId: { $in: shopIds } },
-        { $set: { enterpriseId: result.insertedId, updatedAt: new Date() } }
-      );
+      await sql`
+        UPDATE shops 
+        SET enterprise_id = ${enterpriseId}, updated_at = ${now}
+        WHERE shop_id = ANY(${shopIds.map(String)})
+      `;
     }
 
-    await db.collection("audit_logs").insertOne({
-      type: "enterprise_created",
-      enterpriseId: result.insertedId,
-      enterpriseName: name,
-      shopIds,
-      adminEmail: session.email,
-      createdAt: new Date(),
-    });
+    await sql`
+      INSERT INTO audit_logs (type, enterprise_id, metadata, admin_email, created_at)
+      VALUES (
+        'enterprise_created', 
+        ${enterpriseId}, 
+        ${JSON.stringify({ enterpriseName: name, shopIds })}::jsonb, 
+        ${session.email}, 
+        ${now}
+      )
+    `;
 
     return NextResponse.json({
       ok: true,
-      enterprise: { ...enterprise, _id: result.insertedId },
+      enterprise: { _id: enterpriseId, name: name.trim(), shopIds: shopIds || [], createdAt: now },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Create enterprise error:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
