@@ -183,3 +183,11 @@ export async function getRecentVehiclesByVin(shopId: string, vins: string[]): Pr
     ORDER BY updated_at DESC
   `;
 }
+
+export async function getVehiclesByCustomerId(customerId: string): Promise<Vehicle[]> {
+  return sql<Vehicle[]>`
+    SELECT * FROM vehicles 
+    WHERE customer_id = ${customerId}
+    ORDER BY updated_at DESC, created_at DESC
+  `;
+}
