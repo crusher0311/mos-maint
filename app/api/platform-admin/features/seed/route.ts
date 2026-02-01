@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 const DEFAULT_FEATURES = [
-  // CORE FEATURES - Can be purchased individually or as add-ons to other core features
   {
     order: 1,
     name: "Maintenance Recommendations",
@@ -71,7 +70,6 @@ const DEFAULT_FEATURES = [
     compatibleSMS: ["stand-alone", "protractor", "tekmetric", "autoflow", "shopware", "shopmonkey"],
     includedInTiers: ["elite", "enterprise"],
   },
-  // ADD-ON ONLY - Requires Oil Sticker to be active
   {
     order: 7,
     name: "Auto Booking",
@@ -84,7 +82,6 @@ const DEFAULT_FEATURES = [
     includedInTiers: ["elite", "enterprise"],
     requiresFeature: "oil_sticker",
   },
-  // BUNDLED FEATURES - Enabled with Maintenance, not sold separately
   {
     order: 8,
     name: "OEM Data Integration",
@@ -109,7 +106,6 @@ const DEFAULT_FEATURES = [
     includedInTiers: [],
     bundledWith: "maintenance",
   },
-  // UTILITY FEATURES
   {
     order: 10,
     name: "Chrome Extension",
@@ -127,9 +123,9 @@ export async function POST() {
   try {
     await requirePlatformAdmin();
 
-    const db = await getDb();
+    const countResult = await sql`SELECT COUNT(*)::int as count FROM platform_features`;
+    const existingCount = countResult[0]?.count ?? 0;
     
-    const existingCount = await db.collection("platform_features").countDocuments();
     if (existingCount > 0) {
       return NextResponse.json({ 
         ok: false, 
@@ -138,13 +134,21 @@ export async function POST() {
     }
 
     const now = new Date();
-    const featuresWithTimestamps = DEFAULT_FEATURES.map(f => ({
-      ...f,
-      createdAt: now,
-      updatedAt: now
-    }));
-
-    await db.collection("platform_features").insertMany(featuresWithTimestamps);
+    for (const f of DEFAULT_FEATURES) {
+      await sql`
+        INSERT INTO platform_features (
+          feature_order, name, slug, description, category, status, icon,
+          compatible_sms, included_in_tiers, bundled_features, requires_feature, bundled_with,
+          created_at, updated_at
+        ) VALUES (
+          ${f.order}, ${f.name}, ${f.slug}, ${f.description}, ${f.category}, ${f.status}, ${f.icon},
+          ${JSON.stringify(f.compatibleSMS)}::jsonb, ${JSON.stringify(f.includedInTiers)}::jsonb,
+          ${JSON.stringify((f as any).bundledFeatures || [])}::jsonb,
+          ${(f as any).requiresFeature || null}, ${(f as any).bundledWith || null},
+          ${now}, ${now}
+        )
+      `;
+    }
 
     return NextResponse.json({
       ok: true,

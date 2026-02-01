@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
   fetchDeferredWork,
-  fetchWorkOrderById,
   resolveWorkOrderGuid,
 } from "@/lib/integrations/protractor";
 
@@ -28,15 +27,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // If workOrderId is provided, return full work order details
   const workOrderId = req.nextUrl.searchParams.get("workOrderId");
   if (workOrderId) {
-    // First try to lookup GUID if it's an RO number
     const lookupResult = await resolveWorkOrderGuid(shopId, workOrderId);
     if (!lookupResult.ok) {
       return NextResponse.json({ error: lookupResult.error });
     }
-    // Return the full work order from lookup
     return NextResponse.json({ workOrder: lookupResult.workOrder, guid: lookupResult.workOrderGuid });
   }
 
@@ -57,21 +53,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const db = await getDb();
+  const shopIdStr = String(shopId);
   
-  const cachedVehicles = await db.collection("protractor_vehicles")
-    .find({ shopId })
-    .toArray();
-    
-  const cachedWorkOrders = await db.collection("protractor_work_orders")
-    .find({ shopId })
-    .toArray();
-    
-  const cachedDeferredWork = await db.collection("protractor_deferred_work")
-    .find({ shopId })
-    .toArray();
+  const [cachedVehicles, cachedWorkOrders, cachedDeferredWork] = await Promise.all([
+    sql`SELECT * FROM protractor_vehicles WHERE shop_id = ${shopIdStr}`,
+    sql`SELECT * FROM protractor_work_orders WHERE shop_id = ${shopIdStr}`,
+    sql`SELECT * FROM protractor_deferred_work WHERE shop_id = ${shopIdStr}`,
+  ]);
 
-  // Fetch sample deferred work from first vehicle with ServiceItem
   let sampleDeferredWork = null;
   const workOrders = workOrdersResult.workOrders || [];
   for (const wo of workOrders.slice(0, 3)) {

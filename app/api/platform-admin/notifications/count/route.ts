@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export async function GET() {
   let session;
@@ -11,11 +11,12 @@ export async function GET() {
   }
 
   try {
-    const db = await getDb();
-    const unreadCount = await db.collection("notifications").countDocuments({
-      userId: `admin:${session.email}`,
-      read: false,
-    });
+    const userId = `admin:${session.email}`;
+    const result = await sql`
+      SELECT COUNT(*)::int as count FROM notifications
+      WHERE user_id = ${userId} AND read = false
+    `;
+    const unreadCount = result[0]?.count ?? 0;
 
     return NextResponse.json({
       ok: true,

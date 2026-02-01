@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getBillingSettings } from "@/lib/stripe";
 
 export interface PlatformPlan {
@@ -26,18 +26,15 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
     const billingSettings = await getBillingSettings();
 
-    const plans = await db.collection("platform_plans")
-      .find({ status: "active" })
-      .sort({ order: 1 })
-      .toArray();
+    const plans = await sql`
+      SELECT * FROM platform_plans WHERE status = 'active' ORDER BY plan_order
+    `;
 
-    const features = await db.collection("platform_features")
-      .find({ status: "active" })
-      .sort({ order: 1 })
-      .toArray();
+    const features = await sql`
+      SELECT * FROM platform_features WHERE status = 'active' ORDER BY feature_order
+    `;
 
     if (plans.length === 0) {
       const defaultPlans = [
@@ -48,7 +45,7 @@ export async function GET() {
           monthlyPrice: billingSettings.starterPrice || 199.95,
           stripeMonthlyPriceId: billingSettings.starterPriceId || undefined,
           description: "Maintenance + Oil Sticker",
-          features: features.filter(f => f.includedInTiers?.includes("starter")).map(f => f.slug),
+          features: features.filter((f: any) => f.included_in_tiers?.includes("starter")).map((f: any) => f.slug),
           isPopular: false,
           isEnterprise: false,
         },
@@ -59,7 +56,7 @@ export async function GET() {
           monthlyPrice: billingSettings.plusPrice || 229.95,
           stripeMonthlyPriceId: billingSettings.plusPriceId || billingSettings.mosProPriceId || undefined,
           description: "Maintenance + Job Lookup + Oil Sticker",
-          features: features.filter(f => f.includedInTiers?.includes("plus")).map(f => f.slug),
+          features: features.filter((f: any) => f.included_in_tiers?.includes("plus")).map((f: any) => f.slug),
           isPopular: true,
           isEnterprise: false,
         },
@@ -70,7 +67,7 @@ export async function GET() {
           monthlyPrice: billingSettings.elitePrice || 279.95,
           stripeMonthlyPriceId: billingSettings.elitePriceId || undefined,
           description: "All features included: Maintenance, Job Lookup, Oil Sticker, Keytags, Part Cross-Reference, Auto Booking",
-          features: features.filter(f => f.includedInTiers?.includes("elite")).map(f => f.slug),
+          features: features.filter((f: any) => f.included_in_tiers?.includes("elite")).map((f: any) => f.slug),
           isPopular: false,
           isEnterprise: false,
         },
@@ -88,24 +85,38 @@ export async function GET() {
 
       return NextResponse.json({ 
         plans: defaultPlans,
-        features: features.map(f => ({
-          _id: f._id,
+        features: features.map((f: any) => ({
+          _id: f.id,
           name: f.name,
           slug: f.slug,
           description: f.description,
-          includedInTiers: f.includedInTiers || [],
+          includedInTiers: f.included_in_tiers || [],
         }))
       });
     }
 
     return NextResponse.json({ 
-      plans,
-      features: features.map(f => ({
-        _id: f._id,
+      plans: plans.map((p: any) => ({
+        _id: p.id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+        order: p.plan_order,
+        monthlyPrice: p.monthly_price,
+        yearlyPrice: p.yearly_price,
+        stripeMonthlyPriceId: p.stripe_monthly_price_id,
+        stripeYearlyPriceId: p.stripe_yearly_price_id,
+        features: p.features || [],
+        status: p.status,
+        isPopular: p.is_popular,
+        isEnterprise: p.is_enterprise,
+      })),
+      features: features.map((f: any) => ({
+        _id: f.id,
         name: f.name,
         slug: f.slug,
         description: f.description,
-        includedInTiers: f.includedInTiers || [],
+        includedInTiers: f.included_in_tiers || [],
       }))
     });
   } catch (error) {

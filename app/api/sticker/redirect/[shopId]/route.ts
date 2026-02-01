@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +16,14 @@ export async function GET(
   }
 
   try {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId: numericShopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(numericShopId)}`;
+    const shop = shopRows[0] as any;
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const appointmentUrl = shop.stickerConfig?.appointmentUrl || shop.websiteUrl || null;
+    const appointmentUrl = shop.sticker_config?.appointmentUrl || shop.website_url || null;
 
     if (!appointmentUrl) {
       return new NextResponse(
@@ -40,12 +40,10 @@ export async function GET(
       );
     }
 
-    await db.collection("sticker_qr_scans").insertOne({
-      shopId: numericShopId,
-      scannedAt: new Date(),
-      userAgent: req.headers.get("user-agent") || null,
-      referer: req.headers.get("referer") || null,
-    });
+    await sql`
+      INSERT INTO sticker_qr_scans (shop_id, scanned_at, user_agent, referer)
+      VALUES (${String(numericShopId)}, NOW(), ${req.headers.get("user-agent") || null}, ${req.headers.get("referer") || null})
+    `;
 
     return NextResponse.redirect(appointmentUrl, 302);
   } catch (error) {

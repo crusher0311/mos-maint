@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getStripe } from "@/lib/stripe";
 
 export async function GET() {
@@ -10,10 +10,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne({ id: session.shopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(session.shopId)}`;
+    const shop = shopRows[0] as any;
     
-    if (!shop?.stripeCustomerId) {
+    if (!shop?.stripe_customer_id) {
       return NextResponse.json({ paymentMethods: [] });
     }
 
@@ -21,10 +21,10 @@ export async function GET() {
     
     const [paymentMethods, customer] = await Promise.all([
       stripe.paymentMethods.list({
-        customer: shop.stripeCustomerId,
+        customer: shop.stripe_customer_id,
         type: "card",
       }),
-      stripe.customers.retrieve(shop.stripeCustomerId),
+      stripe.customers.retrieve(shop.stripe_customer_id),
     ]);
 
     const defaultPaymentMethodId = typeof customer !== "string" && "invoice_settings" in customer

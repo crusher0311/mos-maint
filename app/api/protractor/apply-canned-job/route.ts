@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import {
   applyCannedJobToWorkOrder,
   fetchVehicleByVin,
@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = await getDb();
   const shopId = Number(session.shopId);
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
@@ -107,19 +106,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  await db.collection("canned_job_applications").insertOne({
-    shopId,
-    vin: vin?.toUpperCase() || null,
-    workOrderId: targetWorkOrderId,
-    cannedJobId,
-    servicePackageId: result.servicePackage?.ID || null,
-    appliedAt: new Date(),
-    appliedBy: session.email || null,
-  });
+  await sql`
+    INSERT INTO canned_job_applications (shop_id, vin, work_order_id, canned_job_id, service_package_id, applied_at, applied_by)
+    VALUES (${String(shopId)}, ${vin?.toUpperCase() || null}, ${String(targetWorkOrderId)}, ${cannedJobId}, ${result.servicePackage?.ID ? String(result.servicePackage.ID) : null}, NOW(), ${session.email || null})
+  `;
 
   try {
     await logRecommendationEvent({
-      shopId,
+      shopId: String(shopId),
       vin: vin?.toUpperCase() || "",
       workOrderId: String(targetWorkOrderId),
       provider: "protractor",
