@@ -18,6 +18,9 @@ export async function POST(_: Request, { params }: { params: { customerId: strin
     WHERE id = ${params.customerId} AND shop_id = ${shop.id}
     RETURNING id
   `;
+  
+  // Note: customers table doesn't have a closed_at column in PostgreSQL schema
+  // The status = 'closed' and updated_at timestamp serve the same purpose
 
   if (result.length === 0) {
     return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });

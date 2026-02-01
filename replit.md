@@ -47,16 +47,41 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - 2,924 Protractor work orders
   - 2,660 Protractor vehicles
   - 3,276 events
+- Phase 4: PostgreSQL data access layers created:
+  - `lib/db/customers-pg.ts` - Customer CRUD operations
+  - `lib/db/vehicles-pg.ts` - Vehicle CRUD operations  
+  - `lib/db/work-orders-pg.ts` - Work order CRUD operations
+  - `lib/db/shops-pg.ts` - Shop management with Tekmetric/Protractor config
+  - `lib/db/tekmetric-work-orders-pg.ts` - Tekmetric work orders
+  - `lib/db/tekmetric-cache-pg.ts` - Tekmetric API response caching
+  - `lib/db/protractor-work-orders-pg.ts` - Protractor work orders
+  - `lib/db/protractor-vehicles-pg.ts` - Protractor vehicles
+  - `lib/db/users-pg.ts` - User management
+  - `lib/db/sessions-pg.ts` - Session management
+  - `lib/enterprise-pg.ts` - Enterprise account management
+- Phase 5 (In Progress): API routes being migrated:
+  - `/api/auth/me` - Updated to PostgreSQL
+  - `/api/customers/[customerId]` - Updated to PostgreSQL
+  - `/api/customers/[customerId]/inspect` - Updated to PostgreSQL
+  - `/api/customers/[customerId]/close` - Updated to PostgreSQL
+  - `/api/enterprise` - Updated to PostgreSQL
+  - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
 
-**Remaining Phases:**
-- Phase 4: Update lib files to read from PostgreSQL
-- Phase 5: Update API routes to use PostgreSQL
-- Phase 6: Remove MongoDB dependencies
+**Remaining Work:**
+- Phase 5: Continue updating ~200 remaining API routes
+- Phase 6: Remove MongoDB dependencies completely
 
 **Key Migration Files:**
+- `lib/db/index.ts` - Exports all PostgreSQL data access modules
+- `lib/db/postgres.ts` - PostgreSQL connection (uses `postgres` package with parameterized queries)
 - `lib/postgres-ingestion.ts` - PostgreSQL data ingestion service
 - `scripts/etl-phase3-remaining.ts` - ETL script for historical data
-- `lib/db/postgres.ts` - PostgreSQL connection
+
+**Migration Patterns:**
+- Shop ID mapping: MongoDB integer `shopId` → PostgreSQL UUID via `shops.shop_id` (text) column
+- All queries use parameterized `sql` tagged templates for injection safety
+- Upserts use `ON CONFLICT` with `COALESCE` for partial updates
+- VINs normalized to uppercase before storage
 
 ## External Dependencies
 *   **Database**: PostgreSQL (primary), MongoDB Atlas (legacy - being phased out)

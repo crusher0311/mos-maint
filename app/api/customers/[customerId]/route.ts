@@ -39,9 +39,9 @@ export async function GET(
     WHERE shop_id = ${customer.shop_id}
       AND provider = 'autoflow'
       AND (
-        payload->>'customer'->>'id' = ${customer.external_id || ''}
-        OR payload->>'customer'->>'email' = ${customer.email || ''}
-        OR payload->>'customer'->>'phone' = ${customer.phone || ''}
+        payload->'customer'->>'id' = ${customer.external_id || ''}
+        OR payload->'customer'->>'email' = ${customer.email || ''}
+        OR payload->'customer'->>'phone' = ${customer.phone || ''}
       )
     ORDER BY received_at DESC
     LIMIT 25
