@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import {
   resolveProtractorConfig,
@@ -9,7 +9,6 @@ import {
 } from "@/lib/integrations/protractor";
 import {
   extractJobIndexFromWorkOrder,
-  extractJobIndexFromCachedWorkOrder,
   upsertJobIndexEntries,
   updatePartCrossReferences,
 } from "@/lib/job-index";
@@ -29,8 +28,6 @@ const SMS_DISPLAY_NAMES: Record<string, string> = {
 };
 
 async function buildTekmetricPartsHistory(shopId: number) {
-  const db = await getDb();
-  
   const results = {
     workOrdersProcessed: 0,
     jobsIndexed: 0,
@@ -38,18 +35,15 @@ async function buildTekmetricPartsHistory(shopId: number) {
     errors: [] as string[],
   };
   
-  const allJobIndexEntries: any[] = [];
-  
-  // Try job_index collection first - this has detailed job data from backfills
-  const existingJobs = await db.collection("job_index")
-    .find({ shopId, "metadata.sourceType": "tekmetric" })
-    .toArray();
+  const existingJobs = await sql`
+    SELECT * FROM job_index 
+    WHERE shop_id = ${String(shopId)} AND metadata->>'sourceType' = 'tekmetric'
+  `;
   
   if (existingJobs.length > 0) {
     console.log(`[Parts History] Found ${existingJobs.length} existing Tekmetric jobs in index`);
     
-    // Just update part cross-references from existing job data
-    const partsUpdated = await updatePartCrossReferences(existingJobs);
+    const partsUpdated = await updatePartCrossReferences(existingJobs as any[]);
     results.workOrdersProcessed = existingJobs.length;
     results.jobsIndexed = existingJobs.length;
     results.partsIndexed = partsUpdated;
@@ -57,41 +51,40 @@ async function buildTekmetricPartsHistory(shopId: number) {
     return results;
   }
   
-  // Fallback: try to build from cached work orders
-  const workOrders = await db.collection("tekmetric_work_orders")
-    .find({ shopId: { $in: [String(shopId), Number(shopId)] } })
-    .toArray();
+  const workOrders = await sql`
+    SELECT * FROM tekmetric_work_orders 
+    WHERE shop_id = ${String(shopId)} OR shop_id = ${shopId}::text
+  `;
   
   console.log(`[Parts History] Building from ${workOrders.length} Tekmetric work orders...`);
   
-  if (workOrders.length > 0 && !workOrders[0].data?.jobs) {
+  const allJobIndexEntries: any[] = [];
+  
+  if (workOrders.length > 0 && !(workOrders[0] as any).data?.jobs) {
     console.log(`[Parts History] Work orders don't have detailed job data. Need to run job backfill first.`);
-    console.log(`[Parts History] Sample WO fields:`, Object.keys(workOrders[0]).join(", "));
   }
   
   for (const wo of workOrders) {
     try {
       results.workOrdersProcessed++;
       
-      // The raw data is stored in the 'data' field
-      const rawData = wo.data || wo;
+      const rawData = (wo as any).data || wo;
       
       const vehicleData = {
-        vin: wo.vin,
-        year: wo.vehicleYear || rawData.vehicle?.year,
-        make: wo.vehicleMake || rawData.vehicle?.make,
-        model: wo.vehicleModel || rawData.vehicle?.model,
+        vin: (wo as any).vin,
+        year: (wo as any).vehicle_year || rawData.vehicle?.year,
+        make: (wo as any).vehicle_make || rawData.vehicle?.make,
+        model: (wo as any).vehicle_model || rawData.vehicle?.model,
       };
       
-      // Tekmetric stores jobs differently - check for jobs array
       if (rawData.jobs && Array.isArray(rawData.jobs)) {
         for (const job of rawData.jobs) {
           const entry = {
             shopId,
-            workOrderId: String(wo.workOrderId),
-            workOrderNumber: wo.workOrderNumber,
+            workOrderId: String((wo as any).work_order_id),
+            workOrderNumber: (wo as any).work_order_number,
             servicePackageId: String(job.id),
-            performedAt: wo.completedDate ? new Date(wo.completedDate) : new Date(wo.createdDate),
+            performedAt: (wo as any).completed_date ? new Date((wo as any).completed_date) : new Date((wo as any).created_date),
             vehicle: vehicleData,
             job: {
               title: job.name || job.description || "Unknown",
@@ -122,8 +115,8 @@ async function buildTekmetricPartsHistory(shopId: number) {
         }
       }
     } catch (err: any) {
-      console.log(`[Parts History] Error for WO ${wo.workOrderId}: ${err.message}`);
-      results.errors.push(`WO ${wo.workOrderId}: ${err.message}`);
+      console.log(`[Parts History] Error for WO ${(wo as any).work_order_id}: ${err.message}`);
+      results.errors.push(`WO ${(wo as any).work_order_id}: ${err.message}`);
     }
   }
   
@@ -156,11 +149,11 @@ export async function POST() {
   const shopId = Number(session.shopId);
   console.log(`[Parts History] Session shopId: ${session.shopId}, parsed: ${shopId}`);
   
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId });
+  const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
+  const shop = shopRows[0] as any;
   
-  const hasTekmetric = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
-  const hasProtractor = shop?.protractor?.configured || shop?.protractorConnectionId;
+  const hasTekmetric = shop?.tekmetric_shop_id || shop?.tekmetric?.shopId;
+  const hasProtractor = shop?.protractor_configured || shop?.protractor?.configured;
   
   let smsIntegration = "stand-alone";
   if (hasTekmetric) {
@@ -219,20 +212,20 @@ export async function POST() {
   
   const allJobIndexEntries: any[] = [];
   
-  const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
+  const vehicles = await sql`SELECT * FROM protractor_vehicles WHERE shop_id = ${String(shopId)}`;
   console.log(`[Parts History] Building parts database from ${vehicles.length} vehicles...`);
   
   const vehicleLimit = pLimit(2);
   
   await Promise.all(
-    vehicles.map((vehicle) =>
+    vehicles.map((vehicle: any) =>
       vehicleLimit(async () => {
-        if (!vehicle.protractorId) return;
+        if (!vehicle.protractor_id) return;
         
         try {
           results.vehiclesProcessed++;
           
-          const invoicesResult = await fetchInvoicesForVehicle(shopId, vehicle.protractorId, {
+          const invoicesResult = await fetchInvoicesForVehicle(shopId, vehicle.protractor_id, {
             startDate: fiveYearsAgo.toISOString().split("T")[0],
             endDate: endDate.toISOString().split("T")[0],
           });
@@ -318,21 +311,20 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(session.shopId);
-  const db = await getDb();
+  const shopId = String(session.shopId);
   
-  const invoiceCount = await db.collection("protractor_invoices").countDocuments({ shopId });
-  const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
-  const jobsCount = await db.collection("job_index").countDocuments({ shopId });
-  const vehicleCount = await db.collection("protractor_vehicles").countDocuments({ shopId });
+  const invoiceCountRows = await sql`SELECT COUNT(*)::int as count FROM protractor_invoices WHERE shop_id = ${shopId}`;
+  const partsCountRows = await sql`SELECT COUNT(*)::int as count FROM part_cross_ref WHERE shop_id = ${shopId}`;
+  const jobsCountRows = await sql`SELECT COUNT(*)::int as count FROM job_index WHERE shop_id = ${shopId}`;
+  const vehicleCountRows = await sql`SELECT COUNT(*)::int as count FROM protractor_vehicles WHERE shop_id = ${shopId}`;
   
   return NextResponse.json({
     ok: true,
     stats: {
-      vehicles: vehicleCount,
-      invoices: invoiceCount,
-      jobs: jobsCount,
-      parts: partsCount,
+      vehicles: vehicleCountRows[0].count,
+      invoices: invoiceCountRows[0].count,
+      jobs: jobsCountRows[0].count,
+      parts: partsCountRows[0].count,
     },
   });
 }

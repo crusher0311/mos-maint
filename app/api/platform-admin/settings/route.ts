@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,60 +17,58 @@ export async function GET() {
   }
 
   try {
-    const db = await getDb();
-    const [trialSettings, billingSettings, generalSettings] = await Promise.all([
-      db.collection("platform_settings").findOne({ key: "trial" }),
-      db.collection("platform_settings").findOne({ type: "billing" }),
-      db.collection("platform_settings").findOne({ key: "general" }),
+    const [trialRows, billingRows, generalRows] = await Promise.all([
+      sql`SELECT * FROM platform_settings WHERE key = 'trial'`,
+      sql`SELECT * FROM platform_settings WHERE type = 'billing'`,
+      sql`SELECT * FROM platform_settings WHERE key = 'general'`,
     ]);
+
+    const trialSettings = trialRows[0] as any;
+    const billingSettings = billingRows[0] as any;
+    const generalSettings = generalRows[0] as any;
 
     return NextResponse.json({
       ok: true,
       settings: {
         trial: {
-          vinLimit: trialSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT,
+          vinLimit: trialSettings?.vin_limit ?? DEFAULT_TRIAL_VIN_LIMIT,
         },
         billing: {
-          // Tier-specific pricing
-          starterProductId: billingSettings?.starterProductId || "",
-          starterPriceId: billingSettings?.starterPriceId || "",
-          starterPrice: billingSettings?.starterPrice ?? 199.95,
-          starterIncludedVins: billingSettings?.starterIncludedVins ?? 300,
-          plusProductId: billingSettings?.plusProductId || "",
-          plusPriceId: billingSettings?.plusPriceId || "",
-          plusPrice: billingSettings?.plusPrice ?? 229.95,
-          plusIncludedVins: billingSettings?.plusIncludedVins ?? 300,
-          eliteProductId: billingSettings?.eliteProductId || "",
-          elitePriceId: billingSettings?.elitePriceId || "",
-          elitePrice: billingSettings?.elitePrice ?? 279.95,
-          eliteIncludedVins: billingSettings?.eliteIncludedVins ?? 300,
-          // Legacy mosPro fields
-          mosProProductId: billingSettings?.mosProProductId || "",
-          mosProPriceId: billingSettings?.mosProPriceId || "",
-          mosProPrice: billingSettings?.mosProPrice ?? 199,
-          mosProIncludedVins: billingSettings?.mosProIncludedVins ?? 300,
-          // VIN packs
-          vinPack100ProductId: billingSettings?.vinPack100ProductId || "",
-          vinPack100PriceId: billingSettings?.vinPack100PriceId || "",
-          vinPack100Price: billingSettings?.vinPack100Price ?? 39,
-          vinPack250ProductId: billingSettings?.vinPack250ProductId || "",
-          vinPack250PriceId: billingSettings?.vinPack250PriceId || "",
-          vinPack250Price: billingSettings?.vinPack250Price ?? 79,
-          vinPack500ProductId: billingSettings?.vinPack500ProductId || "",
-          vinPack500PriceId: billingSettings?.vinPack500PriceId || "",
-          vinPack500Price: billingSettings?.vinPack500Price ?? 149,
-          // Onboarding
-          onboardingProductId: billingSettings?.onboardingProductId || "",
-          onboardingPriceId: billingSettings?.onboardingPriceId || "",
-          onboardingPrice: billingSettings?.onboardingPrice ?? 495,
-          // Trial settings
-          trialVinLimit: billingSettings?.trialVinLimit ?? 10,
-          skipTrialBonusVins: billingSettings?.skipTrialBonusVins ?? 50,
-          foundingShopPricing: billingSettings?.foundingShopPricing ?? true,
-          defaultVinLimit: billingSettings?.defaultVinLimit ?? 300,
+          starterProductId: billingSettings?.starter_product_id || "",
+          starterPriceId: billingSettings?.starter_price_id || "",
+          starterPrice: billingSettings?.starter_price ?? 199.95,
+          starterIncludedVins: billingSettings?.starter_included_vins ?? 300,
+          plusProductId: billingSettings?.plus_product_id || "",
+          plusPriceId: billingSettings?.plus_price_id || "",
+          plusPrice: billingSettings?.plus_price ?? 229.95,
+          plusIncludedVins: billingSettings?.plus_included_vins ?? 300,
+          eliteProductId: billingSettings?.elite_product_id || "",
+          elitePriceId: billingSettings?.elite_price_id || "",
+          elitePrice: billingSettings?.elite_price ?? 279.95,
+          eliteIncludedVins: billingSettings?.elite_included_vins ?? 300,
+          mosProProductId: billingSettings?.mos_pro_product_id || "",
+          mosProPriceId: billingSettings?.mos_pro_price_id || "",
+          mosProPrice: billingSettings?.mos_pro_price ?? 199,
+          mosProIncludedVins: billingSettings?.mos_pro_included_vins ?? 300,
+          vinPack100ProductId: billingSettings?.vin_pack_100_product_id || "",
+          vinPack100PriceId: billingSettings?.vin_pack_100_price_id || "",
+          vinPack100Price: billingSettings?.vin_pack_100_price ?? 39,
+          vinPack250ProductId: billingSettings?.vin_pack_250_product_id || "",
+          vinPack250PriceId: billingSettings?.vin_pack_250_price_id || "",
+          vinPack250Price: billingSettings?.vin_pack_250_price ?? 79,
+          vinPack500ProductId: billingSettings?.vin_pack_500_product_id || "",
+          vinPack500PriceId: billingSettings?.vin_pack_500_price_id || "",
+          vinPack500Price: billingSettings?.vin_pack_500_price ?? 149,
+          onboardingProductId: billingSettings?.onboarding_product_id || "",
+          onboardingPriceId: billingSettings?.onboarding_price_id || "",
+          onboardingPrice: billingSettings?.onboarding_price ?? 495,
+          trialVinLimit: billingSettings?.trial_vin_limit ?? 10,
+          skipTrialBonusVins: billingSettings?.skip_trial_bonus_vins ?? 50,
+          foundingShopPricing: billingSettings?.founding_shop_pricing ?? true,
+          defaultVinLimit: billingSettings?.default_vin_limit ?? 300,
         },
         general: {
-          bookDemoUrl: generalSettings?.bookDemoUrl || "https://calendly.com/mos-tools",
+          bookDemoUrl: generalSettings?.book_demo_url || "https://calendly.com/mos-tools",
         },
       },
     });
@@ -91,7 +89,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const { key, settings } = await req.json();
-    const db = await getDb();
 
     if (key === "trial") {
       const vinLimit = Number(settings?.vinLimit);
@@ -99,17 +96,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid VIN limit" }, { status: 400 });
       }
 
-      await db.collection("platform_settings").updateOne(
-        { key: "trial" },
-        { 
-          $set: { 
-            vinLimit,
-            updatedAt: new Date(),
-            updatedBy: session.email,
-          } 
-        },
-        { upsert: true }
-      );
+      await sql`
+        INSERT INTO platform_settings (key, vin_limit, updated_at, updated_by)
+        VALUES ('trial', ${vinLimit}, NOW(), ${session.email})
+        ON CONFLICT (key) DO UPDATE SET vin_limit = ${vinLimit}, updated_at = NOW(), updated_by = ${session.email}
+      `;
 
       return NextResponse.json({ 
         ok: true, 
@@ -118,54 +109,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (key === "billing") {
-      await db.collection("platform_settings").updateOne(
-        { type: "billing" },
-        { 
-          $set: { 
-            type: "billing",
-            // Tier-specific pricing
-            starterProductId: settings.starterProductId || "",
-            starterPriceId: settings.starterPriceId || "",
-            starterPrice: settings.starterPrice ?? 199.95,
-            starterIncludedVins: settings.starterIncludedVins ?? 300,
-            plusProductId: settings.plusProductId || "",
-            plusPriceId: settings.plusPriceId || "",
-            plusPrice: settings.plusPrice ?? 229.95,
-            plusIncludedVins: settings.plusIncludedVins ?? 300,
-            eliteProductId: settings.eliteProductId || "",
-            elitePriceId: settings.elitePriceId || "",
-            elitePrice: settings.elitePrice ?? 279.95,
-            eliteIncludedVins: settings.eliteIncludedVins ?? 300,
-            // Legacy mosPro fields
-            mosProProductId: settings.mosProProductId || "",
-            mosProPriceId: settings.mosProPriceId || "",
-            mosProPrice: settings.mosProPrice ?? 199,
-            mosProIncludedVins: settings.mosProIncludedVins ?? 300,
-            // VIN packs
-            vinPack100ProductId: settings.vinPack100ProductId || "",
-            vinPack100PriceId: settings.vinPack100PriceId || "",
-            vinPack100Price: settings.vinPack100Price ?? 39,
-            vinPack250ProductId: settings.vinPack250ProductId || "",
-            vinPack250PriceId: settings.vinPack250PriceId || "",
-            vinPack250Price: settings.vinPack250Price ?? 79,
-            vinPack500ProductId: settings.vinPack500ProductId || "",
-            vinPack500PriceId: settings.vinPack500PriceId || "",
-            vinPack500Price: settings.vinPack500Price ?? 149,
-            // Onboarding
-            onboardingProductId: settings.onboardingProductId || "",
-            onboardingPriceId: settings.onboardingPriceId || "",
-            onboardingPrice: settings.onboardingPrice ?? 495,
-            // Trial settings
-            trialVinLimit: settings.trialVinLimit ?? 10,
-            skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
-            foundingShopPricing: settings.foundingShopPricing ?? true,
-            defaultVinLimit: settings.defaultVinLimit ?? 300,
-            updatedAt: new Date(),
-            updatedBy: session.email,
-          } 
-        },
-        { upsert: true }
-      );
+      await sql`
+        INSERT INTO platform_settings (key, type, settings, updated_at, updated_by)
+        VALUES ('billing_settings', 'billing', ${JSON.stringify(settings)}::jsonb, NOW(), ${session.email})
+        ON CONFLICT (key) DO UPDATE SET 
+          type = 'billing',
+          settings = ${JSON.stringify(settings)}::jsonb,
+          updated_at = NOW(),
+          updated_by = ${session.email}
+      `;
 
       return NextResponse.json({ 
         ok: true, 
@@ -174,18 +126,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (key === "general") {
-      await db.collection("platform_settings").updateOne(
-        { key: "general" },
-        { 
-          $set: { 
-            key: "general",
-            bookDemoUrl: settings.bookDemoUrl || "",
-            updatedAt: new Date(),
-            updatedBy: session.email,
-          } 
-        },
-        { upsert: true }
-      );
+      await sql`
+        INSERT INTO platform_settings (key, book_demo_url, updated_at, updated_by)
+        VALUES ('general', ${settings.bookDemoUrl || ''}, NOW(), ${session.email})
+        ON CONFLICT (key) DO UPDATE SET 
+          book_demo_url = ${settings.bookDemoUrl || ''},
+          updated_at = NOW(),
+          updated_by = ${session.email}
+      `;
 
       return NextResponse.json({ 
         ok: true, 

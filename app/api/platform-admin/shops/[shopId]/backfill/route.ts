@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 
 export const dynamic = "force-dynamic";
@@ -20,18 +20,17 @@ export async function POST(
   }
 
   try {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
+    const shop = shopRows[0] as any;
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
     const hasProtractor = !!(
-      shop.protractor?.configured ||
-      shop.protractor?.apiKey ||
-      shop.protractorApiKey ||
-      shop.protractorConnectionId
+      shop.protractor_configured ||
+      shop.protractor_api_key ||
+      shop.protractor_connection_id
     );
 
     if (!hasProtractor) {
@@ -51,13 +50,10 @@ export async function POST(
         console.error(`[Platform Admin] Backfill failed for shop ${shopId}:`, err.message);
       });
 
-    await db.collection("audit_logs").insertOne({
-      type: "manual_backfill_triggered",
-      shopId,
-      shopName: shop.name,
-      adminEmail: session.email,
-      createdAt: new Date(),
-    });
+    await sql`
+      INSERT INTO audit_logs (type, shop_id, shop_name, admin_email, created_at)
+      VALUES ('manual_backfill_triggered', ${String(shopId)}, ${shop.name}, ${session.email}, NOW())
+    `;
 
     return NextResponse.json({
       ok: true,

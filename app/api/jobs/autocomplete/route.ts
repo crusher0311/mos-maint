@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { NORMALIZED_COLLECTIONS } from "@/lib/normalized-schema";
+import sql from "@/lib/db/postgres";
 import { getNormalizedCache, CACHE_KEYS, CACHE_TTL } from "@/lib/normalized-cache";
 
 export const dynamic = "force-dynamic";
 
 const MAX_SUGGESTIONS = 10;
 const MIN_QUERY_LENGTH = 2;
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 interface AutocompleteSuggestion {
   title: string;
@@ -26,27 +21,13 @@ interface AutocompleteSuggestion {
   cannedJobCode?: string;
 }
 
-interface AggregatedJob {
-  _id: string;
-  title: string;
-  description?: string;
-  avgHours: number;
-  avgTotal: number;
-  avgLaborTotal: number;
-  avgPartsTotal: number;
-  count: number;
-  lastPerformed: Date;
-  vehicleMatchCount: number;
-  cannedJobCode?: string;
-}
-
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(session.shopId);
+  const shopId = String(session.shopId);
   const url = new URL(req.url);
   const query = url.searchParams.get("q") || "";
   const vin = url.searchParams.get("vin") || "";
@@ -59,23 +40,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ suggestions: [] });
   }
 
-  const db = await getDb();
   const cache = getNormalizedCache();
   
-  let enterpriseShopIds: number[] = [shopId];
+  let enterpriseShopIds: string[] = [shopId];
   if (includeEnterprise) {
     const enterpriseCacheKey = { shopId };
-    let cachedEnterpriseShops = cache.get<number[]>(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey);
+    let cachedEnterpriseShops = cache.get<string[]>(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey);
     
     if (!cachedEnterpriseShops) {
-      const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
-      const enterpriseId = shop?.enterpriseId as string | undefined;
+      const shopRows = await sql`SELECT enterprise_id FROM shops WHERE shop_id = ${shopId}`;
+      const enterpriseId = shopRows[0]?.enterprise_id as string | undefined;
       
       if (enterpriseId) {
-        const enterpriseShops = await db.collection("shops")
-          .find({ enterpriseId })
-          .toArray();
-        cachedEnterpriseShops = enterpriseShops.map(s => Number(s.shopId));
+        const enterpriseShops = await sql`SELECT shop_id FROM shops WHERE enterprise_id = ${enterpriseId}`;
+        cachedEnterpriseShops = enterpriseShops.map((s: any) => s.shop_id);
         cache.set(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey, cachedEnterpriseShops, CACHE_TTL.LONG);
       } else {
         cachedEnterpriseShops = [shopId];
@@ -99,153 +77,118 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ suggestions: cached, cached: true });
   }
 
-  const serviceJobsCollection = db.collection(NORMALIZED_COLLECTIONS.serviceJobs);
-
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-  const escapedQueryWords = queryWords.map(escapeRegex);
+  const searchPattern = queryWords.map(w => `%${w}%`).join('%');
   
-  const pipeline: any[] = [
-    {
-      $match: {
-        shopId: { $in: enterpriseShopIds },
-        'softDelete.isDeleted': { $ne: true },
-        status: { $in: ['completed', 'authorized'] },
-        $and: escapedQueryWords.map(word => ({
-          title: { $regex: word, $options: 'i' }
-        }))
-      }
-    },
-    {
-      $lookup: {
-        from: NORMALIZED_COLLECTIONS.workOrders,
-        let: { workOrderId: '$workOrderId' },
-        pipeline: [
-          { $match: { $expr: { $eq: [{ $toString: '$_id' }, '$$workOrderId'] } } },
-          { $project: { closedDate: 1, vehicleId: 1 } }
-        ],
-        as: 'workOrder'
-      }
-    },
-    { $unwind: { path: '$workOrder', preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: NORMALIZED_COLLECTIONS.vehicles,
-        let: { vehicleId: '$workOrder.vehicleId' },
-        pipeline: [
-          { $match: { $expr: { $eq: [{ $toString: '$_id' }, '$$vehicleId'] } } },
-          { $project: { vin: 1, year: 1, make: 1, model: 1 } }
-        ],
-        as: 'vehicle'
-      }
-    },
-    { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
-  ];
-
   const hasVehicleContext = vin || year || make || model;
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  
+  let rows: any[];
   
   if (hasVehicleContext) {
-    const matchConditions: any[] = [];
-    
-    if (vin) {
-      matchConditions.push({ $eq: [{ $ifNull: ['$vehicle.vin', ''] }, vin] });
-    }
-    if (year) {
-      const yearNum = parseInt(year);
-      matchConditions.push({ $eq: [{ $ifNull: ['$vehicle.year', 0] }, yearNum] });
-    }
-    if (make) {
-      const escapedMake = escapeRegex(make);
-      matchConditions.push({
-        $regexMatch: { 
-          input: { $ifNull: ['$vehicle.make', ''] }, 
-          regex: `^${escapedMake}$`, 
-          options: 'i' 
-        }
-      });
-    }
-    if (model) {
-      const escapedModel = escapeRegex(model);
-      matchConditions.push({
-        $regexMatch: { 
-          input: { $ifNull: ['$vehicle.model', ''] }, 
-          regex: `^${escapedModel}$`, 
-          options: 'i' 
-        }
-      });
-    }
-
-    pipeline.push({
-      $addFields: {
-        vehicleMatches: {
-          $cond: {
-            if: {
-              $and: [
-                { $ne: ['$vehicle', null] },
-                ...matchConditions
-              ]
-            },
-            then: 1,
-            else: 0
-          }
-        }
-      }
-    });
+    const yearNum = year ? parseInt(year) : null;
+    rows = await sql`
+      WITH job_data AS (
+        SELECT 
+          sj.title,
+          sj.description,
+          sj.canned_job_code,
+          sj.labor_hours_billed,
+          sj.labor_hours_actual,
+          sj.total,
+          sj.labor_total,
+          sj.parts_total,
+          wo.closed_date,
+          v.vin as vehicle_vin,
+          v.year as vehicle_year,
+          v.make as vehicle_make,
+          v.model as vehicle_model,
+          CASE 
+            WHEN (${vin} = '' OR UPPER(v.vin) = UPPER(${vin}))
+              AND (${yearNum}::int IS NULL OR v.year = ${yearNum})
+              AND (${make} = '' OR LOWER(v.make) = LOWER(${make}))
+              AND (${model} = '' OR LOWER(v.model) = LOWER(${model}))
+            THEN 1 ELSE 0
+          END as vehicle_match
+        FROM service_jobs sj
+        LEFT JOIN work_orders wo ON sj.work_order_id = wo.id::text
+        LEFT JOIN vehicles v ON wo.vehicle_id = v.id::text
+        WHERE sj.shop_id = ANY(${enterpriseShopIds})
+          AND (sj.soft_delete IS NULL OR sj.soft_delete->>'isDeleted' != 'true')
+          AND sj.status IN ('completed', 'authorized')
+          AND LOWER(sj.title) LIKE ${`%${searchPattern}%`}
+      )
+      SELECT 
+        LOWER(TRIM(title)) as job_key,
+        MIN(title) as title,
+        MIN(description) as description,
+        MIN(canned_job_code) as canned_job_code,
+        AVG(COALESCE(labor_hours_billed, labor_hours_actual))::float as avg_hours,
+        AVG(total)::float as avg_total,
+        AVG(labor_total)::float as avg_labor_total,
+        AVG(parts_total)::float as avg_parts_total,
+        COUNT(*)::int as count,
+        MAX(closed_date) as last_performed,
+        SUM(vehicle_match)::int as vehicle_match_count,
+        (COUNT(*) + SUM(vehicle_match) * 10 + 
+          CASE WHEN MAX(closed_date) > ${ninetyDaysAgo} THEN 5 ELSE 0 END) as relevance_score
+      FROM job_data
+      GROUP BY LOWER(TRIM(title))
+      ORDER BY relevance_score DESC, count DESC
+      LIMIT ${MAX_SUGGESTIONS}
+    `;
   } else {
-    pipeline.push({
-      $addFields: { vehicleMatches: 0 }
-    });
+    rows = await sql`
+      WITH job_data AS (
+        SELECT 
+          sj.title,
+          sj.description,
+          sj.canned_job_code,
+          sj.labor_hours_billed,
+          sj.labor_hours_actual,
+          sj.total,
+          sj.labor_total,
+          sj.parts_total,
+          wo.closed_date
+        FROM service_jobs sj
+        LEFT JOIN work_orders wo ON sj.work_order_id = wo.id::text
+        WHERE sj.shop_id = ANY(${enterpriseShopIds})
+          AND (sj.soft_delete IS NULL OR sj.soft_delete->>'isDeleted' != 'true')
+          AND sj.status IN ('completed', 'authorized')
+          AND LOWER(sj.title) LIKE ${`%${searchPattern}%`}
+      )
+      SELECT 
+        LOWER(TRIM(title)) as job_key,
+        MIN(title) as title,
+        MIN(description) as description,
+        MIN(canned_job_code) as canned_job_code,
+        AVG(COALESCE(labor_hours_billed, labor_hours_actual))::float as avg_hours,
+        AVG(total)::float as avg_total,
+        AVG(labor_total)::float as avg_labor_total,
+        AVG(parts_total)::float as avg_parts_total,
+        COUNT(*)::int as count,
+        MAX(closed_date) as last_performed,
+        0 as vehicle_match_count,
+        (COUNT(*) + 
+          CASE WHEN MAX(closed_date) > ${ninetyDaysAgo} THEN 5 ELSE 0 END) as relevance_score
+      FROM job_data
+      GROUP BY LOWER(TRIM(title))
+      ORDER BY relevance_score DESC, count DESC
+      LIMIT ${MAX_SUGGESTIONS}
+    `;
   }
 
-  pipeline.push(
-    {
-      $group: {
-        _id: { $toLower: { $trim: { input: '$title' } } },
-        title: { $first: '$title' },
-        description: { $first: '$description' },
-        cannedJobCode: { $first: '$cannedJobCode' },
-        avgHours: { $avg: { $ifNull: ['$laborHoursBilled', '$laborHoursActual'] } },
-        avgTotal: { $avg: '$total' },
-        avgLaborTotal: { $avg: '$laborTotal' },
-        avgPartsTotal: { $avg: '$partsTotal' },
-        count: { $sum: 1 },
-        lastPerformed: { $max: '$workOrder.closedDate' },
-        vehicleMatchCount: { $sum: '$vehicleMatches' }
-      }
-    },
-    {
-      $addFields: {
-        relevanceScore: {
-          $add: [
-            { $multiply: ['$count', 1] },
-            { $multiply: ['$vehicleMatchCount', 10] },
-            {
-              $cond: {
-                if: { $gt: ['$lastPerformed', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)] },
-                then: 5,
-                else: 0
-              }
-            }
-          ]
-        }
-      }
-    },
-    { $sort: { relevanceScore: -1, count: -1 } },
-    { $limit: MAX_SUGGESTIONS }
-  );
-
-  const aggregatedJobs = await serviceJobsCollection.aggregate(pipeline).toArray() as AggregatedJob[];
-
-  const suggestions: AutocompleteSuggestion[] = aggregatedJobs.map(job => ({
+  const suggestions: AutocompleteSuggestion[] = rows.map((job: any) => ({
     title: job.title,
     description: job.description,
-    avgHours: job.avgHours ? Math.round(job.avgHours * 10) / 10 : undefined,
-    avgTotal: job.avgTotal ? Math.round(job.avgTotal * 100) / 100 : undefined,
-    avgLaborTotal: job.avgLaborTotal ? Math.round(job.avgLaborTotal * 100) / 100 : undefined,
-    avgPartsTotal: job.avgPartsTotal ? Math.round(job.avgPartsTotal * 100) / 100 : undefined,
+    avgHours: job.avg_hours ? Math.round(job.avg_hours * 10) / 10 : undefined,
+    avgTotal: job.avg_total ? Math.round(job.avg_total * 100) / 100 : undefined,
+    avgLaborTotal: job.avg_labor_total ? Math.round(job.avg_labor_total * 100) / 100 : undefined,
+    avgPartsTotal: job.avg_parts_total ? Math.round(job.avg_parts_total * 100) / 100 : undefined,
     occurrences: job.count,
-    lastPerformed: job.lastPerformed,
-    vehicleMatch: job.vehicleMatchCount > 0,
-    cannedJobCode: job.cannedJobCode,
+    lastPerformed: job.last_performed,
+    vehicleMatch: job.vehicle_match_count > 0,
+    cannedJobCode: job.canned_job_code,
   }));
 
   cache.set(CACHE_KEYS.JOB_AUTOCOMPLETE, cacheKey, suggestions, CACHE_TTL.SHORT);

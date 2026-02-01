@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -17,10 +17,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = await getDb();
-    const user = await db.collection("users").findOne({
-      email: email.toLowerCase().trim(),
-    });
+    const userRows = await sql`
+      SELECT * FROM users WHERE LOWER(email) = LOWER(${email.trim()})
+    `;
+    const user = userRows[0] as any;
 
     if (!user) {
       return NextResponse.json(
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!user.isPlatformAdmin) {
+    if (!user.is_platform_admin) {
       return NextResponse.json(
         { ok: false, error: "Access denied. Platform admin privileges required." },
         { status: 403 }
@@ -44,10 +44,7 @@ export async function POST(req: NextRequest) {
         valid = user.password === password;
         if (valid) {
           const hashed = await bcrypt.hash(password, 12);
-          await db.collection("users").updateOne(
-            { _id: user._id },
-            { $set: { password: hashed } }
-          );
+          await sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`;
         }
       }
     }
@@ -62,15 +59,10 @@ export async function POST(req: NextRequest) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    await db.collection("sessions").insertOne({
-      token,
-      userId: user._id,
-      shopId: user.shopId,
-      email: user.email,
-      isPlatformAdmin: true,
-      createdAt: new Date(),
-      expiresAt,
-    });
+    await sql`
+      INSERT INTO sessions (token, user_id, shop_id, email, is_platform_admin, created_at, expires_at)
+      VALUES (${token}, ${user.id}, ${user.shop_id}, ${user.email}, true, NOW(), ${expiresAt})
+    `;
 
     const store = await cookies();
     store.set(SESSION_COOKIE, token, sessionCookieOptions());

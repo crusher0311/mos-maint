@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 import { getSession, sessionCookieOptions, adminSessionCookieOptions } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { logAdminAction } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
@@ -17,31 +17,29 @@ export async function POST(req: Request) {
     const { shopId: rawShopId } = await req.json();
 
     const shopId = typeof rawShopId === "string" && !isNaN(Number(rawShopId)) 
-      ? Number(rawShopId) 
-      : rawShopId;
+      ? String(rawShopId) 
+      : String(rawShopId);
 
-    if (shopId === undefined || shopId === null) {
+    if (shopId === undefined || shopId === null || shopId === "undefined" || shopId === "null") {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
+    const shop = shopRows[0] as any;
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    if (shop.isLocked) {
+    if (shop.is_locked) {
       return NextResponse.json({ error: "Shop is locked. Unlock it first to access." }, { status: 403 });
     }
 
-    let targetUser = await db.collection("users").findOne({
-      shopId,
-      role: "owner",
-    });
+    let userRows = await sql`SELECT * FROM users WHERE shop_id = ${shopId} AND role = 'owner' LIMIT 1`;
+    let targetUser = userRows[0] as any;
 
     if (!targetUser) {
-      targetUser = await db.collection("users").findOne({ shopId });
+      userRows = await sql`SELECT * FROM users WHERE shop_id = ${shopId} LIMIT 1`;
+      targetUser = userRows[0] as any;
     }
 
     if (!targetUser) {
@@ -49,23 +47,18 @@ export async function POST(req: Request) {
     }
 
     const newToken = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 4); // 4 hours for impersonation
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 4);
 
-    await db.collection("sessions").insertOne({
-      token: newToken,
-      userId: targetUser._id,
-      shopId,
-      createdAt: new Date(),
-      expiresAt,
-      impersonatedBy: session.email,
-      isImpersonation: true,
-    });
+    await sql`
+      INSERT INTO sessions (token, user_id, shop_id, created_at, expires_at, impersonated_by, is_impersonation)
+      VALUES (${newToken}, ${targetUser.id}, ${shopId}, NOW(), ${expiresAt}, ${session.email}, true)
+    `;
 
     const headerStore = await headers();
     await logAdminAction({
       action: "impersonation",
       adminEmail: session.email,
-      targetShopId: shopId,
+      targetShopId: Number(shopId),
       targetShopName: shop.name,
       targetUserEmail: targetUser.email,
       ipAddress: headerStore.get("x-forwarded-for") || headerStore.get("x-real-ip") || undefined,
@@ -84,7 +77,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      shopId,
+      shopId: Number(shopId),
       shopName: shop.name || `Shop ${shopId}`,
       userEmail: targetUser.email,
     });

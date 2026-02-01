@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getTekmetricUsageStats, getUsageWarningLevel } from "@/lib/tekmetric-usage-tracker";
 
 export const dynamic = "force-dynamic";
@@ -10,13 +10,14 @@ async function isPlatformAdmin(): Promise<boolean> {
   const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
   if (!sid) return false;
 
-  const db = await getDb();
   const now = new Date();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
+  const sessRows = await sql`SELECT * FROM sessions WHERE token = ${sid} AND expires_at > ${now}`;
+  const sess = sessRows[0] as any;
   if (!sess) return false;
 
-  const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.platformAdmin === true;
+  const userRows = await sql`SELECT * FROM users WHERE id = ${sess.user_id}`;
+  const user = userRows[0] as any;
+  return user?.is_platform_admin === true || user?.platform_admin === true;
 }
 
 export async function GET(request: NextRequest) {
@@ -28,38 +29,32 @@ export async function GET(request: NextRequest) {
     const stats = await getTekmetricUsageStats();
     const warningLevel = await getUsageWarningLevel();
 
-    const db = await getDb();
-    
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
-    const hourlyUsage = await db.collection("tekmetric_api_usage").aggregate([
-      { $match: { timestamp: { $gte: oneDayAgo } } },
-      { 
-        $group: { 
-          _id: { 
-            $dateToString: { format: "%Y-%m-%dT%H:00:00Z", date: "$timestamp" } 
-          },
-          count: { $sum: 1 },
-          errors429: { $sum: { $cond: ["$is429", 1, 0] } },
-          avgLatency: { $avg: "$latencyMs" }
-        } 
-      },
-      { $sort: { _id: 1 } }
-    ]).toArray();
+    const hourlyUsage = await sql`
+      SELECT 
+        date_trunc('hour', timestamp) as hour,
+        COUNT(*)::int as count,
+        SUM(CASE WHEN is_429 THEN 1 ELSE 0 END)::int as errors_429,
+        AVG(latency_ms)::float as avg_latency
+      FROM tekmetric_api_usage
+      WHERE timestamp >= ${oneDayAgo}
+      GROUP BY date_trunc('hour', timestamp)
+      ORDER BY hour
+    `;
 
-    const endpointBreakdown = await db.collection("tekmetric_api_usage").aggregate([
-      { $match: { timestamp: { $gte: oneDayAgo } } },
-      { 
-        $group: { 
-          _id: "$endpoint",
-          count: { $sum: 1 },
-          avgLatency: { $avg: "$latencyMs" }
-        } 
-      },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]).toArray();
+    const endpointBreakdown = await sql`
+      SELECT 
+        endpoint as _id,
+        COUNT(*)::int as count,
+        AVG(latency_ms)::float as avg_latency
+      FROM tekmetric_api_usage
+      WHERE timestamp >= ${oneDayAgo}
+      GROUP BY endpoint
+      ORDER BY count DESC
+      LIMIT 10
+    `;
 
     return NextResponse.json({
       current: {
@@ -76,16 +71,16 @@ export async function GET(request: NextRequest) {
         recentErrors: stats.recentErrors
       },
       topShops: stats.topShops,
-      hourlyUsage: hourlyUsage.map(h => ({
-        hour: h._id,
+      hourlyUsage: hourlyUsage.map((h: any) => ({
+        hour: h.hour?.toISOString(),
         requests: h.count,
-        errors429: h.errors429,
-        avgLatencyMs: Math.round(h.avgLatency || 0)
+        errors429: h.errors_429,
+        avgLatencyMs: Math.round(h.avg_latency || 0)
       })),
-      endpointBreakdown: endpointBreakdown.map(e => ({
+      endpointBreakdown: endpointBreakdown.map((e: any) => ({
         endpoint: e._id,
         count: e.count,
-        avgLatencyMs: Math.round(e.avgLatency || 0)
+        avgLatencyMs: Math.round(e.avg_latency || 0)
       }))
     });
   } catch (error: any) {
