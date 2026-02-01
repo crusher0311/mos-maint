@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { getShopByShopId } from "@/lib/db/shops-pg";
+import { getEnterpriseById } from "@/lib/enterprise-pg";
+import sql from "@/lib/db/postgres";
 import { getStripe } from "@/lib/stripe";
-import { ObjectId } from "mongodb";
 
 async function requireEnterpriseAccess() {
   const session = await getSession();
@@ -10,10 +11,9 @@ async function requireEnterpriseAccess() {
     return { error: "Unauthorized", status: 401 };
   }
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ id: session.shopId });
+  const shop = await getShopByShopId(session.shopId);
 
-  if (!shop?.enterpriseId) {
+  if (!shop?.enterprise_id) {
     return { error: "Not part of an enterprise", status: 403 };
   }
 
@@ -21,7 +21,7 @@ async function requireEnterpriseAccess() {
     return { error: "Enterprise admin access required", status: 403 };
   }
 
-  return { session, enterpriseId: shop.enterpriseId, db };
+  return { session, enterpriseId: shop.enterprise_id };
 }
 
 export async function GET() {
@@ -30,30 +30,40 @@ export async function GET() {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { db, enterpriseId } = auth;
+  const { enterpriseId } = auth;
 
   try {
-    const enterpriseIdStr = enterpriseId.toString();
-    let enterpriseObjId: ObjectId | null = null;
-    try {
-      enterpriseObjId = new ObjectId(enterpriseIdStr);
-    } catch (e) {}
+    const enterprise = await getEnterpriseById(enterpriseId);
+    if (!enterprise) {
+      return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
+    }
 
-    const shops = await db.collection("shops").find({
-      $or: [
-        ...(enterpriseObjId ? [{ enterpriseId: enterpriseObjId }] : []),
-        { enterpriseId: enterpriseIdStr }
-      ]
-    }).toArray();
+    const shops = enterprise.shop_ids.length > 0 ? await sql`
+      SELECT id, shop_id, name, billing FROM shops 
+      WHERE shop_id::int = ANY(${enterprise.shop_ids})
+    ` : [];
 
     const stripe = getStripe();
-    const allInvoices: any[] = [];
+    const allInvoices: Array<{
+      id: string;
+      number: string;
+      amount: number;
+      status: string | null;
+      created: number;
+      hostedInvoiceUrl: string | null;
+      invoicePdf: string | null;
+      shopId: string;
+      shopName: string | null;
+    }> = [];
 
     for (const shop of shops) {
-      if (shop.stripeCustomerId) {
+      const billing = shop.billing as Record<string, unknown> | null;
+      const stripeCustomerId = billing?.stripeCustomerId as string | undefined;
+      
+      if (stripeCustomerId) {
         try {
           const invoices = await stripe.invoices.list({
-            customer: shop.stripeCustomerId,
+            customer: stripeCustomerId,
             limit: 10,
           });
 
@@ -64,8 +74,8 @@ export async function GET() {
               amount: invoice.amount_paid || invoice.total,
               status: invoice.status,
               created: invoice.created,
-              hostedInvoiceUrl: invoice.hosted_invoice_url,
-              invoicePdf: invoice.invoice_pdf,
+              hostedInvoiceUrl: invoice.hosted_invoice_url || null,
+              invoicePdf: invoice.invoice_pdf || null,
               shopId: shop.id,
               shopName: shop.name
             });
@@ -81,7 +91,7 @@ export async function GET() {
     return NextResponse.json({
       invoices: allInvoices.slice(0, 50)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching enterprise invoices:", error);
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });
   }

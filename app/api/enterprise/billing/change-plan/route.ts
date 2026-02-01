@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { getShopByShopId, getShopById } from "@/lib/db/shops-pg";
+import sql from "@/lib/db/postgres";
 import { getStripe } from "@/lib/stripe";
-import { ObjectId } from "mongodb";
 
 async function requireEnterpriseAccess() {
   const session = await getSession();
@@ -10,10 +10,9 @@ async function requireEnterpriseAccess() {
     return { error: "Unauthorized", status: 401 };
   }
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ id: session.shopId });
+  const shop = await getShopByShopId(session.shopId);
 
-  if (!shop?.enterpriseId) {
+  if (!shop?.enterprise_id) {
     return { error: "Not part of an enterprise", status: 403 };
   }
 
@@ -21,7 +20,7 @@ async function requireEnterpriseAccess() {
     return { error: "Enterprise admin access required", status: 403 };
   }
 
-  return { session, enterpriseId: shop.enterpriseId, db };
+  return { session, enterpriseId: shop.enterprise_id };
 }
 
 export async function POST(request: NextRequest) {
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { db, enterpriseId } = auth;
+  const { enterpriseId } = auth;
 
   try {
     const { shopId, planSlug } = await request.json();
@@ -39,14 +38,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const enterpriseIdStr = enterpriseId.toString();
-    let enterpriseObjId: ObjectId | null = null;
-    try {
-      enterpriseObjId = new ObjectId(enterpriseIdStr);
-    } catch (e) {}
-
-    const plans = await db.collection("billing_settings").findOne({ key: "plans" });
-    const planConfig = plans?.plans?.find((p: any) => p.slug === planSlug);
+    const plansResult = await sql<{plans: Array<{slug: string, name: string, order: number, stripeMonthlyPriceId: string}>}[]>`
+      SELECT value as plans FROM settings WHERE key = 'plans' LIMIT 1
+    `;
+    const plans = plansResult[0]?.plans || [];
+    const planConfig = plans.find((p) => p.slug === planSlug);
     if (!planConfig) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
@@ -56,27 +52,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Plan not available for purchase" }, { status: 400 });
     }
 
-    const targetShop = await db.collection("shops").findOne({
-      id: shopId,
-      $or: [
-        ...(enterpriseObjId ? [{ enterpriseId: enterpriseObjId }] : []),
-        { enterpriseId: enterpriseIdStr }
-      ]
-    });
+    const targetShop = typeof shopId === 'string' && shopId.includes('-') 
+      ? await getShopById(shopId) 
+      : await getShopByShopId(shopId);
 
-    if (!targetShop) {
+    if (!targetShop || targetShop.enterprise_id !== enterpriseId) {
       return NextResponse.json({ error: "Shop not found in enterprise" }, { status: 404 });
     }
 
     const stripe = getStripe();
+    const billing = targetShop.billing as Record<string, unknown> | null;
+    const stripeCustomerId = billing?.stripeCustomerId as string | undefined;
+    const stripeSubscriptionId = billing?.stripeSubscriptionId as string | undefined;
 
-    const currentPlanSlug = targetShop.billing?.plan || targetShop.plan || "starter";
-    const currentPlan = plans?.plans?.find((p: any) => p.slug === currentPlanSlug);
+    const currentPlanSlug = (billing?.plan as string) || "starter";
+    const currentPlan = plans.find((p) => p.slug === currentPlanSlug);
     const isDowngrade = planConfig.order < (currentPlan?.order || 0);
 
-    if (!targetShop.stripeCustomerId || !targetShop.stripeSubscriptionId) {
+    if (!stripeCustomerId || !stripeSubscriptionId) {
       const checkoutSession = await stripe.checkout.sessions.create({
-        customer_email: targetShop.email,
         payment_method_types: ["card"],
         allow_promotion_codes: true,
         line_items: [{ price: priceId, quantity: 1 }],
@@ -93,8 +87,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ checkoutUrl: checkoutSession.url });
     }
 
-    const subscriptionData = await stripe.subscriptions.retrieve(targetShop.stripeSubscriptionId);
-    const subscription = subscriptionData as any;
+    const subscriptionData = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const subscription = subscriptionData as unknown as {
+      status: string;
+      items?: { data?: Array<{ id: string }> };
+      current_period_end: number;
+    };
     
     if (!subscription || subscription.status === "canceled") {
       return NextResponse.json({ error: "No active subscription found" }, { status: 400 });
@@ -105,23 +103,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Subscription item not found" }, { status: 400 });
     }
 
-    const periodEnd = subscription.current_period_end as number;
+    const periodEnd = subscription.current_period_end;
 
     if (isDowngrade) {
-      await db.collection("shops").updateOne(
-        { id: shopId },
-        {
-          $set: {
-            pendingPlanChange: {
-              priceId,
-              planId: planSlug,
-              effectiveDate: new Date(periodEnd * 1000),
-              currentSubscriptionId: targetShop.stripeSubscriptionId,
-            },
-            updatedAt: new Date()
-          }
-        }
-      );
+      const existingSettings = (targetShop.settings as Record<string, unknown>) || {};
+      const updatedSettings = {
+        ...existingSettings,
+        pendingPlanChange: {
+          priceId,
+          planId: planSlug,
+          effectiveDate: new Date(periodEnd * 1000).toISOString(),
+          currentSubscriptionId: stripeSubscriptionId,
+        },
+      };
+
+      await sql`
+        UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = NOW()
+        WHERE id = ${shopId}
+      `;
 
       return NextResponse.json({
         success: true,
@@ -129,30 +128,29 @@ export async function POST(request: NextRequest) {
         effectiveDate: new Date(periodEnd * 1000).toISOString(),
       });
     } else {
-      await stripe.subscriptions.update(targetShop.stripeSubscriptionId, {
+      await stripe.subscriptions.update(stripeSubscriptionId, {
         items: [{ id: currentItemId, price: priceId }],
         proration_behavior: "create_prorations",
       });
 
-      await db.collection("shops").updateOne(
-        { id: shopId },
-        {
-          $set: {
-            "billing.plan": planSlug,
-            plan: planSlug,
-            updatedAt: new Date()
-          },
-          $unset: { pendingPlanChange: "" }
-        }
-      );
+      const updatedBilling = {
+        ...(billing || {}),
+        plan: planSlug,
+      };
+
+      await sql`
+        UPDATE shops SET billing = ${JSON.stringify(updatedBilling)}::jsonb, updated_at = NOW()
+        WHERE id = ${shopId}
+      `;
 
       return NextResponse.json({
         success: true,
         message: `Upgraded to ${planConfig.name} successfully!`,
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error changing plan:", error);
-    return NextResponse.json({ error: error.message || "Failed to change plan" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to change plan";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

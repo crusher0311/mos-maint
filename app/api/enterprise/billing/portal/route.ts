@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { getShopByShopId, getShopById } from "@/lib/db/shops-pg";
+import sql from "@/lib/db/postgres";
 import { getStripe } from "@/lib/stripe";
-import { ObjectId } from "mongodb";
 
 async function requireEnterpriseAccess() {
   const session = await getSession();
@@ -10,10 +10,9 @@ async function requireEnterpriseAccess() {
     return { error: "Unauthorized", status: 401 };
   }
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ id: session.shopId });
+  const shop = await getShopByShopId(session.shopId);
 
-  if (!shop?.enterpriseId) {
+  if (!shop?.enterprise_id) {
     return { error: "Not part of an enterprise", status: 403 };
   }
 
@@ -21,7 +20,7 @@ async function requireEnterpriseAccess() {
     return { error: "Enterprise admin access required", status: 403 };
   }
 
-  return { session, enterpriseId: shop.enterpriseId, db };
+  return { session, enterpriseId: shop.enterprise_id };
 }
 
 export async function POST(request: NextRequest) {
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { db, enterpriseId } = auth;
+  const { enterpriseId } = auth;
 
   try {
     const { shopId } = await request.json();
@@ -39,38 +38,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Shop ID required" }, { status: 400 });
     }
 
-    const enterpriseIdStr = enterpriseId.toString();
-    let enterpriseObjId: ObjectId | null = null;
-    try {
-      enterpriseObjId = new ObjectId(enterpriseIdStr);
-    } catch (e) {}
+    const targetShop = typeof shopId === 'string' && shopId.includes('-') 
+      ? await getShopById(shopId) 
+      : await getShopByShopId(shopId);
 
-    const targetShop = await db.collection("shops").findOne({
-      id: shopId,
-      $or: [
-        ...(enterpriseObjId ? [{ enterpriseId: enterpriseObjId }] : []),
-        { enterpriseId: enterpriseIdStr }
-      ]
-    });
-
-    if (!targetShop) {
+    if (!targetShop || targetShop.enterprise_id !== enterpriseId) {
       return NextResponse.json({ error: "Shop not found in enterprise" }, { status: 404 });
     }
 
-    if (!targetShop.stripeCustomerId) {
+    const billing = targetShop.billing as Record<string, unknown> | null;
+    const stripeCustomerId = billing?.stripeCustomerId as string | undefined;
+
+    if (!stripeCustomerId) {
       return NextResponse.json({ error: "No billing account for this location" }, { status: 400 });
     }
 
     const stripe = getStripe();
 
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: targetShop.stripeCustomerId,
+      customer: stripeCustomerId,
       return_url: `${process.env.NEXT_PUBLIC_BASE_URL || "https://mosmaintenance.com"}/dashboard/enterprise/billing`,
     });
 
     return NextResponse.json({ url: portalSession.url });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating portal session:", error);
-    return NextResponse.json({ error: error.message || "Failed to open billing portal" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to open billing portal";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

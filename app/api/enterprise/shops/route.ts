@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
-import { ObjectId } from "mongodb";
+import { 
+  getEnterpriseById, 
+  addShopToEnterprise, 
+  removeShopFromEnterprise 
+} from "@/lib/enterprise-pg";
+import { upsertShop } from "@/lib/db/shops-pg";
+import sql from "@/lib/db/postgres";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -38,44 +42,48 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
 
-    const db = await getDb();
-    
-    const shops = await db.collection("shops")
-      .find({ shopId: { $in: enterprise.shopIds } })
-      .toArray();
+    const shops = enterprise.shop_ids.length > 0 ? await sql`
+      SELECT * FROM shops WHERE shop_id::int = ANY(${enterprise.shop_ids})
+    ` : [];
 
-    const shopUserCounts = await db.collection("users").aggregate([
-      { $match: { shopId: { $in: enterprise.shopIds } } },
-      { $group: { _id: "$shopId", count: { $sum: 1 } } }
-    ]).toArray();
+    const shopUserCounts = enterprise.shop_ids.length > 0 ? await sql<{shop_id: string, count: string}[]>`
+      SELECT shop_id, COUNT(*) as count FROM users 
+      WHERE shop_id::int = ANY(${enterprise.shop_ids})
+      GROUP BY shop_id
+    ` : [];
     
-    const userCountMap = new Map(shopUserCounts.map(s => [s._id, s.count]));
+    const userCountMap = new Map(shopUserCounts.map(s => [s.shop_id, parseInt(s.count, 10)]));
 
     const shopsWithUserCounts = shops.map(shop => ({
-      ...shop,
-      userCount: userCountMap.get(shop.shopId) || 0
+      id: shop.id,
+      shopId: shop.shop_id ? parseInt(shop.shop_id, 10) : null,
+      name: shop.name,
+      locationIdentifier: shop.location_identifier,
+      enterpriseId: shop.enterprise_id,
+      userCount: userCountMap.get(shop.shop_id) || 0,
+      tekmetric: shop.tekmetric,
+      protractor: shop.protractor,
+      billing: shop.billing,
+      createdAt: shop.created_at,
+      updatedAt: shop.updated_at,
     }));
 
-    const availableUsers = await db.collection("users")
-      .find({ shopId: { $in: enterprise.shopIds } })
-      .project({ email: 1, name: 1, role: 1 })
-      .toArray();
-    
-    const uniqueUsers = new Map();
-    availableUsers.forEach(u => {
-      if (!uniqueUsers.has(u.email)) {
-        uniqueUsers.set(u.email, u);
-      }
-    });
+    const availableUsers = enterprise.shop_ids.length > 0 ? await sql`
+      SELECT DISTINCT ON (email) id, email, name, role 
+      FROM users 
+      WHERE shop_id::int = ANY(${enterprise.shop_ids})
+      ORDER BY email
+    ` : [];
 
     return NextResponse.json({ 
-      enterprise: { id: enterprise._id, name: enterprise.name },
+      enterprise: { id: enterprise.id, name: enterprise.name },
       shops: shopsWithUserCounts,
-      availableUsers: Array.from(uniqueUsers.values())
+      availableUsers
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Enterprise shops GET error:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -91,7 +99,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { enterpriseId, name, smsProvider, tekmetricShopId, protractorShopId, assignUserIds, assignUserEmails } = body;
+    const { enterpriseId, name, smsProvider, tekmetricShopId, protractorShopId, assignUserEmails } = body;
     
     if (!enterpriseId) {
       return NextResponse.json({ error: "Enterprise ID is required" }, { status: 400 });
@@ -106,104 +114,73 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
     
-    if (!enterprise.shopIds.includes(session.shopId)) {
+    if (!enterprise.shop_ids.includes(Number(session.shopId))) {
       return NextResponse.json({ error: "You don't have permission for this enterprise" }, { status: 403 });
     }
 
-    const db = await getDb();
-    
-    const counterResult = await db.collection("counters").findOneAndUpdate(
-      { _id: "shopId" as any },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" }
-    );
+    const counterResult = await sql<{seq: number}[]>`
+      INSERT INTO counters (id, seq) VALUES ('shopId', 10001)
+      ON CONFLICT (id) DO UPDATE SET seq = counters.seq + 1
+      RETURNING seq
+    `;
+    const shopId = counterResult[0]?.seq || 10001;
 
-    const shopId = (counterResult as any)?.seq || 10001;
-    
-    if (!shopId || shopId === 10001) {
-      console.log("[Enterprise Shops] Counter result:", JSON.stringify(counterResult));
-    }
+    const tekmetricConfig = smsProvider === "tekmetric" && tekmetricShopId 
+      ? { shopId: tekmetricShopId } 
+      : null;
+    const protractorConfig = smsProvider === "protractor" && protractorShopId 
+      ? { shopId: protractorShopId, enabled: true } 
+      : null;
 
-    // For enterprise locations, use the enterprise name as the shop name
-    // and the provided "name" as the location identifier
-    const shopDoc: any = {
-      shopId,
+    const shop = await upsertShop({
       name: enterprise.name,
-      locationIdentifier: name.trim(),
-      enterpriseId: new ObjectId(enterpriseId),
-      webhookToken: crypto.randomBytes(12).toString("hex"),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      status: "active"
-    };
+      shopId,
+      enterpriseId,
+      tekmetric: tekmetricConfig,
+      protractor: protractorConfig,
+      settings: { locationIdentifier: name.trim(), smsProvider: smsProvider || null },
+    });
 
-    if (smsProvider === "tekmetric") {
-      shopDoc.smsProvider = "tekmetric";
-      if (tekmetricShopId) {
-        shopDoc.tekmetric = { shopId: tekmetricShopId };
-      }
-    } else if (smsProvider === "protractor") {
-      shopDoc.smsProvider = "protractor";
-      if (protractorShopId) {
-        shopDoc.protractor = { shopId: protractorShopId };
-      }
-    }
+    await sql`
+      UPDATE shops SET location_identifier = ${name.trim()}, webhook_token = ${crypto.randomBytes(12).toString("hex")}
+      WHERE id = ${shop.id}
+    `;
 
-    const result = await db.collection("shops").insertOne(shopDoc);
-    
     await addShopToEnterprise(enterpriseId, shopId);
 
-    let usersToClone: any[] = [];
-    
-    if (assignUserIds && assignUserIds.length > 0) {
-      usersToClone = await db.collection("users")
-        .find({ _id: { $in: assignUserIds.map((id: string) => new ObjectId(id)) } })
-        .toArray();
-    } else if (assignUserEmails && assignUserEmails.length > 0) {
-      usersToClone = await db.collection("users")
-        .find({ 
-          email: { $in: assignUserEmails },
-          shopId: { $in: enterprise.shopIds }
-        })
-        .toArray();
-      
-      const uniqueEmails = new Map();
-      usersToClone.forEach(u => {
-        if (!uniqueEmails.has(u.email)) {
-          uniqueEmails.set(u.email, u);
+    if (assignUserEmails && assignUserEmails.length > 0) {
+      const sourceUsers = await sql`
+        SELECT DISTINCT ON (email) * FROM users
+        WHERE email = ANY(${assignUserEmails.map((e: string) => e.toLowerCase())})
+          AND shop_id::int = ANY(${enterprise.shop_ids})
+      `;
+
+      for (const user of sourceUsers) {
+        const existing = await sql`
+          SELECT id FROM users WHERE email = ${user.email} AND shop_id = ${String(shopId)} LIMIT 1
+        `;
+        
+        if (existing.length === 0) {
+          await sql`
+            INSERT INTO users (id, email, name, password_hash, role, shop_id, created_at, updated_at)
+            VALUES (gen_random_uuid(), ${user.email}, ${user.name}, ${user.password_hash}, ${user.role}, ${String(shopId)}, NOW(), NOW())
+          `;
         }
-      });
-      usersToClone = Array.from(uniqueEmails.values());
-    }
-    
-    for (const user of usersToClone) {
-      const existingUser = await db.collection("users").findOne({
-        email: user.email,
-        shopId
-      });
-      
-      if (!existingUser) {
-        await db.collection("users").insertOne({
-          email: user.email,
-          name: user.name,
-          passwordHash: user.passwordHash,
-          role: user.role,
-          shopId,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        });
       }
     }
 
     return NextResponse.json({
       shop: {
-        _id: result.insertedId,
-        ...shopDoc
+        id: shop.id,
+        shopId,
+        name: enterprise.name,
+        locationIdentifier: name.trim(),
       }
     }, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Enterprise shops POST error:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -226,21 +203,21 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
 
-    if (enterprise.shopIds.length <= 1) {
+    if (enterprise.shop_ids.length <= 1) {
       return NextResponse.json({ error: "Cannot remove the last shop from an enterprise" }, { status: 400 });
     }
 
-    await removeShopFromEnterprise(enterpriseId, shopId);
+    await removeShopFromEnterprise(enterpriseId, Number(shopId));
 
-    const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $unset: { enterpriseId: "" }, $set: { updatedAt: new Date() } }
-    );
+    await sql`
+      UPDATE shops SET enterprise_id = NULL, updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Enterprise shops DELETE error:", err);
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
