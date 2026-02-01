@@ -32,8 +32,34 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Modular Features**: A la carte feature flags control functionalities like maintenance, job lookup, oil stickers, keytags, auto booking, and part cross-reference.
 *   **User Preferences**: Shops can select their preferred distance units (miles/kilometers).
 
+## PostgreSQL Migration Status (In Progress)
+**Goal**: Full cutover to PostgreSQL - eliminate MongoDB entirely
+
+**Completed Phases:**
+- Phase 1: PostgreSQL schema created (109 tables)
+- Phase 2: Dual-write ingestion (Tekmetric/Protractor sync writes to both DBs)
+- Phase 3: Historical data migrated:
+  - 309,781 customers
+  - 167,803 vehicles
+  - 497,216 work orders
+  - 24 shops
+  - 7,029 Tekmetric work orders
+  - 2,924 Protractor work orders
+  - 2,660 Protractor vehicles
+  - 3,276 events
+
+**Remaining Phases:**
+- Phase 4: Update lib files to read from PostgreSQL
+- Phase 5: Update API routes to use PostgreSQL
+- Phase 6: Remove MongoDB dependencies
+
+**Key Migration Files:**
+- `lib/postgres-ingestion.ts` - PostgreSQL data ingestion service
+- `scripts/etl-phase3-remaining.ts` - ETL script for historical data
+- `lib/db/postgres.ts` - PostgreSQL connection
+
 ## External Dependencies
-*   **Database**: MongoDB Atlas (planned migration to PostgreSQL), PostgreSQL
+*   **Database**: PostgreSQL (primary), MongoDB Atlas (legacy - being phased out)
 *   **AI**: OpenAI API
 *   **Payments**: Stripe
 *   **VIN Decoding & OEM Schedules**: DataOne (local PostgreSQL, SFTP sync weekly)
