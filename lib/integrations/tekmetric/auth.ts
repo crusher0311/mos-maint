@@ -1,7 +1,8 @@
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+const GLOBAL_TOKEN_KEY = 'global-tekmetric-token';
 
 interface TekmetricToken {
   accessToken: string;
@@ -9,16 +10,6 @@ interface TekmetricToken {
   scope: string;
   expiresAt: Date;
   createdAt: Date;
-}
-
-interface TokenDocument {
-  tokenKey: string;
-  accessToken: string;
-  tokenType: string;
-  scope: string;
-  expiresAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 let cachedToken: TekmetricToken | null = null;
@@ -74,22 +65,16 @@ async function fetchNewToken(): Promise<TekmetricToken> {
 
 async function persistToken(token: TekmetricToken): Promise<void> {
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").updateOne(
-      { tokenKey: "current" },
-      {
-        $set: {
-          tokenKey: "current",
-          accessToken: token.accessToken,
-          tokenType: token.tokenType,
-          scope: token.scope,
-          expiresAt: token.expiresAt,
-          createdAt: token.createdAt,
-          updatedAt: new Date(),
-        }
-      },
-      { upsert: true }
-    );
+    await sql`
+      INSERT INTO tekmetric_tokens (id, access_token, token_type, expires_at, scopes, created_at, updated_at)
+      VALUES (${GLOBAL_TOKEN_KEY}::uuid, ${token.accessToken}, ${token.tokenType}, ${token.expiresAt}, ${[token.scope]}, ${token.createdAt}, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        access_token = EXCLUDED.access_token,
+        token_type = EXCLUDED.token_type,
+        expires_at = EXCLUDED.expires_at,
+        scopes = EXCLUDED.scopes,
+        updated_at = NOW()
+    `;
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to persist token:', err);
   }
@@ -97,17 +82,24 @@ async function persistToken(token: TekmetricToken): Promise<void> {
 
 async function loadPersistedToken(): Promise<TekmetricToken | null> {
   try {
-    const db = await getDb();
-    const doc = await db.collection("tekmetric_tokens").findOne({ tokenKey: "current" }) as TokenDocument | null;
+    const rows = await sql`
+      SELECT access_token, token_type, scopes, expires_at, created_at
+      FROM tekmetric_tokens
+      WHERE expires_at > NOW()
+      ORDER BY expires_at DESC
+      LIMIT 1
+    `;
     
-    if (!doc) return null;
+    if (rows.length === 0) return null;
     
+    const doc = rows[0];
+    const scopes = doc.scopes as string[] || [];
     return {
-      accessToken: doc.accessToken,
-      tokenType: doc.tokenType,
-      scope: doc.scope,
-      expiresAt: new Date(doc.expiresAt),
-      createdAt: new Date(doc.createdAt),
+      accessToken: doc.access_token as string,
+      tokenType: doc.token_type as string,
+      scope: scopes.join(' '),
+      expiresAt: new Date(doc.expires_at as string),
+      createdAt: new Date(doc.created_at as string),
     };
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to load persisted token:', err);
@@ -151,8 +143,7 @@ export async function invalidateToken(): Promise<void> {
   cachedToken = null;
   
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").deleteOne({ tokenKey: "current" });
+    await sql`DELETE FROM tekmetric_tokens WHERE expires_at < NOW()`;
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to invalidate token:', err);
   }

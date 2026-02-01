@@ -1,38 +1,54 @@
-import { ObjectId } from 'mongodb';
+import { randomUUID } from 'crypto';
 
-export function toObjectId(id: string | ObjectId | undefined | null): ObjectId | undefined {
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const OBJECTID_REGEX = /^[0-9a-f]{24}$/i;
+
+export function toUUID(id: string | undefined | null): string | undefined {
   if (!id) return undefined;
-  if (id instanceof ObjectId) return id;
-  if (typeof id === 'string' && ObjectId.isValid(id)) {
-    return new ObjectId(id);
-  }
+  if (UUID_REGEX.test(id)) return id;
+  if (OBJECTID_REGEX.test(id)) return id;
   return undefined;
 }
 
-export function toObjectIdOrThrow(id: string | ObjectId, fieldName = 'id'): ObjectId {
-  if (id instanceof ObjectId) return id;
-  if (typeof id === 'string' && ObjectId.isValid(id)) {
-    return new ObjectId(id);
-  }
-  throw new Error(`Invalid ObjectId for ${fieldName}: ${id}`);
+export function toUUIDOrThrow(id: string, fieldName = 'id'): string {
+  if (UUID_REGEX.test(id)) return id;
+  if (OBJECTID_REGEX.test(id)) return id;
+  throw new Error(`Invalid UUID for ${fieldName}: ${id}`);
 }
 
-export function objectIdToString(id: ObjectId | string | undefined | null): string | undefined {
-  if (!id) return undefined;
-  if (id instanceof ObjectId) return id.toHexString();
-  return id;
+export function generateId(): string {
+  return randomUUID();
 }
 
-export function isValidObjectId(id: any): boolean {
+export function isValidId(id: any): boolean {
   if (!id) return false;
-  if (id instanceof ObjectId) return true;
-  if (typeof id === 'string') return ObjectId.isValid(id);
+  if (typeof id === 'string') {
+    return UUID_REGEX.test(id) || OBJECTID_REGEX.test(id);
+  }
   return false;
 }
 
-export function objectIdsEqual(a: ObjectId | string | undefined, b: ObjectId | string | undefined): boolean {
+export function idsEqual(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false;
-  const aStr = a instanceof ObjectId ? a.toHexString() : a;
-  const bStr = b instanceof ObjectId ? b.toHexString() : b;
-  return aStr === bStr;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+export function toObjectId(id: string | undefined | null): string | undefined {
+  return toUUID(id);
+}
+
+export function toObjectIdOrThrow(id: string, fieldName = 'id'): string {
+  return toUUIDOrThrow(id, fieldName);
+}
+
+export function objectIdToString(id: string | undefined | null): string | undefined {
+  return id || undefined;
+}
+
+export function isValidObjectId(id: any): boolean {
+  return isValidId(id);
+}
+
+export function objectIdsEqual(a: string | undefined, b: string | undefined): boolean {
+  return idsEqual(a, b);
 }

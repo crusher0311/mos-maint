@@ -1,5 +1,7 @@
 export { buildRecommendations } from './build';
 
+import sql from "@/lib/db/postgres";
+
 interface RecommendationOptions {
   shopId: string;
   mileage?: number;
@@ -17,21 +19,25 @@ export async function getMaintenanceRecommendations(
   vin: string,
   options: RecommendationOptions
 ): Promise<Recommendation[]> {
-  const { getDb } = await import('@/lib/mongo');
-  const db = await getDb();
+  const vinUpper = vin.toUpperCase();
   
-  const vehicle = await db.collection('vehicles').findOne({
-    vin: vin.toUpperCase(),
-  });
+  const rows = await sql`
+    SELECT id, oem_maintenance_schedule, declined_services
+    FROM vehicles
+    WHERE vin = ${vinUpper}
+    LIMIT 1
+  `;
   
-  if (!vehicle) {
+  if (rows.length === 0) {
     return [];
   }
   
+  const vehicle = rows[0];
   const recommendations: Recommendation[] = [];
   
-  if (vehicle.oemMaintenanceSchedule?.items) {
-    for (const item of vehicle.oemMaintenanceSchedule.items) {
+  const oemSchedule = vehicle.oem_maintenance_schedule as any;
+  if (oemSchedule?.items) {
+    for (const item of oemSchedule.items) {
       if (options.mileage && item.mileage && item.mileage <= options.mileage) {
         recommendations.push({
           service: item.description || item.service,
@@ -43,8 +49,9 @@ export async function getMaintenanceRecommendations(
     }
   }
   
-  if (vehicle.declinedServices?.length) {
-    for (const declined of vehicle.declinedServices.slice(0, 5)) {
+  const declinedServices = vehicle.declined_services as any[];
+  if (declinedServices?.length) {
+    for (const declined of declinedServices.slice(0, 5)) {
       recommendations.push({
         service: declined.service,
         priority: 'medium',

@@ -1,6 +1,5 @@
 import { getOpenAI } from "./ai";
-import { getDb } from "./mongo";
-import { NORMALIZED_COLLECTIONS } from "./normalized-schema";
+import sql from "@/lib/db/postgres";
 import { getNormalizedCache, CACHE_TTL } from "./normalized-cache";
 import { getShopPatterns, getEnterprisePatterns, PatternMatch } from "./repair-patterns";
 
@@ -45,10 +44,6 @@ export interface CommonFailuresResult {
 
 function getMileageBucket(mileage: number): number {
   return Math.floor(mileage / MILEAGE_BUCKET_SIZE) * MILEAGE_BUCKET_SIZE;
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function normalizeTitle(title: string): string {
@@ -134,18 +129,18 @@ export async function getCommonFailures(
 ): Promise<CommonFailuresResult> {
   const cache = getNormalizedCache();
   const mileageBucket = getMileageBucket(mileage);
-  const db = await getDb();
   
-  // Step 1: Check shop's own repair patterns first
   let shopPatterns: PatternMatch[] = [];
   let enterpriseId: string | undefined;
   
   if (shopIds.length > 0) {
-    const shop = await db.collection("shops").findOne({ shopId: String(shopIds[0]) });
-    enterpriseId = shop?.enterpriseId || undefined;
+    const shopIdStr = String(shopIds[0]);
+    const shopRows = await sql`
+      SELECT enterprise_id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
+    `;
+    enterpriseId = shopRows[0]?.enterprise_id as string | undefined;
     
     if (enterpriseId && shopIds.length > 1) {
-      // Enterprise: aggregate patterns across all locations
       shopPatterns = await getEnterprisePatterns({
         enterpriseId,
         year,
@@ -155,7 +150,6 @@ export async function getCommonFailures(
         limit: 15,
       });
     } else {
-      // Single shop patterns
       shopPatterns = await getShopPatterns({
         shopId: shopIds[0],
         enterpriseId,
@@ -169,14 +163,11 @@ export async function getCommonFailures(
     }
   }
   
-  // Filter to only patterns with enough occurrences
   const strongPatterns = shopPatterns.filter(p => p.occurrences >= MIN_PATTERN_OCCURRENCES);
   
-  // Step 2: If we have enough shop data, use it directly (no AI call needed)
   if (strongPatterns.length >= MIN_PATTERNS_FOR_SHOP_ONLY) {
     const failures = strongPatterns.map(p => patternToFailure(p, mileage));
     
-    // Sort by occurrences (most common first)
     failures.sort((a, b) => {
       if (a.shopMatch && b.shopMatch) {
         return b.shopMatch.occurrences - a.shopMatch.occurrences;
@@ -193,7 +184,6 @@ export async function getCommonFailures(
     };
   }
   
-  // Step 3: Not enough shop data - check AI cache or fetch from AI
   const cacheKey = {
     year,
     make: make.toLowerCase(),
@@ -215,10 +205,8 @@ export async function getCommonFailures(
     cache.set(CACHE_KEY_PREFIX, cacheKey, aiFailures, CACHE_TTL.LONG * 12);
   }
   
-  // Step 4: Combine AI suggestions with shop patterns
   const matchedFailures = await matchFailuresToShopHistory(aiFailures, shopIds, strongPatterns);
   
-  // Add any strong shop patterns that weren't matched by AI
   const matchedTitles = new Set(matchedFailures.map(f => normalizeTitle(f.repair)));
   const additionalPatterns = strongPatterns
     .filter(p => !matchedTitles.has(normalizeTitle(p.jobTitle)))
@@ -226,7 +214,6 @@ export async function getCommonFailures(
   
   const combined = [...matchedFailures, ...additionalPatterns];
   
-  // Sort by urgency then confidence
   combined.sort((a, b) => {
     const urgencyOrder = { high: 3, medium: 2, low: 1 };
     const urgencyDiff = urgencyOrder[b.urgency] - urgencyOrder[a.urgency];
@@ -334,12 +321,10 @@ async function matchFailuresToShopHistory(
     return [];
   }
   
-  // Use existing patterns if available, otherwise query service jobs
   const matchedFailures: MatchedFailure[] = failures.map(failure => {
     let bestMatch: PatternMatch | null = null;
     let bestScore = 0;
     
-    // Check against pre-computed patterns first (faster)
     for (const pattern of existingPatterns) {
       const score = calculateMatchScore(failure.repair, pattern.jobTitle);
       if (score > bestScore && score >= 40) {
@@ -367,52 +352,44 @@ async function matchFailuresToShopHistory(
     return result;
   });
   
-  // If no patterns, fall back to service jobs query (for shops without patterns yet)
   const unmatchedFailures = matchedFailures.filter(f => !f.shopMatch);
   if (unmatchedFailures.length > 0 && shopIds.length > 0 && existingPatterns.length === 0) {
-    const db = await getDb();
-    const serviceJobsCollection = db.collection(NORMALIZED_COLLECTIONS.serviceJobs);
+    const shopIdStrs = shopIds.map(id => String(id));
     
     const repairKeywords = unmatchedFailures.map(f => {
       const words = f.repair.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      return words.map(escapeRegex);
+      return words;
     });
     
     const allKeywords = [...new Set(repairKeywords.flat())];
     
     if (allKeywords.length > 0) {
-      const pipeline = [
-        {
-          $match: {
-            shopId: { $in: shopIds },
-            'softDelete.isDeleted': { $ne: true },
-            status: { $in: ['completed', 'authorized'] },
-            $or: allKeywords.map(kw => ({
-              title: { $regex: kw, $options: 'i' }
-            }))
-          }
-        },
-        {
-          $group: {
-            _id: { $toLower: { $trim: { input: '$title' } } },
-            title: { $first: '$title' },
-            avgTotal: { $avg: '$total' },
-            avgHours: { $avg: { $ifNull: ['$laborHoursBilled', '$laborHoursActual'] } },
-            count: { $sum: 1 },
-            lastPerformed: { $max: '$completedAt' }
-          }
-        },
-        { $limit: 100 }
-      ];
+      const keywordPattern = allKeywords.join('|');
       
-      const shopJobs = await serviceJobsCollection.aggregate(pipeline).toArray();
+      const rows = await sql`
+        SELECT 
+          LOWER(TRIM(title)) as normalized_title,
+          MIN(title) as title,
+          AVG(total) as avg_total,
+          AVG(COALESCE(labor_hours_billed, labor_hours_actual)) as avg_hours,
+          COUNT(*) as count,
+          MAX(completed_at) as last_performed
+        FROM service_jobs sj
+        JOIN shops s ON sj.shop_id = s.id
+        WHERE s.shop_id = ANY(${shopIdStrs})
+          AND (sj.soft_delete IS NULL OR sj.soft_delete->>'isDeleted' != 'true')
+          AND sj.status IN ('completed', 'authorized')
+          AND LOWER(sj.title) ~ ${keywordPattern}
+        GROUP BY LOWER(TRIM(title))
+        LIMIT 100
+      `;
       
       for (const failure of unmatchedFailures) {
         let bestJobMatch: any = null;
         let bestJobScore = 0;
         
-        for (const job of shopJobs) {
-          const score = calculateMatchScore(failure.repair, job.title);
+        for (const job of rows) {
+          const score = calculateMatchScore(failure.repair, job.title as string);
           if (score > bestJobScore && score >= 40) {
             bestJobScore = score;
             bestJobMatch = job;
@@ -423,10 +400,10 @@ async function matchFailuresToShopHistory(
           failure.matchConfidence = bestJobScore;
           failure.shopMatch = {
             title: bestJobMatch.title,
-            avgTotal: bestJobMatch.avgTotal ? Math.round(bestJobMatch.avgTotal * 100) / 100 : 0,
-            avgHours: bestJobMatch.avgHours ? Math.round(bestJobMatch.avgHours * 10) / 10 : 0,
-            occurrences: bestJobMatch.count,
-            lastPerformed: bestJobMatch.lastPerformed,
+            avgTotal: bestJobMatch.avg_total ? Math.round(Number(bestJobMatch.avg_total) * 100) / 100 : 0,
+            avgHours: bestJobMatch.avg_hours ? Math.round(Number(bestJobMatch.avg_hours) * 10) / 10 : 0,
+            occurrences: Number(bestJobMatch.count),
+            lastPerformed: bestJobMatch.last_performed ? new Date(bestJobMatch.last_performed as string) : undefined,
           };
         }
       }
