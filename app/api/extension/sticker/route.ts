@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import { validateExtensionToken } from "@/lib/extension-auth";
 import nodeHtmlToImage from "node-html-to-image";
 import QRCode from "qrcode";
@@ -491,49 +491,86 @@ export async function OPTIONS() {
 }
 
 async function resolveMosShopId(
-  db: any,
   authResult: any,
   smsShopId?: string | null,
   _provider?: string | null // Provider hint is now ignored - we detect from shop config
 ): Promise<{ mosShopId: number | null; shop: any }> {
   const isPlatformAdmin = authResult.user?.role === "platform_admin";
   const userShopIds = [
-    ...(authResult.user?.shopId ? [Number(authResult.user.shopId)] : []),
-    ...(authResult.user?.shopIds || []).map((id: any) => Number(id)),
+    ...(authResult.user?.shopId ? [String(authResult.user.shopId)] : []),
+    ...(authResult.user?.shopIds || []).map((id: any) => String(id)),
   ];
 
   // Search across all integration types
   if (smsShopId) {
     const tekShopIdNum = parseInt(smsShopId);
-    const tekShopIdStr = String(smsShopId);
-    const query: any = {
-      $or: [
-        // Tekmetric
-        { "tekmetric.shopId": tekShopIdNum },
-        { "tekmetric.shopId": tekShopIdStr },
-        { tekmetricShopId: tekShopIdNum },
-        { tekmetricShopId: tekShopIdStr },
-        // Protractor
-        { "protractor.connectionId": smsShopId },
-        { protractorConnectionId: smsShopId },
-        // AutoFlow
-        { "autoflow.shopId": smsShopId },
-      ],
-    };
-    if (!isPlatformAdmin) {
-      query.shopId = { $in: userShopIds };
+    
+    let shopRows;
+    if (!isPlatformAdmin && userShopIds.length > 0) {
+      shopRows = await sql`
+        SELECT id, shop_id, name, integration_provider, tekmetric_shop_id, protractor_connection_id, 
+               sticker_config, enabled_features, settings
+        FROM shops
+        WHERE shop_id = ANY(${userShopIds})
+          AND (
+            tekmetric_shop_id = ${tekShopIdNum}
+            OR protractor_connection_id = ${smsShopId}
+            OR settings->'autoflow'->>'shopId' = ${smsShopId}
+          )
+        LIMIT 1
+      `;
+    } else {
+      shopRows = await sql`
+        SELECT id, shop_id, name, integration_provider, tekmetric_shop_id, protractor_connection_id,
+               sticker_config, enabled_features, settings
+        FROM shops
+        WHERE (
+          tekmetric_shop_id = ${tekShopIdNum}
+          OR protractor_connection_id = ${smsShopId}
+          OR settings->'autoflow'->>'shopId' = ${smsShopId}
+        )
+        LIMIT 1
+      `;
     }
-    const shop = await db.collection("shops").findOne(query);
-    if (shop) {
-      console.log(`[Extension Sticker] Found MOS shop ${shop.shopId} for SMS shop ${smsShopId}, provider: ${shop.integrationProvider || 'unknown'}`);
-      return { mosShopId: shop.shopId, shop };
+    
+    const shopRow = shopRows[0];
+    if (shopRow) {
+      const shopId = parseInt(shopRow.shop_id as string);
+      console.log(`[Extension Sticker] Found MOS shop ${shopId} for SMS shop ${smsShopId}, provider: ${shopRow.integration_provider || 'unknown'}`);
+      return { 
+        mosShopId: shopId, 
+        shop: {
+          shopId,
+          name: shopRow.name,
+          integrationProvider: shopRow.integration_provider,
+          stickerConfig: shopRow.sticker_config,
+          enabledFeatures: shopRow.enabled_features,
+          settings: shopRow.settings
+        }
+      };
     }
   }
 
   // Fallback to user's primary shop
   if (authResult.user?.shopId) {
-    const shop = await db.collection("shops").findOne({ shopId: Number(authResult.user.shopId) });
-    return { mosShopId: shop?.shopId || null, shop };
+    const shopRows = await sql`
+      SELECT id, shop_id, name, sticker_config, enabled_features, settings
+      FROM shops WHERE shop_id = ${String(authResult.user.shopId)} LIMIT 1
+    `;
+    const shopRow = shopRows[0];
+    if (shopRow) {
+      const shopId = parseInt(shopRow.shop_id as string);
+      return { 
+        mosShopId: shopId, 
+        shop: {
+          shopId,
+          name: shopRow.name,
+          stickerConfig: shopRow.sticker_config,
+          enabledFeatures: shopRow.enabled_features,
+          settings: shopRow.settings
+        }
+      };
+    }
   }
 
   return { mosShopId: null, shop: null };
@@ -553,8 +590,7 @@ export async function GET(request: NextRequest) {
     const smsShopId = searchParams.get("shopId");
     const provider = searchParams.get("provider") || "tekmetric";
 
-    const db = await getDb();
-    const { mosShopId, shop } = await resolveMosShopId(db, authResult, smsShopId, provider);
+    const { mosShopId, shop } = await resolveMosShopId(authResult, smsShopId, provider);
 
     console.log(`[Extension Sticker] GET: smsShopId=${smsShopId}, provider=${provider}, mosShopId=${mosShopId}, features=${JSON.stringify(shop?.features || [])}`);
 
@@ -633,8 +669,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = await getDb();
-    const { mosShopId, shop } = await resolveMosShopId(db, authResult, smsShopId, provider);
+    const { mosShopId, shop } = await resolveMosShopId(authResult, smsShopId, provider);
 
     if (!shop) {
       return NextResponse.json(
@@ -668,7 +703,7 @@ export async function POST(request: NextRequest) {
     nextDate.setMonth(nextDate.getMonth() + intervalMonths);
     const nextServiceDate = nextDate.toISOString().split("T")[0];
 
-    const size = stickerConfig.defaultSize || "2x2.5";
+    const size: string = typeof stickerConfig.defaultSize === 'string' ? stickerConfig.defaultSize : "2x2.5";
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
     const useKilometers = unit === "km";
     const useHours = unit === "hrs";
@@ -729,14 +764,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await db.collection("sticker_generations").insertOne({
-      shopId: mosShopId,
-      generatedAt: new Date(),
-      generatedBy: authResult.user.email,
-      source: "extension",
-      size,
-      unit,
-    });
+    const shopIdStr = String(mosShopId || 0);
+    const generatedByStr = String(authResult.user?.email || '');
+    const sizeStr = String(size || '2x2.5');
+    const unitStr = String(unit || 'mi');
+    await sql`
+      INSERT INTO sticker_generations (shop_id, generated_at, generated_by, source, size, unit)
+      VALUES (${shopIdStr}, NOW(), ${generatedByStr}, 'extension', ${sizeStr}, ${unitStr})
+    `;
 
     // Trigger auto booking if customer/vehicle data provided
     let bookingResult: { queued: boolean; bookingId?: string; status?: string; error?: string } | null = null;
