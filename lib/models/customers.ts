@@ -1,12 +1,6 @@
-// lib/models/customers.ts
-import { ObjectId } from "mongodb";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
-type RawPayload = any;
-
-/* ------------------------------------------------------------------ */
-/* ----------------------------- utils ------------------------------ */
-/* ------------------------------------------------------------------ */
+type RawPayload = Record<string, unknown>;
 
 function normalizeEmail(s?: unknown): string | null {
   if (!s) return null;
@@ -30,7 +24,6 @@ function cleanPersonToken(s?: unknown): string | null {
   if (!s) return null;
   const t = String(s).trim();
   if (!t) return null;
-  // strip trailing asterisks or noise, e.g. "Michael*"
   const cleaned = t.replace(/\*+$/g, "").trim();
   return cleaned || null;
 }
@@ -50,17 +43,11 @@ function looksLikeCompany(s?: string | null): boolean {
   return wordCount >= 2;
 }
 
-/** values treated as non-displayable/closed by the dashboard helper */
 const CLOSED_SET = ["closed", "Close", "CLOSED", "Appointment"] as const;
-type ClosedWord = typeof CLOSED_SET[number];
-
-/* ------------------------------------------------------------------ */
-/* --------------------------- extractors --------------------------- */
-/* ------------------------------------------------------------------ */
 
 function extractCustomer(payload: RawPayload) {
-  const a = payload?.data?.customer; // { event: 'customer.created', data: { customer: {...} } }
-  const b = payload?.customer;       // status_update / dvi_signoff_update shape
+  const a = (payload?.data as Record<string, unknown>)?.customer as Record<string, unknown> | undefined;
+  const b = payload?.customer as Record<string, unknown> | undefined;
 
   let externalId: string | null = null;
   let first: string | null = null;
@@ -82,9 +69,9 @@ function extractCustomer(payload: RawPayload) {
     last  = cleanPersonToken(b?.lastname);
 
     if (Array.isArray(b?.phone_numbers) && b.phone_numbers.length > 0) {
-      const mobile = b.phone_numbers.find((p: any) => String(p?.phone_type).toUpperCase() === "M");
-      const pick   = mobile ?? b.phone_numbers[0];
-      phone = normalizePhone(pick?.phonenumber);
+      const mobile = (b.phone_numbers as Record<string, unknown>[]).find((p) => String(p?.phone_type).toUpperCase() === "M");
+      const pick = mobile ?? b.phone_numbers[0];
+      phone = normalizePhone((pick as Record<string, unknown>)?.phonenumber);
     }
     email = normalizeEmail(b?.email);
     if (b?.name && String(b.name).trim()) name = String(b.name).trim();
@@ -103,10 +90,10 @@ function extractCustomer(payload: RawPayload) {
 }
 
 function extractVehicleTicket(payload: RawPayload) {
-  const ticket = payload?.ticket;
-  const vehicle = payload?.vehicle;
+  const ticket = payload?.ticket as Record<string, unknown> | undefined;
+  const vehicle = payload?.vehicle as Record<string, unknown> | undefined;
 
-  const roNumber = ticket?.invoice ?? ticket?.id ?? null; // prefer invoice
+  const roNumber = ticket?.invoice ?? ticket?.id ?? null;
   const vin = vehicle?.vin ?? null;
   const mileage = normalizeNumber(vehicle?.odometer);
   const ticketStatus = ticket?.status ?? null;
@@ -119,31 +106,20 @@ function extractVehicleTicket(payload: RawPayload) {
     vehicleMeta: vehicle
       ? {
           year: normalizeNumber(vehicle.year) ?? undefined,
-          make: vehicle.make ?? undefined,
-          model: vehicle.model ?? undefined,
-          license: vehicle.license ?? undefined,
+          make: vehicle.make as string | undefined,
+          model: vehicle.model as string | undefined,
+          license: vehicle.license as string | undefined,
         }
       : undefined,
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* ---------------------------- upserts ----------------------------- */
-/* ------------------------------------------------------------------ */
-
-/**
- * Rich upsert used by data model (vehicles/repair_orders + last* fields on customer).
- * Stores status exactly as received from AutoFlow.
- */
-export async function upsertCustomerFromAutoflow(shopId: number, payload: RawPayload) {
-  const db = await getDb();
+export async function upsertCustomerFromAutoflow(shopId: number | string, payload: RawPayload) {
+  const shopIdStr = String(shopId);
 
   const { externalId, first, last, name, email, phone } = extractCustomer(payload);
   const { roNumber, vin, mileage, ticketStatus, vehicleMeta } = extractVehicleTicket(payload);
 
-  const now = new Date();
-
-  // Guard: skip truly empty payloads
   const hasIdentity = Boolean(externalId || email || phone);
   const hasAnyName = Boolean(name || first || last);
   const hasUsefulVehicle = Boolean(vin || (vehicleMeta && (vehicleMeta.make || vehicleMeta.model)));
@@ -152,141 +128,116 @@ export async function upsertCustomerFromAutoflow(shopId: number, payload: RawPay
     return { ok: true as const, customerId: null, vehicleId: null, roNumber: roNumber ?? null, mileage: mileage ?? null };
   }
 
-  // Build base $set (status/raw)
-  const baseSet: any = {
-    externalId: externalId ?? null,
-    firstName: first ?? null,
-    lastName:  last ?? null,
-    name:      name ?? null,
-    email:     email ?? null,
-    phone:     phone ?? null,
-    updatedAt: now,
-    source:    "autoflow",
-  };
-  if (roNumber != null) baseSet.lastRo = String(roNumber);
-  if (vin != null)      baseSet.lastVin = String(vin);
-  if (mileage != null)  baseSet.lastMileage = mileage;
-  if (ticketStatus != null) {
-    baseSet.lastStatus = ticketStatus;
-    baseSet.status = ticketStatus; // store exactly as sent
+  let customerId: string | null = null;
+
+  if (externalId) {
+    const existing = await sql`SELECT id FROM customers WHERE shop_id = ${shopIdStr} AND external_id = ${externalId} LIMIT 1`;
+    if (existing.length > 0) customerId = existing[0].id;
+  }
+  if (!customerId && email) {
+    const existing = await sql`SELECT id FROM customers WHERE shop_id = ${shopIdStr} AND email = ${email} LIMIT 1`;
+    if (existing.length > 0) customerId = existing[0].id;
+  }
+  if (!customerId && phone) {
+    const existing = await sql`SELECT id FROM customers WHERE shop_id = ${shopIdStr} AND phone = ${phone} LIMIT 1`;
+    if (existing.length > 0) customerId = existing[0].id;
   }
 
-  // Choose selector (most specific first)
-  const selectors: any[] = [];
-  if (externalId) selectors.push({ shopId, externalId });
-  if (email)      selectors.push({ shopId, email });
-  if (phone)      selectors.push({ shopId, phone });
-
-  let customerId: ObjectId;
-
-  if (selectors.length === 0) {
-    if (!hasAnyName && !hasUsefulVehicle && !hasRO) {
-      return { ok: true as const, customerId: null, vehicleId: null, roNumber: roNumber ?? null, mileage: mileage ?? null };
-    }
-    const ins = await db.collection("customers").insertOne({ shopId, createdAt: now, createdBy: "autoflow-webhook", ...baseSet });
-    customerId = ins.insertedId;
+  if (customerId) {
+    await sql`
+      UPDATE customers SET
+        external_id = COALESCE(${externalId}, external_id),
+        first_name = COALESCE(${first}, first_name),
+        last_name = COALESCE(${last}, last_name),
+        name = COALESCE(${name}, name),
+        email = COALESCE(${email}, email),
+        phone = COALESCE(${phone}, phone),
+        last_ro = COALESCE(${roNumber}, last_ro),
+        last_vin = COALESCE(${vin}, last_vin),
+        last_mileage = COALESCE(${mileage}, last_mileage),
+        last_status = COALESCE(${ticketStatus}, last_status),
+        status = COALESCE(${ticketStatus}, status),
+        source = 'autoflow',
+        updated_at = NOW()
+      WHERE id = ${customerId}::uuid
+    `;
   } else {
-    const existing = await db.collection("customers").findOne({ $or: selectors }, { projection: { _id: 1 } });
-    if (existing?._id) {
-      customerId = existing._id;
-      await db.collection("customers").updateOne(
-        { _id: customerId },
-        { $set: baseSet, $setOnInsert: { shopId, createdAt: now, createdBy: "autoflow-webhook" } },
-      );
+    const result = await sql`
+      INSERT INTO customers (shop_id, external_id, first_name, last_name, name, email, phone, last_ro, last_vin, last_mileage, last_status, status, source, created_by)
+      VALUES (${shopIdStr}, ${externalId}, ${first}, ${last}, ${name}, ${email}, ${phone}, ${roNumber}, ${vin}, ${mileage}, ${ticketStatus}, ${ticketStatus || 'open'}, 'autoflow', 'autoflow-webhook')
+      RETURNING id
+    `;
+    customerId = result[0]?.id;
+  }
+
+  let vehicleId: string | null = null;
+  if (vin && customerId) {
+    const existingVehicle = await sql`SELECT id FROM vehicles WHERE shop_id = ${shopIdStr} AND vin = ${vin} LIMIT 1`;
+    
+    if (existingVehicle.length > 0) {
+      vehicleId = existingVehicle[0].id;
+      await sql`
+        UPDATE vehicles SET
+          customer_id = ${customerId}::uuid,
+          customer_external_id = ${externalId},
+          mileage = COALESCE(${mileage}, mileage),
+          year = COALESCE(${vehicleMeta?.year || null}, year),
+          make = COALESCE(${vehicleMeta?.make || null}, make),
+          model = COALESCE(${vehicleMeta?.model || null}, model),
+          source = 'autoflow',
+          updated_at = NOW()
+        WHERE id = ${vehicleId}::uuid
+      `;
     } else {
-      await db.collection("customers").updateOne(
-        selectors[0],
-        { $set: baseSet, $setOnInsert: { shopId, createdAt: now, createdBy: "autoflow-webhook" } },
-        { upsert: true },
-      );
-      const got = await db.collection("customers").findOne(selectors[0], { projection: { _id: 1 } });
-      customerId = got!._id as ObjectId;
+      const result = await sql`
+        INSERT INTO vehicles (shop_id, vin, customer_id, customer_external_id, mileage, year, make, model, source)
+        VALUES (${shopIdStr}, ${vin}, ${customerId}::uuid, ${externalId}, ${mileage}, ${vehicleMeta?.year || null}, ${vehicleMeta?.make || null}, ${vehicleMeta?.model || null}, 'autoflow')
+        RETURNING id
+      `;
+      vehicleId = result[0]?.id;
     }
   }
 
-  // Vehicle
-  let vehicleId: ObjectId | undefined;
-  if (vin) {
-    const vehRes = await db.collection("vehicles").findOneAndUpdate(
-      { shopId, vin },
-      {
-        $setOnInsert: { shopId, vin, createdAt: now },
-        $set: {
-          customerId,
-          customerExternalId: externalId ?? null,
-          lastMileage: mileage ?? undefined,
-          updatedAt: now,
-          source: "autoflow",
-          ...(vehicleMeta ?? {}),
-        },
-      },
-      { upsert: true, returnDocument: "after" },
-    );
-    vehicleId = (vehRes.value?._id as ObjectId) ?? ((vehRes as any).lastErrorObject?.upserted as ObjectId | undefined);
+  if (roNumber && customerId) {
+    await sql`
+      INSERT INTO repair_orders (shop_id, ro_number, customer_id, customer_external_id, vehicle_id, vin, mileage, status, source)
+      VALUES (${shopIdStr}, ${roNumber}, ${customerId}::uuid, ${externalId}, ${vehicleId ? sql`${vehicleId}::uuid` : null}, ${vin}, ${mileage}, ${ticketStatus}, 'autoflow')
+      ON CONFLICT (shop_id, ro_number) DO UPDATE SET
+        customer_id = ${customerId}::uuid,
+        customer_external_id = ${externalId},
+        vehicle_id = COALESCE(${vehicleId ? sql`${vehicleId}::uuid` : null}, repair_orders.vehicle_id),
+        vin = COALESCE(${vin}, repair_orders.vin),
+        mileage = COALESCE(${mileage}, repair_orders.mileage),
+        status = COALESCE(${ticketStatus}, repair_orders.status),
+        updated_at = NOW()
+    `;
   }
 
-  // RO
-  if (roNumber) {
-    await db.collection("repair_orders").updateOne(
-      { shopId, roNumber: String(roNumber) },
-      {
-        $setOnInsert: { shopId, roNumber: String(roNumber), createdAt: now },
-        $set: {
-          customerId,
-          customerExternalId: externalId ?? null,
-          vehicleId: vehicleId ?? null,
-          vin: vin ?? null,
-          mileage: mileage ?? null,
-          status: ticketStatus ?? null, // store raw
-          updatedAt: now,
-          source: "autoflow",
-        },
-      },
-      { upsert: true },
-    );
-  }
-
-  return { ok: true as const, customerId, vehicleId: vehicleId ?? null, roNumber: roNumber ?? null, mileage: mileage ?? null };
+  return { ok: true as const, customerId, vehicleId, roNumber: roNumber ?? null, mileage: mileage ?? null };
 }
 
-/**
- * Lightweight upsert used by webhook to keep the “open customers” list fresh.
- * - Stores whatever status AutoFlow sent (no canonicalization)
- * - Persists a compact vehicle block when present
- * - Ensures openedAt on first sighting
- */
-export async function upsertCustomerFromAutoflowEvent(payload: any, shopIdRaw: string | number) {
-  const db = await getDb();
-
+export async function upsertCustomerFromAutoflowEvent(payload: RawPayload, shopIdRaw: string | number) {
   const shopIdStr = String(shopIdRaw);
-  const now = new Date();
+
+  const customer = payload?.customer as Record<string, unknown> | undefined;
+  const ticket = payload?.ticket as Record<string, unknown> | undefined;
+  const vehicle = payload?.vehicle as Record<string, unknown> | undefined;
 
   const externalId =
-    (payload?.customer?.id != null ? String(payload.customer.id) : null) ??
+    (customer?.id != null ? String(customer.id) : null) ??
     (payload?.customerId != null ? String(payload.customerId) : null) ??
-    (payload?.externalId != null ? String(payload.externalId) : null) ??
     null;
 
-  const firstName =
-    (cleanPersonToken(payload?.customer?.firstName) as string | null) ??
-    (cleanPersonToken(payload?.firstName) as string | null) ??
-    null;
+  const firstName = cleanPersonToken(customer?.firstName) ?? cleanPersonToken(payload?.firstName) ?? null;
+  const lastName = cleanPersonToken(customer?.lastName) ?? cleanPersonToken(payload?.lastName) ?? null;
 
-  const lastName =
-    (cleanPersonToken(payload?.customer?.lastName) as string | null) ??
-    (cleanPersonToken(payload?.lastName) as string | null) ??
-    null;
-
-  const explicitName =
-    (typeof payload?.customer?.name === "string" && payload.customer.name.trim().length > 0
-      ? payload.customer.name.trim()
-      : null) ??
-    (typeof payload?.name === "string" && payload.name.trim().length > 0
-      ? payload.name.trim()
-      : null) ??
-    null;
-
-  let derivedName: string | null = explicitName;
+  let derivedName: string | null = null;
+  if (customer?.name && String(customer.name).trim()) {
+    derivedName = String(customer.name).trim();
+  } else if (payload?.name && String(payload.name).trim()) {
+    derivedName = String(payload.name).trim();
+  }
+  
   if (!derivedName) {
     const joined = [firstName ?? "", lastName ?? ""].filter(Boolean).join(" ").trim();
     if (joined) derivedName = joined;
@@ -294,109 +245,69 @@ export async function upsertCustomerFromAutoflowEvent(payload: any, shopIdRaw: s
     else derivedName = "(no name)";
   }
 
-  const emailRaw =
-    (typeof payload?.customer?.email === "string" ? payload.customer.email : null) ??
-    (typeof payload?.email === "string" ? payload.email : null) ??
-    null;
-  const email = normalizeEmail(emailRaw ?? undefined);
-
-  // phone may come as customer.phone or as customer.phone_numbers[*].phonenumber
-  let phone = normalizePhone(
-    ((typeof payload?.customer?.phone === "string" ? payload.customer.phone : null) ??
-      (typeof payload?.phone === "string" ? payload.phone : null) ??
-      null) ?? undefined
-  );
-  if (!phone && Array.isArray(payload?.customer?.phone_numbers) && payload.customer.phone_numbers.length) {
-    const mobile = payload.customer.phone_numbers.find((p: any) => String(p?.phone_type).toUpperCase() === "M");
-    const pick = mobile ?? payload.customer.phone_numbers[0];
+  const email = normalizeEmail(customer?.email ?? payload?.email);
+  let phone = normalizePhone(customer?.phone ?? payload?.phone);
+  if (!phone && Array.isArray(customer?.phone_numbers) && (customer.phone_numbers as unknown[]).length) {
+    const phoneNumbers = customer.phone_numbers as Record<string, unknown>[];
+    const mobile = phoneNumbers.find((p) => String(p?.phone_type).toUpperCase() === "M");
+    const pick = mobile ?? phoneNumbers[0];
     phone = normalizePhone(pick?.phonenumber);
   }
 
-  // Vehicle/RO/status
-  const ticket = payload?.ticket ?? {};
-  const vehicle = payload?.vehicle ?? {};
-
-  const ro =
-    (ticket?.invoice != null ? String(ticket.invoice) : null) ??
-    (ticket?.id != null ? String(ticket.id) : null) ??
-    null;
-
-  const rawStatus = ticket?.status ? String(ticket.status) : null; // keep as-is
-
+  const ro = ticket?.invoice != null ? String(ticket.invoice) : (ticket?.id != null ? String(ticket.id) : null);
+  const rawStatus = ticket?.status ? String(ticket.status) : null;
   const vin = vehicle?.vin ? String(vehicle.vin).toUpperCase() : null;
-  const vehDoc =
-    vin || vehicle?.year != null || vehicle?.make != null || vehicle?.model != null || vehicle?.license != null || vehicle?.odometer != null
-      ? {
-          vin: vin ?? undefined,
-          year: normalizeNumber(vehicle?.year) ?? undefined,
-          make: vehicle?.make ?? undefined,
-          model: vehicle?.model ?? undefined,
-          license: vehicle?.license ?? undefined,
-          odometer: normalizeNumber(vehicle?.odometer) ?? undefined,
-        }
-      : undefined;
+  const odometer = normalizeNumber(vehicle?.odometer);
 
-  // Build selector (externalId -> email -> phone -> name)
-  const selector: Record<string, any> = { shopId: shopIdStr };
-  if (externalId != null) selector.externalId = externalId;
-  else if (email) selector.email = email;
-  else if (phone) selector.phone = phone;
-  else selector.name = derivedName;
+  let customerId: string | null = null;
 
-  // Build $set, avoiding null clobbers
-  const setDoc: Record<string, any> = {
-    shopId: shopIdStr,
-    externalId: externalId ?? null,
-    name: derivedName,
-    firstName: firstName ?? null,
-    lastName: lastName ?? null,
-    email,
-    phone,
-    provider: "autoflow",
-    updatedAt: now,
-    lastEventAt: now,
-  };
-
-  if (ro != null) setDoc.lastTicketId = ro;
-  if (rawStatus != null) {
-    setDoc.lastStatus = rawStatus;
-    setDoc.status = rawStatus; // store exactly as sent
+  if (externalId) {
+    const existing = await sql`SELECT id FROM customers WHERE shop_id = ${shopIdStr} AND external_id = ${externalId} LIMIT 1`;
+    if (existing.length > 0) customerId = existing[0].id;
+  }
+  if (!customerId && email) {
+    const existing = await sql`SELECT id FROM customers WHERE shop_id = ${shopIdStr} AND email = ${email} LIMIT 1`;
+    if (existing.length > 0) customerId = existing[0].id;
+  }
+  if (!customerId && phone) {
+    const existing = await sql`SELECT id FROM customers WHERE shop_id = ${shopIdStr} AND phone = ${phone} LIMIT 1`;
+    if (existing.length > 0) customerId = existing[0].id;
   }
 
-  if (vehDoc) {
-    const v: any = {};
-    if (vehDoc.vin) v.vin = vehDoc.vin;
-    if (vehDoc.year !== undefined) v.year = vehDoc.year;
-    if (vehDoc.make !== undefined) v.make = vehDoc.make;
-    if (vehDoc.model !== undefined) v.model = vehDoc.model;
-    if (vehDoc.license !== undefined) v.license = vehDoc.license;
-    if (vehDoc.odometer !== undefined) v.odometer = vehDoc.odometer;
-    setDoc.vehicle = v;
-    if (vehDoc.vin) setDoc.lastVin = vehDoc.vin;
-    if (vehDoc.odometer !== undefined) setDoc.lastMileage = vehDoc.odometer;
+  if (customerId) {
+    await sql`
+      UPDATE customers SET
+        external_id = COALESCE(${externalId}, external_id),
+        name = COALESCE(${derivedName}, name),
+        first_name = COALESCE(${firstName}, first_name),
+        last_name = COALESCE(${lastName}, last_name),
+        email = COALESCE(${email}, email),
+        phone = COALESCE(${phone}, phone),
+        provider = 'autoflow',
+        last_ticket_id = COALESCE(${ro}, last_ticket_id),
+        last_status = COALESCE(${rawStatus}, last_status),
+        status = COALESCE(${rawStatus}, status),
+        last_vin = COALESCE(${vin}, last_vin),
+        last_mileage = COALESCE(${odometer}, last_mileage),
+        last_event_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${customerId}::uuid
+    `;
+  } else {
+    await sql`
+      INSERT INTO customers (shop_id, external_id, name, first_name, last_name, email, phone, provider, last_ticket_id, last_status, status, last_vin, last_mileage, opened_at)
+      VALUES (${shopIdStr}, ${externalId}, ${derivedName}, ${firstName}, ${lastName}, ${email}, ${phone}, 'autoflow', ${ro}, ${rawStatus}, ${rawStatus || 'open'}, ${vin}, ${odometer}, NOW())
+    `;
   }
-
-  await db.collection("customers").updateOne(
-    selector,
-    {
-      $setOnInsert: { createdAt: now, openedAt: now, status: rawStatus ?? "open" },
-      $set: setDoc,
-    },
-    { upsert: true },
-  );
 }
 
-/* ------------------------------------------------------------------ */
-/* --------------------- dashboard query helper --------------------- */
-/* ------------------------------------------------------------------ */
-
 export type OpenCustomer = {
-  _id: any;
-  shopId: number | string;
+  id: string;
+  shopId: string;
   name?: string | null;
   lastStatus?: string | null;
   status?: string | null;
-  lastTicketId?: string | number | null;
+  lastTicketId?: string | null;
   updatedAt?: Date;
   vehicle?: {
     year?: number | null;
@@ -408,41 +319,36 @@ export type OpenCustomer = {
   };
 };
 
-/**
- * Fetch rows the dashboard expects:
- *  - Accepts shopId as number or string
- *  - Excludes statuses in CLOSED_SET (no transformation performed elsewhere)
- *  - Requires a VIN
- *  - Sorts by updatedAt desc
- */
-export async function getOpenCustomersForDashboard(shopIdInput: number | string, limit = 50) {
-  const db = await getDb();
-  const shopIdNum = Number(shopIdInput);
+export async function getOpenCustomersForDashboard(shopIdInput: number | string, limit = 50): Promise<OpenCustomer[]> {
   const shopIdStr = String(shopIdInput);
 
-  const cursor = db
-    .collection<OpenCustomer>("customers")
-    .find(
-      {
-        $and: [
-          { $or: [{ shopId: shopIdNum }, { shopId: shopIdStr }] },
-          { status: { $nin: CLOSED_SET as unknown as ClosedWord[] } },
-          { "vehicle.vin": { $nin: ["", null] } }, // ← stricter VIN filter
-        ],
-      },
-      {
-        projection: {
-          name: 1,
-          status: 1,
-          lastStatus: 1,
-          lastTicketId: 1,
-          updatedAt: 1,
-          vehicle: { year: 1, make: 1, model: 1, vin: 1, odometer: 1, license: 1 },
-        },
-      },
-    )
-    .sort({ updatedAt: -1 })
-    .limit(limit);
+  const customers = await sql`
+    SELECT c.id, c.shop_id, c.name, c.status, c.last_status, c.last_ticket_id, c.updated_at,
+           v.year, v.make, v.model, v.vin, v.mileage as odometer, v.license_plate as license
+    FROM customers c
+    LEFT JOIN vehicles v ON v.customer_id = c.id
+    WHERE c.shop_id = ${shopIdStr}
+      AND c.status NOT IN ('closed', 'Close', 'CLOSED', 'Appointment')
+      AND v.vin IS NOT NULL AND v.vin != ''
+    ORDER BY c.updated_at DESC
+    LIMIT ${limit}
+  `;
 
-  return cursor.toArray();
+  return customers.map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    shopId: String(row.shop_id),
+    name: row.name as string | null,
+    lastStatus: row.last_status as string | null,
+    status: row.status as string | null,
+    lastTicketId: row.last_ticket_id as string | null,
+    updatedAt: row.updated_at as Date,
+    vehicle: {
+      year: row.year as number | null,
+      make: row.make as string | null,
+      model: row.model as string | null,
+      vin: row.vin as string | null,
+      odometer: row.odometer as number | null,
+      license: row.license as string | null,
+    },
+  }));
 }

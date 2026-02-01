@@ -1,5 +1,4 @@
-// lib/data-quality.ts
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export interface DataQualityReport {
   timestamp: Date;
@@ -22,66 +21,54 @@ export interface DataQualityIssue {
   description: string;
   entityId: string;
   entityType: 'customer' | 'vehicle' | 'repair_order';
-  shopId?: number;
+  shopId?: string;
   suggestedAction: string;
 }
 
-export async function runDataQualityCheck(shopId?: number): Promise<DataQualityReport> {
-  const db = await getDb();
+export async function runDataQualityCheck(shopId?: number | string): Promise<DataQualityReport> {
   const issues: DataQualityIssue[] = [];
   const recommendations: string[] = [];
 
-  // Build shop filter
-  const shopFilter = shopId ? { shopId } : {};
+  const shopIdStr = shopId ? String(shopId) : null;
 
-  // 1. Find orphaned customers (customers without vehicles)
-  const orphanedCustomers = await db.collection("customers").aggregate([
-    { $match: shopFilter },
-    {
-      $lookup: {
-        from: "vehicles",
-        localField: "_id",
-        foreignField: "customerId",
-        as: "vehicles"
-      }
-    },
-    {
-      $match: {
-        $or: [
-          { vehicles: { $size: 0 } },
-          { vehicles: { $exists: false } }
-        ]
-      }
-    },
-    { $project: { _id: 1, name: 1, firstName: 1, lastName: 1, email: 1, shopId: 1 } }
-  ]).toArray();
+  const orphanedCustomers = shopIdStr
+    ? await sql`
+        SELECT c.id, c.name, c.first_name, c.last_name, c.email, c.shop_id
+        FROM customers c
+        LEFT JOIN vehicles v ON v.customer_id = c.id
+        WHERE c.shop_id = ${shopIdStr} AND v.id IS NULL
+      `
+    : await sql`
+        SELECT c.id, c.name, c.first_name, c.last_name, c.email, c.shop_id
+        FROM customers c
+        LEFT JOIN vehicles v ON v.customer_id = c.id
+        WHERE v.id IS NULL
+      `;
 
-  orphanedCustomers.forEach(customer => {
+  orphanedCustomers.forEach((customer: Record<string, unknown>) => {
+    const displayName = customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
     issues.push({
       type: 'orphaned_customer',
       severity: 'medium',
-      description: `Customer "${customer.name || customer.firstName + ' ' + customer.lastName}" has no vehicles`,
-      entityId: customer._id.toString(),
+      description: `Customer "${displayName}" has no vehicles`,
+      entityId: String(customer.id),
       entityType: 'customer',
-      shopId: customer.shopId,
+      shopId: customer.shop_id ? String(customer.shop_id) : undefined,
       suggestedAction: 'Add vehicle or archive customer'
     });
   });
 
-  // 2. Find incomplete vehicles (missing VIN, year, make, model)
-  const incompleteVehicles = await db.collection("vehicles").find({
-    ...shopFilter,
-    $or: [
-      { vin: { $exists: false } },
-      { vin: null },
-      { vin: "" },
-      { year: { $exists: false } },
-      { make: { $exists: false } },
-      { model: { $exists: false } }
-    ]
-  }).toArray();
+  const incompleteVehicles = shopIdStr
+    ? await sql`
+        SELECT id, vin, year, make, model, shop_id FROM vehicles
+        WHERE shop_id = ${shopIdStr} AND (vin IS NULL OR vin = '' OR year IS NULL OR make IS NULL OR model IS NULL)
+      `
+    : await sql`
+        SELECT id, vin, year, make, model, shop_id FROM vehicles
+        WHERE vin IS NULL OR vin = '' OR year IS NULL OR make IS NULL OR model IS NULL
+      `;
 
-  incompleteVehicles.forEach(vehicle => {
+  incompleteVehicles.forEach((vehicle: Record<string, unknown>) => {
     const missing = [];
     if (!vehicle.vin) missing.push("VIN");
     if (!vehicle.year) missing.push("year");
@@ -92,90 +79,109 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
       type: 'incomplete_vehicle',
       severity: missing.includes("VIN") ? 'high' : 'medium',
       description: `Vehicle missing: ${missing.join(", ")}`,
-      entityId: vehicle._id.toString(),
+      entityId: String(vehicle.id),
       entityType: 'vehicle',
-      shopId: vehicle.shopId,
+      shopId: vehicle.shop_id ? String(vehicle.shop_id) : undefined,
       suggestedAction: `Update vehicle with missing ${missing.join(", ")}`
     });
   });
 
-  // 3. Find invalid VINs (not 17 characters)
-  const invalidVins = await db.collection("vehicles").find({
-    ...shopFilter,
-    vin: { $exists: true, $ne: null, $ne: "" },
-    $expr: { $ne: [{ $strLenCP: "$vin" }, 17] }
-  }).toArray();
+  const invalidVins = shopIdStr
+    ? await sql`
+        SELECT id, vin, shop_id FROM vehicles
+        WHERE shop_id = ${shopIdStr} AND vin IS NOT NULL AND vin != '' AND LENGTH(vin) != 17
+      `
+    : await sql`
+        SELECT id, vin, shop_id FROM vehicles
+        WHERE vin IS NOT NULL AND vin != '' AND LENGTH(vin) != 17
+      `;
 
-  invalidVins.forEach(vehicle => {
+  invalidVins.forEach((vehicle: Record<string, unknown>) => {
+    const vinStr = String(vehicle.vin || '');
     issues.push({
       type: 'invalid_vin',
       severity: 'high',
-      description: `Invalid VIN length: "${vehicle.vin}" (${vehicle.vin?.length || 0} chars, should be 17)`,
-      entityId: vehicle._id.toString(),
+      description: `Invalid VIN length: "${vinStr}" (${vinStr.length} chars, should be 17)`,
+      entityId: String(vehicle.id),
       entityType: 'vehicle',
-      shopId: vehicle.shopId,
+      shopId: vehicle.shop_id ? String(vehicle.shop_id) : undefined,
       suggestedAction: 'Correct VIN or remove invalid VIN'
     });
   });
 
-  // 4. Find stale records (no activity in 90+ days)
   const staleDate = new Date();
   staleDate.setDate(staleDate.getDate() - 90);
 
-  const staleCustomers = await db.collection("customers").find({
-    ...shopFilter,
-    updatedAt: { $lt: staleDate },
-    status: { $ne: "archived" }
-  }).toArray();
+  const staleCustomers = shopIdStr
+    ? await sql`
+        SELECT id, updated_at, shop_id FROM customers
+        WHERE shop_id = ${shopIdStr} AND updated_at < ${staleDate} AND (status IS NULL OR status != 'archived')
+      `
+    : await sql`
+        SELECT id, updated_at, shop_id FROM customers
+        WHERE updated_at < ${staleDate} AND (status IS NULL OR status != 'archived')
+      `;
 
-  staleCustomers.forEach(customer => {
+  staleCustomers.forEach((customer: Record<string, unknown>) => {
+    const updatedAt = customer.updated_at as Date;
     issues.push({
       type: 'stale_record',
       severity: 'low',
-      description: `No activity since ${customer.updatedAt?.toDateString()}`,
-      entityId: customer._id.toString(),
+      description: `No activity since ${updatedAt?.toDateString?.() || 'unknown'}`,
+      entityId: String(customer.id),
       entityType: 'customer',
-      shopId: customer.shopId,
+      shopId: customer.shop_id ? String(customer.shop_id) : undefined,
       suggestedAction: 'Review for archival or re-engagement'
     });
   });
 
-  // 5. Find duplicate emails
-  const duplicateEmails = await db.collection("customers").aggregate([
-    { $match: { ...shopFilter, email: { $exists: true, $ne: null, $ne: "" } } },
-    {
-      $group: {
-        _id: { email: "$email", shopId: "$shopId" },
-        count: { $sum: 1 },
-        customers: { $push: { _id: "$_id", name: "$name" } }
-      }
-    },
-    { $match: { count: { $gt: 1 } } }
-  ]).toArray();
+  const duplicateEmails = shopIdStr
+    ? await sql`
+        SELECT email, shop_id, COUNT(*) as count, array_agg(id) as customer_ids
+        FROM customers
+        WHERE shop_id = ${shopIdStr} AND email IS NOT NULL AND email != ''
+        GROUP BY email, shop_id
+        HAVING COUNT(*) > 1
+      `
+    : await sql`
+        SELECT email, shop_id, COUNT(*) as count, array_agg(id) as customer_ids
+        FROM customers
+        WHERE email IS NOT NULL AND email != ''
+        GROUP BY email, shop_id
+        HAVING COUNT(*) > 1
+      `;
 
-  duplicateEmails.forEach(group => {
-    group.customers.forEach((customer: any) => {
+  duplicateEmails.forEach((group: Record<string, unknown>) => {
+    const customerIds = group.customer_ids as string[];
+    customerIds?.forEach(customerId => {
       issues.push({
         type: 'duplicate_email',
         severity: 'medium',
-        description: `Duplicate email: ${group._id.email} (${group.count} records)`,
-        entityId: customer._id.toString(),
+        description: `Duplicate email: ${group.email} (${group.count} records)`,
+        entityId: String(customerId),
         entityType: 'customer',
-        shopId: group._id.shopId,
+        shopId: group.shop_id ? String(group.shop_id) : undefined,
         suggestedAction: 'Merge or archive duplicate customers'
       });
     });
   });
 
-  // Generate summary
-  const totalCustomers = await db.collection("customers").countDocuments(shopFilter);
-  const activeCustomers = await db.collection("customers").countDocuments({
-    ...shopFilter,
-    status: { $ne: "archived" },
-    updatedAt: { $gte: staleDate }
-  });
+  const totalCustomersResult = shopIdStr
+    ? await sql`SELECT COUNT(*) as count FROM customers WHERE shop_id = ${shopIdStr}`
+    : await sql`SELECT COUNT(*) as count FROM customers`;
+  const totalCustomers = Number(totalCustomersResult[0]?.count || 0);
 
-  // Generate recommendations
+  const activeCustomersResult = shopIdStr
+    ? await sql`
+        SELECT COUNT(*) as count FROM customers
+        WHERE shop_id = ${shopIdStr} AND (status IS NULL OR status != 'archived') AND updated_at >= ${staleDate}
+      `
+    : await sql`
+        SELECT COUNT(*) as count FROM customers
+        WHERE (status IS NULL OR status != 'archived') AND updated_at >= ${staleDate}
+      `;
+  const activeCustomers = Number(activeCustomersResult[0]?.count || 0);
+
   if (orphanedCustomers.length > 0) {
     recommendations.push(`${orphanedCustomers.length} customers need vehicles added or should be archived`);
   }
@@ -208,72 +214,65 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
   };
 }
 
-export async function autoCleanupData(shopId?: number, dryRun: boolean = true): Promise<{
+export async function autoCleanupData(shopId?: number | string, dryRun: boolean = true): Promise<{
   actions: string[];
   cleaned: number;
   errors: string[];
 }> {
-  const db = await getDb();
   const actions: string[] = [];
   const errors: string[] = [];
   let cleaned = 0;
 
-  const shopFilter = shopId ? { shopId } : {};
+  const shopIdStr = shopId ? String(shopId) : null;
 
   try {
-    // 1. Archive customers with no vehicles and no activity in 180+ days
     const archiveDate = new Date();
     archiveDate.setDate(archiveDate.getDate() - 180);
 
-    const toArchive = await db.collection("customers").find({
-      ...shopFilter,
-      status: { $ne: "archived" },
-      updatedAt: { $lt: archiveDate }
-    }).toArray();
+    const toArchive = shopIdStr
+      ? await sql`
+          SELECT c.id FROM customers c
+          LEFT JOIN vehicles v ON v.customer_id = c.id
+          WHERE c.shop_id = ${shopIdStr} AND (c.status IS NULL OR c.status != 'archived') AND c.updated_at < ${archiveDate}
+          GROUP BY c.id
+          HAVING COUNT(v.id) = 0
+        `
+      : await sql`
+          SELECT c.id FROM customers c
+          LEFT JOIN vehicles v ON v.customer_id = c.id
+          WHERE (c.status IS NULL OR c.status != 'archived') AND c.updated_at < ${archiveDate}
+          GROUP BY c.id
+          HAVING COUNT(v.id) = 0
+        `;
 
-    const toArchiveIds = [];
-    for (const customer of toArchive) {
-      const vehicleCount = await db.collection("vehicles").countDocuments({
-        customerId: customer._id
-      });
-      if (vehicleCount === 0) {
-        toArchiveIds.push(customer._id);
-      }
-    }
+    const toArchiveIds = toArchive.map((c: Record<string, unknown>) => String(c.id));
 
     if (toArchiveIds.length > 0 && !dryRun) {
-      await db.collection("customers").updateMany(
-        { _id: { $in: toArchiveIds } },
-        { 
-          $set: { 
-            status: "archived", 
-            archivedAt: new Date(),
-            archivedReason: "Auto-archived: No vehicles, inactive 180+ days"
-          } 
-        }
-      );
+      for (const id of toArchiveIds) {
+        await sql`
+          UPDATE customers SET status = 'archived', archived_at = NOW(), archived_reason = 'Auto-archived: No vehicles, inactive 180+ days'
+          WHERE id = ${id}::uuid
+        `;
+      }
       cleaned += toArchiveIds.length;
     }
     actions.push(`${dryRun ? 'Would archive' : 'Archived'} ${toArchiveIds.length} inactive customers`);
 
-    // 2. Clean up empty VIN fields (set to null instead of empty string)
     if (!dryRun) {
-      const vinResult = await db.collection("vehicles").updateMany(
-        { ...shopFilter, vin: "" },
-        { $set: { vin: null } }
-      );
-      cleaned += vinResult.modifiedCount;
-      actions.push(`Cleaned ${vinResult.modifiedCount} empty VIN fields`);
+      const vinResult = shopIdStr
+        ? await sql`UPDATE vehicles SET vin = NULL WHERE shop_id = ${shopIdStr} AND vin = '' RETURNING id`
+        : await sql`UPDATE vehicles SET vin = NULL WHERE vin = '' RETURNING id`;
+      cleaned += vinResult.length;
+      actions.push(`Cleaned ${vinResult.length} empty VIN fields`);
     } else {
-      const emptyVins = await db.collection("vehicles").countDocuments({
-        ...shopFilter, 
-        vin: ""
-      });
-      actions.push(`Would clean ${emptyVins} empty VIN fields`);
+      const emptyVins = shopIdStr
+        ? await sql`SELECT COUNT(*) as count FROM vehicles WHERE shop_id = ${shopIdStr} AND vin = ''`
+        : await sql`SELECT COUNT(*) as count FROM vehicles WHERE vin = ''`;
+      actions.push(`Would clean ${emptyVins[0]?.count || 0} empty VIN fields`);
     }
 
   } catch (error) {
-    errors.push(`Cleanup error: ${error}`);
+    errors.push(`Cleanup error: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return { actions, cleaned, errors };

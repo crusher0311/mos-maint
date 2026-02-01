@@ -75,10 +75,17 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 
 **Recently Migrated (This Session):**
 - Core libraries: `lib/features.ts`, `lib/enterprise.ts`, `lib/stripe.ts`, `lib/api-usage-tracker.ts`
+- Utility libraries: `lib/rate.ts`, `lib/evidence.ts`, `lib/data-quality.ts`, `lib/ids.ts`
+- Models: `lib/models/customers.ts` (customer upsert from AutoFlow)
 - API routes: `/api/features`, `/api/support/tickets/count`
 - Platform admin routes: features, tickets, notifications, knowledge-base, enterprises, users
 - Callbacks: `/api/callbacks/protractor`
 - Jobs: `/api/jobs/search-normalized`
+
+**New PostgreSQL Tables Created:**
+- `shop_features` - Shop feature toggles and subscriptions
+- `ratelimits` - Rate limiting with automatic TTL cleanup
+- `counters` - Sequential ID generation
 
 **Remaining Work:**
 - Phase 5: Continue updating remaining API routes (dashboard data, cron jobs, recommended, vehicle-analyzer, stickers, parts, etc.)

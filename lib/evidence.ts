@@ -1,32 +1,46 @@
-// lib/evidence.ts
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export async function buildEvidenceForVIN(vin: string) {
-  const db = await getDb();
+  const vinUpper = vin.toUpperCase();
 
-  // Pull DVI items (Autoflow)
-  const dvi = await db.collection("autoflow_dvi_items")
-    .find({ vin }, { projection: { _id: 0 } }).limit(500).toArray();
+  const dvi = await sql`
+    SELECT * FROM autoflow_dvi_items WHERE vin = ${vinUpper} LIMIT 500
+  `;
 
-  // Pull CARFAX history (your cached table)
-  const carfax = await db.collection("carfax_history")
-    .find({ vin }, { projection: { _id: 0 } }).limit(1000).toArray();
+  const carfax = await sql`
+    SELECT * FROM carfax_history WHERE vin = ${vinUpper} LIMIT 1000
+  `;
 
-  // Pull OE schedule (DataOne LKP/DEF tables you imported)
-  const veh = await db.collection("vehicles").findOne({ vin });
-  const ymmFilter: any = { Year: veh?.year, Make: veh?.make, Model: veh?.model };
-  if (veh?.trim) ymmFilter.Trim = veh.trim;
+  const vehResult = await sql`
+    SELECT * FROM vehicles WHERE vin = ${vinUpper} LIMIT 1
+  `;
+  const veh = vehResult[0];
 
-  const intervals = await db.collection("lkp_ymm_maintenance_interval")
-    .find(ymmFilter, { projection: { _id: 0 } }).limit(5000).toArray();
+  let intervals: Record<string, unknown>[] = [];
+  if (veh?.year && veh?.make && veh?.model) {
+    if (veh?.trim) {
+      intervals = await sql`
+        SELECT * FROM lkp_ymm_maintenance_interval 
+        WHERE "Year" = ${veh.year} AND "Make" = ${veh.make} AND "Model" = ${veh.model} AND "Trim" = ${veh.trim}
+        LIMIT 5000
+      `;
+    } else {
+      intervals = await sql`
+        SELECT * FROM lkp_ymm_maintenance_interval 
+        WHERE "Year" = ${veh.year} AND "Make" = ${veh.make} AND "Model" = ${veh.model}
+        LIMIT 5000
+      `;
+    }
+  }
 
-  const defs = await db.collection("def_maintenance_event")
-    .find({}, { projection: { _id: 0, EventCode: 1, Description: 1 } }).toArray();
-  const defMap = new Map(defs.map(d => [String(d.EventCode), String(d.Description)]));
+  const defs = await sql`
+    SELECT "EventCode", "Description" FROM def_maintenance_event
+  `;
+  const defMap = new Map(defs.map((d: Record<string, unknown>) => [String(d.EventCode), String(d.Description)]));
 
-  const oe_schedule = intervals.map((r: any) => ({
-    id: String(r.EventCode ?? r.ServiceCode ?? r._id ?? ""),
-    normalized_service: normalizeLabel(r.Description ?? defMap.get(String(r.EventCode)) ?? ""),
+  const oe_schedule = intervals.map((r: Record<string, unknown>) => ({
+    id: String(r.EventCode ?? r.ServiceCode ?? r.id ?? ""),
+    normalized_service: normalizeLabel(String(r.Description ?? defMap.get(String(r.EventCode)) ?? "")),
     mileage_interval: toNum(r.MileageInterval),
     time_interval_months: toNum(r.TimeIntervalMonths),
     first_due_miles: toNum(r.FirstDueMiles),
@@ -36,25 +50,25 @@ export async function buildEvidenceForVIN(vin: string) {
   }));
 
   const evidence = {
-    vehicle: { vin, year: veh?.year, make: veh?.make, model: veh?.model, trim: veh?.trim },
+    vehicle: { vin: vinUpper, year: veh?.year, make: veh?.make, model: veh?.model, trim: veh?.trim },
     current_odometer_miles: veh?.odometer,
     last_known_mileage: latestMileage(carfax, dvi),
     last_record_date_iso: latestMileageDate(carfax, dvi),
     avg_daily_miles: 30,
-    dvi: dvi.map((x: any) => ({
-      id: String(x.itemId || x.dviId || x._id || ""),
-      normalized_service: normalizeLabel(x.label || x.system || ""),
+    dvi: dvi.map((x: Record<string, unknown>) => ({
+      id: String(x.item_id || x.dvi_id || x.id || ""),
+      normalized_service: normalizeLabel(String(x.label || x.system || "")),
       label: String(x.label || x.system || ""),
       severity: (String(x.severity || "green").toLowerCase() as "red"|"yellow"|"green"),
       note: x.note || x.comment || undefined,
       metrics: x.metrics || undefined
     })),
-    carfax: carfax.map((r: any) => ({
-      id: String(r.id || r.date || r._id || ""),
-      date_iso: r.date_iso || r.date || "",
+    carfax: carfax.map((r: Record<string, unknown>) => ({
+      id: String(r.id || r.date || ""),
+      date_iso: String(r.date_iso || r.date || ""),
       mileage: toNum(r.mileage),
       service_label: String(r.service || r.label || ""),
-      normalized_service: normalizeLabel(r.service || r.label || ""),
+      normalized_service: normalizeLabel(String(r.service || r.label || "")),
       note: r.shop || undefined
     })),
     oe_schedule
@@ -63,7 +77,7 @@ export async function buildEvidenceForVIN(vin: string) {
   return evidence;
 }
 
-function toNum(v: any){ const n = Number(v); return Number.isFinite(n) ? n : undefined; }
+function toNum(v: unknown){ const n = Number(v); return Number.isFinite(n) ? n : undefined; }
 
 function normalizeLabel(s: string): string {
   const t = s.toLowerCase();
@@ -97,17 +111,18 @@ function normalizeLabel(s: string): string {
   return "other";
 }
 
-function latestMileage(carfax: any[], dvi: any[]) {
+function latestMileage(carfax: Record<string, unknown>[], dvi: Record<string, unknown>[]) {
   const all = [
-    ...carfax.map(x => ({ m: Number(x.mileage)||0, d: new Date(x.date_iso||x.date||0).getTime()||0 })),
-    ...dvi.map(x => ({ m: Number(x.mileage)||0, d: new Date(x.date_iso||x.date||0).getTime()||0 })),
+    ...carfax.map(x => ({ m: Number(x.mileage)||0, d: new Date(String(x.date_iso||x.date||0)).getTime()||0 })),
+    ...dvi.map(x => ({ m: Number(x.mileage)||0, d: new Date(String(x.date_iso||x.date||0)).getTime()||0 })),
   ];
   return all.sort((a,b)=>b.d-a.d)[0]?.m;
 }
-function latestMileageDate(carfax: any[], dvi: any[]) {
+
+function latestMileageDate(carfax: Record<string, unknown>[], dvi: Record<string, unknown>[]) {
   const all = [
-    ...carfax.map(x => new Date(x.date_iso||x.date||0).toISOString()),
-    ...dvi.map(x => new Date(x.date_iso||x.date||0).toISOString()),
+    ...carfax.map(x => new Date(String(x.date_iso||x.date||0)).toISOString()),
+    ...dvi.map(x => new Date(String(x.date_iso||x.date||0)).toISOString()),
   ].filter(Boolean);
   return all.sort().pop();
 }
