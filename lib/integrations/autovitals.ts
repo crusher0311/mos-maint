@@ -1,4 +1,4 @@
-import { getDb } from "../mongo";
+import sql from "@/lib/db/postgres";
 
 export interface AutoVitalsConfig {
   shopId: number;
@@ -89,7 +89,7 @@ async function autovitalsFetch<T>(
   config: AutoVitalsConfig,
   options: {
     method?: string;
-    body?: any;
+    body?: unknown;
     useShopUrl?: boolean;
     useFormData?: boolean;
   } = {}
@@ -121,7 +121,7 @@ async function autovitalsFetch<T>(
     const response = await fetch(url, {
       method,
       headers,
-      body: useFormData ? body : (body ? JSON.stringify(body) : undefined),
+      body: useFormData ? (body as string) : (body ? JSON.stringify(body) : undefined),
     });
 
     if (!response.ok) {
@@ -147,7 +147,7 @@ export async function getVehicle(
 ): Promise<{ ok: true; data: AutoVitalsVehicle } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching vehicle ${vehicleId}`);
   
-  const result = await autovitalsFetch<any>(
+  const result = await autovitalsFetch<Record<string, unknown>>(
     "/TvpxService.asmx/GetData?sp=Vehicle_Get",
     config,
     {
@@ -162,16 +162,16 @@ export async function getVehicle(
 
   const data = result.data;
   const vehicle: AutoVitalsVehicle = {
-    vehicleId: data.VehicleId || data.vehicleId || vehicleId,
-    vin: data.VIN || data.Vin || data.vin,
-    year: data.Year || data.year,
-    make: data.Make || data.make,
-    model: data.Model || data.model,
-    mileage: data.Mileage || data.mileage || data.Odometer || data.odometer,
-    licensePlate: data.LicensePlate || data.licensePlate,
-    color: data.Color || data.color,
-    customerId: data.CustomerId || data.customerId,
-    customerName: data.CustomerName || data.customerName,
+    vehicleId: (data.VehicleId || data.vehicleId || vehicleId) as number,
+    vin: (data.VIN || data.Vin || data.vin) as string,
+    year: (data.Year || data.year) as number,
+    make: (data.Make || data.make) as string,
+    model: (data.Model || data.model) as string,
+    mileage: (data.Mileage || data.mileage || data.Odometer || data.odometer) as number,
+    licensePlate: (data.LicensePlate || data.licensePlate) as string,
+    color: (data.Color || data.color) as string,
+    customerId: (data.CustomerId || data.customerId) as number,
+    customerName: (data.CustomerName || data.customerName) as string,
   };
 
   return { ok: true, data: vehicle };
@@ -183,7 +183,7 @@ export async function getAppointment(
 ): Promise<{ ok: true; data: AutoVitalsAppointment } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching appointment ${appointmentId}`);
   
-  const result = await autovitalsFetch<any>(
+  const result = await autovitalsFetch<Record<string, unknown>>(
     "/TvpxService.asmx/GetData?sp=Appointment_Get_AdditionalInfo",
     config,
     {
@@ -198,22 +198,22 @@ export async function getAppointment(
 
   const data = result.data;
   const appointment: AutoVitalsAppointment = {
-    appointmentId: data.AppointmentId || data.appointmentId || appointmentId,
-    vehicleId: data.VehicleId || data.vehicleId,
-    vin: data.VIN || data.Vin || data.vin,
-    customerId: data.CustomerId || data.customerId,
-    customerName: data.CustomerName || data.customerName,
-    customerPhone: data.CustomerPhone || data.customerPhone,
-    customerEmail: data.CustomerEmail || data.customerEmail,
-    status: data.Status || data.status,
-    promisedTime: data.PromisedTime || data.promisedTime,
-    dropOffTime: data.DropOffTime || data.dropOffTime,
-    serviceAdvisorId: data.ServiceAdvisorId || data.serviceAdvisorId,
-    serviceAdvisorName: data.ServiceAdvisorName || data.serviceAdvisorName,
-    technicianId: data.TechnicianId || data.technicianId,
-    technicianName: data.TechnicianName || data.technicianName,
-    concern: data.Concern || data.concern,
-    mileageIn: data.MileageIn || data.mileageIn || data.Odometer || data.odometer,
+    appointmentId: (data.AppointmentId || data.appointmentId || appointmentId) as number,
+    vehicleId: (data.VehicleId || data.vehicleId) as number,
+    vin: (data.VIN || data.Vin || data.vin) as string,
+    customerId: (data.CustomerId || data.customerId) as number,
+    customerName: (data.CustomerName || data.customerName) as string,
+    customerPhone: (data.CustomerPhone || data.customerPhone) as string,
+    customerEmail: (data.CustomerEmail || data.customerEmail) as string,
+    status: (data.Status || data.status) as string,
+    promisedTime: (data.PromisedTime || data.promisedTime) as string,
+    dropOffTime: (data.DropOffTime || data.dropOffTime) as string,
+    serviceAdvisorId: (data.ServiceAdvisorId || data.serviceAdvisorId) as number,
+    serviceAdvisorName: (data.ServiceAdvisorName || data.serviceAdvisorName) as string,
+    technicianId: (data.TechnicianId || data.technicianId) as number,
+    technicianName: (data.TechnicianName || data.technicianName) as string,
+    concern: (data.Concern || data.concern) as string,
+    mileageIn: (data.MileageIn || data.mileageIn || data.Odometer || data.odometer) as number,
   };
 
   return { ok: true, data: appointment };
@@ -225,7 +225,7 @@ export async function getInspectionResults(
 ): Promise<{ ok: true; data: AutoVitalsInspectionResult } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching inspection results for appointment ${appointmentId}`);
   
-  const result = await autovitalsFetch<any>(
+  const result = await autovitalsFetch<Record<string, unknown>>(
     "/TvpxService.asmx/GetData?sp=InspectionResults_Get",
     config,
     {
@@ -242,7 +242,7 @@ export async function getInspectionResults(
   const items: AutoVitalsInspectionItem[] = [];
 
   if (Array.isArray(data.Items || data.items || data)) {
-    const rawItems = data.Items || data.items || data;
+    const rawItems = (data.Items || data.items || data) as Record<string, unknown>[];
     for (const item of rawItems) {
       const statusNum = item.Status ?? item.status ?? item.Condition ?? item.condition;
       let status: "green" | "yellow" | "red" = "green";
@@ -250,14 +250,14 @@ export async function getInspectionResults(
       else if (statusNum === 1 || statusNum === "yellow" || statusNum === "Yellow") status = "yellow";
 
       items.push({
-        id: item.Id || item.id || item.ItemId || item.itemId,
-        name: item.Name || item.name || item.Title || item.title,
-        category: item.Category || item.category || item.CategoryName || item.categoryName,
+        id: (item.Id || item.id || item.ItemId || item.itemId) as number,
+        name: (item.Name || item.name || item.Title || item.title) as string,
+        category: (item.Category || item.category || item.CategoryName || item.categoryName) as string,
         status,
-        notes: item.Notes || item.notes,
-        techNotes: item.TechNotes || item.techNotes,
-        photos: item.Photos || item.photos || [],
-        videos: item.Videos || item.videos || [],
+        notes: (item.Notes || item.notes) as string,
+        techNotes: (item.TechNotes || item.techNotes) as string,
+        photos: (item.Photos || item.photos || []) as string[],
+        videos: (item.Videos || item.videos || []) as string[],
       });
     }
   }
@@ -265,11 +265,11 @@ export async function getInspectionResults(
   return {
     ok: true,
     data: {
-      inspectionResultId: data.InspectionResultId || data.inspectionResultId || 0,
+      inspectionResultId: (data.InspectionResultId || data.inspectionResultId || 0) as number,
       appointmentId,
-      completedAt: data.CompletedAt || data.completedAt,
-      technicianId: data.TechnicianId || data.technicianId,
-      technicianName: data.TechnicianName || data.technicianName,
+      completedAt: (data.CompletedAt || data.completedAt) as string,
+      technicianId: (data.TechnicianId || data.technicianId) as number,
+      technicianName: (data.TechnicianName || data.technicianName) as string,
       items,
     }
   };
@@ -281,7 +281,7 @@ export async function getRepairOrderJobs(
 ): Promise<{ ok: true; data: AutoVitalsJob[] } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching RO jobs for appointment ${appointmentId}`);
   
-  const result = await autovitalsFetch<any>(
+  const result = await autovitalsFetch<Record<string, unknown>>(
     "/TvpxService.asmx/GetData?sp=VehicleRepairOrderJobs_Get",
     config,
     {
@@ -295,23 +295,23 @@ export async function getRepairOrderJobs(
   if (!result.ok) return result;
 
   const jobs: AutoVitalsJob[] = [];
-  const rawJobs = Array.isArray(result.data) ? result.data : (result.data?.Jobs || result.data?.jobs || []);
+  const rawJobs = Array.isArray(result.data) ? result.data : ((result.data?.Jobs || result.data?.jobs || []) as Record<string, unknown>[]);
 
   for (const job of rawJobs) {
     jobs.push({
-      jobId: job.JobId || job.jobId || job.Id || job.id,
+      jobId: (job.JobId || job.jobId || job.Id || job.id) as number,
       appointmentId,
-      code: job.Code || job.code,
-      title: job.Title || job.title || job.Name || job.name,
-      description: job.Description || job.description,
-      laborHours: job.LaborHours || job.laborHours,
-      laborRate: job.LaborRate || job.laborRate,
-      partsTotal: job.PartsTotal || job.partsTotal,
-      total: job.Total || job.total,
-      status: job.Status || job.status,
-      approved: job.Approved || job.approved,
-      declined: job.Declined || job.declined,
-      declinedReason: job.DeclinedReason || job.declinedReason,
+      code: (job.Code || job.code) as string,
+      title: (job.Title || job.title || job.Name || job.name) as string,
+      description: (job.Description || job.description) as string,
+      laborHours: (job.LaborHours || job.laborHours) as number,
+      laborRate: (job.LaborRate || job.laborRate) as number,
+      partsTotal: (job.PartsTotal || job.partsTotal) as number,
+      total: (job.Total || job.total) as number,
+      status: (job.Status || job.status) as string,
+      approved: (job.Approved || job.approved) as boolean,
+      declined: (job.Declined || job.declined) as boolean,
+      declinedReason: (job.DeclinedReason || job.declinedReason) as string,
     });
   }
 
@@ -325,7 +325,7 @@ export async function getAppointmentUpdates(
 ): Promise<{ ok: true; data: AutoVitalsAppointment[] } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching appointment updates`);
   
-  const result = await autovitalsFetch<any>(
+  const result = await autovitalsFetch<Record<string, unknown>>(
     "/TvpxService.asmx/GetData?sp=Appointments_GetUpdates",
     config,
     {
@@ -345,22 +345,22 @@ export async function getAppointmentUpdates(
   if (!result.ok) return result;
 
   const appointments: AutoVitalsAppointment[] = [];
-  const rawAppointments = Array.isArray(result.data) ? result.data : (result.data?.Appointments || []);
+  const rawAppointments = Array.isArray(result.data) ? result.data : ((result.data?.Appointments || []) as Record<string, unknown>[]);
 
   for (const apt of rawAppointments) {
     appointments.push({
-      appointmentId: apt.AppointmentId || apt.appointmentId || apt.Id || apt.id,
-      vehicleId: apt.VehicleId || apt.vehicleId,
-      vin: apt.VIN || apt.Vin || apt.vin,
-      customerId: apt.CustomerId || apt.customerId,
-      customerName: apt.CustomerName || apt.customerName,
-      customerPhone: apt.CustomerPhone || apt.customerPhone,
-      status: apt.Status || apt.status,
-      promisedTime: apt.PromisedTime || apt.promisedTime,
-      serviceAdvisorId: apt.ServiceAdvisorId || apt.serviceAdvisorId,
-      technicianId: apt.TechnicianId || apt.technicianId,
-      concern: apt.Concern || apt.concern,
-      mileageIn: apt.MileageIn || apt.mileageIn,
+      appointmentId: (apt.AppointmentId || apt.appointmentId || apt.Id || apt.id) as number,
+      vehicleId: (apt.VehicleId || apt.vehicleId) as number,
+      vin: (apt.VIN || apt.Vin || apt.vin) as string,
+      customerId: (apt.CustomerId || apt.customerId) as number,
+      customerName: (apt.CustomerName || apt.customerName) as string,
+      customerPhone: (apt.CustomerPhone || apt.customerPhone) as string,
+      status: (apt.Status || apt.status) as string,
+      promisedTime: (apt.PromisedTime || apt.promisedTime) as string,
+      serviceAdvisorId: (apt.ServiceAdvisorId || apt.serviceAdvisorId) as number,
+      technicianId: (apt.TechnicianId || apt.technicianId) as number,
+      concern: (apt.Concern || apt.concern) as string,
+      mileageIn: (apt.MileageIn || apt.mileageIn) as number,
     });
   }
 
@@ -369,10 +369,10 @@ export async function getAppointmentUpdates(
 
 export async function getTechInfo(
   config: AutoVitalsConfig
-): Promise<{ ok: true; data: any } | { ok: false; error: string }> {
+): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching tech info`);
   
-  return autovitalsFetch<any>(
+  return autovitalsFetch<unknown>(
     "/TvpxService.asmx/GetData?sp=TechInfo_Get2",
     config,
     {
@@ -386,10 +386,10 @@ export async function getTechInfo(
 
 export async function getServerSettings(
   config: AutoVitalsConfig
-): Promise<{ ok: true; data: any } | { ok: false; error: string }> {
+): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
   console.log(`[AutoVitals] Fetching server settings`);
   
-  return autovitalsFetch<any>(
+  return autovitalsFetch<Record<string, unknown>>(
     "/TvpxService.asmx/GetServerSettingsUpdates",
     config,
     { body: null }
@@ -400,103 +400,128 @@ export async function cacheAutoVitalsVehicle(
   vehicle: AutoVitalsVehicle,
   shopId: string
 ): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_vehicles");
-
-  await collection.updateOne(
-    { vehicleId: vehicle.vehicleId, shopId },
-    {
-      $set: {
-        ...vehicle,
-        shopId,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        createdAt: new Date(),
-      }
-    },
-    { upsert: true }
-  );
+  await sql`
+    INSERT INTO autovitals_vehicles (vehicle_id, shop_id, vin, year, make, model, mileage, license_plate, color, customer_id, customer_name, updated_at)
+    VALUES (${vehicle.vehicleId}, ${shopId}, ${vehicle.vin || null}, ${vehicle.year || null}, ${vehicle.make || null},
+      ${vehicle.model || null}, ${vehicle.mileage || null}, ${vehicle.licensePlate || null}, ${vehicle.color || null},
+      ${vehicle.customerId || null}, ${vehicle.customerName || null}, NOW())
+    ON CONFLICT (vehicle_id, shop_id) DO UPDATE SET
+      vin = COALESCE(${vehicle.vin || null}, autovitals_vehicles.vin),
+      year = COALESCE(${vehicle.year || null}, autovitals_vehicles.year),
+      make = COALESCE(${vehicle.make || null}, autovitals_vehicles.make),
+      model = COALESCE(${vehicle.model || null}, autovitals_vehicles.model),
+      mileage = COALESCE(${vehicle.mileage || null}, autovitals_vehicles.mileage),
+      license_plate = COALESCE(${vehicle.licensePlate || null}, autovitals_vehicles.license_plate),
+      color = COALESCE(${vehicle.color || null}, autovitals_vehicles.color),
+      customer_id = COALESCE(${vehicle.customerId || null}, autovitals_vehicles.customer_id),
+      customer_name = COALESCE(${vehicle.customerName || null}, autovitals_vehicles.customer_name),
+      updated_at = NOW()
+  `;
 }
 
 export async function cacheAutoVitalsAppointment(
   appointment: AutoVitalsAppointment,
   shopId: string
 ): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_appointments");
-
-  await collection.updateOne(
-    { appointmentId: appointment.appointmentId, shopId },
-    {
-      $set: {
-        ...appointment,
-        shopId,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        createdAt: new Date(),
-      }
-    },
-    { upsert: true }
-  );
+  await sql`
+    INSERT INTO autovitals_appointments (appointment_id, shop_id, vehicle_id, vin, customer_id, customer_name, customer_phone, customer_email,
+      status, promised_time, drop_off_time, service_advisor_id, service_advisor_name, technician_id, technician_name, concern, mileage_in, updated_at)
+    VALUES (${appointment.appointmentId}, ${shopId}, ${appointment.vehicleId || null}, ${appointment.vin || null},
+      ${appointment.customerId || null}, ${appointment.customerName || null}, ${appointment.customerPhone || null},
+      ${appointment.customerEmail || null}, ${appointment.status || null}, ${appointment.promisedTime || null},
+      ${appointment.dropOffTime || null}, ${appointment.serviceAdvisorId || null}, ${appointment.serviceAdvisorName || null},
+      ${appointment.technicianId || null}, ${appointment.technicianName || null}, ${appointment.concern || null},
+      ${appointment.mileageIn || null}, NOW())
+    ON CONFLICT (appointment_id, shop_id) DO UPDATE SET
+      vehicle_id = COALESCE(${appointment.vehicleId || null}, autovitals_appointments.vehicle_id),
+      vin = COALESCE(${appointment.vin || null}, autovitals_appointments.vin),
+      customer_id = COALESCE(${appointment.customerId || null}, autovitals_appointments.customer_id),
+      customer_name = COALESCE(${appointment.customerName || null}, autovitals_appointments.customer_name),
+      status = COALESCE(${appointment.status || null}, autovitals_appointments.status),
+      updated_at = NOW()
+  `;
 }
 
 export async function cacheAutoVitalsInspection(
   inspection: AutoVitalsInspectionResult,
   shopId: string
 ): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_inspections");
-
-  await collection.updateOne(
-    { appointmentId: inspection.appointmentId, shopId },
-    {
-      $set: {
-        ...inspection,
-        shopId,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        createdAt: new Date(),
-      }
-    },
-    { upsert: true }
-  );
+  await sql`
+    INSERT INTO autovitals_inspections (appointment_id, shop_id, inspection_result_id, completed_at, technician_id, technician_name, items, updated_at)
+    VALUES (${inspection.appointmentId}, ${shopId}, ${inspection.inspectionResultId || null}, ${inspection.completedAt || null},
+      ${inspection.technicianId || null}, ${inspection.technicianName || null}, ${JSON.stringify(inspection.items)}::jsonb, NOW())
+    ON CONFLICT (appointment_id, shop_id) DO UPDATE SET
+      inspection_result_id = COALESCE(${inspection.inspectionResultId || null}, autovitals_inspections.inspection_result_id),
+      completed_at = COALESCE(${inspection.completedAt || null}, autovitals_inspections.completed_at),
+      technician_id = COALESCE(${inspection.technicianId || null}, autovitals_inspections.technician_id),
+      technician_name = COALESCE(${inspection.technicianName || null}, autovitals_inspections.technician_name),
+      items = ${JSON.stringify(inspection.items)}::jsonb,
+      updated_at = NOW()
+  `;
 }
 
 export async function getCachedAutoVitalsVehicleByVin(
   vin: string,
   shopId: string
 ): Promise<AutoVitalsVehicle | null> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_vehicles");
-  return collection.findOne({ vin, shopId }) as Promise<AutoVitalsVehicle | null>;
+  const vinUpper = vin.toUpperCase();
+  const result = await sql`
+    SELECT * FROM autovitals_vehicles WHERE shop_id = ${shopId} AND UPPER(vin) = ${vinUpper} LIMIT 1
+  `;
+  if (!result[0]) return null;
+  const row = result[0];
+  return {
+    vehicleId: row.vehicle_id as number,
+    vin: row.vin as string,
+    year: row.year as number,
+    make: row.make as string,
+    model: row.model as string,
+    mileage: row.mileage as number,
+    licensePlate: row.license_plate as string,
+    color: row.color as string,
+    customerId: row.customer_id as number,
+    customerName: row.customer_name as string,
+  };
 }
 
 export async function getCachedAutoVitalsInspection(
   appointmentId: number,
   shopId: string
 ): Promise<AutoVitalsInspectionResult | null> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_inspections");
-  return collection.findOne({ appointmentId, shopId }) as Promise<AutoVitalsInspectionResult | null>;
+  const result = await sql`
+    SELECT * FROM autovitals_inspections WHERE shop_id = ${shopId} AND appointment_id = ${appointmentId} LIMIT 1
+  `;
+  if (!result[0]) return null;
+  const row = result[0];
+  return {
+    inspectionResultId: row.inspection_result_id as number,
+    appointmentId: row.appointment_id as number,
+    completedAt: row.completed_at as string,
+    technicianId: row.technician_id as number,
+    technicianName: row.technician_name as string,
+    items: (row.items || []) as AutoVitalsInspectionItem[],
+  };
 }
 
 export async function getShopAutoVitalsConfig(shopId: string | number): Promise<AutoVitalsConfig | null> {
-  const db = await getDb();
-  const numericShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
-  const shop = await db.collection("shops").findOne({ shopId: numericShopId });
+  const shopIdStr = String(shopId);
+  const result = await sql`
+    SELECT settings FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
+  `;
   
-  if (!shop?.autovitals?.shopId || !shop?.autovitals?.sessionCookie) {
+  const shop = result[0];
+  const settings = shop?.settings as Record<string, unknown> | undefined;
+  const autovitals = settings?.autovitals as Record<string, unknown> | undefined;
+  
+  if (!autovitals?.shopId || !autovitals?.sessionCookie) {
     return null;
   }
 
   return {
-    shopId: shop.autovitals.shopId,
-    userId: shop.autovitals.userId,
-    sessionCookie: shop.autovitals.sessionCookie,
-    jwtToken: shop.autovitals.jwtToken,
+    shopId: autovitals.shopId as number,
+    userId: autovitals.userId as number,
+    sessionCookie: autovitals.sessionCookie as string,
+    jwtToken: autovitals.jwtToken as string,
   };
 }
 
@@ -513,7 +538,7 @@ export async function testAutoVitalsConnection(
 
   return { 
     ok: true, 
-    shopName: result.data?.ShopName || result.data?.shopName 
+    shopName: (result.data?.ShopName || result.data?.shopName) as string
   };
 }
 
@@ -590,92 +615,101 @@ export async function loginWithCodes(
 }
 
 export async function resolveAutoVitalsConfig(
-  shopId: number
+  shopId: number | string
 ): Promise<{ configured: boolean; config?: AutoVitalsConfig }> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId });
+  const shopIdStr = String(shopId);
+  const result = await sql`
+    SELECT settings FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
+  `;
   
-  if (!shop?.autovitals?.shopId || !shop?.autovitals?.sessionCookie) {
+  const shop = result[0];
+  const settings = shop?.settings as Record<string, unknown> | undefined;
+  const autovitals = settings?.autovitals as Record<string, unknown> | undefined;
+  
+  if (!autovitals?.shopId || !autovitals?.sessionCookie) {
     return { configured: false };
   }
 
   return {
     configured: true,
     config: {
-      shopId: shop.autovitals.shopId,
-      userId: shop.autovitals.userId,
-      sessionCookie: shop.autovitals.sessionCookie,
-      jwtToken: shop.autovitals.jwtToken,
+      shopId: autovitals.shopId as number,
+      userId: autovitals.userId as number,
+      sessionCookie: autovitals.sessionCookie as string,
+      jwtToken: autovitals.jwtToken as string,
     },
   };
 }
 
 export async function fetchAutoVitalsInspectionByVin(
-  shopId: number,
+  shopId: number | string,
   vin: string,
   ttlMs: number = 6 * 60 * 60 * 1000
 ): Promise<{ ok: true; inspection: AutoVitalsInspectionResult; items: AutoVitalsInspectionItem[] } | { ok: false; error: string }> {
-  const db = await getDb();
   const shopIdStr = String(shopId);
   const vinUpper = vin.toUpperCase();
   
-  // First check cache for recent inspection by VIN
-  const cachedVehicle = await db.collection("autovitals_vehicles").findOne({
-    shopId: shopIdStr,
-    vin: { $regex: new RegExp(`^${vinUpper}$`, 'i') }
-  });
+  const cachedVehicle = await getCachedAutoVitalsVehicleByVin(vinUpper, shopIdStr);
   
   if (!cachedVehicle?.vehicleId) {
     return { ok: false, error: "Vehicle not found in AutoVitals cache. Run sync first." };
   }
   
-  // Find the most recent appointment for this vehicle
-  const cachedAppointment = await db.collection("autovitals_appointments").findOne(
-    { shopId: shopIdStr, vehicleId: cachedVehicle.vehicleId },
-    { sort: { updatedAt: -1 } }
-  );
+  const appointmentResult = await sql`
+    SELECT * FROM autovitals_appointments 
+    WHERE shop_id = ${shopIdStr} AND vehicle_id = ${cachedVehicle.vehicleId}
+    ORDER BY updated_at DESC LIMIT 1
+  `;
   
-  if (!cachedAppointment?.appointmentId) {
+  const cachedAppointment = appointmentResult[0];
+  if (!cachedAppointment?.appointment_id) {
     return { ok: false, error: "No appointment found for this vehicle in AutoVitals." };
   }
   
-  // Check cache for inspection
-  const cachedInspection = await db.collection("autovitals_inspections").findOne({
-    shopId: shopIdStr,
-    appointmentId: cachedAppointment.appointmentId
-  });
+  const inspectionResult = await sql`
+    SELECT * FROM autovitals_inspections 
+    WHERE shop_id = ${shopIdStr} AND appointment_id = ${cachedAppointment.appointment_id}
+    LIMIT 1
+  `;
   
-  const cacheAge = cachedInspection?.updatedAt 
-    ? Date.now() - new Date(cachedInspection.updatedAt).getTime() 
+  const cachedInspection = inspectionResult[0];
+  const cacheAge = cachedInspection?.updated_at 
+    ? Date.now() - new Date(cachedInspection.updated_at as string).getTime() 
     : Infinity;
   
-  if (cachedInspection && cacheAge < ttlMs && cachedInspection.items?.length > 0) {
+  const items = (cachedInspection?.items || []) as AutoVitalsInspectionItem[];
+  if (cachedInspection && cacheAge < ttlMs && items.length > 0) {
     console.log(`[AutoVitals] Using cached inspection for VIN ${vin}, age: ${Math.round(cacheAge / 1000 / 60)}m`);
     return {
       ok: true,
-      inspection: cachedInspection as AutoVitalsInspectionResult,
-      items: cachedInspection.items || []
+      inspection: {
+        inspectionResultId: cachedInspection.inspection_result_id as number,
+        appointmentId: cachedInspection.appointment_id as number,
+        completedAt: cachedInspection.completed_at as string,
+        technicianId: cachedInspection.technician_id as number,
+        technicianName: cachedInspection.technician_name as string,
+        items,
+      },
+      items,
     };
   }
   
-  // Fetch fresh from API
   const configResult = await resolveAutoVitalsConfig(shopId);
   if (!configResult.configured || !configResult.config) {
     return { ok: false, error: "AutoVitals not configured for this shop." };
   }
   
-  const inspectionResult = await getInspectionResults(cachedAppointment.appointmentId, configResult.config);
+  const freshResult = await getInspectionResults(cachedAppointment.appointment_id as number, configResult.config);
   
-  if (!inspectionResult.ok) {
-    return { ok: false, error: inspectionResult.error };
+  if (!freshResult.ok) {
+    return { ok: false, error: freshResult.error };
   }
   
-  // Cache the result
-  await cacheAutoVitalsInspection(inspectionResult.data, shopIdStr);
+  await cacheAutoVitalsInspection(freshResult.data, shopIdStr);
   
   return {
     ok: true,
-    inspection: inspectionResult.data,
-    items: inspectionResult.data.items || []
+    inspection: freshResult.data,
+    items: freshResult.data.items || [],
   };
 }
