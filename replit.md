@@ -60,15 +60,21 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - `lib/db/sessions-pg.ts` - Session management
   - `lib/enterprise-pg.ts` - Enterprise account management
 - Phase 5 (In Progress): API routes being migrated:
-  - `/api/auth/me` - Updated to PostgreSQL
-  - `/api/customers/[customerId]` - Updated to PostgreSQL
-  - `/api/customers/[customerId]/inspect` - Updated to PostgreSQL
-  - `/api/customers/[customerId]/close` - Updated to PostgreSQL
-  - `/api/enterprise` - Updated to PostgreSQL
+  - Auth routes: `/api/auth/me`, `/api/auth/setup`, `/api/auth/setup-complete`, `/api/auth/complete-setup`
+  - Customer routes: `/api/customers/[customerId]`, `/api/customers/[customerId]/inspect`, `/api/customers/[customerId]/close`
+  - Enterprise routes: `/api/enterprise/*`
+  - Settings routes: `/api/settings/integrations`, `/api/settings/tekmetric`, `/api/settings/protractor`, `/api/settings/addons`, `/api/settings/branding`, `/api/settings/extensions/*`, `/api/settings/autoflow`, `/api/settings/carfax`, `/api/settings/inspection`, `/api/settings/canned-job-mappings`, `/api/settings/workflows`, `/api/settings/auto-booking/*`, `/api/settings/invites/*`, `/api/settings/users/*`, `/api/settings/integration-setup`
+  - Admin routes: `/api/admin/shops`, `/api/admin/billing/*`, `/api/admin/features`, `/api/admin/promote-user`, `/api/admin/utils/*`
+  - Shops routes: `/api/shops`, `/api/shops/list`, `/api/shops/[shopId]/credentials`
+  - Events routes: `/api/events/list`, `/api/events/autoflow/recent`
+  - Debug routes: `/api/debug/dashboard`, `/api/debug/events`
+  - Dashboard routes: `/api/dashboard/updates`
   - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
+  
+**Migration Progress:** 178 → 134 MongoDB files (44+ routes migrated this session)
 
 **Remaining Work:**
-- Phase 5: Continue updating ~200 remaining API routes
+- Phase 5: Continue updating ~134 remaining API routes (dashboard data, cron jobs, recommended, vehicle-analyzer, etc.)
 - Phase 6: Remove MongoDB dependencies completely
 
 **Key Migration Files:**

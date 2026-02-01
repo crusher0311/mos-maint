@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,18 +75,17 @@ const DEFAULT_SETTINGS: AutoBookingSettings = {
   timezone: "America/New_York",
 };
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
+    const numericShopId = Number(session.shopId);
     
-    // Check feature entitlements
-    const entitlements = await getFeatureEntitlements(shopId);
+    const entitlements = await getFeatureEntitlements(numericShopId);
     if (!entitlements.canUseFeature("auto_booking")) {
       return NextResponse.json({
         available: false,
@@ -95,24 +94,24 @@ export async function GET(req: NextRequest) {
       });
     }
     
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { autoBooking: 1 } }
-    );
-
-    const settings = shop?.autoBooking || DEFAULT_SETTINGS;
+    const shopResult = await sql`
+      SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1
+    `;
+    const shopSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+    const autoBooking = (shopSettings.autoBooking as AutoBookingSettings) || DEFAULT_SETTINGS;
 
     return NextResponse.json({
       available: true,
       settings: {
         ...DEFAULT_SETTINGS,
-        ...settings,
+        ...autoBooking,
       },
       defaultHolidays: DEFAULT_HOLIDAYS,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Auto Booking Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -123,11 +122,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = Number(session.shopId);
-    const db = await getDb();
+    const shopId = String(session.shopId);
+    const numericShopId = Number(session.shopId);
     
-    // Check feature entitlements
-    const entitlements = await getFeatureEntitlements(shopId);
+    const entitlements = await getFeatureEntitlements(numericShopId);
     if (!entitlements.canUseFeature("auto_booking")) {
       return NextResponse.json(
         { error: "Auto Booking feature is not enabled for this shop" },
@@ -136,7 +134,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const settings: Partial<AutoBookingSettings> = {};
+    const settings: Partial<AutoBookingSettings> & { updatedAt?: string } = {};
 
     if (typeof body.enabled === "boolean") settings.enabled = body.enabled;
     if (typeof body.leadTimeDays === "number" && body.leadTimeDays >= 0 && body.leadTimeDays <= 30) {
@@ -148,7 +146,7 @@ export async function POST(req: NextRequest) {
     if (typeof body.useDefaultHolidays === "boolean") settings.useDefaultHolidays = body.useDefaultHolidays;
     if (Array.isArray(body.customHolidays)) {
       settings.customHolidays = body.customHolidays.filter(
-        (h: any) => h.date && h.name && typeof h.date === "string" && typeof h.name === "string"
+        (h: { date?: string; name?: string }) => h.date && h.name && typeof h.date === "string" && typeof h.name === "string"
       );
     }
     if (body.businessHours?.start && body.businessHours?.end) {
@@ -176,19 +174,25 @@ export async function POST(req: NextRequest) {
       settings.timezone = body.timezone;
     }
 
-    (settings as any).updatedAt = new Date();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          autoBooking: settings,
-        },
-      }
-    );
+    settings.updatedAt = new Date().toISOString();
+
+    const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+    const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+    
+    const updatedSettings = {
+      ...existingSettings,
+      autoBooking: settings
+    };
+
+    await sql`
+      UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = ${new Date()}
+      WHERE shop_id = ${shopId}
+    `;
 
     return NextResponse.json({ ok: true, settings });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Auto Booking Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

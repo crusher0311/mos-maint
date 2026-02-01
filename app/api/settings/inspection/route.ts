@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,11 +9,12 @@ export async function GET() {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: sess.shopId });
+  const shopId = String(sess.shopId);
+  const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+  const settings = (shopResult[0]?.settings as Record<string, unknown>) || {};
 
   return NextResponse.json({
-    items: shop?.inspectionMappings || [],
+    items: settings.inspectionMappings || [],
   });
 }
 
@@ -28,11 +29,19 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { items } = body;
 
-  const db = await getDb();
-  await db.collection("shops").updateOne(
-    { shopId: sess.shopId },
-    { $set: { inspectionMappings: items, updatedAt: new Date() } }
-  );
+  const shopId = String(sess.shopId);
+  const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+  const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
+
+  const updatedSettings = {
+    ...existingSettings,
+    inspectionMappings: items
+  };
+
+  await sql`
+    UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = ${new Date()}
+    WHERE shop_id = ${shopId}
+  `;
 
   return NextResponse.json({ ok: true });
 }

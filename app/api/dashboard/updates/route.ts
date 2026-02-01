@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const db = await getDb();
-    const update = await db.collection("dashboard_updates").findOne({ _id: "lastUpdate" });
+    const updateResult = await sql`
+      SELECT timestamp FROM dashboard_updates WHERE id = 'lastUpdate' LIMIT 1
+    `;
     
     return NextResponse.json({ 
-      lastUpdate: update?.timestamp || 0 
+      lastUpdate: updateResult[0]?.timestamp || 0 
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ lastUpdate: 0 });
   }
 }

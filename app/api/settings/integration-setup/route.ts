@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { sendEmail, makeProtractorApiRequestEmail, makeTekmetricSetupEmail } from "@/lib/email";
 
 async function getSession() {
@@ -8,11 +8,10 @@ async function getSession() {
   const token = cookieStore.get("mos_token")?.value;
   if (!token) return null;
 
-  const db = await getDb();
-  const session = await db.collection("sessions").findOne({ token });
-  if (!session) return null;
+  const sessionResult = await sql`SELECT * FROM sessions WHERE token = ${token} LIMIT 1`;
+  if (!sessionResult[0]) return null;
 
-  return session;
+  return sessionResult[0];
 }
 
 export async function POST(req: NextRequest) {
@@ -28,21 +27,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid integration type" }, { status: 400 });
     }
 
-    const db = await getDb();
-    const shopId = session.shopId;
+    const shopId = String(session.shop_id);
     
-    const shop = await db.collection("shops").findOne({ 
-      shopId: { $in: [shopId, Number(shopId), String(shopId)] } 
-    });
+    const shopResult = await sql`
+      SELECT * FROM shops WHERE shop_id = ${shopId} LIMIT 1
+    `;
+    const shop = shopResult[0];
     
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const owner = await db.collection("users").findOne({ 
-      shopId: { $in: [shopId, Number(shopId), String(shopId)] },
-      role: "owner"
-    });
+    const ownerResult = await sql`
+      SELECT email FROM users WHERE shop_id = ${shopId} AND role = 'owner' LIMIT 1
+    `;
+    const owner = ownerResult[0];
 
     if (!owner?.email) {
       return NextResponse.json({ error: "Shop owner email not found" }, { status: 400 });
@@ -64,10 +63,16 @@ export async function POST(req: NextRequest) {
         replyTo: ownerEmail,
       });
 
-      await db.collection("shops").updateOne(
-        { shopId: { $in: [shopId, Number(shopId), String(shopId)] } },
-        { $set: { "protractor.apiRequestSentAt": new Date() } }
-      );
+      const protractorConfig = (shop.protractor_config as Record<string, unknown>) || {};
+      const updatedConfig = {
+        ...protractorConfig,
+        apiRequestSentAt: new Date().toISOString()
+      };
+
+      await sql`
+        UPDATE shops SET protractor_config = ${JSON.stringify(updatedConfig)}::jsonb
+        WHERE shop_id = ${shopId}
+      `;
 
       return NextResponse.json({ 
         ok: true, 
@@ -85,10 +90,16 @@ export async function POST(req: NextRequest) {
         text: emailData.text,
       });
 
-      await db.collection("shops").updateOne(
-        { shopId: { $in: [shopId, Number(shopId), String(shopId)] } },
-        { $set: { "tekmetric.setupEmailSentAt": new Date() } }
-      );
+      const tekmetricConfig = (shop.tekmetric_config as Record<string, unknown>) || {};
+      const updatedConfig = {
+        ...tekmetricConfig,
+        setupEmailSentAt: new Date().toISOString()
+      };
+
+      await sql`
+        UPDATE shops SET tekmetric_config = ${JSON.stringify(updatedConfig)}::jsonb
+        WHERE shop_id = ${shopId}
+      `;
 
       return NextResponse.json({ 
         ok: true, 
@@ -97,8 +108,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ error: "Unknown type" }, { status: 400 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[integration-setup] Error:", err);
-    return NextResponse.json({ error: err.message || "Failed to send email" }, { status: 500 });
+    return NextResponse.json({ error: message || "Failed to send email" }, { status: 500 });
   }
 }

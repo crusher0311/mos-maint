@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -10,49 +10,50 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "missing ?shop" }, { status: 400 });
   }
 
-  const shopIdNum = Number(shopParam);
-  const shopIdStr = String(shopParam);
-  const db = await getDb();
+  const shopId = String(shopParam);
 
-  // Wide filter:
-  // - shopId matches number OR string
-  // - exclude obvious closed/appointment
-  // - require either vehicle.vin OR lastVin
-  const filter = {
-    $and: [
-      { $or: [{ shopId: shopIdNum }, { shopId: shopIdStr }] },
-      { status: { $nin: ["closed", "Close", "CLOSED", "Appointment"] } },
-      {
-        $or: [
-          { "vehicle.vin": { $exists: true, $ne: "" } },
-          { lastVin: { $exists: true, $ne: "" } },
-        ],
-      },
-    ],
-  };
+  const countResult = await sql`
+    SELECT COUNT(*) as count 
+    FROM customers 
+    WHERE shop_id = ${shopId}
+      AND status NOT IN ('closed', 'Close', 'CLOSED', 'Appointment')
+      AND (vin IS NOT NULL AND vin != '')
+  `;
+  const count = Number(countResult[0]?.count) || 0;
 
-  const projection = {
-    name: 1,
-    status: 1,
-    lastStatus: 1,
-    lastTicketId: 1,
-    updatedAt: 1,
-    lastVin: 1,
-    vehicle: { year: 1, make: 1, model: 1, vin: 1, odometer: 1, license: 1 },
-  };
+  const sample = await sql`
+    SELECT id, name, status, last_status, last_ticket_id, updated_at,
+           vin, year, make, model, odometer, license
+    FROM customers
+    WHERE shop_id = ${shopId}
+      AND status NOT IN ('closed', 'Close', 'CLOSED', 'Appointment')
+      AND (vin IS NOT NULL AND vin != '')
+    ORDER BY updated_at DESC
+    LIMIT 10
+  `;
 
-  const coll = db.collection("customers");
-  const count = await coll.countDocuments(filter);
-  const sample = await coll
-    .find(filter, { projection })
-    .sort({ updatedAt: -1 })
-    .limit(10)
-    .toArray();
+  const formattedSample = sample.map(c => ({
+    _id: c.id,
+    name: c.name,
+    status: c.status,
+    lastStatus: c.last_status,
+    lastTicketId: c.last_ticket_id,
+    updatedAt: c.updated_at,
+    lastVin: c.vin,
+    vehicle: {
+      year: c.year,
+      make: c.make,
+      model: c.model,
+      vin: c.vin,
+      odometer: c.odometer,
+      license: c.license,
+    }
+  }));
 
   return NextResponse.json({
     ok: true,
-    shop: shopIdStr,
+    shop: shopId,
     count,
-    sample,
+    sample: formattedSample,
   });
 }

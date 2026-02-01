@@ -1,6 +1,5 @@
-// app/api/shops/[shopId]/credentials/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,16 +16,6 @@ function mask(s?: string, keep = 4) {
   return `${"*".repeat(Math.max(0, s.length - keep))}${s.slice(-keep)}`;
 }
 
-// Build a query that matches both numeric (new) and string (legacy) shopId values.
-function shopIdQuery(raw: string) {
-  const n = Number(raw);
-  const parts: any[] = [];
-  if (Number.isFinite(n)) parts.push({ shopId: n });
-  parts.push({ shopId: raw }); // legacy
-  return parts.length === 1 ? parts[0] : { $or: parts };
-}
-
-/** PUT /api/shops/[shopId]/credentials  Body: { apiKey, apiPassword, apiBase? } */
 export async function PUT(req: NextRequest, ctx: { params: { shopId: string } }) {
   try {
     const raw = ctx.params?.shopId?.trim();
@@ -38,24 +27,29 @@ export async function PUT(req: NextRequest, ctx: { params: { shopId: string } })
       return NextResponse.json({ error: "apiKey and apiPassword are required" }, { status: 400 });
     }
 
-    const db = await getDb();
-    const shops = db.collection("shops");
-
-    // Ensure shop exists
-    const q = shopIdQuery(raw);
-    const shop = await shops.findOne(q);
+    const shopResult = await sql`SELECT shop_id, settings FROM shops WHERE shop_id = ${raw} LIMIT 1`;
+    const shop = shopResult[0];
     if (!shop) return NextResponse.json({ error: `Shop ${raw} not found` }, { status: 404 });
 
-    await shops.updateOne(q, {
-      $set: {
-        "credentials.autoflow": { apiKey, apiPassword, ...(apiBase ? { apiBase } : {}) },
-        updatedAt: new Date(),
-      },
-    });
+    const existingSettings = (shop.settings as Record<string, unknown>) || {};
+    const credentials = (existingSettings.credentials as Record<string, unknown>) || {};
+    
+    const updatedSettings = {
+      ...existingSettings,
+      credentials: {
+        ...credentials,
+        autoflow: { apiKey, apiPassword, ...(apiBase ? { apiBase } : {}) }
+      }
+    };
+
+    await sql`
+      UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb, updated_at = ${new Date()}
+      WHERE shop_id = ${raw}
+    `;
 
     return NextResponse.json({
       ok: true,
-      shopId: shop.shopId,
+      shopId: shop.shop_id,
       saved: true,
       credentials: {
         provider: "autoflow",
@@ -64,41 +58,42 @@ export async function PUT(req: NextRequest, ctx: { params: { shopId: string } })
         apiBase: apiBase || null,
       },
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-/** GET /api/shops/[shopId]/credentials — masked status */
 export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }) {
   try {
     const raw = ctx.params?.shopId?.trim();
     if (!raw) return NextResponse.json({ error: "Missing shopId in path" }, { status: 400 });
 
-    const db = await getDb();
-    const shops = db.collection("shops");
-    const q = shopIdQuery(raw);
-    const shop = await shops.findOne(q, { projection: { "credentials.autoflow": 1, shopId: 1 } });
+    const shopResult = await sql`SELECT shop_id, settings FROM shops WHERE shop_id = ${raw} LIMIT 1`;
+    const shop = shopResult[0];
 
     if (!shop) return NextResponse.json({ error: `Shop ${raw} not found` }, { status: 404 });
 
-    const c = shop.credentials?.autoflow;
-    const hasCreds = Boolean(c?.apiKey && c?.apiPassword);
+    const settings = (shop.settings as Record<string, unknown>) || {};
+    const credentials = (settings.credentials as Record<string, unknown>) || {};
+    const c = (credentials.autoflow as Record<string, unknown>) || {};
+    const hasCreds = Boolean(c.apiKey && c.apiPassword);
 
     return NextResponse.json({
       ok: true,
-      shopId: shop.shopId,
+      shopId: shop.shop_id,
       hasCreds,
       credentials: hasCreds
         ? {
             provider: "autoflow",
-            apiKey: mask(c.apiKey),
-            apiPassword: mask(c.apiPassword),
-            apiBase: c.apiBase ?? null,
+            apiKey: mask(c.apiKey as string),
+            apiPassword: mask(c.apiPassword as string),
+            apiBase: (c.apiBase as string) ?? null,
           }
         : null,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
