@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import bcrypt from "bcryptjs";
 
 const corsHeaders = {
@@ -45,23 +45,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = await getDb();
-    const usersCollection = db.collection("users");
+    const userRows = await sql`
+      SELECT u.id, u.email, u.name, u.role, u.password_hash, s.shop_id
+      FROM users u
+      LEFT JOIN shops s ON u.shop_id = s.id
+      WHERE LOWER(u.email) = ${email.toLowerCase().trim()}
+      LIMIT 1
+    `;
 
-    const user = await usersCollection.findOne({ 
-      email: email.toLowerCase().trim() 
-    });
-
-    if (!user) {
+    if (userRows.length === 0) {
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401, headers: corsHeaders }
       );
     }
 
-    // Check password - same logic as main app login
-    const dbHash = user.passwordHash;
-    const legacyPlain = user.password;
+    const user = userRows[0];
+    const dbHash = user.password_hash;
 
     let passOk = false;
 
@@ -71,19 +71,7 @@ export async function POST(request: NextRequest) {
       passOk = await verifyScrypt(String(password), String(dbHash));
       if (passOk) {
         const newHash = await bcrypt.hash(String(password), 12);
-        await usersCollection.updateOne(
-          { _id: user._id },
-          { $set: { passwordHash: newHash } }
-        );
-      }
-    } else if (legacyPlain) {
-      passOk = String(password) === String(legacyPlain);
-      if (passOk) {
-        const newHash = await bcrypt.hash(String(password), 12);
-        await usersCollection.updateOne(
-          { _id: user._id },
-          { $set: { passwordHash: newHash }, $unset: { password: "" } }
-        );
+        await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
       }
     }
 
@@ -94,25 +82,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const extensionToken = `ext_${user._id.toString()}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    const extensionToken = `ext_${user.id}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
     
-    await usersCollection.updateOne(
-      { _id: user._id },
-      { 
-        $set: { 
-          extensionToken,
-          extensionTokenCreatedAt: new Date()
-        } 
-      }
-    );
+    await sql`
+      UPDATE users 
+      SET extension_token = ${extensionToken}, extension_token_created_at = NOW()
+      WHERE id = ${user.id}
+    `;
 
     return NextResponse.json({
       token: extensionToken,
       user: {
-        id: user._id.toString(),
+        id: user.id,
         email: user.email,
         name: user.name,
-        shopId: user.shopId,
+        shopId: user.shop_id ? Number(user.shop_id) : null,
         role: user.role
       }
     }, { headers: corsHeaders });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,16 +40,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { keytagConfig: 1, name: 1 } }
-    );
+    const shopRows = await sql`
+      SELECT id, name, keytag_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
 
-    if (!shop) {
+    if (shopRows.length === 0) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
+    const shop = shopRows[0];
     const defaultConfig: KeytagConfig = {
       enabled: true,
       showLogo: false,
@@ -66,10 +65,12 @@ export async function GET(req: NextRequest) {
       defaultSize: "dymo30252",
     };
 
+    const storedConfig = shop.keytag_config as KeytagConfig | null;
+
     return NextResponse.json({
       config: {
         ...defaultConfig,
-        ...shop.keytagConfig,
+        ...storedConfig,
       },
       shopName: shop.name,
     });
@@ -97,16 +98,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const config: KeytagConfig = body.config;
 
-    const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          keytagConfig: config,
-          updatedAt: new Date()
-        } 
-      }
-    );
+    await sql`
+      UPDATE shops 
+      SET keytag_config = ${JSON.stringify(config)}::jsonb, updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
 
     return NextResponse.json({ success: true, config });
   } catch (error) {
