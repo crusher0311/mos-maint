@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -16,19 +16,16 @@ export async function GET(
 
   const { vin } = await params;
   const shopId = session.shopId;
-  const db = await getDb();
 
-  const vehicle = await db.collection("vehicles").findOne(
-    { 
-      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
-      vin: vin.toUpperCase() 
-    },
-    { projection: { hasComponents: 1 } }
-  );
+  const rows = await sql`
+    SELECT has_components FROM vehicles 
+    WHERE shop_id = ${String(shopId)} AND vin = ${vin.toUpperCase()}
+    LIMIT 1
+  `;
 
   return NextResponse.json({
     ok: true,
-    hasComponents: vehicle?.hasComponents || {},
+    hasComponents: rows[0]?.has_components || {},
   });
 }
 
@@ -43,7 +40,6 @@ export async function PATCH(
 
   const { vin } = await params;
   const shopId = session.shopId;
-  const db = await getDb();
 
   const body = await req.json();
   const { componentKey, hasComponent } = body;
@@ -55,20 +51,19 @@ export async function PATCH(
     );
   }
 
-  const result = await db.collection("vehicles").updateOne(
-    { 
-      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
-      vin: vin.toUpperCase() 
-    },
-    {
-      $set: {
-        [`hasComponents.${componentKey}`]: hasComponent,
-        updatedAt: new Date(),
-      },
-    }
-  );
+  const result = await sql`
+    UPDATE vehicles 
+    SET has_components = jsonb_set(
+      COALESCE(has_components, '{}'::jsonb),
+      ${`{${componentKey}}`}::text[],
+      ${JSON.stringify(hasComponent)}::jsonb
+    ),
+    updated_at = NOW()
+    WHERE shop_id = ${String(shopId)} AND vin = ${vin.toUpperCase()}
+    RETURNING id
+  `;
 
-  if (result.matchedCount === 0) {
+  if (result.length === 0) {
     return NextResponse.json(
       { error: "Vehicle not found" },
       { status: 404 }

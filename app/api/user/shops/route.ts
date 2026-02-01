@@ -15,7 +15,7 @@ export async function GET() {
     const userShops = await sql`
       SELECT DISTINCT u.shop_id, s.shop_id as numeric_shop_id, s.name, s.location_identifier
       FROM users u
-      JOIN shops s ON u.shop_id = s.id
+      JOIN shops s ON u.shop_id = s.id::text
       WHERE LOWER(u.email) = ${session.email.toLowerCase()}
     `;
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import { getBrowser } from "@/lib/browser-pool";
 import { DesignerLayout, DesignerElement, DYMO_30252 } from "@/lib/keytag-designer-types";
 
@@ -345,13 +345,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { keytagConfig: 1 } }
-    );
+    const shopRows = await sql`
+      SELECT keytag_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
 
-    const config: KeytagConfig = body.previewConfig || shop?.keytagConfig || {};
+    const config: KeytagConfig = body.previewConfig || shopRows[0]?.keytag_config || {};
     const designerLayout = body.designerLayout || config.designerLayout;
     
     let html: string;

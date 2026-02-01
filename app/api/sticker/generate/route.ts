@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
 import { Storage } from "@google-cloud/storage";
@@ -32,18 +32,16 @@ const storage = new Storage({
 
 async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: string): Promise<string | null> {
   try {
-    // First, try MongoDB shop_media collection (works on Render)
+    // First, try PostgreSQL shop_media table (works on Render)
     if (shopId) {
-      const db = await getDb();
-      const numericShopId = Number(shopId);
-      // Query with both string and number to handle legacy data
-      const shopMedia = await db.collection("shop_media").findOne({ 
-        $or: [{ shopId: numericShopId }, { shopId: shopId }],
-        type: "logo" 
-      });
-      if (shopMedia?.dataUri) {
-        console.log("[Sticker Generate] Using logo from MongoDB shop_media");
-        return shopMedia.dataUri;
+      const mediaRows = await sql`
+        SELECT data_uri FROM shop_media 
+        WHERE shop_id = ${String(shopId)} AND type = 'logo'
+        LIMIT 1
+      `;
+      if (mediaRows.length > 0 && mediaRows[0].data_uri) {
+        console.log("[Sticker Generate] Using logo from PostgreSQL shop_media");
+        return mediaRows[0].data_uri;
       }
     }
     
@@ -691,14 +689,16 @@ export async function POST(req: NextRequest) {
     const size = body.size || "2x2.5";
     const includeQR = body.includeQR !== false;
 
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shopRows = await sql`
+      SELECT id, name, sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
 
-    if (!shop) {
+    if (shopRows.length === 0) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const dbConfig: StickerConfig = shop.stickerConfig || {};
+    const shop = shopRows[0];
+    const dbConfig: StickerConfig = (shop.sticker_config as StickerConfig) || {};
     const config: StickerConfig = body.previewConfig ? { ...dbConfig, ...body.previewConfig } : dbConfig;
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
@@ -728,10 +728,11 @@ export async function POST(req: NextRequest) {
         if (existingQR.dataUri) {
           qrDataUrl = existingQR.dataUri;
           // Cache it for next time
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
-          );
+          const updatedConfig = { ...dbConfig, cachedQrCodeDataUri: qrDataUrl };
+          await sql`
+            UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
+            WHERE shop_id = ${String(shopId)}
+          `;
           console.log("[Sticker Generate] Cached HoverCode QR for future use");
         }
       }
@@ -749,16 +750,15 @@ export async function POST(req: NextRequest) {
           qrDataUrl = newQR.dataUri;
           
           // Save both the HoverCode ID and cache the QR image
-          const updateFields: Record<string, string> = {
-            "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
+          const updatedConfig = { 
+            ...dbConfig, 
+            cachedQrCodeDataUri: qrDataUrl,
+            ...(newQR.id && !config.hovercodeQRId ? { hovercodeQRId: newQR.id } : {})
           };
-          if (newQR.id && !config.hovercodeQRId) {
-            updateFields["stickerConfig.hovercodeQRId"] = newQR.id;
-          }
-          await db.collection("shops").updateOne(
-            { shopId },
-            { $set: updateFields }
-          );
+          await sql`
+            UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
+            WHERE shop_id = ${String(shopId)}
+          `;
           console.log(`[Sticker Generate] Created and cached new HoverCode QR: ${newQR.id}`);
         }
       }
@@ -776,7 +776,7 @@ export async function POST(req: NextRequest) {
     let outputWidth = dimensions.width;
     let outputHeight = dimensions.height;
     
-    let designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
+    let designerLayout = body.designerLayout || (dbConfig as any)?.designerLayout;
     
     // Scale the layout to match the requested sticker size
     // This ensures the designer preview matches the printed output exactly
@@ -838,16 +838,10 @@ export async function POST(req: NextRequest) {
     console.log(`[Sticker Generate] Rendered in ${Date.now() - startTime}ms`);
 
     // Log generation stats asynchronously (don't block response)
-    db.collection("sticker_generations").insertOne({
-      shopId,
-      generatedAt: new Date(),
-      generatedBy: session.email,
-      vin: body.vin || null,
-      vehicleYear: body.vehicleYear || null,
-      vehicleMake: body.vehicleMake || null,
-      vehicleModel: body.vehicleModel || null,
-      size,
-    }).catch(err => console.error("[Sticker Generate] Failed to log generation:", err));
+    sql`
+      INSERT INTO sticker_generations (shop_id, generated_at, generated_by, vin, vehicle_year, vehicle_make, vehicle_model, size)
+      VALUES (${String(shopId)}, NOW(), ${session.email}, ${body.vin || null}, ${body.vehicleYear || null}, ${body.vehicleMake || null}, ${body.vehicleModel || null}, ${size})
+    `.catch(err => console.error("[Sticker Generate] Failed to log generation:", err));
 
     // Trigger auto booking if customer data is provided and we have a service date
     if (body.nextServiceDate && (body.customerName || body.customerId)) {
