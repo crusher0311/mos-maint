@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { sessionCookieOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -16,12 +16,12 @@ export async function POST() {
       return NextResponse.json({ error: "No admin session found" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const adminSession = await db.collection("sessions").findOne({
-      token: adminToken,
-      expiresAt: { $gt: new Date() },
-    });
+    const adminSessionRows = await sql`
+      SELECT * FROM sessions 
+      WHERE token = ${adminToken} AND expires_at > NOW()
+      LIMIT 1
+    `;
+    const adminSession = adminSessionRows[0];
 
     if (!adminSession) {
       cookieStore.delete("admin_session_token");
@@ -29,10 +29,10 @@ export async function POST() {
     }
 
     if (currentToken) {
-      await db.collection("sessions").deleteOne({
-        token: currentToken,
-        isImpersonation: true,
-      });
+      await sql`
+        DELETE FROM sessions 
+        WHERE token = ${currentToken} AND is_impersonation = true
+      `;
     }
 
     cookieStore.set("session_token", adminToken, sessionCookieOptions(60 * 60 * 8));

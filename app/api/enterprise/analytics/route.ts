@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEnterpriseAnalytics, getEnterpriseById, getShopsForEnterprise } from "@/lib/enterprise";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,23 +35,27 @@ export async function GET(req: NextRequest) {
     }
     
     const shops = await getShopsForEnterprise(enterpriseId);
-    
-    const db = await getDb();
     const enterprise = await getEnterpriseById(enterpriseId);
     
-    const vehicleCounts = await db.collection("vehicles").aggregate([
-      { $match: { shopId: { $in: enterprise?.shopIds?.map(String) || [] } } },
-      { $group: { _id: "$shopId", count: { $sum: 1 }, activeCount: { $sum: { $cond: [{ $eq: ["$status.active", true] }, 1, 0] } } } }
-    ]).toArray();
+    const shopIds = enterprise?.shopIds?.map(String) || [];
     
-    const vehicleMap = new Map(vehicleCounts.map((v: any) => [String(v._id), v]));
+    const vehicleCounts = shopIds.length > 0 ? await sql`
+      SELECT shop_id, 
+        COUNT(*)::int as count, 
+        COUNT(*) FILTER (WHERE status->>'active' = 'true')::int as active_count
+      FROM vehicles 
+      WHERE shop_id = ANY(${shopIds})
+      GROUP BY shop_id
+    ` : [];
+    
+    const vehicleMap = new Map(vehicleCounts.map((v: any) => [String(v.shop_id), v]));
     
     const shopsWithVehicles = shops.map((shop: any) => {
-      const counts = vehicleMap.get(String(shop.shopId)) || { count: 0, activeCount: 0 };
+      const counts = vehicleMap.get(String(shop.shopId)) || { count: 0, active_count: 0 };
       return {
         ...shop,
         totalVehicles: counts.count,
-        activeVehicles: counts.activeCount
+        activeVehicles: counts.active_count
       };
     });
     

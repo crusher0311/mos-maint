@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 
 export const runtime = "nodejs";
@@ -19,28 +19,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ locations: [] });
   }
 
-  const db = await getDb();
-  const otherShopIds = enterprise.shopIds.filter((id: number) => id !== currentShopId);
+  const otherShopIds = enterprise.shopIds.filter((id: number) => id !== currentShopId).map(String);
 
   if (otherShopIds.length === 0) {
     return NextResponse.json({ locations: [] });
   }
 
-  const shops = await db.collection("shops").find(
-    { shopId: { $in: otherShopIds } },
-    { projection: { shopId: 1, name: 1, locationIdentifier: 1 } }
-  ).toArray();
+  const shops = await sql`
+    SELECT shop_id, name, settings->>'locationIdentifier' as location_identifier 
+    FROM shops 
+    WHERE shop_id = ANY(${otherShopIds})
+  `;
 
-  const locations = shops.map((shop) => ({
-    shopId: shop.shopId,
-    name: shop.locationIdentifier 
-      ? `${shop.name || `Shop ${shop.shopId}`} (${shop.locationIdentifier})`
-      : shop.name || `Shop ${shop.shopId}`,
+  const locations = shops.map((shop: any) => ({
+    shopId: shop.shop_id,
+    name: shop.location_identifier 
+      ? `${shop.name || `Shop ${shop.shop_id}`} (${shop.location_identifier})`
+      : shop.name || `Shop ${shop.shop_id}`,
   }));
 
   return NextResponse.json({
     ok: true,
-    enterpriseId: enterprise._id,
+    enterpriseId: enterprise.id,
     enterpriseName: enterprise.name,
     locations,
   });

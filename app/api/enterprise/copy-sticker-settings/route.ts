@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -31,134 +31,104 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Source shop and target shops are required" }, { status: 400 });
     }
 
-    const db = await getDb();
+    const userShopId = String(session.shopId);
+    const userShopRows = await sql`
+      SELECT id, settings FROM shops WHERE shop_id = ${userShopId} LIMIT 1
+    `;
+    const userShop = userShopRows[0];
 
-    const userShopId = Number(session.shopId);
-    const userShop = await db.collection("shops").findOne({
-      shopId: { $in: [userShopId, String(userShopId)] },
-    });
-
-    if (!userShop?.enterpriseId) {
+    if (!userShop?.settings?.enterpriseId) {
       return NextResponse.json({ error: "You are not part of an enterprise" }, { status: 403 });
     }
 
-    const sourceShop = await db.collection("shops").findOne({
-      shopId: { $in: [sourceShopId, String(sourceShopId)] },
-    });
+    const sourceShopRows = await sql`
+      SELECT id, name, settings FROM shops WHERE shop_id = ${String(sourceShopId)} LIMIT 1
+    `;
+    const sourceShop = sourceShopRows[0];
 
     if (!sourceShop) {
       return NextResponse.json({ error: "Source shop not found" }, { status: 404 });
     }
 
-    const userEnterpriseId = String(userShop.enterpriseId);
-    const sourceEnterpriseId = String(sourceShop.enterpriseId);
+    const userEnterpriseId = String(userShop.settings.enterpriseId);
+    const sourceEnterpriseId = String(sourceShop.settings?.enterpriseId);
     
     if (sourceEnterpriseId !== userEnterpriseId) {
       console.error(`[Copy Sticker] Enterprise mismatch: user=${userEnterpriseId}, source=${sourceEnterpriseId}, userShopId=${userShopId}, sourceShopId=${sourceShopId}`);
       return NextResponse.json({ error: "Source shop is not in your enterprise" }, { status: 403 });
     }
 
-    const enterpriseId = sourceShop.enterpriseId;
+    const enterpriseId = sourceShop.settings.enterpriseId;
+    const targetShopIdsStr = targetShopIds.map(String);
 
-    const targetShops = await db.collection("shops").find({
-      shopId: { $in: targetShopIds.flatMap(id => [id, String(id)]) },
-      enterpriseId: enterpriseId,
-    }).toArray();
+    const targetShops = await sql`
+      SELECT id, shop_id, name, settings FROM shops 
+      WHERE shop_id = ANY(${targetShopIdsStr}) 
+        AND settings->>'enterpriseId' = ${String(enterpriseId)}
+    `;
 
     if (targetShops.length === 0) {
       return NextResponse.json({ error: "No valid target shops found in the same enterprise" }, { status: 400 });
     }
 
-    const sourceConfig = sourceShop.stickerConfig || {};
+    const sourceConfig = sourceShop.settings?.stickerConfig || {};
 
     const settingsToCopy: Record<string, any> = {};
 
-    if (sourceConfig.logo) {
-      settingsToCopy["stickerConfig.logo"] = sourceConfig.logo;
-    }
-    if (sourceConfig.logoObjectPath) {
-      settingsToCopy["stickerConfig.logoObjectPath"] = sourceConfig.logoObjectPath;
-    }
-    if (sourceConfig.tagline) {
-      settingsToCopy["stickerConfig.tagline"] = sourceConfig.tagline;
-    }
-    if (sourceConfig.taglineLine2) {
-      settingsToCopy["stickerConfig.taglineLine2"] = sourceConfig.taglineLine2;
-    }
-    if (sourceConfig.serviceLabel) {
-      settingsToCopy["stickerConfig.serviceLabel"] = sourceConfig.serviceLabel;
-    }
-    if (sourceConfig.fontStyles) {
-      settingsToCopy["stickerConfig.fontStyles"] = sourceConfig.fontStyles;
-    }
-    if (sourceConfig.colors) {
-      settingsToCopy["stickerConfig.colors"] = sourceConfig.colors;
-    }
-    if (sourceConfig.useKilometers !== undefined) {
-      settingsToCopy["stickerConfig.useKilometers"] = sourceConfig.useKilometers;
-    }
-    if (sourceConfig.roundMileage !== undefined) {
-      settingsToCopy["stickerConfig.roundMileage"] = sourceConfig.roundMileage;
-    }
-    if (sourceConfig.designerLayout) {
-      settingsToCopy["stickerConfig.designerLayout"] = sourceConfig.designerLayout;
-    }
-    if (sourceConfig.defaultSize) {
-      settingsToCopy["stickerConfig.defaultSize"] = sourceConfig.defaultSize;
-    }
-    if (sourceConfig.showQRCode !== undefined) {
-      settingsToCopy["stickerConfig.showQRCode"] = sourceConfig.showQRCode;
-    }
-    if (sourceConfig.usePredictiveDate !== undefined) {
-      settingsToCopy["stickerConfig.usePredictiveDate"] = sourceConfig.usePredictiveDate;
-    }
-    if (sourceConfig.intervals) {
-      settingsToCopy["stickerConfig.intervals"] = sourceConfig.intervals;
-    }
-    if (sourceConfig.defaultOilType) {
-      settingsToCopy["stickerConfig.defaultOilType"] = sourceConfig.defaultOilType;
-    }
+    if (sourceConfig.logo) settingsToCopy.logo = sourceConfig.logo;
+    if (sourceConfig.logoObjectPath) settingsToCopy.logoObjectPath = sourceConfig.logoObjectPath;
+    if (sourceConfig.tagline) settingsToCopy.tagline = sourceConfig.tagline;
+    if (sourceConfig.taglineLine2) settingsToCopy.taglineLine2 = sourceConfig.taglineLine2;
+    if (sourceConfig.serviceLabel) settingsToCopy.serviceLabel = sourceConfig.serviceLabel;
+    if (sourceConfig.fontStyles) settingsToCopy.fontStyles = sourceConfig.fontStyles;
+    if (sourceConfig.colors) settingsToCopy.colors = sourceConfig.colors;
+    if (sourceConfig.useKilometers !== undefined) settingsToCopy.useKilometers = sourceConfig.useKilometers;
+    if (sourceConfig.roundMileage !== undefined) settingsToCopy.roundMileage = sourceConfig.roundMileage;
+    if (sourceConfig.designerLayout) settingsToCopy.designerLayout = sourceConfig.designerLayout;
+    if (sourceConfig.defaultSize) settingsToCopy.defaultSize = sourceConfig.defaultSize;
+    if (sourceConfig.showQRCode !== undefined) settingsToCopy.showQRCode = sourceConfig.showQRCode;
+    if (sourceConfig.usePredictiveDate !== undefined) settingsToCopy.usePredictiveDate = sourceConfig.usePredictiveDate;
+    if (sourceConfig.intervals) settingsToCopy.intervals = sourceConfig.intervals;
+    if (sourceConfig.defaultOilType) settingsToCopy.defaultOilType = sourceConfig.defaultOilType;
 
     if (Object.keys(settingsToCopy).length === 0) {
       return NextResponse.json({ error: "No sticker settings to copy from source shop" }, { status: 400 });
     }
 
-    const sourceLogo = await db.collection("shop_media").findOne({
-      shopId: sourceShopId,
-      type: "logo",
-    });
+    const sourceLogoRows = await sql`
+      SELECT * FROM shop_media WHERE shop_id = ${String(sourceShopId)} AND type = 'logo' LIMIT 1
+    `;
+    const sourceLogo = sourceLogoRows[0];
 
     const results: { shopId: number; shopName: string; success: boolean; error?: string }[] = [];
 
     for (const targetShop of targetShops) {
-      const targetShopId = typeof targetShop.shopId === "string" 
-        ? parseInt(targetShop.shopId, 10) 
-        : targetShop.shopId;
+      const targetShopId = Number(targetShop.shop_id);
 
       if (targetShopId === sourceShopId) {
         continue;
       }
 
       try {
-        await db.collection("shops").updateOne(
-          { _id: targetShop._id },
-          { $set: settingsToCopy }
-        );
+        const currentSettings = targetShop.settings || {};
+        const currentStickerConfig = currentSettings.stickerConfig || {};
+        const updatedStickerConfig = { ...currentStickerConfig, ...settingsToCopy };
+        const updatedSettings = { ...currentSettings, stickerConfig: updatedStickerConfig };
 
-        if (sourceLogo?.dataUri) {
-          await db.collection("shop_media").updateOne(
-            { shopId: targetShopId, type: "logo" },
-            {
-              $set: {
-                shopId: targetShopId,
-                type: "logo",
-                dataUri: sourceLogo.dataUri,
-                contentType: sourceLogo.contentType || "image/png",
-                updatedAt: new Date(),
-              },
-            },
-            { upsert: true }
-          );
+        await sql`
+          UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb
+          WHERE id = ${targetShop.id}
+        `;
+
+        if (sourceLogo?.data_uri) {
+          await sql`
+            INSERT INTO shop_media (shop_id, type, data_uri, content_type, updated_at)
+            VALUES (${String(targetShopId)}, 'logo', ${sourceLogo.data_uri}, ${sourceLogo.content_type || 'image/png'}, NOW())
+            ON CONFLICT (shop_id, type) DO UPDATE SET
+              data_uri = ${sourceLogo.data_uri},
+              content_type = ${sourceLogo.content_type || 'image/png'},
+              updated_at = NOW()
+          `;
         }
 
         results.push({
@@ -184,7 +154,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       message: `Copied sticker settings to ${successCount} location(s)${failCount > 0 ? `, ${failCount} failed` : ""}`,
       results,
-      copiedFields: Object.keys(settingsToCopy).map(k => k.replace("stickerConfig.", "")),
+      copiedFields: Object.keys(settingsToCopy),
       preservedFields: ["phone", "appointmentUrl", "hovercodeQRId", "cachedQrCodeDataUri"],
     });
   } catch (error) {
@@ -208,41 +178,37 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const db = await getDb();
-    const currentShopId = Number(session.shopId);
+    const currentShopId = String(session.shopId);
 
-    const currentShop = await db.collection("shops").findOne({
-      shopId: { $in: [currentShopId, String(currentShopId)] },
-    });
+    const currentShopRows = await sql`
+      SELECT settings FROM shops WHERE shop_id = ${currentShopId} LIMIT 1
+    `;
+    const currentShop = currentShopRows[0];
 
-    if (!currentShop?.enterpriseId) {
+    if (!currentShop?.settings?.enterpriseId) {
       return NextResponse.json({ error: "Not part of an enterprise" }, { status: 400 });
     }
 
-    const enterpriseShops = await db.collection("shops").find({
-      enterpriseId: currentShop.enterpriseId,
-    }).project({
-      shopId: 1,
-      name: 1,
-      locationIdentifier: 1,
-      "stickerConfig.logo": 1,
-      "stickerConfig.phone": 1,
-      "stickerConfig.appointmentUrl": 1,
-    }).toArray();
+    const enterpriseId = String(currentShop.settings.enterpriseId);
 
-    const shops = enterpriseShops.map(shop => ({
-      shopId: typeof shop.shopId === "string" ? parseInt(shop.shopId, 10) : shop.shopId,
+    const enterpriseShops = await sql`
+      SELECT shop_id, name, settings FROM shops 
+      WHERE settings->>'enterpriseId' = ${enterpriseId}
+    `;
+
+    const shops = enterpriseShops.map((shop: any) => ({
+      shopId: Number(shop.shop_id),
       name: shop.name,
-      locationIdentifier: shop.locationIdentifier,
-      hasLogo: !!shop.stickerConfig?.logo,
-      hasPhone: !!shop.stickerConfig?.phone,
-      hasAppointmentUrl: !!shop.stickerConfig?.appointmentUrl,
+      locationIdentifier: shop.settings?.locationIdentifier,
+      hasLogo: !!shop.settings?.stickerConfig?.logo,
+      hasPhone: !!shop.settings?.stickerConfig?.phone,
+      hasAppointmentUrl: !!shop.settings?.stickerConfig?.appointmentUrl,
     }));
 
     return NextResponse.json({
       ok: true,
-      enterpriseId: currentShop.enterpriseId,
-      currentShopId,
+      enterpriseId: currentShop.settings.enterpriseId,
+      currentShopId: Number(currentShopId),
       shops,
     });
   } catch (error) {

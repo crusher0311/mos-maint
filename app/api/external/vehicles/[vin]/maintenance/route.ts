@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +18,6 @@ export const GET = createExternalEndpoint(
     }
     
     const mileage = Number(req.nextUrl.searchParams.get("mileage")) || undefined;
-    
-    const db = await getDb();
     
     try {
       const { getOEMMaintenanceSchedule } = await import("@/lib/dataone");

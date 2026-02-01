@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,15 +17,10 @@ export const GET = createExternalEndpoint(
       );
     }
     
-    const db = await getDb();
-    
-    const vehicle = await db.collection("vehicles").findOne({
-      $or: [
-        { vin: vin.toUpperCase() },
-        { vin: vin.toLowerCase() },
-        { vin }
-      ]
-    });
+    const vehicleRows = await sql`
+      SELECT * FROM vehicles WHERE UPPER(vin) = ${vin.toUpperCase()} LIMIT 1
+    `;
+    const vehicle = vehicleRows[0];
     
     if (!vehicle) {
       try {
@@ -61,17 +56,17 @@ export const GET = createExternalEndpoint(
       vin,
       source: "database",
       vehicle: {
-        id: vehicle._id?.toString(),
+        id: vehicle.id?.toString(),
         year: vehicle.year,
         make: vehicle.make,
         model: vehicle.model,
         engine: vehicle.engine,
         transmission: vehicle.transmission,
-        customerId: vehicle.customerId,
-        lastServiceDate: vehicle.lastServiceDate,
-        lastServiceMileage: vehicle.lastServiceMileage,
-        nextServiceDate: vehicle.nextServiceDate,
-        nextServiceMileage: vehicle.nextServiceMileage,
+        customerId: vehicle.customer_id,
+        lastServiceDate: vehicle.last_service_date,
+        lastServiceMileage: vehicle.last_service_mileage,
+        nextServiceDate: vehicle.next_service_date,
+        nextServiceMileage: vehicle.next_service_mileage,
       }
     });
   }

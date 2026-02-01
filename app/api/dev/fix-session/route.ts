@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/auth";
 
@@ -22,15 +22,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No session" }, { status: 401 });
   }
 
-  const db = await getDb();
-  const result = await db.collection("sessions").updateOne(
-    { token },
-    { $set: { shopId: Number(newShopId) } }
-  );
+  const result = await sql`
+    UPDATE sessions SET shop_id = ${newShopId}
+    WHERE token = ${token}
+  `;
 
   return NextResponse.json({ 
     ok: true, 
-    modified: result.modifiedCount,
+    modified: result.count,
     newShopId: Number(newShopId)
   });
 }

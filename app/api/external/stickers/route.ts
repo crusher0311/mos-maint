@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,13 +36,10 @@ export const POST = createExternalEndpoint(
     }
     
     try {
-      const { getDb } = await import("@/lib/mongo");
-      const db = await getDb();
-      
-      const shop = await db.collection("shops").findOne(
-        { shopId },
-        { projection: { name: 1, sticker: 1, qrCode: 1, autoBooking: 1 } }
-      );
+      const shopRows = await sql`
+        SELECT name, settings FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+      `;
+      const shop = shopRows[0];
       
       if (!shop) {
         return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -66,23 +64,10 @@ export const POST = createExternalEndpoint(
         externalApiCall: true,
       };
       
-      await db.collection("external_api_stickers").insertOne({
-        shopId,
-        vin,
-        customerId,
-        customerName,
-        vehicleYear,
-        vehicleMake,
-        vehicleModel,
-        currentMileage,
-        nextServiceMileage,
-        nextServiceDate,
-        oilType,
-        oilBrand,
-        triggerAutoBooking,
-        createdAt: new Date(),
-        source: "external_api",
-      });
+      await sql`
+        INSERT INTO external_api_stickers (shop_id, vin, customer_id, customer_name, vehicle_year, vehicle_make, vehicle_model, current_mileage, next_service_mileage, next_service_date, oil_type, oil_brand, trigger_auto_booking, source, created_at)
+        VALUES (${String(shopId)}, ${vin}, ${customerId || null}, ${customerName || null}, ${vehicleYear || null}, ${vehicleMake || null}, ${vehicleModel || null}, ${currentMileage || null}, ${nextServiceMileage || null}, ${nextServiceDate || null}, ${oilType || null}, ${oilBrand || null}, ${triggerAutoBooking}, 'external_api', NOW())
+      `;
       
       return NextResponse.json({
         success: true,
