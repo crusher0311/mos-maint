@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import {
   getShopAutoVitalsConfig,
   getAppointmentUpdates,
   getVehicle,
   getInspectionResults,
-  getRepairOrderJobs,
   cacheAutoVitalsVehicle,
   cacheAutoVitalsAppointment,
   cacheAutoVitalsInspection,
@@ -18,16 +17,16 @@ export async function POST(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const user = { shopId: String(session.shopId) };
+    const shopId = String(session.shopId);
 
-    const config = await getShopAutoVitalsConfig(user.shopId);
+    const config = await getShopAutoVitalsConfig(shopId);
     if (!config) {
       return NextResponse.json({ 
         error: "AutoVitals is not configured. Please set up your credentials in Settings." 
       }, { status: 400 });
     }
 
-    console.log(`[AutoVitals Sync] Starting sync for shop ${user.shopId}`);
+    console.log(`[AutoVitals Sync] Starting sync for shop ${shopId}`);
 
     const appointmentsResult = await getAppointmentUpdates(config);
     if (!appointmentsResult.ok) {
@@ -45,19 +44,19 @@ export async function POST(request: NextRequest) {
 
     for (const appointment of appointments) {
       try {
-        await cacheAutoVitalsAppointment(appointment, user.shopId);
+        await cacheAutoVitalsAppointment(appointment, shopId);
 
         if (appointment.vehicleId) {
           const vehicleResult = await getVehicle(appointment.vehicleId, config);
           if (vehicleResult.ok) {
-            await cacheAutoVitalsVehicle(vehicleResult.data, user.shopId);
+            await cacheAutoVitalsVehicle(vehicleResult.data, shopId);
             vehiclesSynced++;
           }
         }
 
         const inspectionResult = await getInspectionResults(appointment.appointmentId, config);
         if (inspectionResult.ok && inspectionResult.data.items.length > 0) {
-          await cacheAutoVitalsInspection(inspectionResult.data, user.shopId);
+          await cacheAutoVitalsInspection(inspectionResult.data, shopId);
           inspectionsSynced++;
         }
       } catch (err) {
@@ -93,22 +92,35 @@ export async function GET(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const user = { shopId: String(session.shopId) };
+    const shopId = String(session.shopId);
 
-    const db = await getDb();
+    const vehicleCountRows = await sql`
+      SELECT COUNT(*)::int as count FROM autovitals_vehicles WHERE shop_id = ${shopId}
+    `;
+    const vehicleCount = vehicleCountRows[0]?.count || 0;
 
-    const vehicleCount = await db.collection("autovitals_vehicles").countDocuments({ shopId: user.shopId });
-    const appointmentCount = await db.collection("autovitals_appointments").countDocuments({ shopId: user.shopId });
-    const inspectionCount = await db.collection("autovitals_inspections").countDocuments({ shopId: user.shopId });
+    const appointmentCountRows = await sql`
+      SELECT COUNT(*)::int as count FROM autovitals_appointments WHERE shop_id = ${shopId}
+    `;
+    const appointmentCount = appointmentCountRows[0]?.count || 0;
 
-    const lastVehicle = await db.collection("autovitals_vehicles")
-      .findOne({ shopId: user.shopId }, { sort: { updatedAt: -1 } });
+    const inspectionCountRows = await sql`
+      SELECT COUNT(*)::int as count FROM autovitals_inspections WHERE shop_id = ${shopId}
+    `;
+    const inspectionCount = inspectionCountRows[0]?.count || 0;
+
+    const lastVehicleRows = await sql`
+      SELECT updated_at FROM autovitals_vehicles 
+      WHERE shop_id = ${shopId} 
+      ORDER BY updated_at DESC 
+      LIMIT 1
+    `;
 
     return NextResponse.json({
       vehicles: vehicleCount,
       appointments: appointmentCount,
       inspections: inspectionCount,
-      lastSyncedAt: lastVehicle?.updatedAt || null,
+      lastSyncedAt: lastVehicleRows[0]?.updated_at || null,
     });
   } catch (error) {
     console.error("[AutoVitals Sync GET] Error:", error);

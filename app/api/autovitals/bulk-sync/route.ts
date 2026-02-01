@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getSession } from "@/lib/auth";
 import {
   getShopAutoVitalsConfig,
@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const shopId = String(session.shopId);
-    const numericShopId = parseInt(shopId, 10);
 
     const config = await getShopAutoVitalsConfig(shopId);
     if (!config) {
@@ -28,7 +27,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`[AutoVitals Bulk Sync] Starting for shop ${shopId}`);
 
-    const db = await getDb();
     const now = new Date();
 
     const appointmentsResult = await getAppointmentUpdates(config);
@@ -61,72 +59,61 @@ export async function POST(request: NextRequest) {
             if (avVehicle.vin && !processedVins.has(avVehicle.vin)) {
               processedVins.add(avVehicle.vin);
               
+              const vin = avVehicle.vin.toUpperCase();
               const customerName = avVehicle.customerName || appointment.customerName;
               const customerPhone = appointment.customerPhone;
               const customerEmail = appointment.customerEmail;
 
-              const existingVehicle = await db.collection("vehicles").findOne({
-                shopId: numericShopId,
-                vin: avVehicle.vin.toUpperCase()
-              });
+              const existingRows = await sql`
+                SELECT id, oem_schedule_fetched_at, carfax_fetched_at 
+                FROM vehicles 
+                WHERE shop_id = ${shopId} AND vin = ${vin}
+                LIMIT 1
+              `;
+              const existingVehicle = existingRows[0];
 
-              const vehicleData: any = {
-                shopId: numericShopId,
-                vin: avVehicle.vin.toUpperCase(),
-                year: avVehicle.year,
-                make: avVehicle.make,
-                model: avVehicle.model,
-                lastMileage: avVehicle.mileage || appointment.mileageIn,
-                license: avVehicle.licensePlate,
-                source: "autovitals",
-                updatedAt: now,
-              };
+              const vehicleYear = avVehicle.year ? Number(avVehicle.year) : null;
+              const vehicleMake = avVehicle.make || null;
+              const vehicleModel = avVehicle.model || null;
+              const lastMileage = avVehicle.mileage || appointment.mileageIn || null;
+              const vehicleLicense = avVehicle.licensePlate || null;
+              const custName = customerName || null;
+              const custPhone = customerPhone || null;
+              const custEmail = customerEmail || null;
 
-              if (customerName) {
-                vehicleData["customer.name"] = customerName;
-              }
-              if (customerPhone) {
-                vehicleData["customer.phone"] = customerPhone;
-              }
-              if (customerEmail) {
-                vehicleData["customer.email"] = customerEmail;
-              }
-
-              await db.collection("vehicles").updateOne(
-                { shopId: numericShopId, vin: avVehicle.vin.toUpperCase() },
-                {
-                  $set: vehicleData,
-                  $setOnInsert: { createdAt: now }
-                },
-                { upsert: true }
-              );
+              await sql`
+                INSERT INTO vehicles (shop_id, vin, year, make, model, last_mileage, license, source, updated_at, customer_name, customer_phone, customer_email, created_at)
+                VALUES (${shopId}, ${vin}, ${vehicleYear}, ${vehicleMake}, ${vehicleModel}, ${lastMileage}, ${vehicleLicense}, 'autovitals', ${now}, ${custName}, ${custPhone}, ${custEmail}, ${now})
+                ON CONFLICT (shop_id, vin) DO UPDATE SET
+                  year = COALESCE(EXCLUDED.year, vehicles.year),
+                  make = COALESCE(EXCLUDED.make, vehicles.make),
+                  model = COALESCE(EXCLUDED.model, vehicles.model),
+                  last_mileage = COALESCE(EXCLUDED.last_mileage, vehicles.last_mileage),
+                  license = COALESCE(EXCLUDED.license, vehicles.license),
+                  source = EXCLUDED.source,
+                  updated_at = EXCLUDED.updated_at,
+                  customer_name = COALESCE(EXCLUDED.customer_name, vehicles.customer_name),
+                  customer_phone = COALESCE(EXCLUDED.customer_phone, vehicles.customer_phone),
+                  customer_email = COALESCE(EXCLUDED.customer_email, vehicles.customer_email)
+              `;
 
               if (!existingVehicle) {
                 vehiclesImported++;
               }
 
               const needsEnrichment = !existingVehicle || 
-                !existingVehicle.oemScheduleFetchedAt ||
-                !existingVehicle.carfaxFetchedAt;
+                !existingVehicle.oem_schedule_fetched_at ||
+                !existingVehicle.carfax_fetched_at;
 
               if (needsEnrichment) {
-                await db.collection("enrichment_queue").updateOne(
-                  { shopId: numericShopId, vin: avVehicle.vin.toUpperCase() },
-                  {
-                    $set: {
-                      shopId: numericShopId,
-                      vin: avVehicle.vin.toUpperCase(),
-                      status: "pending",
-                      priority: 1,
-                      updatedAt: now,
-                    },
-                    $setOnInsert: {
-                      createdAt: now,
-                      attempts: 0,
-                    }
-                  },
-                  { upsert: true }
-                );
+                await sql`
+                  INSERT INTO enrichment_queue (shop_id, vin, status, priority, updated_at, created_at, attempts)
+                  VALUES (${shopId}, ${vin}, 'pending', 1, ${now}, ${now}, 0)
+                  ON CONFLICT (shop_id, vin) DO UPDATE SET
+                    status = 'pending',
+                    priority = 1,
+                    updated_at = ${now}
+                `;
                 enrichmentQueued++;
               }
             }
@@ -140,18 +127,18 @@ export async function POST(request: NextRequest) {
             inspectionsSynced++;
 
             if (appointment.vin) {
-              await db.collection("vehicles").updateOne(
-                { shopId: numericShopId, vin: appointment.vin.toUpperCase() },
-                {
-                  $set: {
-                    lastDviAt: now,
-                    lastDviAppointmentId: appointment.appointmentId,
-                    "dvi.itemCount": inspectionResult.data.items.length,
-                    "dvi.redCount": inspectionResult.data.items.filter(i => i.status === "red").length,
-                    "dvi.yellowCount": inspectionResult.data.items.filter(i => i.status === "yellow").length,
-                  }
-                }
-              );
+              const vin = appointment.vin.toUpperCase();
+              const itemCount = inspectionResult.data.items.length;
+              const redCount = inspectionResult.data.items.filter((i: any) => i.status === "red").length;
+              const yellowCount = inspectionResult.data.items.filter((i: any) => i.status === "yellow").length;
+
+              await sql`
+                UPDATE vehicles SET
+                  last_dvi_at = ${now},
+                  last_dvi_appointment_id = ${appointment.appointmentId},
+                  dvi = jsonb_build_object('itemCount', ${itemCount}, 'redCount', ${redCount}, 'yellowCount', ${yellowCount})
+                WHERE shop_id = ${shopId} AND vin = ${vin}
+              `;
             }
           }
         }
@@ -162,33 +149,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await db.collection("shops").updateOne(
-      { shopId: numericShopId },
-      {
-        $set: {
-          "autovitals.lastBulkSyncAt": now,
-          "autovitals.lastBulkSyncStats": {
-            appointments: appointments.length,
-            vehiclesSynced,
-            vehiclesImported,
-            inspectionsSynced,
-            enrichmentQueued,
-          },
-          updatedAt: now,
-        }
-      }
-    );
+    const bulkSyncStats = {
+      appointments: appointments.length,
+      vehiclesSynced,
+      vehiclesImported,
+      inspectionsSynced,
+      enrichmentQueued,
+    };
+
+    await sql`
+      UPDATE shops SET
+        settings = jsonb_set(
+          jsonb_set(
+            COALESCE(settings, '{}'),
+            '{autovitals,lastBulkSyncAt}', ${JSON.stringify(now.toISOString())}::jsonb
+          ),
+          '{autovitals,lastBulkSyncStats}', ${JSON.stringify(bulkSyncStats)}::jsonb
+        ),
+        updated_at = ${now}
+      WHERE shop_id = ${shopId}
+    `;
 
     console.log(`[AutoVitals Bulk Sync] Completed. Vehicles: ${vehiclesSynced} synced, ${vehiclesImported} imported. Inspections: ${inspectionsSynced}. Enrichment queued: ${enrichmentQueued}`);
 
     return NextResponse.json({
       success: true,
       stats: {
-        appointments: appointments.length,
-        vehiclesSynced,
-        vehiclesImported,
-        inspectionsSynced,
-        enrichmentQueued,
+        ...bulkSyncStats,
         errors: errors.length,
       },
       message: `Synced ${vehiclesSynced} vehicles from AutoVitals. ${vehiclesImported} new vehicles imported to MOS.`,
@@ -208,22 +195,34 @@ export async function GET(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const shopId = parseInt(String(session.shopId), 10);
+    const shopId = String(session.shopId);
 
-    const db = await getDb();
+    const avVehicleCountRows = await sql`
+      SELECT COUNT(*)::int as count FROM autovitals_vehicles WHERE shop_id = ${shopId}
+    `;
+    const avVehicleCount = avVehicleCountRows[0]?.count || 0;
 
-    const avVehicleCount = await db.collection("autovitals_vehicles").countDocuments({ shopId: String(shopId) });
-    const mosVehicleCount = await db.collection("vehicles").countDocuments({ shopId, source: "autovitals" });
-    const pendingEnrichment = await db.collection("enrichment_queue").countDocuments({ shopId, status: "pending" });
+    const mosVehicleCountRows = await sql`
+      SELECT COUNT(*)::int as count FROM vehicles WHERE shop_id = ${shopId} AND source = 'autovitals'
+    `;
+    const mosVehicleCount = mosVehicleCountRows[0]?.count || 0;
 
-    const shop = await db.collection("shops").findOne({ shopId });
+    const pendingEnrichmentRows = await sql`
+      SELECT COUNT(*)::int as count FROM enrichment_queue WHERE shop_id = ${shopId} AND status = 'pending'
+    `;
+    const pendingEnrichment = pendingEnrichmentRows[0]?.count || 0;
+
+    const shopRows = await sql`
+      SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1
+    `;
+    const settings = shopRows[0]?.settings || {};
 
     return NextResponse.json({
       autovitalsVehicles: avVehicleCount,
       mosVehicles: mosVehicleCount,
       pendingEnrichment,
-      lastBulkSyncAt: shop?.autovitals?.lastBulkSyncAt || null,
-      lastBulkSyncStats: shop?.autovitals?.lastBulkSyncStats || null,
+      lastBulkSyncAt: settings.autovitals?.lastBulkSyncAt || null,
+      lastBulkSyncStats: settings.autovitals?.lastBulkSyncStats || null,
     });
   } catch (error) {
     console.error("[AutoVitals Bulk Sync GET] Error:", error);

@@ -1,7 +1,7 @@
 // app/api/dashboard/data/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 import { getBatchQuickSpecs } from "@/lib/integrations/dataone-local";
 
@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(100, Math.max(10, parseInt(searchParams.get('pageSize') || '50', 10)));
     const search = searchParams.get('search')?.toLowerCase() || '';
     const showArchived = searchParams.get('archived') === 'true';
+    
     // Session check
     const store = await cookies();
     const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
@@ -20,70 +21,115 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-    const sessions = db.collection("sessions");
-    const users = db.collection("users");
     const now = new Date();
-
-    const sess = await sessions.findOne({ token: sid, expiresAt: { $gt: now } });
-    if (!sess) {
+    const sessRows = await sql`
+      SELECT user_id, expires_at FROM sessions 
+      WHERE token = ${sid} AND expires_at > ${now}
+      LIMIT 1
+    `;
+    if (!sessRows[0]) {
       return NextResponse.json({ error: "Session expired" }, { status: 401 });
     }
 
-    const user = await users.findOne(
-      { _id: sess.userId },
-      { projection: { email: 1, role: 1, shopId: 1 } }
-    );
+    const userRows = await sql`
+      SELECT id, email, role, shop_id FROM users WHERE id = ${sessRows[0].user_id} LIMIT 1
+    `;
+    const user = userRows[0];
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    const userShopId = user.shop_id;
 
-    // Check shop SMS configuration to skip unnecessary queries
-    const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
-    const isAutoFlowConfigured = !!(shopConfig?.autoflow?.apiKey || shopConfig?.autoflowApiKey);
-    const isProtractorPrimary = !!shopConfig?.protractor?.configured;
+    // Check shop SMS configuration
+    const shopRows = await sql`
+      SELECT id, shop_id, settings, tekmetric_shop_id, protractor_connection_id,
+             trial_vin_limit, billing
+      FROM shops
+      WHERE shop_id = ${String(userShopId)} OR shop_id = ${String(Number(userShopId))}
+      LIMIT 1
+    `;
+    const shopConfig = shopRows[0];
+    const settings = shopConfig?.settings || {};
+    const isAutoFlowConfigured = !!(settings?.autoflow?.apiKey || settings?.autoflowApiKey);
+    const isProtractorPrimary = !!settings?.protractor?.configured;
 
     // If showing archived vehicles, fetch from vehicles collection directly
     if (showArchived) {
-      const archivedQuery: any = {
-        shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-        "status.active": { $ne: true },
-      };
-
+      let archivedQuery = sql`
+        SELECT v.*, c.first_name, c.last_name, c.name as customer_name
+        FROM vehicles v
+        LEFT JOIN customers c ON v.customer_id = c.id
+        WHERE v.shop_id = ${String(userShopId)}
+          AND (v.status->>'active')::boolean IS NOT TRUE
+      `;
+      
       if (search) {
-        archivedQuery.$or = [
-          { vin: { $regex: search, $options: 'i' } },
-          { make: { $regex: search, $options: 'i' } },
-          { model: { $regex: search, $options: 'i' } },
-          { "customer.name": { $regex: search, $options: 'i' } },
-          { "customer.firstName": { $regex: search, $options: 'i' } },
-          { "customer.lastName": { $regex: search, $options: 'i' } },
-        ];
+        archivedQuery = sql`
+          SELECT v.*, c.first_name, c.last_name, c.name as customer_name
+          FROM vehicles v
+          LEFT JOIN customers c ON v.customer_id = c.id
+          WHERE v.shop_id = ${String(userShopId)}
+            AND (v.status->>'active')::boolean IS NOT TRUE
+            AND (
+              LOWER(v.vin) LIKE ${`%${search}%`}
+              OR LOWER(v.make) LIKE ${`%${search}%`}
+              OR LOWER(v.model) LIKE ${`%${search}%`}
+              OR LOWER(c.name) LIKE ${`%${search}%`}
+              OR LOWER(c.first_name) LIKE ${`%${search}%`}
+              OR LOWER(c.last_name) LIKE ${`%${search}%`}
+            )
+        `;
       }
 
-      const totalCount = await db.collection("vehicles").countDocuments(archivedQuery);
-      const archivedVehicles = await db.collection("vehicles")
-        .find(archivedQuery)
-        .sort({ "status.lastClosedAt": -1, updatedAt: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .toArray();
+      const countRows = await sql`
+        SELECT COUNT(*)::int as count FROM vehicles
+        WHERE shop_id = ${String(userShopId)}
+          AND (status->>'active')::boolean IS NOT TRUE
+      `;
+      const totalCount = countRows[0]?.count || 0;
+      
+      const offset = (page - 1) * pageSize;
+      const archivedVehicles = search ? await sql`
+        SELECT v.*, c.first_name, c.last_name, c.name as customer_name
+        FROM vehicles v
+        LEFT JOIN customers c ON v.customer_id = c.id
+        WHERE v.shop_id = ${String(userShopId)}
+          AND (v.status->>'active')::boolean IS NOT TRUE
+          AND (
+            LOWER(v.vin) LIKE ${`%${search}%`}
+            OR LOWER(v.make) LIKE ${`%${search}%`}
+            OR LOWER(v.model) LIKE ${`%${search}%`}
+            OR LOWER(c.name) LIKE ${`%${search}%`}
+            OR LOWER(c.first_name) LIKE ${`%${search}%`}
+            OR LOWER(c.last_name) LIKE ${`%${search}%`}
+          )
+        ORDER BY (v.status->>'lastClosedAt')::timestamp DESC NULLS LAST, v.updated_at DESC
+        LIMIT ${pageSize} OFFSET ${offset}
+      ` : await sql`
+        SELECT v.*, c.first_name, c.last_name, c.name as customer_name
+        FROM vehicles v
+        LEFT JOIN customers c ON v.customer_id = c.id
+        WHERE v.shop_id = ${String(userShopId)}
+          AND (v.status->>'active')::boolean IS NOT TRUE
+        ORDER BY (v.status->>'lastClosedAt')::timestamp DESC NULLS LAST, v.updated_at DESC
+        LIMIT ${pageSize} OFFSET ${offset}
+      `;
 
       const rows = archivedVehicles.map((v: any) => ({
-        updatedAt: v.status?.lastClosedAt || v.updatedAt || new Date(),
-        displayName: v.customer?.name || v.customer?.firstName ? 
-          `${v.customer.firstName || ''} ${v.customer.lastName || ''}`.trim() : 
+        updatedAt: v.status?.lastClosedAt || v.updated_at || new Date(),
+        displayName: v.customer_name || v.first_name ? 
+          `${v.first_name || ''} ${v.last_name || ''}`.trim() : 
           'Unknown Customer',
         displayVehicle: [v.year, v.make, v.model].filter(Boolean).join(' '),
         displayVin: v.vin,
-        displayMiles: v.mileage || v.lastMileage || null,
+        displayMiles: v.mileage || v.last_mileage || null,
         displayRo: v.tekmetric?.repairOrderNumber || null,
         dviDone: false,
         archived: true,
         af: {
           status: 'Archived',
-          createdAt: v.status?.lastClosedAt || v.updatedAt,
-          miles: v.mileage || v.lastMileage || null,
+          createdAt: v.status?.lastClosedAt || v.updated_at,
+          miles: v.mileage || v.last_mileage || null,
         },
         vehicle: {
           year: v.year || null,
@@ -106,430 +152,247 @@ export async function GET(request: NextRequest) {
         user: {
           email: user.email,
           role: user.role,
-          shopId: user.shopId,
+          shopId: userShopId,
         },
       });
     }
 
     // Build rows from latest AutoFlow events per VIN (only if AutoFlow is configured)
-    // Skip this expensive query entirely when AutoFlow is not set up
     let autoflowRows: any[] = [];
     if (isAutoFlowConfigured) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      autoflowRows = await db.collection("events").aggregate([
-      {
-        $match: {
-          shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-          provider: "autoflow",
-          receivedAt: { $gte: thirtyDaysAgo }
+      
+      // Fetch events and process in JS (PostgreSQL equivalent of MongoDB aggregation)
+      const eventRows = await sql`
+        SELECT e.*, 
+               COALESCE(e.received_at, e.created_at) as created_at_date,
+               UPPER(COALESCE(e.vehicle_vin, e.vin, e.payload->'vehicle'->>'vin')) as vin_norm,
+               COALESCE(e.payload->'ticket'->>'status', e.status, e.payload->>'status', e.type) as status_raw
+        FROM events e
+        WHERE e.shop_id = ${String(userShopId)}
+          AND e.provider = 'autoflow'
+          AND COALESCE(e.received_at, e.created_at) >= ${thirtyDaysAgo}
+        ORDER BY UPPER(COALESCE(e.vehicle_vin, e.vin, e.payload->'vehicle'->>'vin')) ASC,
+                 COALESCE(e.received_at, e.created_at) DESC
+      `;
+
+      // Active statuses list
+      const activeStatuses = ["CHECKED IN", "IN PROGRESS", "EST", "RACK ATTACK", 
+        "Build Estimate (Workflow) and Presentation (Advisor)", "Authorized ready for work"];
+      
+      // Group by VIN and get latest, track active/close
+      const vinGroups = new Map<string, { latest: any; lastActive: Date | null; lastClose: Date | null }>();
+      
+      for (const e of eventRows) {
+        const vin = e.vin_norm;
+        if (!vin) continue;
+        
+        const ticketStatus = e.payload?.ticket?.status;
+        const createdAt = e.created_at_date;
+        const isActive = activeStatuses.includes(ticketStatus);
+        const isClose = ticketStatus === "Close";
+        
+        if (!vinGroups.has(vin)) {
+          vinGroups.set(vin, { 
+            latest: e, 
+            lastActive: isActive ? createdAt : null,
+            lastClose: isClose ? createdAt : null
+          });
+        } else {
+          const group = vinGroups.get(vin)!;
+          if (isActive && (!group.lastActive || createdAt > group.lastActive)) {
+            group.lastActive = createdAt;
+          }
+          if (isClose && (!group.lastClose || createdAt > group.lastClose)) {
+            group.lastClose = createdAt;
+          }
         }
-      },
-      // Normalize basic fields we need from events
-      {
-        $addFields: {
-          createdAtDate: { $ifNull: ["$receivedAt", "$createdAt"] },
-          statusRaw: {
-            $ifNull: [
-              "$payload.ticket.status",
-              { $ifNull: ["$status", { $ifNull: ["$payload.status", "$type"] }] }
-            ]
-          },
-          vinNorm: {
-            $toUpper: {
-              $ifNull: [
-                "$vehicleVin",
-                { $ifNull: ["$vin", "$payload.vehicle.vin"] }
-              ]
-            }
-          },
-          // Track active vs close status for smart filtering
-          isActiveStatus: {
-            $in: ["$payload.ticket.status", ["CHECKED IN", "IN PROGRESS", "EST", "RACK ATTACK", 
-              "Build Estimate (Workflow) and Presentation (Advisor)", "Authorized ready for work"]]
-          },
-          isCloseStatus: { $eq: ["$payload.ticket.status", "Close"] }
+      }
+      
+      // Filter to active vehicles and map to display format
+      for (const [vin, group] of vinGroups.entries()) {
+        // Vehicle is active if: has active status AND (no close, OR last active is after last close)
+        if (!group.lastActive) continue;
+        if (group.lastClose && group.lastActive <= group.lastClose) continue;
+        
+        const e = group.latest;
+        const payload = e.payload || {};
+        
+        // Check DVI presence
+        const roNumber = payload.ticket?.invoice || payload.ticket?.id || payload.event?.invoice || e.ro_number;
+        let dviDone = false;
+        if (roNumber) {
+          const dviCheck = await sql`
+            SELECT 1 FROM dvi_results WHERE ro_number = ${String(roNumber)} LIMIT 1
+          `;
+          if (!dviCheck[0]) {
+            const dviAltCheck = await sql`
+              SELECT 1 FROM dvi WHERE ro_number = ${String(roNumber)} LIMIT 1
+            `;
+            dviDone = !!dviAltCheck[0];
+          } else {
+            dviDone = true;
+          }
         }
-      },
-      // Require VIN
-      { $match: { vinNorm: { $type: "string", $ne: "" } } },
-      // Sort by VIN asc, then time desc
-      { $sort: { vinNorm: 1, createdAtDate: -1 } },
-      {
-        $group: {
-          _id: "$vinNorm",
-          latest: { $first: "$$ROOT" },
-          // Track last active and last close timestamps
-          lastActive: { $max: { $cond: ["$isActiveStatus", "$createdAtDate", null] } },
-          lastClose: { $max: { $cond: ["$isCloseStatus", "$createdAtDate", null] } }
-        }
-      },
-      // Vehicle is active if: no close, OR last active is after last close
-      {
-        $match: {
-          lastActive: { $ne: null },
-          $or: [
-            { lastClose: null },
-            { $expr: { $gt: ["$lastActive", "$lastClose"] } }
-          ]
-        }
-      },
-      { $replaceRoot: { newRoot: "$latest" } },
-      // Compute display fields
-      {
-        $addFields: {
-          // Name from payload; fallback to nested customer fields if used
-          displayName: {
-            $let: {
-              vars: {
-                full: {
-                  $trim: {
-                    input: {
-                      $concat: [
-                        { $ifNull: ["$payload.customer.firstname", ""] },
-                        {
-                          $cond: [
-                            {
-                              $and: [
-                                { $ifNull: ["$payload.customer.firstname", false] },
-                                { $ifNull: ["$payload.customer.lastname", false] }
-                              ]
-                            },
-                            " ",
-                            ""
-                          ]
-                        },
-                        { $ifNull: ["$payload.customer.lastname", ""] }
-                      ]
-                    }
-                  }
-                }
-              },
-              in: {
-                $cond: [
-                  { $ne: ["$$full", ""] },
-                  "$$full",
-                  { $ifNull: ["$payload.customer.name", null] }
-                ]
-              }
-            }
-          },
-          // Vehicle display from payload
-          displayVehicle: {
-            $trim: {
-              input: {
-                $concat: [
-                  { $toString: { $ifNull: ["$payload.vehicle.year", ""] } },
-                  { $cond: [{ $ifNull: ["$payload.vehicle.year", false] }, " ", ""] },
-                  { $ifNull: ["$payload.vehicle.make", ""] },
-                  { $cond: [{ $ifNull: ["$payload.vehicle.make", false] }, " ", ""] },
-                  { $ifNull: ["$payload.vehicle.model", ""] }
-                ]
-              }
-            }
-          },
-          displayVin: "$vinNorm",
-          displayRo: {
-            $ifNull: [
-              "$payload.ticket.invoice",
-              {
-                $ifNull: [
-                  "$payload.ticket.id", 
-                  {
-                    $ifNull: [
-                      "$payload.event.invoice",
-                      { $ifNull: ["$roNumber", null] }
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
+        
+        const firstName = payload.customer?.firstname || '';
+        const lastName = payload.customer?.lastname || '';
+        const fullName = `${firstName} ${lastName}`.trim() || payload.customer?.name || null;
+        
+        const vYear = payload.vehicle?.year;
+        const vMake = payload.vehicle?.make || '';
+        const vModel = payload.vehicle?.model || '';
+        const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
+        
+        const miles = payload.ticket?.mileage || payload.mileage || 
+                      payload.vehicle?.mileage || payload.vehicle?.miles || 
+                      payload.vehicle?.odometer || null;
+        
+        autoflowRows.push({
+          updatedAt: e.created_at_date || new Date(),
+          displayName: fullName,
+          displayVehicle,
+          displayVin: vin,
+          displayMiles: miles,
+          displayRo: roNumber,
+          dviDone,
           af: {
-            createdAt: "$createdAtDate",
-            status: "$statusRaw",
-            miles: {
-              $ifNull: [
-                "$payload.ticket.mileage",
-                {
-                  $ifNull: [
-                    "$payload.mileage",
-                    {
-                      $ifNull: [
-                        "$payload.vehicle.mileage",
-                        {
-                          $ifNull: [
-                            "$payload.vehicle.miles",
-                            { $ifNull: ["$payload.vehicle.odometer", null] }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            createdAt: e.created_at_date,
+            status: e.status_raw,
+            miles
           },
-          updatedAt: {
-            $ifNull: [
-              "$createdAtDate",
-              { $ifNull: ["$createdAt", new Date()] }
-            ]
-          }
-        }
-      },
-      // DVI presence using roNumber (if present)
-      {
-        $lookup: {
-          from: "dvi_results",
-          let: { ro: { $toString: "$displayRo" } },
-          pipeline: [
-            {
-              $match: {
-                $expr: { 
-                  $and: [
-                    { $ne: ["$$ro", null] }, 
-                    { $ne: ["$$ro", "null"] },
-                    { $or: [
-                      { $eq: ["$roNumber", "$$ro"] },
-                      { $eq: [{ $toString: "$roNumber" }, "$$ro"] }
-                    ]}
-                  ] 
-                }
-              }
-            },
-            { $limit: 1 },
-            { $project: { _id: 1 } }
-          ],
-          as: "dviRes"
-        }
-      },
-      {
-        $lookup: {
-          from: "dvi",
-          let: { ro: { $toString: "$displayRo" } },
-          pipeline: [
-            {
-              $match: {
-                $expr: { 
-                  $and: [
-                    { $ne: ["$$ro", null] }, 
-                    { $ne: ["$$ro", "null"] },
-                    { $or: [
-                      { $eq: ["$roNumber", "$$ro"] },
-                      { $eq: [{ $toString: "$roNumber" }, "$$ro"] }
-                    ]}
-                  ] 
-                }
-              }
-            },
-            { $limit: 1 },
-            { $project: { _id: 1 } }
-          ],
-          as: "dviAlt"
-        }
-      },
-      { $addFields: { dviDone: { $gt: [{ $size: { $concatArrays: ["$dviRes", "$dviAlt"] } }, 0] } } },
-      // Final projection
-      {
-        $project: {
-          _id: 0,
-          updatedAt: 1,
-          af: 1,
-          displayName: 1,
-          displayVehicle: 1,
-          displayVin: 1,
-          displayMiles: "$af.miles",
-          displayRo: 1,
-          dviDone: 1,
           vehicle: {
-            year: { $ifNull: ["$payload.vehicle.year", null] },
-            make: { $ifNull: ["$payload.vehicle.make", null] },
-            model: { $ifNull: ["$payload.vehicle.model", null] },
-            engine: { $ifNull: ["$payload.vehicle.engine", null] }
+            year: payload.vehicle?.year || null,
+            make: payload.vehicle?.make || null,
+            model: payload.vehicle?.model || null,
+            engine: payload.vehicle?.engine || null
           }
-        }
-      },
-      // Sort alphabetically by name for stable order
-      { 
-        $sort: { 
-          displayName: 1  // Alphabetical by customer name
-        } 
-      },
-    ]).toArray();
-    } // End of if (!isProtractorPrimary)
+        });
+      }
+      
+      // Sort by name
+      autoflowRows.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+    }
 
     // Fetch shop preferences for workflow stage filtering
-    const shopPrefs = await db.collection("shops").findOne(
-      { shopId: { $in: [String(user.shopId), Number(user.shopId)] } },
-      { projection: { preferences: 1, tekmetric: 1 } }
-    );
     const DEFAULT_WORKFLOW_STAGES = [
       "InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted",
       "EstimatePresented", "EstimateRejected", "WaitingForParts", "VehicleInBay",
       "VehicleReadyForPickup", "Deferred", "WorkCompleted"
     ];
-    const allowedStages = shopPrefs?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
-
-    // Fetch Protractor work orders directly (they have the odometer)
-    // Filter by workflow stage preference - no date limit
-    // Fetch Protractor work orders - each work order is a separate row (no VIN grouping)
-    // Exclude invoiced/closed work orders - those vehicles have left the shop
-    // Terminal stages that indicate vehicle has left the shop (always excluded regardless of preferences)
+    const allowedStages = settings?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
     const TERMINAL_WORKFLOW_STAGES = ["Invoiced", "Closed", "Void", "ClosedInvoiced", "ClosedVoid"];
-    const protractorRows = await db.collection("protractor_work_orders").aggregate([
-      {
-        $match: {
-          shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-          vin: { $ne: null, $type: "string" },
-          completed: { $ne: true }, // Exclude completed work orders
-          status: { $nin: ["Invoiced", "Closed", "Void"] }, // Exclude by status field
-          workflowStage: { 
-            $in: allowedStages, // Only show allowed workflow stages
-            $nin: TERMINAL_WORKFLOW_STAGES // Always exclude terminal stages (vehicle left shop)
-          }
-        }
-      },
-      { $sort: { fetchedAt: -1 } },
-      {
-        $lookup: {
-          from: "protractor_vehicles",
-          let: { vin: "$vin", shopIdNum: Number(user.shopId), shopIdStr: String(user.shopId) },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $or: [
-                      { $eq: ["$shopId", "$$shopIdNum"] },
-                      { $eq: ["$shopId", "$$shopIdStr"] }
-                    ]},
-                    { $eq: ["$vin", "$$vin"] }
-                  ]
-                }
-              }
-            },
-            { $limit: 1 }
-          ],
-          as: "vehicle"
-        }
-      },
-      { $unwind: { path: "$vehicle", preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          _id: 0,
-          updatedAt: { $ifNull: ["$fetchedAt", new Date()] },
-          displayName: {
-            $ifNull: [
-              "$customer.name",
-              { $ifNull: [
-                "$vehicle.customer.name",
-                { $ifNull: ["$companyName", { $ifNull: ["$contactName", "Unknown Customer"] }] }
-              ]}
-            ]
-          },
-          displayVehicle: {
-            $concat: [
-              { $toString: { $ifNull: ["$vehicle.year", ""] } },
-              { $cond: [{ $ifNull: ["$vehicle.year", false] }, " ", ""] },
-              { $ifNull: ["$vehicle.make", ""] },
-              { $cond: [{ $ifNull: ["$vehicle.make", false] }, " ", ""] },
-              { $ifNull: ["$vehicle.model", ""] }
-            ]
-          },
-          displayVin: "$vin",
-          displayMiles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] },
-          displayRo: "$workOrderNumber",
-          workOrderGuid: "$workOrderGuid",
-          dviDone: { $literal: false },
-          source: { $literal: "protractor" },
-          af: {
-            status: { $ifNull: ["$workflowStage", "In Progress"] },
-            createdAt: "$fetchedAt",
-            miles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] }
-          },
-          vehicle: {
-            year: { $ifNull: ["$vehicle.year", null] },
-            make: { $ifNull: ["$vehicle.make", null] },
-            model: { $ifNull: ["$vehicle.model", null] },
-            engine: { $ifNull: ["$vehicle.engine", null] }
-          }
-        }
-      }
-    ]).toArray();
 
-    // Fetch Tekmetric work orders from synced collection (like Protractor)
-    // Terminal statuses that indicate vehicle has left the shop
-    const TEKMETRIC_ALLOWED_STATUSES = ["Estimate", "Estimates", "Work-In-Progress", "Complete", "Completed"];
-    
-    // Build Tekmetric match criteria with optional label filtering
-    const tekmetricMatch: any = {
-      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-      vin: { $ne: null, $type: "string" },
-      status: { $in: TEKMETRIC_ALLOWED_STATUSES }
-    };
-    
-    // Apply label filter if preferences are set (empty array = show all)
-    const tekmetricLabelFilter = shopPrefs?.preferences?.tekmetricLabels || [];
-    if (tekmetricLabelFilter.length > 0) {
-      tekmetricMatch.label = { $in: tekmetricLabelFilter };
-    }
-    
-    const tekmetricRows = await db.collection("tekmetric_work_orders").aggregate([
-      {
-        $match: tekmetricMatch
-      },
-      { $sort: { fetchedAt: -1 } },
-      {
-        $project: {
-          _id: 0,
-          updatedAt: { $ifNull: ["$fetchedAt", new Date()] },
-          displayName: { $ifNull: ["$customerName", "Unknown Customer"] },
-          displayVehicle: {
-            $concat: [
-              { $toString: { $ifNull: ["$vehicleYear", ""] } },
-              { $cond: [{ $ifNull: ["$vehicleYear", false] }, " ", ""] },
-              { $ifNull: ["$vehicleMake", ""] },
-              { $cond: [{ $ifNull: ["$vehicleMake", false] }, " ", ""] },
-              { $ifNull: ["$vehicleModel", ""] }
-            ]
-          },
-          displayVin: "$vin",
-          displayMiles: "$odometer",
-          displayRo: "$workOrderNumber",
-          workOrderId: "$workOrderId",
-          dviDone: { $ifNull: ["$dviDone", false] },
-          source: { $literal: "tekmetric" },
-          displayStatus: { 
-            $cond: {
-              if: { $and: [{ $ifNull: ["$label", false] }, { $ne: ["$label", ""] }] },
-              then: "$label",
-              else: { $ifNull: ["$status", "Open"] }
-            }
-          },
-          label: { $ifNull: ["$label", null] },
-          labelColor: { $ifNull: ["$labelColor", null] },
-          af: {
-            status: { $ifNull: ["$status", "Open"] },
-            createdAt: "$fetchedAt",
-            miles: "$odometer"
-          },
-          vehicle: {
-            year: { $ifNull: ["$vehicleYear", null] },
-            make: { $ifNull: ["$vehicleMake", null] },
-            model: { $ifNull: ["$vehicleModel", null] },
-            engine: { $ifNull: ["$vehicleEngine", null] }
-          }
+    // Fetch Protractor work orders
+    const protractorWoRows = await sql`
+      SELECT wo.*, pv.year as vehicle_year, pv.make as vehicle_make, pv.model as vehicle_model,
+             pv.engine as vehicle_engine, pv.mileage as vehicle_mileage, pv.odometer as vehicle_odometer,
+             pv.customer
+      FROM protractor_work_orders wo
+      LEFT JOIN protractor_vehicles pv ON wo.vin = pv.vin AND wo.shop_id = pv.shop_id
+      WHERE wo.shop_id = ${String(userShopId)}
+        AND wo.vin IS NOT NULL
+        AND wo.completed IS NOT TRUE
+        AND wo.status NOT IN ('Invoiced', 'Closed', 'Void')
+        AND wo.workflow_stage = ANY(${allowedStages})
+        AND wo.workflow_stage != ALL(${TERMINAL_WORKFLOW_STAGES})
+      ORDER BY wo.fetched_at DESC
+    `;
+
+    const protractorRows = protractorWoRows.map((wo: any) => {
+      const displayName = wo.customer?.name || wo.company_name || wo.contact_name || 'Unknown Customer';
+      const vYear = wo.vehicle_year;
+      const vMake = wo.vehicle_make || '';
+      const vModel = wo.vehicle_model || '';
+      const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
+      const miles = wo.vehicle_mileage || wo.odometer || wo.vehicle_odometer || null;
+      
+      return {
+        updatedAt: wo.fetched_at || new Date(),
+        displayName,
+        displayVehicle,
+        displayVin: wo.vin,
+        displayMiles: miles,
+        displayRo: wo.work_order_number,
+        workOrderGuid: wo.work_order_guid,
+        dviDone: false,
+        source: "protractor",
+        af: {
+          status: wo.workflow_stage || "In Progress",
+          createdAt: wo.fetched_at,
+          miles
+        },
+        vehicle: {
+          year: wo.vehicle_year || null,
+          make: wo.vehicle_make || null,
+          model: wo.vehicle_model || null,
+          engine: wo.vehicle_engine || null
         }
-      }
-    ]).toArray();
+      };
+    });
+
+    // Fetch Tekmetric work orders
+    const TEKMETRIC_ALLOWED_STATUSES = ["Estimate", "Estimates", "Work-In-Progress", "Complete", "Completed"];
+    const tekmetricLabelFilter = settings?.preferences?.tekmetricLabels || [];
+    
+    let tekmetricWoRows;
+    if (tekmetricLabelFilter.length > 0) {
+      tekmetricWoRows = await sql`
+        SELECT * FROM tekmetric_work_orders
+        WHERE shop_id = ${String(userShopId)}
+          AND vin IS NOT NULL
+          AND status = ANY(${TEKMETRIC_ALLOWED_STATUSES})
+          AND label = ANY(${tekmetricLabelFilter})
+        ORDER BY fetched_at DESC
+      `;
+    } else {
+      tekmetricWoRows = await sql`
+        SELECT * FROM tekmetric_work_orders
+        WHERE shop_id = ${String(userShopId)}
+          AND vin IS NOT NULL
+          AND status = ANY(${TEKMETRIC_ALLOWED_STATUSES})
+        ORDER BY fetched_at DESC
+      `;
+    }
+
+    const tekmetricRows = tekmetricWoRows.map((wo: any) => {
+      const vYear = wo.vehicle_year;
+      const vMake = wo.vehicle_make || '';
+      const vModel = wo.vehicle_model || '';
+      const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
+      const displayStatus = (wo.label && wo.label !== '') ? wo.label : (wo.status || 'Open');
+      
+      return {
+        updatedAt: wo.fetched_at || new Date(),
+        displayName: wo.customer_name || 'Unknown Customer',
+        displayVehicle,
+        displayVin: wo.vin,
+        displayMiles: wo.odometer,
+        displayRo: wo.work_order_number,
+        workOrderId: wo.work_order_id,
+        dviDone: wo.dvi_done || false,
+        source: "tekmetric",
+        displayStatus,
+        label: wo.label || null,
+        labelColor: wo.label_color || null,
+        af: {
+          status: wo.status || 'Open',
+          createdAt: wo.fetched_at,
+          miles: wo.odometer
+        },
+        vehicle: {
+          year: wo.vehicle_year || null,
+          make: wo.vehicle_make || null,
+          model: wo.vehicle_model || null,
+          engine: wo.vehicle_engine || null
+        }
+      };
+    });
 
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
     
-    // When Protractor is primary, use Protractor rows (which have workflowStage as status)
-    // When only AutoFlow is configured, use AutoFlow rows directly
-    // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
     const rowSources = isProtractorPrimary 
       ? [...protractorRows, ...tekmetricRows]
       : [...autoflowRows, ...protractorRows, ...tekmetricRows];
@@ -543,8 +406,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter to only show vehicles with mileage data (if preference is enabled)
-    // This ensures advisors know to enter mileage before the vehicle appears
-    const showOnlyWithMileage = shopPrefs?.preferences?.showOnlyWithMileage !== false; // default true
+    const showOnlyWithMileage = settings?.preferences?.showOnlyWithMileage !== false;
     if (showOnlyWithMileage) {
       allRows = allRows.filter((row: any) => {
         const miles = row.displayMiles ?? row.af?.miles;
@@ -581,23 +443,21 @@ export async function GET(request: NextRequest) {
     const paginatedRows = allRows.slice(startIndex, endIndex);
 
     // Determine which SMS integration is active for this shop
-    const shop = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
-    let smsType = "autoflow"; // default
-    if (shop?.protractor?.configured) {
+    let smsType = "autoflow";
+    if (settings?.protractor?.configured) {
       smsType = "protractor";
-    } else if (shop?.tekmetric?.configured) {
+    } else if (settings?.tekmetric?.configured) {
       smsType = "tekmetric";
     }
     
-    const distanceUnit = shop?.preferences?.distanceUnit || "miles";
+    const distanceUnit = settings?.preferences?.distanceUnit || "miles";
     
     // Get enabled features for this shop from featureResolver
-    const shopIdNum = typeof user.shopId === 'string' ? parseInt(user.shopId, 10) : user.shopId;
+    const shopIdNum = typeof userShopId === 'string' ? parseInt(userShopId, 10) : userShopId;
     const entitlements = await getFeatureEntitlements(shopIdNum);
     const enabledFeatures: FeatureKey[] = (Object.keys(entitlements.effectiveFeatures) as FeatureKey[])
       .filter(key => entitlements.effectiveFeatures[key]);
 
-    // Add cache-control headers to prevent browser caching
     // Pre-load quick specs for all VINs on this page
     const vins = paginatedRows
       .map((r: any) => r.displayVin)
@@ -618,7 +478,7 @@ export async function GET(request: NextRequest) {
       user: {
         email: user.email,
         role: user.role,
-        shopId: user.shopId
+        shopId: userShopId
       },
       smsType,
       distanceUnit,

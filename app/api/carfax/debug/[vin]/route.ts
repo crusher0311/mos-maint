@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,19 +14,20 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(session.shopId);
+  const shopId = String(session.shopId);
   const vin = params.vin?.toUpperCase();
 
   if (!vin) {
     return NextResponse.json({ error: "VIN required" }, { status: 400 });
   }
 
-  const db = await getDb();
+  const rows = await sql`
+    SELECT * FROM carfax_reports
+    WHERE shop_id = ${shopId} AND vin = ${vin}
+    LIMIT 1
+  `;
   
-  const carfaxReport = await db.collection("carfax_reports").findOne({
-    shopId,
-    vin,
-  });
+  const carfaxReport = rows[0];
 
   if (!carfaxReport) {
     return NextResponse.json({ 
@@ -38,13 +39,13 @@ export async function GET(
 
   return NextResponse.json({
     vin,
-    fetchedAt: carfaxReport.fetchedAt,
-    reportDate: carfaxReport.reportDate,
-    numberOfOwners: carfaxReport.numberOfOwners,
+    fetchedAt: carfaxReport.fetched_at,
+    reportDate: carfaxReport.report_date,
+    numberOfOwners: carfaxReport.number_of_owners,
     accidents: carfaxReport.accidents,
-    lastReportedMileage: carfaxReport.lastReportedMileage,
-    serviceRecordsCount: carfaxReport.serviceRecords?.length ?? 0,
-    serviceRecords: carfaxReport.serviceRecords,
+    lastReportedMileage: carfaxReport.last_reported_mileage,
+    serviceRecordsCount: carfaxReport.service_records?.length ?? 0,
+    serviceRecords: carfaxReport.service_records,
     raw: carfaxReport.raw,
   });
 }

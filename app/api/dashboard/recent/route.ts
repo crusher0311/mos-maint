@@ -1,7 +1,7 @@
 // app/api/dashboard/recent/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -22,199 +22,105 @@ export async function GET() {
     const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
     if (!sid) return NextResponse.json({ items: [] }, { status: 401 });
 
-    const db = await getDb();
-    const sessions = db.collection("sessions");
-    const users = db.collection("users");
     const now = new Date();
+    const sessRows = await sql`
+      SELECT user_id FROM sessions WHERE token = ${sid} AND expires_at > ${now} LIMIT 1
+    `;
+    if (!sessRows[0]) return NextResponse.json({ items: [] }, { status: 401 });
 
-    const sess = await sessions.findOne({ token: sid, expiresAt: { $gt: now } });
-    if (!sess) return NextResponse.json({ items: [] }, { status: 401 });
-
-    const user = await users.findOne(
-      { _id: sess.userId },
-      { projection: { email: 1, role: 1, shopId: 1 } }
-    );
+    const userRows = await sql`
+      SELECT email, role, shop_id FROM users WHERE id = ${sessRows[0].user_id} LIMIT 1
+    `;
+    const user = userRows[0];
     if (!user) return NextResponse.json({ items: [] }, { status: 401 });
 
-    const pipeline: any[] = [
-      {
-        $match: {
-          $and: [
-            { $or: [{ shopId: String(user.shopId) }, { shopId: Number(user.shopId) }] },
-            { provider: "autoflow" },
-          ],
-        },
-      },
-      {
-        $addFields: {
-          createdAtDate: {
-            $cond: [
-              { $eq: [{ $type: "$createdAt" }, "date"] },
-              "$createdAt",
-              {
-                $dateFromString: {
-                  dateString: { $toString: "$createdAt" },
-                  onError: null,
-                  onNull: null,
-                },
-              },
-            ],
-          },
-          statusRaw: {
-            $ifNull: [
-              "$payload.ticket.status",
-              { $ifNull: ["$status", { $ifNull: ["$payload.status", "$type"] }] },
-            ],
-          },
-          vinNorm: {
-            $toUpper: {
-              $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }],
-            },
-          },
-        },
-      },
-      { $match: { vinNorm: { $type: "string", $ne: "" } } },
-      { $sort: { vinNorm: 1, createdAtDate: -1 } },
-      {
-        $group: {
-          _id: "$vinNorm",
-          latest: { $first: "$$ROOT" },
-        },
-      },
-      { $replaceRoot: { newRoot: "$latest" } },
-      { $match: { statusRaw: { $not: /close|appoint/i } } },
-      {
-        $addFields: {
-          displayName: {
-            $let: {
-              vars: {
-                full: {
-                  $trim: {
-                    input: {
-                      $concat: [
-                        { $ifNull: ["$payload.customer.firstname", ""] },
-                        {
-                          $cond: [
-                            {
-                              $and: [
-                                { $ifNull: ["$payload.customer.firstname", false] },
-                                { $ifNull: ["$payload.customer.lastname", false] },
-                              ],
-                            },
-                            " ",
-                            "",
-                          ],
-                        },
-                        { $ifNull: ["$payload.customer.lastname", ""] },
-                      ],
-                    },
-                  },
-                },
-              },
-              in: {
-                $cond: [
-                  { $ne: ["$$full", ""] },
-                  "$$full",
-                  { $ifNull: ["$payload.customer.name", null] },
-                ],
-              },
-            },
-          },
-          displayVehicle: {
-            $trim: {
-              input: {
-                $concat: [
-                  { $toString: { $ifNull: ["$payload.vehicle.year", ""] } },
-                  { $cond: [{ $ifNull: ["$payload.vehicle.year", false] }, " ", ""] },
-                  { $ifNull: ["$payload.vehicle.make", "" ] },
-                  { $cond: [{ $ifNull: ["$payload.vehicle.make", false] }, " ", ""] },
-                  { $ifNull: ["$payload.vehicle.model", "" ] },
-                ],
-              },
-            },
-          },
-          displayVin: "$vinNorm",
-          displayRo: { $ifNull: ["$payload.ticket.roNumber", null] },
-          af: {
-            createdAt: "$createdAtDate",
-            status: "$statusRaw",
-            miles: {
-              $ifNull: [
-                "$payload.ticket.mileage",
-                {
-                  $ifNull: [
-                    "$payload.mileage",
-                    {
-                      $ifNull: [
-                        "$payload.vehicle.mileage",
-                        {
-                          $ifNull: [
-                            "$payload.vehicle.miles",
-                            { $ifNull: ["$payload.vehicle.odometer", null] },
-                          ],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-          updatedAt: "$createdAtDate",
-        },
-      },
-      {
-        $lookup: {
-          from: "dvi_results",
-          let: { ro: "$displayRo" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $and: [{ $ne: ["$$ro", null] }, { $eq: ["$roNumber", "$$ro"] }] },
-              },
-            },
-            { $limit: 1 },
-            { $project: { _id: 1 } },
-          ],
-          as: "dviRes",
-        },
-      },
-      {
-        $lookup: {
-          from: "dvi",
-          let: { ro: "$displayRo" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $and: [{ $ne: ["$$ro", null] }, { $eq: ["$roNumber", "$$ro"] }] },
-              },
-            },
-            { $limit: 1 },
-            { $project: { _id: 1 } },
-          ],
-          as: "dviAlt",
-        },
-      },
-      { $addFields: { dviDone: { $gt: [{ $size: { $concatArrays: ["$dviRes", "$dviAlt"] } }, 0] } } },
-      {
-        $project: {
-          _id: 0,
-          updatedAt: 1,
-          af: 1,
-          displayName: 1,
-          displayVehicle: 1,
-          displayVin: 1,
-          displayMiles: "$af.miles",
-          displayRo: 1,
-          dviDone: 1,
-        },
-      },
-      { $sort: { updatedAt: -1 } },
-      { $limit: 100 },
-    ];
+    const shopId = String(user.shop_id);
 
-    const items = await db.collection("events").aggregate<Row>(pipeline).toArray();
-    return NextResponse.json({ items });
+    // Fetch AutoFlow events
+    const eventRows = await sql`
+      SELECT e.*, 
+             COALESCE(e.received_at, e.created_at) as created_at_date,
+             UPPER(COALESCE(e.vehicle_vin, e.vin, e.payload->'vehicle'->>'vin')) as vin_norm,
+             COALESCE(e.payload->'ticket'->>'status', e.status, e.payload->>'status', e.type) as status_raw
+      FROM events e
+      WHERE e.shop_id = ${shopId}
+        AND e.provider = 'autoflow'
+      ORDER BY UPPER(COALESCE(e.vehicle_vin, e.vin, e.payload->'vehicle'->>'vin')) ASC,
+               COALESCE(e.received_at, e.created_at) DESC
+    `;
+
+    // Group by VIN, get latest per VIN
+    const vinGroups = new Map<string, any>();
+    for (const e of eventRows) {
+      const vin = e.vin_norm;
+      if (!vin || typeof vin !== 'string' || vin === '') continue;
+      if (!vinGroups.has(vin)) {
+        vinGroups.set(vin, e);
+      }
+    }
+
+    // Filter out closed/appointment statuses and map to display format
+    const items: Row[] = [];
+    for (const [vin, e] of vinGroups.entries()) {
+      const status = e.status_raw || '';
+      if (/close|appoint/i.test(status)) continue;
+
+      const payload = e.payload || {};
+      const firstName = payload.customer?.firstname || '';
+      const lastName = payload.customer?.lastname || '';
+      const fullName = `${firstName} ${lastName}`.trim() || payload.customer?.name || null;
+
+      const vYear = payload.vehicle?.year;
+      const vMake = payload.vehicle?.make || '';
+      const vModel = payload.vehicle?.model || '';
+      const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
+
+      const miles = payload.ticket?.mileage || payload.mileage || 
+                    payload.vehicle?.mileage || payload.vehicle?.miles || 
+                    payload.vehicle?.odometer || null;
+
+      const roNumber = payload.ticket?.roNumber || null;
+
+      // Check DVI presence
+      let dviDone = false;
+      if (roNumber) {
+        const dviCheck = await sql`
+          SELECT 1 FROM dvi_results WHERE ro_number = ${String(roNumber)} LIMIT 1
+        `;
+        if (!dviCheck[0]) {
+          const dviAltCheck = await sql`
+            SELECT 1 FROM dvi WHERE ro_number = ${String(roNumber)} LIMIT 1
+          `;
+          dviDone = !!dviAltCheck[0];
+        } else {
+          dviDone = true;
+        }
+      }
+
+      items.push({
+        updatedAt: e.created_at_date,
+        displayName: fullName,
+        displayVehicle: displayVehicle || null,
+        displayVin: vin,
+        displayMiles: miles,
+        displayRo: roNumber,
+        dviDone,
+        af: {
+          createdAt: e.created_at_date,
+          status: e.status_raw,
+          miles
+        }
+      });
+    }
+
+    // Sort by updated time desc and limit to 100
+    items.sort((a, b) => {
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    return NextResponse.json({ items: items.slice(0, 100) });
   } catch (err: any) {
     console.error("dashboard/recent error:", err);
     return NextResponse.json({ items: [], error: err?.message ?? "error" }, { status: 500 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 
@@ -11,37 +11,38 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-
-    const shop = await db.collection("shops").findOne({ shopId: session.shopId });
+    const shopRows = await sql`
+      SELECT id, shop_id, enterprise_id, name, location_identifier 
+      FROM shops WHERE shop_id = ${String(session.shopId)} LIMIT 1
+    `;
+    const shop = shopRows[0];
     
-    if (!shop?.enterpriseId) {
+    if (!shop?.enterprise_id) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 404 });
     }
 
-    const enterprise = await db.collection("enterprise_accounts").findOne({
-      _id: shop.enterpriseId,
-    });
+    const enterpriseRows = await sql`
+      SELECT id, name, shop_ids FROM enterprise_accounts WHERE id = ${shop.enterprise_id} LIMIT 1
+    `;
+    const enterprise = enterpriseRows[0];
 
     if (!enterprise) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
 
-    const shopIds = enterprise.shopIds || [];
+    const shopIds = enterprise.shop_ids || [];
 
-    const shops = await db
-      .collection("shops")
-      .find({ shopId: { $in: shopIds } })
-      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
-      .toArray();
+    const shops = await sql`
+      SELECT shop_id, name, location_identifier 
+      FROM shops WHERE shop_id = ANY(${shopIds.map(String)})
+    `;
 
-    const shopMap = new Map(shops.map((s) => [s.shopId, s.name || `Shop ${s.shopId}`]));
+    const shopMap = new Map(shops.map((s: any) => [s.shop_id, s.name || `Shop ${s.shop_id}`]));
 
-    const users = await db
-      .collection("users")
-      .find({ shopId: { $in: shopIds } })
-      .project({ _id: 1, email: 1, role: 1, shopId: 1, name: 1, createdAt: 1 })
-      .toArray();
+    const users = await sql`
+      SELECT id, email, role, shop_id, name, created_at 
+      FROM users WHERE shop_id = ANY(${shopIds.map(String)})
+    `;
 
     const usersByEmail: Record<string, any> = {};
     for (const u of users) {
@@ -51,14 +52,14 @@ export async function GET() {
           email,
           name: u.name || null,
           role: u.role,
-          createdAt: u.createdAt,
+          createdAt: u.created_at,
           shopAccess: [],
         };
       }
       usersByEmail[email].shopAccess.push({
-        shopId: u.shopId,
-        shopName: shopMap.get(u.shopId) || `Shop ${u.shopId}`,
-        userId: u._id.toString(),
+        shopId: u.shop_id,
+        shopName: shopMap.get(u.shop_id) || `Shop ${u.shop_id}`,
+        userId: u.id.toString(),
       });
     }
 
@@ -68,13 +69,13 @@ export async function GET() {
 
     return NextResponse.json({
       enterprise: {
-        id: enterprise._id.toString(),
+        id: enterprise.id.toString(),
         name: enterprise.name,
       },
-      shops: shops.map((s) => ({
-        shopId: s.shopId,
-        name: s.name || `Shop ${s.shopId}`,
-        locationIdentifier: s.locationIdentifier || null,
+      shops: shops.map((s: any) => ({
+        shopId: s.shop_id,
+        name: s.name || `Shop ${s.shop_id}`,
+        locationIdentifier: s.location_identifier || null,
       })),
       users: userList,
     });
@@ -101,78 +102,79 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const shop = await db.collection("shops").findOne({ shopId: session.shopId });
+    const shopRows = await sql`
+      SELECT id, shop_id, enterprise_id, name 
+      FROM shops WHERE shop_id = ${String(session.shopId)} LIMIT 1
+    `;
+    const shop = shopRows[0];
     
-    if (!shop?.enterpriseId) {
+    if (!shop?.enterprise_id) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 403 });
     }
 
-    const enterprise = await db.collection("enterprise_accounts").findOne({
-      _id: shop.enterpriseId,
-    });
+    const enterpriseRows = await sql`
+      SELECT id, name, shop_ids FROM enterprise_accounts WHERE id = ${shop.enterprise_id} LIMIT 1
+    `;
+    const enterprise = enterpriseRows[0];
 
-    if (!enterprise || !enterprise.shopIds?.includes(shopId)) {
+    if (!enterprise || !enterprise.shop_ids?.includes(shopId)) {
       return NextResponse.json({ error: "Shop not in your enterprise" }, { status: 400 });
     }
 
-    const targetShop = await db.collection("shops").findOne({ shopId });
-    const shopName = targetShop?.name || `Shop ${shopId}`;
+    const targetShopRows = await sql`
+      SELECT name FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
+    `;
+    const shopName = targetShopRows[0]?.name || `Shop ${shopId}`;
 
     if (action === "grant") {
-      const existingUser = await db.collection("users").findOne({
-        email: email.toLowerCase(),
-        shopId,
-      });
+      const existingUserRows = await sql`
+        SELECT id FROM users WHERE LOWER(email) = ${email.toLowerCase()} AND shop_id = ${String(shopId)} LIMIT 1
+      `;
 
-      if (existingUser) {
+      if (existingUserRows[0]) {
         return NextResponse.json({ error: "User already has access to this shop" }, { status: 400 });
       }
 
-      const sourceUser = await db.collection("users").findOne({
-        email: email.toLowerCase(),
-        shopId: { $in: enterprise.shopIds },
-      });
+      const sourceUserRows = await sql`
+        SELECT email, name, role, password_hash 
+        FROM users 
+        WHERE LOWER(email) = ${email.toLowerCase()} AND shop_id = ANY(${enterprise.shop_ids.map(String)})
+        LIMIT 1
+      `;
+      const sourceUser = sourceUserRows[0];
 
       if (!sourceUser) {
         return NextResponse.json({ error: "User not found in enterprise" }, { status: 404 });
       }
 
-      await db.collection("users").insertOne({
-        email: email.toLowerCase(),
-        name: sourceUser.name,
-        role: sourceUser.role,
-        shopId,
-        passwordHash: sourceUser.passwordHash,
-        createdAt: new Date(),
-        grantedBy: session.email,
-      });
+      await sql`
+        INSERT INTO users (email, name, role, shop_id, password_hash, created_at, granted_by)
+        VALUES (${email.toLowerCase()}, ${sourceUser.name}, ${sourceUser.role}, ${String(shopId)}, ${sourceUser.password_hash}, NOW(), ${session.email})
+      `;
 
       return NextResponse.json({
         ok: true,
         message: `Access granted to ${shopName}`,
       });
     } else if (action === "revoke") {
-      const userAccounts = await db
-        .collection("users")
-        .find({ email: email.toLowerCase(), shopId: { $in: enterprise.shopIds } })
-        .toArray();
+      const userAccountsRows = await sql`
+        SELECT id FROM users 
+        WHERE LOWER(email) = ${email.toLowerCase()} AND shop_id = ANY(${enterprise.shop_ids.map(String)})
+      `;
 
-      if (userAccounts.length <= 1) {
+      if (userAccountsRows.length <= 1) {
         return NextResponse.json({
           error: "Cannot revoke - user must have at least one shop access",
         }, { status: 400 });
       }
 
-      await db.collection("users").deleteOne({
-        email: email.toLowerCase(),
-        shopId,
-      });
+      await sql`
+        DELETE FROM users WHERE LOWER(email) = ${email.toLowerCase()} AND shop_id = ${String(shopId)}
+      `;
 
-      await db.collection("sessions").deleteMany({
-        shopId,
-      });
+      await sql`
+        DELETE FROM sessions WHERE shop_id = ${String(shopId)}
+      `;
 
       return NextResponse.json({
         ok: true,
