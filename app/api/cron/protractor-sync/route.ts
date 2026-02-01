@@ -8,7 +8,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
-import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import { NormalizedIngestionServicePg } from "@/lib/normalized-ingestion-pg";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -230,10 +230,7 @@ export async function GET(req: NextRequest) {
             const shopData = await sql`SELECT enterprise_id FROM shops WHERE shop_id = ${String(shopId)}`;
             const enterpriseId = (shopData[0] as any)?.enterprise_id as string | undefined;
             
-            const { getDb } = await import("@/lib/mongo");
-            const db = await getDb();
-            const ingestionService = new NormalizedIngestionService(
-              db,
+            const ingestionService = new NormalizedIngestionServicePg(
               'protractor',
               shopId,
               enterpriseId,
