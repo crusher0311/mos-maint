@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import { sql } from "@/lib/db/postgres";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
@@ -43,34 +43,32 @@ export async function GET(request: NextRequest) {
     }
     
     const mosShopId = shopResult.mosShopId;
-    const db = await getDb();
 
-    const cannedJobs = await db.collection("canned_jobs")
-      .find({ 
-        shopId: mosShopId,
-        enriched: true 
-      })
-      .limit(100)
-      .toArray();
+    const cannedJobRows = await sql`
+      SELECT id, title, name, description, code, chapter, maintenance_interval, labor_lines, part_lines, total_amount
+      FROM canned_jobs
+      WHERE shop_id = ${String(mosShopId)} AND enriched = true
+      LIMIT 100
+    `;
 
-    const shop = await db.collection("shops").findOne({ 
-      shopId: mosShopId 
-    });
+    const shopRows = await sql`
+      SELECT maintenance_intervals FROM shops WHERE shop_id = ${String(mosShopId)} LIMIT 1
+    `;
 
-    const shopIntervals = shop?.maintenanceIntervals || [];
+    const shopIntervals = (shopRows[0]?.maintenance_intervals as any[]) || [];
 
     const jobs = [
-      ...cannedJobs.map((job: any) => ({
-        id: job._id.toString(),
+      ...cannedJobRows.map((job: any) => ({
+        id: job.id,
         name: job.title || job.name,
         description: job.description,
         code: job.code,
         chapter: job.chapter,
-        interval: job.maintenanceInterval,
+        interval: job.maintenance_interval,
         source: "mos",
-        laborItems: job.laborLines || [],
-        parts: job.partLines || [],
-        amount: job.totalAmount || 0
+        laborItems: job.labor_lines || [],
+        parts: job.part_lines || [],
+        amount: job.total_amount || 0
       })),
       ...shopIntervals.map((interval: any) => ({
         id: `interval_${interval.service}`,
