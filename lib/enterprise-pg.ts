@@ -47,6 +47,19 @@ export async function getEnterpriseByShopId(shopId: number): Promise<EnterpriseA
   return results[0] || null;
 }
 
+export async function getEnterpriseByShopUUID(shopUUID: string): Promise<EnterpriseAccount | null> {
+  const shopResult = await sql<{shop_id: string}[]>`
+    SELECT shop_id FROM shops WHERE id = ${shopUUID} LIMIT 1
+  `;
+  
+  if (!shopResult[0]?.shop_id) return null;
+  
+  const shopIntId = parseInt(shopResult[0].shop_id, 10);
+  if (isNaN(shopIntId)) return null;
+  
+  return getEnterpriseByShopId(shopIntId);
+}
+
 export async function createEnterprise(name: string, shopIds: number[]): Promise<EnterpriseAccount> {
   const now = new Date();
   const results = await sql<EnterpriseAccount[]>`
@@ -93,7 +106,7 @@ export async function logRecommendationEvent(event: {
   totalPrice?: number;
   addedBy?: string;
 }): Promise<void> {
-  const enterprise = await getEnterpriseByShopId(event.shopId);
+  const enterprise = await getEnterpriseByShopUUID(event.shopId);
   const enterpriseId = enterprise?.id || null;
 
   await sql`

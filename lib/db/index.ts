@@ -1,11 +1,9 @@
 export * from './customers-pg';
 export * from './vehicles-pg';
 export * from './work-orders-pg';
+export * from './shops-pg';
+export * from './tekmetric-work-orders-pg';
+export * from './tekmetric-cache-pg';
+export * from './users-pg';
+export * from './sessions-pg';
 export { default as sql } from './postgres';
-
-export { 
-  getShopById, 
-  getShopBySlug, 
-  updateShop,
-  type Shop 
-} from '../shops';
