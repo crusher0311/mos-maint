@@ -77,7 +77,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 - Core libraries: `lib/features.ts`, `lib/enterprise.ts`, `lib/stripe.ts`, `lib/api-usage-tracker.ts`
 - Utility libraries: `lib/rate.ts`, `lib/evidence.ts`, `lib/data-quality.ts`, `lib/ids.ts`
 - Models: `lib/models/customers.ts` (customer upsert from AutoFlow)
-- Integrations: `lib/integrations/carfax.ts`, `lib/integrations/dvi.ts`, `lib/integrations/autovitals.ts`, `lib/integrations/autoflow.ts`, `lib/integrations/dataone.ts`
+- Integrations: `lib/integrations/carfax.ts`, `lib/integrations/dvi.ts`, `lib/integrations/autovitals.ts`, `lib/integrations/autoflow.ts`, `lib/integrations/dataone.ts`, `lib/integrations/protractor.ts` (2543 lines, all 22 MongoDB calls migrated)
 - API routes: `/api/features`, `/api/support/tickets/count`
 - Platform admin routes: features, tickets, notifications, knowledge-base, enterprises, users
 - Callbacks: `/api/callbacks/protractor`
