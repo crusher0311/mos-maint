@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import IntervalsForm from "./IntervalsForm";
 import IntervalsHeader from "./IntervalsHeader";
 import { revalidatePath } from "next/cache";
@@ -42,13 +42,12 @@ export type ShopInterval = {
 };
 
 async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { "maintenance.intervals": 1 } }
-  );
+  const shops = await sql`
+    SELECT maintenance_intervals FROM shops WHERE shop_id = ${String(shopId)}
+  `;
+  const shop = shops[0] as any;
   
-  const saved = shop?.maintenance?.intervals || {};
+  const saved = shop?.maintenance_intervals || {};
   
   return COMMON_SERVICES.map(svc => ({
     key: svc.key,
@@ -63,12 +62,11 @@ async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
 }
 
 async function getShopDistanceUnit(shopId: number): Promise<"miles" | "kilometers"> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { "preferences.distanceUnit": 1 } }
-  );
-  return shop?.preferences?.distanceUnit || "miles";
+  const shops = await sql`
+    SELECT distance_unit FROM shops WHERE shop_id = ${String(shopId)}
+  `;
+  const shop = shops[0] as any;
+  return shop?.distance_unit || "miles";
 }
 
 export default async function IntervalsPage() {
@@ -107,18 +105,12 @@ export default async function IntervalsPage() {
       };
     }
 
-    const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          "maintenance.intervals": updates,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true }
-    );
+    await sql`
+      UPDATE shops SET
+        maintenance_intervals = ${JSON.stringify(updates)}::jsonb,
+        updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
 
     revalidatePath("/dashboard/settings/intervals");
     revalidatePath("/dashboard/vehicles/[vin]/plan");

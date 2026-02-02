@@ -1,5 +1,5 @@
 // app/admin/integrations/carfax/page.tsx
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { revalidatePath } from "next/cache";
 import { CheckCircle, XCircle, AlertCircle, Building2 } from "lucide-react";
 import CarfaxAdminForm from "./CarfaxAdminForm";
@@ -13,14 +13,13 @@ function checkEnvConfig() {
 }
 
 async function getShopsWithCarfax() {
-  const db = await getDb();
-  const shops = await db.collection("shops").find({}).toArray();
+  const shops = await sql`SELECT id, shop_id, name, carfax_location_id FROM shops`;
   
-  return shops.map((shop) => ({
-    _id: String(shop._id),
-    shopId: shop.shopId,
-    name: shop.name || `Shop ${shop.shopId}`,
-    locationId: shop.carfax?.locationId || shop.carfaxLocationId || "",
+  return shops.map((shop: any) => ({
+    _id: String(shop.id),
+    shopId: shop.shop_id,
+    name: shop.name || `Shop ${shop.shop_id}`,
+    locationId: shop.carfax_location_id || "",
   }));
 }
 
@@ -31,22 +30,15 @@ export default async function CarfaxAdminPage() {
 
   async function saveLocationId(formData: FormData) {
     "use server";
-    const shopId = Number(formData.get("shopId"));
+    const shopId = String(formData.get("shopId"));
     const locationId = String(formData.get("locationId") || "").trim();
     
-    const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          carfax: { locationId },
-          carfaxLocationId: locationId,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true }
-    );
+    await sql`
+      UPDATE shops SET
+        carfax_location_id = ${locationId},
+        updated_at = NOW()
+      WHERE shop_id = ${shopId}
+    `;
 
     revalidatePath("/admin/integrations/carfax");
     revalidatePath("/dashboard/vehicles/[vin]");

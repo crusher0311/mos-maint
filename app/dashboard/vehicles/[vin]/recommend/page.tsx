@@ -1,6 +1,6 @@
 // app/dashboard/vehicles/[vin]/recommend/page.tsx
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import Link from "next/link";
 import { MODELS, DEFAULT_MODEL } from "@/lib/ai";
 import React from "react";
@@ -12,16 +12,17 @@ type PageProps = { params: Promise<{ vin: string }> };
 
 export default async function VehicleRecommendPage({ params }: PageProps) {
   const session = await requireSession();
-  const db = await getDb();
-  const shopId = Number(session.shopId);
+  const shopId = String(session.shopId);
 
   const { vin: v } = await params;
   const vin = String(v || "").toUpperCase();
 
-  const vehicle = await db.collection("vehicles").findOne(
-    { shopId, vin },
-    { projection: { year: 1, make: 1, model: 1, lastMileage: 1 } }
-  );
+  const vehicles = await sql`
+    SELECT year, make, model, last_mileage FROM vehicles 
+    WHERE shop_id = ${shopId} AND vin = ${vin}
+    LIMIT 1
+  `;
+  const vehicle = vehicles[0] as any;
 
   const headerLine = [vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(" ") || "Vehicle";
 
@@ -35,13 +36,13 @@ export default async function VehicleRecommendPage({ params }: PageProps) {
           <h1 className="text-2xl font-bold truncate">{headerLine} — Recommended</h1>
           <div className="text-sm text-neutral-600">
             VIN <code>{vin}</code>
-            {typeof vehicle?.lastMileage === "number" && <> • Current: {vehicle.lastMileage.toLocaleString()} mi</>}
+            {typeof vehicle?.last_mileage === "number" && <> • Current: {vehicle.last_mileage.toLocaleString()} mi</>}
           </div>
         </div>
       </div>
 
       {/* Client runner */}
-      <Runner vin={vin} shopId={shopId} />
+      <Runner vin={vin} shopId={Number(shopId)} />
     </main>
   );
 }

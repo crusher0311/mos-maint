@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import MaintenanceForm from "./MaintenanceForm";
 import MaintenanceHeader from "./MaintenanceHeader";
 import { revalidatePath } from "next/cache";
@@ -12,15 +12,15 @@ const DEFAULT_SOON_MILES = 1000;
 const DEFAULT_SOON_DAYS = 30;
 
 async function getMaintenanceSettings(shopId: number) {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { maintenance: 1, preferences: 1 } }
-  );
+  const shops = await sql`
+    SELECT due_soon_miles, due_soon_days, distance_unit 
+    FROM shops WHERE shop_id = ${String(shopId)}
+  `;
+  const shop = shops[0] as any;
   return {
-    dueSoonMiles: shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES,
-    dueSoonDays: shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS,
-    distanceUnit: (shop?.preferences?.distanceUnit as "miles" | "kilometers") || "miles",
+    dueSoonMiles: shop?.due_soon_miles ?? DEFAULT_SOON_MILES,
+    dueSoonDays: shop?.due_soon_days ?? DEFAULT_SOON_DAYS,
+    distanceUnit: (shop?.distance_unit as "miles" | "kilometers") || "miles",
   };
 }
 
@@ -34,19 +34,13 @@ export default async function MaintenanceSettingsPage() {
     const dueSoonMiles = Math.max(0, parseInt(String(formData.get("dueSoonMiles") || "1000"), 10) || DEFAULT_SOON_MILES);
     const dueSoonDays = Math.max(0, parseInt(String(formData.get("dueSoonDays") || "30"), 10) || DEFAULT_SOON_DAYS);
 
-    const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          "maintenance.dueSoonMiles": dueSoonMiles,
-          "maintenance.dueSoonDays": dueSoonDays,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true }
-    );
+    await sql`
+      UPDATE shops SET
+        due_soon_miles = ${dueSoonMiles},
+        due_soon_days = ${dueSoonDays},
+        updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
 
     revalidatePath("/dashboard/vehicles/[vin]/plan");
     revalidatePath("/dashboard/settings/maintenance");

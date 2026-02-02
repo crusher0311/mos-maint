@@ -1,6 +1,6 @@
 // app/dashboard/settings/autoflow/page.tsx
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import AutoflowForm from "./AutoflowForm";
 import crypto from "crypto";
 
@@ -8,32 +8,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function getCurrent(shopId: number) {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    {
-      projection: {
-        autoflowDomain: 1,
-        autoflowApiKey: 1,
-        autoflowApiPassword: 1,
-        webhookToken: 1,
-      },
-    }
-  );
+  const shops = await sql`
+    SELECT autoflow_domain, autoflow_api_key, autoflow_api_password, webhook_token 
+    FROM shops WHERE shop_id = ${String(shopId)}
+  `;
+  const shop = shops[0] as any;
 
-  let webhookToken = shop?.webhookToken;
+  let webhookToken = shop?.webhook_token;
   if (!webhookToken) {
     webhookToken = crypto.randomBytes(12).toString("hex");
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: { webhookToken } }
-    );
+    await sql`
+      UPDATE shops SET webhook_token = ${webhookToken}, updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
   }
 
   return {
-    autoflowDomain: shop?.autoflowDomain || "",
-    autoflowApiKey: shop?.autoflowApiKey || "",
-    autoflowApiPassword: shop?.autoflowApiPassword || "",
+    autoflowDomain: shop?.autoflow_domain || "",
+    autoflowApiKey: shop?.autoflow_api_key || "",
+    autoflowApiPassword: shop?.autoflow_api_password || "",
     webhookToken,
   };
 }

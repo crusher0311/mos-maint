@@ -2,7 +2,7 @@
 // Part Cross-Reference Page
 
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import PartCrossRefClient from "./PartCrossRefClient";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +19,11 @@ const SMS_DISPLAY_NAMES: Record<string, string> = {
 export default async function PartCrossRefPage() {
   const session = await requireSession();
   
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: session.shopId });
+  const shops = await sql`SELECT * FROM shops WHERE shop_id = ${String(session.shopId)}`;
+  const shop = shops[0] as any;
   
-  const hasTekmetric = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
-  const hasProtractor = shop?.protractor?.configured || shop?.protractorConnectionId;
+  const hasTekmetric = shop?.tekmetric_shop_id;
+  const hasProtractor = shop?.protractor_connection_id;
   
   let smsIntegration = "stand-alone";
   if (hasTekmetric) {

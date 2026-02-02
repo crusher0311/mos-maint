@@ -1,124 +1,63 @@
 // app/admin/analytics/page.tsx
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 
 export const dynamic = "force-dynamic";
 
 async function getAnalyticsData() {
-  const db = await getDb();
-  
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   
-  // Get various analytics metrics
   const [
-    totalShops,
-    totalUsers,
-    totalCustomers,
-    totalVehicles,
-    activeShopsLast30Days,
-    newShopsLast30Days,
-    newUsersLast30Days,
-    eventsBySource,
-    topShopsByActivity,
-    dailyActivity
+    shopsResult,
+    usersResult,
+    customersResult,
+    vehiclesResult,
+    activeShopsResult,
+    newShopsResult,
+    newUsersResult,
+    eventsBySourceResult,
+    topShopsResult,
+    dailyActivityResult
   ] = await Promise.all([
-    // Basic counts
-    db.collection("shops").countDocuments(),
-    db.collection("users").countDocuments(),
-    db.collection("customers").countDocuments(),
-    db.collection("vehicles").countDocuments(),
-    
-    // Active shops (with events in last 30 days)
-    db.collection("events").distinct("shopId", {
-      receivedAt: { $gte: thirtyDaysAgo }
-    }).then(shops => shops.length),
-    
-    // New shops in last 30 days
-    db.collection("shops").countDocuments({
-      createdAt: { $gte: thirtyDaysAgo }
-    }),
-    
-    // New users in last 30 days
-    db.collection("users").countDocuments({
-      createdAt: { $gte: thirtyDaysAgo }
-    }),
-    
-    // Events by source
-    db.collection("events").aggregate([
-      {
-        $group: {
-          _id: "$source",
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]).toArray(),
-    
-    // Top shops by activity (last 30 days)
-    db.collection("events").aggregate([
-      {
-        $match: {
-          receivedAt: { $gte: thirtyDaysAgo }
-        }
-      },
-      {
-        $group: {
-          _id: "$shopId",
-          eventCount: { $sum: 1 }
-        }
-      },
-      {
-        $lookup: {
-          from: "shops",
-          localField: "_id",
-          foreignField: "shopId",
-          as: "shop"
-        }
-      },
-      {
-        $addFields: {
-          shopName: { $arrayElemAt: ["$shop.name", 0] }
-        }
-      },
-      { $sort: { eventCount: -1 } },
-      { $limit: 10 }
-    ]).toArray(),
-    
-    // Daily activity for last 7 days
-    db.collection("events").aggregate([
-      {
-        $match: {
-          receivedAt: { $gte: sevenDaysAgo }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: "$receivedAt"
-            }
-          },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]).toArray()
+    sql`SELECT COUNT(*) as count FROM shops`,
+    sql`SELECT COUNT(*) as count FROM users`,
+    sql`SELECT COUNT(*) as count FROM customers`,
+    sql`SELECT COUNT(*) as count FROM vehicles`,
+    sql`SELECT COUNT(DISTINCT shop_id) as count FROM events WHERE received_at >= ${thirtyDaysAgo}`,
+    sql`SELECT COUNT(*) as count FROM shops WHERE created_at >= ${thirtyDaysAgo}`,
+    sql`SELECT COUNT(*) as count FROM users WHERE created_at >= ${thirtyDaysAgo}`,
+    sql`SELECT source as _id, COUNT(*) as count FROM events GROUP BY source ORDER BY count DESC`,
+    sql`
+      SELECT e.shop_id as _id, COUNT(*) as "eventCount", s.name as "shopName"
+      FROM events e
+      LEFT JOIN shops s ON e.shop_id = s.shop_id
+      WHERE e.received_at >= ${thirtyDaysAgo}
+      GROUP BY e.shop_id, s.name
+      ORDER BY "eventCount" DESC
+      LIMIT 10
+    `,
+    sql`
+      SELECT DATE(received_at) as _id, COUNT(*) as count
+      FROM events
+      WHERE received_at >= ${sevenDaysAgo}
+      GROUP BY DATE(received_at)
+      ORDER BY _id ASC
+    `
   ]);
 
   return {
     overview: {
-      totalShops,
-      totalUsers,
-      totalCustomers,
-      totalVehicles,
-      activeShopsLast30Days,
-      newShopsLast30Days,
-      newUsersLast30Days
+      totalShops: Number(shopsResult[0]?.count || 0),
+      totalUsers: Number(usersResult[0]?.count || 0),
+      totalCustomers: Number(customersResult[0]?.count || 0),
+      totalVehicles: Number(vehiclesResult[0]?.count || 0),
+      activeShopsLast30Days: Number(activeShopsResult[0]?.count || 0),
+      newShopsLast30Days: Number(newShopsResult[0]?.count || 0),
+      newUsersLast30Days: Number(newUsersResult[0]?.count || 0)
     },
-    eventsBySource,
-    topShopsByActivity,
-    dailyActivity
+    eventsBySource: eventsBySourceResult,
+    topShopsByActivity: topShopsResult,
+    dailyActivity: dailyActivityResult
   };
 }
 

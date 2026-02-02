@@ -1,35 +1,31 @@
 // app/admin/shops/page.tsx
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 async function getShopsWithStats() {
-  const db = await getDb();
+  const shops = await sql`SELECT * FROM shops`;
   
-  const shops = await db.collection("shops").find({}).toArray();
-  
-  // Get stats for each shop
   const shopsWithStats = await Promise.all(
-    shops.map(async (shop) => {
-      const [userCount, customerCount, vehicleCount, lastActivity] = await Promise.all([
-        db.collection("users").countDocuments({ shopId: shop.shopId }),
-        db.collection("customers").countDocuments({ shopId: shop.shopId }),
-        db.collection("vehicles").countDocuments({ shopId: shop.shopId }),
-        db.collection("events")
-          .findOne(
-            { shopId: shop.shopId },
-            { sort: { receivedAt: -1 } }
-          )
+    shops.map(async (shop: any) => {
+      const shopId = shop.shop_id;
+      const [userResult, customerResult, vehicleResult, lastActivityResult] = await Promise.all([
+        sql`SELECT COUNT(*) as count FROM users WHERE shop_id = ${shopId}`,
+        sql`SELECT COUNT(*) as count FROM customers WHERE shop_id = ${shopId}`,
+        sql`SELECT COUNT(*) as count FROM vehicles WHERE shop_id = ${shopId}`,
+        sql`SELECT received_at FROM events WHERE shop_id = ${shopId} ORDER BY received_at DESC LIMIT 1`
       ]);
 
       return {
         ...shop,
+        _id: shop.id,
+        shopId: shop.shop_id,
         stats: {
-          users: userCount,
-          customers: customerCount,
-          vehicles: vehicleCount,
-          lastActivity: lastActivity?.receivedAt || null
+          users: Number(userResult[0]?.count || 0),
+          customers: Number(customerResult[0]?.count || 0),
+          vehicles: Number(vehicleResult[0]?.count || 0),
+          lastActivity: lastActivityResult[0]?.received_at || null
         }
       };
     })

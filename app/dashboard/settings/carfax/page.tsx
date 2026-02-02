@@ -1,6 +1,6 @@
 // app/dashboard/settings/carfax/page.tsx
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import CarfaxForm from "./CarfaxForm";
 import { revalidatePath } from "next/cache";
 import { CheckCircle, AlertCircle, XCircle } from "lucide-react";
@@ -9,13 +9,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function getCurrent(shopId: number) {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { carfax: 1, carfaxLocationId: 1 } }
-  );
+  const shops = await sql`
+    SELECT carfax_location_id FROM shops WHERE shop_id = ${String(shopId)}
+  `;
+  const shop = shops[0] as any;
   return {
-    locationId: shop?.carfax?.locationId || shop?.carfaxLocationId || "",
+    locationId: shop?.carfax_location_id || "",
   };
 }
 
@@ -36,20 +35,13 @@ export default async function CarfaxSettingsPage() {
   async function save(formData: FormData) {
     "use server";
     const loc = String(formData.get("locationId") || "").trim();
-    const db = await getDb();
 
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          carfax: { locationId: loc },
-          carfaxLocationId: loc,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true }
-    );
+    await sql`
+      UPDATE shops SET
+        carfax_location_id = ${loc},
+        updated_at = NOW()
+      WHERE shop_id = ${String(shopId)}
+    `;
 
     revalidatePath("/dashboard/vehicles/[vin]");
     revalidatePath("/dashboard/settings/carfax");

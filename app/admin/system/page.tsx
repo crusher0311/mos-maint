@@ -1,47 +1,39 @@
 // app/admin/system/page.tsx
-import { getDb } from "@/lib/mongo";
+import sql from "@/lib/db/postgres";
 import { isEmailConfigured, isAIConfigured, isAutoflowConfigured, isCarfaxConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 async function getSystemHealth() {
-  const db = await getDb();
-  
   try {
-    // Test database connectivity
-    const dbStats = await db.stats();
-    const dbConnected = true;
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
-    // Check collection counts and indexes
-    const collections = await db.listCollections().toArray();
-    const collectionStats = await Promise.all(
+    // Get table stats for key tables
+    const tableStats = await Promise.all(
       ['shops', 'users', 'customers', 'vehicles', 'events', 'sessions'].map(async (name) => {
         try {
-          const count = await db.collection(name).countDocuments();
-          const indexes = await db.collection(name).indexes();
-          return { name, count, indexCount: indexes.length, status: 'healthy' };
-        } catch (error) {
+          const countResult = await sql`SELECT COUNT(*) as count FROM ${sql(name)}`;
+          return { name, count: Number(countResult[0]?.count || 0), indexCount: 0, status: 'healthy' };
+        } catch (error: any) {
           return { name, count: 0, indexCount: 0, status: 'error', error: error.message };
         }
       })
     );
 
     // Check recent activity
-    const recentEvents = await db.collection("events").countDocuments({
-      receivedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-    });
-
-    // Check for any error patterns
-    const errorEvents = await db.collection("events").countDocuments({
-      receivedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      error: { $exists: true }
-    });
+    const [recentEventsResult, errorEventsResult] = await Promise.all([
+      sql`SELECT COUNT(*) as count FROM events WHERE received_at >= ${oneDayAgo}`,
+      sql`SELECT COUNT(*) as count FROM events WHERE received_at >= ${oneDayAgo} AND error IS NOT NULL`
+    ]);
+    
+    const recentEvents = Number(recentEventsResult[0]?.count || 0);
+    const errorEvents = Number(errorEventsResult[0]?.count || 0);
 
     return {
       database: {
-        connected: dbConnected,
-        stats: dbStats,
-        collections: collectionStats
+        connected: true,
+        stats: { db: 'PostgreSQL' },
+        collections: tableStats
       },
       activity: {
         recentEvents,
@@ -55,7 +47,7 @@ async function getSystemHealth() {
         carfax: isCarfaxConfigured()
       }
     };
-  } catch (error) {
+  } catch (error: any) {
     return {
       database: {
         connected: false,
@@ -119,20 +111,10 @@ export default async function AdminSystemPage() {
               </div>
               
               {health.database.stats && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-900">Database Size</span>
-                    <span className="text-sm text-gray-500">
-                      {(health.database.stats.dataSize / 1024 / 1024).toFixed(2)} MB
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-900">Storage Size</span>
-                    <span className="text-sm text-gray-500">
-                      {(health.database.stats.storageSize / 1024 / 1024).toFixed(2)} MB
-                    </span>
-                  </div>
-                </>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-900">Database</span>
+                  <span className="text-sm text-gray-500">{health.database.stats.db}</span>
+                </div>
               )}
             </div>
           ) : (
