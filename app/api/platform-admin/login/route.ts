@@ -37,14 +37,15 @@ export async function POST(req: NextRequest) {
     }
 
     let valid = false;
-    if (user.password) {
-      if (user.password.startsWith("$2")) {
-        valid = await bcrypt.compare(password, user.password);
+    const storedPassword = user.password_hash || user.password;
+    if (storedPassword) {
+      if (storedPassword.startsWith("$2")) {
+        valid = await bcrypt.compare(password, storedPassword);
       } else {
-        valid = user.password === password;
+        valid = storedPassword === password;
         if (valid) {
           const hashed = await bcrypt.hash(password, 12);
-          await sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`;
+          await sql`UPDATE users SET password_hash = ${hashed} WHERE id = ${user.id}`;
         }
       }
     }
