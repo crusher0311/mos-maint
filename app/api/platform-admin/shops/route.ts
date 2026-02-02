@@ -133,11 +133,13 @@ export async function GET() {
         enabledFeatures: enabledFeatures || {},
         backfill: (hasProtractor || hasTekmetric) ? (() => {
           const bf = hasProtractor ? backfill : tekmetricBackfill;
-          const completed = bf?.completed || false;
-          const inProgress = bf?.in_progress === true;
-          const lastActivityAt = bf?.last_activity_at || bf?.last_attempted_at || null;
-          const lastError = bf?.last_error || null;
-          const lastErrorAt = bf?.last_error_at || null;
+          if (!bf) return null;
+          
+          const bfStatus = bf?.status as string;
+          const completed = bfStatus === 'completed';
+          const inProgress = bfStatus === 'in_progress' || bfStatus === 'running';
+          const lastActivityAt = bf?.updated_at || bf?.completed_at || null;
+          const lastError = bf?.error || (bf?.metadata as Record<string, unknown>)?.lastError || null;
           
           const STALE_THRESHOLD_MS = 5 * 60 * 1000;
           const isStale = inProgress && lastActivityAt && 
@@ -146,7 +148,7 @@ export async function GET() {
           let status: "completed" | "active" | "stale" | "error" | "pending" = "pending";
           if (completed) {
             status = "completed";
-          } else if (lastError && lastErrorAt) {
+          } else if (lastError) {
             status = "error";
           } else if (isStale) {
             status = "stale";
@@ -154,19 +156,23 @@ export async function GET() {
             status = "active";
           }
           
+          const totalRecords = (bf?.total_records as number) || 0;
+          const processedRecords = (bf?.processed_records as number) || 0;
+          
           return {
             completed,
             inProgress,
             status,
             isStale,
-            totalJobsIndexed: jobIndexCount || (bf?.total_jobs_indexed as number) || 0,
-            currentChunkDate: bf?.current_chunk_end || bf?.current_chunk_start || null,
+            totalJobsIndexed: jobIndexCount || totalRecords || 0,
+            currentChunkDate: bf?.last_cursor || bf?.last_page || null,
             source: hasProtractor ? "protractor" : "tekmetric",
-            lastAttemptedAt: bf?.last_attempted_at || bf?.last_run_at || null,
+            lastAttemptedAt: bf?.started_at || bf?.created_at || null,
             lastActivityAt,
             lastError,
-            lastErrorAt,
-            processedCount: bf?.processed_count || 0,
+            lastErrorAt: lastError ? lastActivityAt : null,
+            processedCount: processedRecords || 0,
+            phase: bf?.phase || null,
           };
         })() : null,
         integrationDetails: {
