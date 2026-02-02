@@ -45,13 +45,13 @@ export async function POST(req: Request) {
     let candidates;
     if (shopId !== undefined && shopId !== null && String(shopId).trim() !== "") {
       candidates = await sql`
-        SELECT id, email, role, password_hash, password, shop_id 
+        SELECT id, email, role, password_hash, shop_id 
         FROM users 
         WHERE email = ${emailLower} AND shop_id = ${String(shopId)}
       `;
     } else {
       candidates = await sql`
-        SELECT id, email, role, password_hash, password, shop_id 
+        SELECT id, email, role, password_hash, shop_id 
         FROM users 
         WHERE email = ${emailLower}
       `;
@@ -63,7 +63,6 @@ export async function POST(req: Request) {
 
     const user = candidates[0];
     const dbHash = user.password_hash;
-    const legacyPlain = user.password;
 
     let passOk = false;
 
@@ -74,12 +73,6 @@ export async function POST(req: Request) {
       if (passOk) {
         const newHash = await bcrypt.hash(String(password), 12);
         await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${user.id}`;
-      }
-    } else if (legacyPlain) {
-      passOk = String(password) === String(legacyPlain);
-      if (passOk) {
-        const newHash = await bcrypt.hash(String(password), 12);
-        await sql`UPDATE users SET password_hash = ${newHash}, password = NULL WHERE id = ${user.id}`;
       }
     }
 
