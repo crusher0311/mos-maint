@@ -8,14 +8,14 @@ export async function GET() {
     const shopId = String(session.shopId);
 
     const shopResult = await sql`
-      SELECT branding, location_identifier, tekmetric_config, protractor_config 
+      SELECT branding, location_identifier, tekmetric, protractor 
       FROM shops WHERE shop_id = ${shopId} LIMIT 1
     `;
     const shop = shopResult[0];
 
     const branding = shop?.branding as Record<string, unknown> | null;
-    const tekmetricConfig = shop?.tekmetric_config as Record<string, unknown> | null;
-    const protractorConfig = shop?.protractor_config as Record<string, unknown> | null;
+    const tekmetricConfig = shop?.tekmetric as Record<string, unknown> | null;
+    const protractorConfig = shop?.protractor as Record<string, unknown> | null;
 
     let smsType = "none";
     if (tekmetricConfig?.configured || tekmetricConfig?.shopId) {

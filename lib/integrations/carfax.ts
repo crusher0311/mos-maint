@@ -216,45 +216,61 @@ export async function upsertCarfaxSnapshot(
   const shopIdStr = String(shopId);
   const vinUpper = vin.toUpperCase();
 
+  // Get shop UUID from text shop_id
+  const shopResult = await sql`SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1`;
+  const shopUuid = shopResult[0]?.id;
+  
+  if (!shopUuid) {
+    console.error(`[CARFAX] Cannot upsert snapshot: shop ${shopIdStr} not found`);
+    return;
+  }
+
+  // Store all report data in the report_data jsonb column
+  const reportData = {
+    ok: report.ok,
+    reportDate: report.reportDate,
+    numberOfOwners: report.numberOfOwners,
+    accidents: report.accidents,
+    damageReports: report.damageReports,
+    lastReportedMileage: report.lastReportedMileage,
+    serviceRecords: report.serviceRecords,
+    titleIssues: report.titleIssues,
+    recalls: report.recalls,
+    error: report.error,
+    raw: report.raw
+  };
+
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
   await sql`
-    INSERT INTO carfax_reports (shop_id, vin, fetched_at, report_date, number_of_owners, accidents, damage_reports, 
-      last_reported_mileage, service_records, title_issues, recalls, ok, error, raw, source)
-    VALUES (${shopIdStr}, ${vinUpper}, NOW(), ${report.reportDate || null}, ${report.numberOfOwners || null}, 
-      ${report.accidents || null}, ${report.damageReports || null}, ${report.lastReportedMileage || null},
-      ${JSON.stringify(report.serviceRecords || null)}::jsonb, ${JSON.stringify(report.titleIssues || null)}::jsonb,
-      ${JSON.stringify(report.recalls || null)}::jsonb, ${report.ok}, ${report.error || null}, 
-      ${JSON.stringify(report.raw || null)}::jsonb, 'carfax')
+    INSERT INTO carfax_reports (shop_id, vin, report_type, report_data, fetched_at, expires_at)
+    VALUES (${shopUuid}, ${vinUpper}, 'carfax', ${JSON.stringify(reportData)}::jsonb, NOW(), ${expiresAt})
     ON CONFLICT (shop_id, vin) DO UPDATE SET
+      report_data = ${JSON.stringify(reportData)}::jsonb,
       fetched_at = NOW(),
-      report_date = ${report.reportDate || null},
-      number_of_owners = ${report.numberOfOwners || null},
-      accidents = ${report.accidents || null},
-      damage_reports = ${report.damageReports || null},
-      last_reported_mileage = ${report.lastReportedMileage || null},
-      service_records = ${JSON.stringify(report.serviceRecords || null)}::jsonb,
-      title_issues = ${JSON.stringify(report.titleIssues || null)}::jsonb,
-      recalls = ${JSON.stringify(report.recalls || null)}::jsonb,
-      ok = ${report.ok},
-      error = ${report.error || null},
-      raw = ${JSON.stringify(report.raw || null)}::jsonb
+      expires_at = ${expiresAt}
   `;
 }
 
 function snapshotToResult(doc: Record<string, unknown>): CarfaxResult {
   if (!doc) return { ok: false, error: "No snapshot" };
+  
+  // Report data is stored as JSON in report_data column
+  const data = (doc.report_data || {}) as Record<string, unknown>;
+  
   return {
-    ok: !!doc.ok,
+    ok: !!data.ok,
     vin: doc.vin as string ?? null,
-    reportDate: doc.report_date as string ?? null,
-    numberOfOwners: doc.number_of_owners as number ?? null,
-    accidents: doc.accidents as number ?? null,
-    damageReports: doc.damage_reports as number ?? null,
-    lastReportedMileage: doc.last_reported_mileage as number ?? null,
-    serviceRecords: doc.service_records as CarfaxServiceRecord[] ?? null,
-    titleIssues: doc.title_issues as string[] ?? null,
-    recalls: doc.recalls as string[] ?? null,
-    raw: doc.raw ?? null,
-    error: doc.error as string ?? null,
+    reportDate: data.reportDate as string ?? null,
+    numberOfOwners: data.numberOfOwners as number ?? null,
+    accidents: data.accidents as number ?? null,
+    damageReports: data.damageReports as number ?? null,
+    lastReportedMileage: data.lastReportedMileage as number ?? null,
+    serviceRecords: data.serviceRecords as CarfaxServiceRecord[] ?? null,
+    titleIssues: data.titleIssues as string[] ?? null,
+    recalls: data.recalls as string[] ?? null,
+    raw: data.raw ?? null,
+    error: data.error as string ?? null,
   };
 }
 
@@ -267,8 +283,16 @@ export async function fetchCarfaxWithCache(
   const shopIdStr = String(shopId);
   const vinUpper = vin.toUpperCase();
 
+  // Get shop UUID from text shop_id
+  const shopResult = await sql`SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1`;
+  const shopUuid = shopResult[0]?.id;
+  
+  if (!shopUuid) {
+    return { ok: false, vin: vinUpper, error: 'Shop not found' };
+  }
+
   const result = await sql`
-    SELECT * FROM carfax_reports WHERE shop_id = ${shopIdStr} AND vin = ${vinUpper} LIMIT 1
+    SELECT * FROM carfax_reports WHERE shop_id = ${shopUuid} AND vin = ${vinUpper} LIMIT 1
   `;
   const doc = result[0];
 
