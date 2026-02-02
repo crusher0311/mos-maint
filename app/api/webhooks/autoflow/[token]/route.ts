@@ -4,6 +4,7 @@ import sql from "@/lib/db/postgres";
 import crypto from "node:crypto";
 import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflow";
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
+import { processAutoflowWebhook } from "@/lib/webhook-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,6 +109,12 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     const shopId = Number(shop.shop_id);
 
     await upsertCustomerFromEvent(shopId, payload);
+
+    // Real-time sync: Update normalized tables and queue prefetch
+    const syncResult = await processAutoflowWebhook(shop.shop_id, payload);
+    if (syncResult.prefetchQueued > 0) {
+      console.log(`[AutoFlow Webhook] Queued ${syncResult.prefetchQueued} prefetch(es) for shop ${shop.shop_id}`);
+    }
 
     const closeTypes = new Set<string>([
       "dvi_signoff",

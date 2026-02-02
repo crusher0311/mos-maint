@@ -171,6 +171,105 @@ export async function invalidateCachedPlan(vin: string, shopId: number): Promise
   `;
 }
 
+export async function updateCachedPlanMileage(
+  vin: string,
+  shopId: number,
+  newMileage: number,
+  mpdBlended?: number | null
+): Promise<{ updated: boolean; crossedInterval: boolean }> {
+  const shopIdStr = String(shopId);
+  const normalizedVin = vin.toUpperCase();
+  
+  const rows = await sql`
+    SELECT cp.id, cp.mileage, cp.plan_data, cp.created_at, cp.expires_at
+    FROM cached_plans cp
+    JOIN shops s ON cp.shop_id = s.id
+    WHERE s.shop_id = ${shopIdStr}
+      AND cp.vin = ${normalizedVin}
+    LIMIT 1
+  `;
+  
+  if (!rows[0]) {
+    return { updated: false, crossedInterval: false };
+  }
+  
+  const cached = rows[0] as any;
+  const cachedMileage = cached.mileage as number | null;
+  const planData = cached.plan_data as CachedPlanData;
+  const expiresAt = new Date(cached.expires_at as string);
+  
+  if (expiresAt <= new Date()) {
+    return { updated: false, crossedInterval: false };
+  }
+  
+  if (cachedMileage == null || newMileage == null) {
+    return { updated: false, crossedInterval: false };
+  }
+  
+  const milesDriven = newMileage - cachedMileage;
+  if (milesDriven <= 0) {
+    return { updated: false, crossedInterval: false };
+  }
+  
+  const avgMpd = mpdBlended || planData.mpdBlended || 30;
+  const daysDriven = Math.round(milesDriven / avgMpd);
+  
+  let crossedInterval = false;
+  
+  const updateBucket = (items: TriagedItemCache[]): TriagedItemCache[] => {
+    return items.map(item => {
+      const updated = { ...item };
+      
+      if (updated.milesToGo != null) {
+        updated.milesToGo = updated.milesToGo - milesDriven;
+        if (updated.milesToGo <= 0 && item.milesToGo! > 0) {
+          crossedInterval = true;
+        }
+      }
+      
+      if (updated.daysToGo != null) {
+        updated.daysToGo = updated.daysToGo - daysDriven;
+      }
+      
+      if (updated.dueAtMiles != null) {
+        const newMilesToGo = updated.dueAtMiles - newMileage;
+        if (newMilesToGo <= 0 && (item.milesToGo ?? 0) > 0) {
+          crossedInterval = true;
+        }
+      }
+      
+      return updated;
+    });
+  };
+  
+  const updatedPlan: CachedPlanData = {
+    ...planData,
+    currentMiles: newMileage,
+    mpdBlended: mpdBlended ?? planData.mpdBlended,
+    buckets: {
+      overdue: updateBucket(planData.buckets.overdue),
+      dueSoon: updateBucket(planData.buckets.dueSoon),
+      upcoming: updateBucket(planData.buckets.upcoming),
+    },
+  };
+  
+  if (crossedInterval) {
+    console.log(`[PlanCache] Interval crossed for ${vin}, invalidating cache`);
+    await invalidateCachedPlan(vin, shopId);
+    return { updated: false, crossedInterval: true };
+  }
+  
+  await sql`
+    UPDATE cached_plans
+    SET mileage = ${newMileage},
+        plan_data = ${JSON.stringify(updatedPlan)}::jsonb
+    WHERE id = ${cached.id}
+  `;
+  
+  console.log(`[PlanCache] Delta update for ${vin}: ${cachedMileage} -> ${newMileage} miles (+${milesDriven})`);
+  return { updated: true, crossedInterval: false };
+}
+
 export async function checkAndTrackVin(
   shopId: number, 
   vin: string, 
