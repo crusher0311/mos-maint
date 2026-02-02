@@ -71,12 +71,15 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
   - Dashboard routes: `/api/dashboard/updates`
   - Tekmetric sync files fully migrated (`lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`)
   
-**Migration Progress:** ~8 MongoDB files remaining (2 complex vehicle pages, 3 legacy lib files, 2 backfill scripts, 1 unused page-fixed.tsx)
+**Migration Progress:** ~5 MongoDB files remaining (3 legacy lib files for backward compatibility, 2 backfill scripts)
 
 **Recently Migrated (This Session):**
+- Vehicle detail page migrated: /dashboard/vehicles/[vin]/page.tsx (531 lines - complex aggregation pipelines converted)
+- Vehicle plan page migrated: /dashboard/vehicles/[vin]/plan/page.tsx (2265 lines - largest file in codebase, all MongoDB queries converted)
+- Vehicle recommend page migrated: /dashboard/vehicles/[vin]/recommend/page.tsx
 - Admin pages migrated (6 files): /admin/page.tsx, analytics, shops, users, system, carfax integration
 - Dashboard settings pages migrated (6 files): events, parts, autoflow, carfax, intervals, maintenance
-- Vehicle recommend page migrated: /dashboard/vehicles/[vin]/recommend/page.tsx
+- Removed unused page-fixed.tsx file
 - API Sync Routes migrated (9 routes):
   - `/api/tekmetric/sync` - Manual Tekmetric sync
   - `/api/protractor/sync` - Manual Protractor sync  
