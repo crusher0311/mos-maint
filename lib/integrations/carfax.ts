@@ -241,12 +241,13 @@ export async function upsertCarfaxSnapshot(
   };
 
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+  const jsonData = JSON.stringify(reportData);
 
   await sql`
     INSERT INTO carfax_reports (shop_id, vin, report_type, report_data, fetched_at, expires_at)
-    VALUES (${shopUuid}, ${vinUpper}, 'carfax', ${JSON.stringify(reportData)}::jsonb, NOW(), ${expiresAt})
+    VALUES (${shopUuid}, ${vinUpper}, 'carfax', ${jsonData}::jsonb, NOW(), ${expiresAt})
     ON CONFLICT (shop_id, vin) DO UPDATE SET
-      report_data = ${JSON.stringify(reportData)}::jsonb,
+      report_data = ${jsonData}::jsonb,
       fetched_at = NOW(),
       expires_at = ${expiresAt}
   `;
@@ -256,7 +257,11 @@ function snapshotToResult(doc: Record<string, unknown>): CarfaxResult {
   if (!doc) return { ok: false, error: "No snapshot" };
   
   // Report data is stored as JSON in report_data column
-  const data = (doc.report_data || {}) as Record<string, unknown>;
+  // Handle both proper JSONB objects and legacy double-encoded strings
+  let data = (doc.report_data || {}) as Record<string, unknown>;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch { data = {}; }
+  }
   
   return {
     ok: !!data.ok,
