@@ -1187,7 +1187,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       shopUuid ? sql`
         SELECT * FROM tekmetric_work_orders
         WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vinUpper}
-        ORDER BY completed_date DESC NULLS LAST
+        ORDER BY closed_date DESC NULLS LAST
         LIMIT 50
       ` : sql`SELECT NULL WHERE FALSE`,
       sql`SELECT branding FROM shops WHERE shop_id = ${shopId} LIMIT 1`

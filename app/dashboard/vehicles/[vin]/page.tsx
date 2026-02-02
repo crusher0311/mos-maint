@@ -106,15 +106,19 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
 
+  // Get shop UUID from shop_id
+  const shopUuidResult = await sql`SELECT id FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+  const shopUuid = shopUuidResult[0]?.id as string | undefined;
+
   // Find vehicle in PostgreSQL
-  const vehicleResult = await sql`
+  const vehicleResult = shopUuid ? await sql`
     SELECT 
-      id, vin, year, make, model, license, last_mileage, odometer, updated_at, customer_id,
+      id, vin, year, make, model, license_plate, last_mileage, odometer, updated_at, customer_id,
       has_components, declined_services, tekmetric
     FROM vehicles
-    WHERE shop_id = ${shopId} AND vin = ${vin}
+    WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
     LIMIT 1
-  `;
+  ` : [];
   
   let vehicle: any = vehicleResult[0] ? {
     _id: vehicleResult[0].id,
@@ -122,7 +126,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     year: vehicleResult[0].year,
     make: vehicleResult[0].make,
     model: vehicleResult[0].model,
-    license: vehicleResult[0].license,
+    license: vehicleResult[0].license_plate,
     lastMileage: vehicleResult[0].last_mileage,
     odometer: vehicleResult[0].odometer,
     updatedAt: vehicleResult[0].updated_at,
@@ -133,11 +137,11 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   } : null;
 
   // If not in vehicles collection, try to build from events (AutoFlow data)
-  if (!vehicle) {
+  if (!vehicle && shopUuid) {
     const eventResult = await sql`
       SELECT payload, created_at
       FROM events
-      WHERE shop_id = ${shopId}
+      WHERE shop_id = ${shopUuid}::uuid
         AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
       ORDER BY created_at DESC
       LIMIT 1
@@ -191,19 +195,21 @@ export default async function VehicleDetailPage({ params }: PageProps) {
           };
           
           // Store in database for future lookups
-          await sql`
-            INSERT INTO vehicles (vin, shop_id, year, make, model, license, last_mileage, odometer, updated_at, tekmetric, created_at)
-            VALUES (${vin}, ${shopId}, ${tekVehicle.year}, ${tekVehicle.make}, ${tekVehicle.model}, 
-                    ${tekVehicle.licensePlate}, ${tekVehicle.mileageIn || tekVehicle.mileageOut}, 
-                    ${tekVehicle.mileageIn || tekVehicle.mileageOut}, NOW(),
-                    ${JSON.stringify(vehicle.tekmetric)}::jsonb, NOW())
-            ON CONFLICT (vin, shop_id) DO UPDATE SET
-              year = COALESCE(EXCLUDED.year, vehicles.year),
-              make = COALESCE(EXCLUDED.make, vehicles.make),
-              model = COALESCE(EXCLUDED.model, vehicles.model),
-              tekmetric = EXCLUDED.tekmetric,
-              updated_at = NOW()
-          `;
+          if (shopUuid) {
+            await sql`
+              INSERT INTO vehicles (vin, shop_id, year, make, model, license_plate, last_mileage, odometer, updated_at, tekmetric, created_at)
+              VALUES (${vin}, ${shopUuid}::uuid, ${tekVehicle.year}, ${tekVehicle.make}, ${tekVehicle.model}, 
+                      ${tekVehicle.licensePlate}, ${tekVehicle.mileageIn || tekVehicle.mileageOut}, 
+                      ${tekVehicle.mileageIn || tekVehicle.mileageOut}, NOW(),
+                      ${JSON.stringify(vehicle.tekmetric)}::jsonb, NOW())
+              ON CONFLICT (vin, shop_id) DO UPDATE SET
+                year = COALESCE(EXCLUDED.year, vehicles.year),
+                make = COALESCE(EXCLUDED.make, vehicles.make),
+                model = COALESCE(EXCLUDED.model, vehicles.model),
+                tekmetric = EXCLUDED.tekmetric,
+                updated_at = NOW()
+            `;
+          }
         }
       } catch (error) {
         console.error('[Vehicle Detail] Error fetching from Tekmetric:', error);

@@ -691,12 +691,12 @@ export async function POST(req: NextRequest) {
 
     const [protractorWORows, tekmetricWORows] = await Promise.all([
       shopUuid ? sql`SELECT * FROM protractor_work_orders 
-          WHERE shop_id = ${shopUuid}::uuid AND (vin = ${vinUpper} OR data->>'VIN' = ${vinUpper})
-          ORDER BY data->'Header'->>'LastModifiedTime' DESC NULLS LAST
+          WHERE shop_id = ${shopUuid}::uuid AND (vin = ${vinUpper} OR raw_data->>'VIN' = ${vinUpper})
+          ORDER BY raw_data->'Header'->>'LastModifiedTime' DESC NULLS LAST
           LIMIT 20` : sql`SELECT NULL WHERE FALSE`,
       shopUuid ? sql`SELECT * FROM tekmetric_work_orders
           WHERE shop_id = ${shopUuid}::uuid AND vin = ${vinUpper}
-          ORDER BY completed_date DESC NULLS LAST
+          ORDER BY closed_date DESC NULLS LAST
           LIMIT 50` : sql`SELECT NULL WHERE FALSE`,
     ]);
     const protractorWOs = protractorWORows as any[];
