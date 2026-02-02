@@ -305,7 +305,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         ) as mileage,
         created_at
       FROM events
-      WHERE shop_id = ${shopId}
+      WHERE shop_id = ${shopUuid}::uuid
         AND provider = 'autoflow'
         AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
     ),
