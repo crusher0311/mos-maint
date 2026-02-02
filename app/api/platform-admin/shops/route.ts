@@ -33,16 +33,17 @@ export async function GET() {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
+    const shopUuids = shops.map(s => s.id).filter(Boolean);
+    
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
       sql`SELECT shop_id, COUNT(*) as count FROM users WHERE shop_id = ANY(${shopIds}) GROUP BY shop_id`,
-      sql`SELECT shop_id, COUNT(*) as count FROM vehicles WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
+      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM vehicles WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
       sql`SELECT shop_id, COUNT(*) as count FROM viewed_vins WHERE shop_id = ANY(${shopIds}) GROUP BY shop_id`,
       sql`SELECT * FROM backfill_progress WHERE shop_id::text = ANY(${shopIds})`,
       sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id::text = ANY(${shopIds})`,
-      sql`SELECT shop_id, COUNT(*) as count FROM job_history WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
-      sql`SELECT shop_id, COUNT(*) as count FROM job_index WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
-      sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
-      sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shops.map(s => s.id)}) AND created_at >= ${monthStart} GROUP BY shop_id`
+      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM job_index WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
+      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
+      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) AND created_at >= ${monthStart} GROUP BY shop_id` : Promise.resolve([])
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u.shop_id), parseInt(u.count as string, 10)]));
@@ -53,11 +54,6 @@ export async function GET() {
     const vehicleCountMap = new Map<string, number>();
     for (const v of vehicleCounts) {
       vehicleCountMap.set(String(v.shop_id), parseInt(v.count as string, 10));
-    }
-    
-    const jobHistoryCountMap = new Map<string, number>();
-    for (const j of jobHistoryCounts) {
-      jobHistoryCountMap.set(String(j.shop_id), parseInt(j.count as string, 10));
     }
     
     const jobIndexCountMap = new Map<string, number>();
