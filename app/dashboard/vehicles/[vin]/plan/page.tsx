@@ -1024,7 +1024,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     shopUuid ? sql`
       SELECT * FROM tekmetric_work_orders
       WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vin}
-      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+      ORDER BY synced_at DESC NULLS LAST, closed_date DESC NULLS LAST
       LIMIT 1
     ` : sql`SELECT NULL WHERE FALSE`,
     // AutoFlow work orders (via webhook events)
