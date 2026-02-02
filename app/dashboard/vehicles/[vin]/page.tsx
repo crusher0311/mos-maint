@@ -114,7 +114,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const vehicleResult = shopUuid ? await sql`
     SELECT 
       id, vin, year, make, model, license_plate, last_mileage, odometer, updated_at, customer_id,
-      has_components, declined_services, tekmetric
+      declined_services, metadata, raw_data
     FROM vehicles
     WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
     LIMIT 1
@@ -131,9 +131,9 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     odometer: vehicleResult[0].odometer,
     updatedAt: vehicleResult[0].updated_at,
     customerId: vehicleResult[0].customer_id,
-    hasComponents: vehicleResult[0].has_components || {},
+    hasComponents: vehicleResult[0].metadata?.hasComponents || {},
     declinedServices: vehicleResult[0].declined_services || [],
-    tekmetric: vehicleResult[0].tekmetric,
+    tekmetric: vehicleResult[0].raw_data?.tekmetric,
   } : null;
 
   // If not in vehicles collection, try to build from events (AutoFlow data)
