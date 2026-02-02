@@ -254,7 +254,8 @@ export async function getEnhancedVehicleData(vin: string): Promise<{
   };
   error?: string;
 }> {
-  const decoded = await decodeVin(vin);
+  // Use local PostgreSQL lookup instead of external API
+  const decoded = await decodeVinLocal(vin);
   
   if (!decoded.ok || !decoded.decoded) {
     return { ok: false, vin, error: decoded.error };
