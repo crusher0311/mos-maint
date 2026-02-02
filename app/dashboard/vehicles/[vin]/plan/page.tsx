@@ -865,11 +865,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
   const vin = String(vinParam || "").toUpperCase();
 
   const shopResult = await sql`
-    SELECT maintenance, protractor, preferences FROM shops
+    SELECT id, maintenance, protractor, preferences FROM shops
     WHERE shop_id = ${shopId}
     LIMIT 1
   `;
   const shop = shopResult[0] as any;
+  const shopUuid = shop?.id as string | undefined; // UUID for foreign key lookups
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
   const hasJobLookupFeature = await isFeatureEnabled(Number(shopId), "job_lookup");
@@ -921,12 +922,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
   console.log(`[CannedJobs] Shop ${shopId} mappings:`, Object.keys(cannedJobMappings));
   console.log(`[CannedJobs] Shop ${shopId} cannedJobsById count:`, Object.keys(cannedJobsById).length);
   
-  const vehicleResult = await sql`
+  const vehicleResult = shopUuid ? await sql`
     SELECT year, make, model, vin, last_mileage, customer_id, updated_at, declined_services
     FROM vehicles
-    WHERE shop_id = ${shopId} AND vin = ${vin}
+    WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
     LIMIT 1
-  `;
+  ` : [];
   const vehicle = vehicleResult[0] ? {
     ...vehicleResult[0],
     lastMileage: vehicleResult[0].last_mileage,
@@ -963,7 +964,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         ) as mileage,
         created_at
       FROM events
-      WHERE shop_id = ${shopId}
+      WHERE shop_id = ${shopUuid}::uuid
         AND provider = 'autoflow'
         AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
     ),
@@ -1012,27 +1013,27 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Query all connected work order sources in parallel
   const [protractorWOResult, tekmetricWOResult, autoflowWOResult] = await Promise.all([
     // Protractor work orders
-    sql`
+    shopUuid ? sql`
       SELECT * FROM protractor_work_orders
-      WHERE shop_id = ${shopId} AND UPPER(vin) = ${vin}
+      WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vin}
       ORDER BY fetched_at DESC NULLS LAST, created_at DESC NULLS LAST
       LIMIT 1
-    `,
+    ` : sql`SELECT NULL WHERE FALSE`,
     // Tekmetric work orders
-    sql`
+    shopUuid ? sql`
       SELECT * FROM tekmetric_work_orders
-      WHERE shop_id = ${shopId} AND UPPER(vin) = ${vin}
+      WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vin}
       ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
       LIMIT 1
-    `,
+    ` : sql`SELECT NULL WHERE FALSE`,
     // AutoFlow work orders (via webhook events)
-    sql`
+    shopUuid ? sql`
       SELECT * FROM events
-      WHERE shop_id = ${shopId}
+      WHERE shop_id = ${shopUuid}::uuid
         AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
       ORDER BY created_at DESC
       LIMIT 1
-    `
+    ` : sql`SELECT NULL WHERE FALSE`
   ]);
   
   const protractorWO = protractorWOResult[0] as any;
@@ -1177,18 +1178,18 @@ async function PlanContent({ params, searchParams }: PageProps) {
       autoVitalsCfg.configured
         ? fetchAutoVitalsInspectionByVin(Number(shopId), vin, PROTRACTOR_CACHE_TTL)
         : Promise.resolve({ ok: false } as { ok: false }),
-      sql`
+      shopUuid ? sql`
         SELECT * FROM protractor_work_orders
-        WHERE shop_id = ${shopId} AND UPPER(vin) = ${vinUpper}
+        WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vinUpper}
         ORDER BY fetched_at DESC NULLS LAST
         LIMIT 20
-      `,
-      sql`
+      ` : sql`SELECT NULL WHERE FALSE`,
+      shopUuid ? sql`
         SELECT * FROM tekmetric_work_orders
-        WHERE shop_id = ${shopId} AND UPPER(vin) = ${vinUpper}
+        WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vinUpper}
         ORDER BY completed_date DESC NULLS LAST
         LIMIT 50
-      `,
+      ` : sql`SELECT NULL WHERE FALSE`,
       sql`SELECT branding FROM shops WHERE shop_id = ${shopId} LIMIT 1`
     ]);
     dvi = localDvi;

@@ -665,6 +665,7 @@ export async function POST(req: NextRequest) {
 
     const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
     const shopDoc = shopRows[0] as any;
+    const shopUuid = shopDoc?.id as string | undefined; // UUID for foreign key lookups
     const soonMiles = shopDoc?.maintenance?.dueSoonMiles ?? shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
     const soonDays = shopDoc?.maintenance?.dueSoonDays ?? shopDoc?.settings?.planPage?.soonDays ?? DEFAULT_SOON_DAYS;
     const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
@@ -681,22 +682,22 @@ export async function POST(req: NextRequest) {
       getMaintenanceScheduleCached(vin),
     ]);
 
-    const vehicleRows = await sql`
+    const vehicleRows = shopUuid ? await sql`
       SELECT year, make, model, declined_services FROM vehicles 
-      WHERE shop_id = ${String(shopId)} AND vin = ${vinUpper}
-    `;
+      WHERE shop_id = ${shopUuid}::uuid AND vin = ${vinUpper}
+    ` : [];
     const vehicleDoc = vehicleRows[0] as any;
     const vehicleYear = vehicleDoc?.year ?? oemData.vehicle?.year ?? null;
 
     const [protractorWORows, tekmetricWORows] = await Promise.all([
-      sql`SELECT * FROM protractor_work_orders 
-          WHERE shop_id = ${String(shopId)} AND (vin = ${vinUpper} OR data->>'VIN' = ${vinUpper})
+      shopUuid ? sql`SELECT * FROM protractor_work_orders 
+          WHERE shop_id = ${shopUuid}::uuid AND (vin = ${vinUpper} OR data->>'VIN' = ${vinUpper})
           ORDER BY data->'Header'->>'LastModifiedTime' DESC NULLS LAST
-          LIMIT 20`,
-      sql`SELECT * FROM tekmetric_work_orders
-          WHERE shop_id = ${String(shopId)} AND vin = ${vinUpper}
+          LIMIT 20` : sql`SELECT NULL WHERE FALSE`,
+      shopUuid ? sql`SELECT * FROM tekmetric_work_orders
+          WHERE shop_id = ${shopUuid}::uuid AND vin = ${vinUpper}
           ORDER BY completed_date DESC NULLS LAST
-          LIMIT 50`,
+          LIMIT 50` : sql`SELECT NULL WHERE FALSE`,
     ]);
     const protractorWOs = protractorWORows as any[];
     const tekmetricWOs = tekmetricWORows as any[];
