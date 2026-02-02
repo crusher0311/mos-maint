@@ -1405,7 +1405,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     : 0;
   const hasDeferredMismatch = protractorDeferredWork.length > 0 && cachedDeferredCount === 0;
   
-  if (useCachedData && cachedPlan) {
+  if (useCachedData && cachedPlan && cachedPlan.plan?.buckets?.overdue) {
     console.log(`[Plan] Using cached buckets for ${vin}`);
     const cached = cachedPlan.plan;
     
@@ -1421,9 +1421,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
     });
     
     buckets = {
-      overdue: cached.buckets.overdue.map(convertCacheItem),
-      dueSoon: cached.buckets.dueSoon.map(convertCacheItem),
-      upcoming: cached.buckets.upcoming.map(convertCacheItem),
+      overdue: (cached.buckets.overdue || []).map(convertCacheItem),
+      dueSoon: (cached.buckets.dueSoon || []).map(convertCacheItem),
+      upcoming: (cached.buckets.upcoming || []).map(convertCacheItem),
     };
     
     // If we have fresh deferred work that's not in cached buckets, add it now
