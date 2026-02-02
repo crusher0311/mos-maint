@@ -309,7 +309,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const ownerName =
     [customer?.first_name, customer?.last_name].filter(Boolean).join(" ").trim() || (customer?.name || "");
 
-  // Get repair orders from events collection (AutoFlow webhooks store RO data here)
+  // Get repair orders from events collection (AutoFlow webhooks) and Protractor
   const eventRos = await sql`
     WITH event_ros AS (
       SELECT 
@@ -322,11 +322,28 @@ export default async function VehicleDetailPage({ params }: PageProps) {
           (payload->'ticket'->>'mileage')::numeric,
           (payload->'vehicle'->>'mileage')::numeric
         ) as mileage,
-        created_at
+        created_at,
+        'autoflow' as source
       FROM events
       WHERE shop_id = ${shopUuid}::uuid
         AND provider = 'autoflow'
         AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
+    ),
+    protractor_ros AS (
+      SELECT 
+        work_order_number as ro_number,
+        status,
+        mileage::numeric as mileage,
+        created_date as created_at,
+        'protractor' as source
+      FROM protractor_work_orders
+      WHERE shop_id = ${shopUuid}::uuid
+        AND UPPER(vin) = ${vin}
+    ),
+    all_ros AS (
+      SELECT * FROM event_ros
+      UNION ALL
+      SELECT * FROM protractor_ros
     ),
     grouped_ros AS (
       SELECT DISTINCT ON (ro_number)
@@ -334,8 +351,9 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         status,
         mileage,
         created_at as updated_at,
-        created_at
-      FROM event_ros
+        created_at,
+        source
+      FROM all_ros
       WHERE ro_number IS NOT NULL
       ORDER BY ro_number, created_at DESC
     )
