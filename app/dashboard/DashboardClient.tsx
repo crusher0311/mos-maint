@@ -92,11 +92,46 @@ async function fetchDashboardData(page: number, search: string, archived: boolea
   return null;
 }
 
+const DASHBOARD_CACHE_KEY = 'mos_dashboard_cache';
+const DASHBOARD_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function getCachedDashboardData(): DashboardData | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (!cached) return null;
+    const { data, timestamp } = JSON.parse(cached);
+    // Return cached data even if stale - we'll refresh in background
+    if (data?.rows?.length > 0) {
+      return data;
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+  return null;
+}
+
+function setCachedDashboardData(data: DashboardData) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }));
+  } catch (e) {
+    // Ignore storage errors (quota exceeded, etc)
+  }
+}
+
 export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
-  const [data, setData] = useState(initialData);
+  // Try to use cached data first for instant display
+  const cachedData = getCachedDashboardData();
+  const startingData = cachedData?.rows?.length ? cachedData : initialData;
+  
+  const [data, setData] = useState(startingData);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!initialData?.rows?.length);
+  const [initialLoading, setInitialLoading] = useState(!startingData?.rows?.length);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
@@ -747,6 +782,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     if (newData) {
       setData(newData);
       setLastUpdated(new Date());
+      // Cache for instant display on next visit (only cache first page, no search/archive)
+      if (page === 1 && !search && !archived) {
+        setCachedDashboardData(newData);
+      }
     }
     setIsRefreshing(false);
     setInitialLoading(false);
