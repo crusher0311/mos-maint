@@ -121,18 +121,10 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
   }
   
   const rows: DashboardRow[] = [];
-  let skippedNoActive = 0;
-  let skippedClosed = 0;
   
   for (const [vin, group] of vinGroups.entries()) {
-    if (!group.lastActive) {
-      skippedNoActive++;
-      continue;
-    }
-    if (group.lastClose && group.lastActive <= group.lastClose) {
-      skippedClosed++;
-      continue;
-    }
+    if (!group.lastActive) continue;
+    if (group.lastClose && group.lastActive <= group.lastClose) continue;
     
     const e = group.latest;
     const payload = group.payload || {};
@@ -190,7 +182,6 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
     });
   }
   
-  console.log(`[AutoFlow] Shop ${shopId}: ${eventRows.length} events, ${vinGroups.size} unique VINs, ${skippedNoActive} no-active, ${skippedClosed} closed, ${rows.length} active`);
   rows.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
   return rows;
 }

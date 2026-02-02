@@ -9,6 +9,27 @@ import { processAutoflowWebhook } from "@/lib/webhook-sync";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Forward webhooks to dev environment if configured
+async function forwardToDevEnvironment(token: string, raw: string, headers: Headers) {
+  const devUrl = process.env.DEV_WEBHOOK_FORWARD_URL;
+  if (!devUrl) return;
+  
+  try {
+    const forwardUrl = `${devUrl}/api/webhooks/autoflow/${token}`;
+    await fetch(forwardUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-From': 'production',
+      },
+      body: raw,
+    });
+    console.log(`[Webhook] Forwarded to dev: ${forwardUrl}`);
+  } catch (e) {
+    console.error('[Webhook] Dev forward failed:', e);
+  }
+}
+
 function timingSafeEqual(a: Buffer, b: Buffer) {
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
@@ -97,6 +118,12 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     if (!sig || !verifyHmacSHA256(secret, raw, sig)) {
       return NextResponse.json({ error: "invalid signature" }, { status: 401 });
     }
+  }
+
+  // Forward to dev environment (non-blocking, don't wait)
+  const isForwarded = req.headers.get("X-Forwarded-From") === "production";
+  if (!isForwarded) {
+    forwardToDevEnvironment(token, raw, req.headers);
   }
 
   await sql`
