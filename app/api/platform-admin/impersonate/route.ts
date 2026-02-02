@@ -34,11 +34,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Shop is locked. Unlock it first to access." }, { status: 403 });
     }
 
-    let userRows = await sql`SELECT * FROM users WHERE shop_id = ${shopId} AND role = 'owner' LIMIT 1`;
+    // Look for users by both text shop_id and UUID shop.id
+    const shopUuid = shop.id;
+    let userRows = await sql`SELECT * FROM users WHERE (shop_id = ${shopId} OR shop_id = ${shopUuid}) AND role = 'owner' LIMIT 1`;
     let targetUser = userRows[0] as any;
 
     if (!targetUser) {
-      userRows = await sql`SELECT * FROM users WHERE shop_id = ${shopId} LIMIT 1`;
+      userRows = await sql`SELECT * FROM users WHERE (shop_id = ${shopId} OR shop_id = ${shopUuid}) LIMIT 1`;
       targetUser = userRows[0] as any;
     }
 
