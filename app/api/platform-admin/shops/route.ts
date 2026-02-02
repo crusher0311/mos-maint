@@ -36,11 +36,11 @@ export async function GET() {
     const shopUuids = shops.map(s => s.id).filter(Boolean);
     
     const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
-      sql`SELECT shop_id, COUNT(*) as count FROM users WHERE shop_id = ANY(${shopIds}) GROUP BY shop_id`,
+      shopIds.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM users WHERE shop_id = ANY(${shopIds}) GROUP BY shop_id` : Promise.resolve([]),
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM vehicles WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
-      sql`SELECT shop_id, COUNT(*) as count FROM viewed_vins WHERE shop_id = ANY(${shopIds}) GROUP BY shop_id`,
-      sql`SELECT * FROM backfill_progress WHERE shop_id::text = ANY(${shopIds})`,
-      sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id::text = ANY(${shopIds})`,
+      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM viewed_vins WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
+      shopIds.length > 0 ? sql`SELECT * FROM backfill_progress WHERE shop_id::text = ANY(${shopIds})` : Promise.resolve([]),
+      shopIds.length > 0 ? sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id::text = ANY(${shopIds})` : Promise.resolve([]),
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM job_index WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) AND created_at >= ${monthStart} GROUP BY shop_id` : Promise.resolve([])
