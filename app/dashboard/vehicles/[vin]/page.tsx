@@ -79,7 +79,7 @@ async function getLatestMilesForVin(vin: string): Promise<number | null> {
         (payload->'vehicle'->>'odometer')::numeric
       ) as miles
     FROM events
-    WHERE UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vinUpper}
+    WHERE UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vinUpper}
       AND (provider = 'autoflow' OR (provider = 'ui' AND type = 'manual_closed'))
     ORDER BY created_at DESC NULLS LAST
     LIMIT 1
@@ -308,7 +308,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       FROM events
       WHERE shop_id = ${shopId}
         AND provider = 'autoflow'
-        AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
+        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
     ),
     grouped_ros AS (
       SELECT DISTINCT ON (ro_number)
