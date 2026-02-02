@@ -6,7 +6,7 @@ import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/aut
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
-import { resolveProtractorConfig, fetchAllActiveInspections } from "@/lib/integrations/protractor";
+import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -362,7 +362,33 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     LIMIT 20
   `;
 
-  const ros = eventRos as any[];
+  let ros = eventRos as any[];
+  
+  // If no repair orders found yet, try fetching invoices from Protractor API
+  if (ros.length === 0) {
+    // Get Protractor vehicle ID from protractor_vehicles table
+    const protVehicleResult = await sql`
+      SELECT vehicle_id FROM protractor_vehicles WHERE vin = ${vin} LIMIT 1
+    `;
+    const protractorVehicleId = protVehicleResult[0]?.vehicle_id;
+    
+    if (protractorVehicleId) {
+      console.log(`[Vehicle Detail] Fetching Protractor invoices for vehicle ${protractorVehicleId}`);
+      const invoiceResult = await fetchInvoicesForVehicle(Number(shopId), protractorVehicleId);
+      if (invoiceResult.ok && invoiceResult.invoices && invoiceResult.invoices.length > 0) {
+        console.log(`[Vehicle Detail] Found ${invoiceResult.invoices.length} Protractor invoices`);
+        ros = invoiceResult.invoices.map((inv: any) => ({
+          ro_number: inv.InvoiceNumber ? String(inv.InvoiceNumber) : inv.ID,
+          status: 'Invoiced',
+          mileage: inv.Odometer ?? null,
+          updated_at: inv.InvoiceDate ? new Date(inv.InvoiceDate) : null,
+          created_at: inv.InvoiceDate ? new Date(inv.InvoiceDate) : null,
+          source: 'protractor'
+        }));
+      }
+    }
+  }
+  
   const latestRoNumber = ros[0]?.ro_number ?? null;
 
   // Autoflow - fetch DVI for the latest RO
