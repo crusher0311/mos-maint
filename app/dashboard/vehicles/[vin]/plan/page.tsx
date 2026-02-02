@@ -270,7 +270,7 @@ async function getLatestMilesForVin(vinRaw: string): Promise<number | null> {
         (payload->'vehicle'->>'odometer')::numeric
       ) as mileage
     FROM events
-    WHERE UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
+    WHERE UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
     ORDER BY created_at DESC NULLS LAST
     LIMIT 10
   `;
@@ -966,7 +966,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       FROM events
       WHERE shop_id = ${shopUuid}::uuid
         AND provider = 'autoflow'
-        AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
+        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
     ),
     grouped_ros AS (
       SELECT DISTINCT ON (ro_number)
@@ -1030,7 +1030,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     shopUuid ? sql`
       SELECT * FROM events
       WHERE shop_id = ${shopUuid}::uuid
-        AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
+        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
       ORDER BY created_at DESC
       LIMIT 1
     ` : sql`SELECT NULL WHERE FALSE`

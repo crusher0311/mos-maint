@@ -142,7 +142,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       SELECT payload, created_at
       FROM events
       WHERE shop_id = ${shopUuid}::uuid
-        AND UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${vin}
+        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
       ORDER BY created_at DESC
       LIMIT 1
     `;
