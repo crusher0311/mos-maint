@@ -217,6 +217,31 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
+  // If still not found, try to use cached plan data and DataOne VIN decoding
+  if (!vehicle && shopUuid) {
+    const cachedPlan = await sql`
+      SELECT vin, mileage FROM cached_plans 
+      WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
+      LIMIT 1
+    `;
+    if (cachedPlan[0]) {
+      // Get vehicle info from DataOne VIN decoding
+      const enhanced = await getEnhancedVehicleData(vin);
+      vehicle = {
+        _id: null,
+        vin: vin,
+        year: enhanced.ok ? enhanced.vehicle?.year : null,
+        make: enhanced.ok ? enhanced.vehicle?.make : null,
+        model: enhanced.ok ? enhanced.vehicle?.model : null,
+        license: null,
+        lastMileage: cachedPlan[0].mileage,
+        odometer: cachedPlan[0].mileage,
+        updatedAt: new Date(),
+        customerId: null,
+      };
+    }
+  }
+
   if (!vehicle) {
     return (
       <main className="mx-auto max-w-5xl p-6 space-y-6">
