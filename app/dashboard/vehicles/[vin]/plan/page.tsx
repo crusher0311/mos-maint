@@ -250,11 +250,13 @@ async function getLatestMilesForVin(vinRaw: string): Promise<number | null> {
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  // Latest RO mileage
+  // Latest RO mileage (join with vehicles to get by VIN)
   const roResult = await sql`
-    SELECT mileage FROM work_orders 
-    WHERE vin = ${vin}
-    ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+    SELECT w.odometer_in as mileage 
+    FROM work_orders w
+    JOIN vehicles v ON w.vehicle_id = v.id
+    WHERE v.vin = ${vin}
+    ORDER BY w.updated_at DESC NULLS LAST, w.created_at DESC NULLS LAST
     LIMIT 1
   `;
   const mRO = toPos(roResult[0]?.mileage);
