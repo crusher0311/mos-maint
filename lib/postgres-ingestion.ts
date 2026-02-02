@@ -12,7 +12,7 @@ import {
   generateContentHash,
   createProvenance,
   INormalizedAdapter,
-} from './normalized-adapters';
+} from './normalized-adapters-pg';
 
 export interface IngestionResult {
   success: boolean;

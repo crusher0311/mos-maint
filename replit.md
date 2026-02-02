@@ -110,9 +110,11 @@ New PostgreSQL ingestion files:
 - `lib/normalized-ingestion-pg.ts` - PostgreSQL-based normalized data ingestion (1115 lines)
 - `lib/normalized-adapters-pg.ts` - PostgreSQL-compatible adapters using UUID IDs
 
-Original MongoDB versions remain for backward compatibility:
-- `lib/normalized-ingestion.ts` - MongoDB version (can be removed after full migration)
-- `lib/normalized-adapters.ts` - MongoDB version (can be removed after full migration)
+Original MongoDB versions remain for backward compatibility (can be removed after verification):
+- `lib/normalized-ingestion.ts` - MongoDB version (only used by legacy scripts)
+- `lib/normalized-adapters.ts` - MongoDB version (only used by normalized-ingestion.ts)
+- `lib/mongo.ts` - MongoDB connection (only used by backfill scripts)
+- `lib/scripts/backfill-*.ts` - One-time migration scripts
 
 **New PostgreSQL Tables Created:**
 - `shop_features` - Shop feature toggles and subscriptions
