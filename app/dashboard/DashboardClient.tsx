@@ -96,6 +96,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [data, setData] = useState(initialData);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(!initialData?.rows?.length);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
@@ -748,6 +749,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       setLastUpdated(new Date());
     }
     setIsRefreshing(false);
+    setInitialLoading(false);
   };
 
   useEffect(() => {
@@ -929,7 +931,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </div>
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">Total Vehicles</p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
+                {initialLoading ? (
+                  <div className="h-7 sm:h-8 w-12 bg-gray-200 rounded animate-pulse mt-1"></div>
+                ) : (
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
+                )}
               </div>
             </div>
           </div>
@@ -941,7 +947,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </div>
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">DVI Complete (this page)</p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
+                {initialLoading ? (
+                  <div className="h-7 sm:h-8 w-8 bg-gray-200 rounded animate-pulse mt-1"></div>
+                ) : (
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
+                )}
               </div>
             </div>
           </div>
@@ -953,7 +963,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </div>
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">No DVI (this page)</p>
-                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.inProgress}</p>
+                {initialLoading ? (
+                  <div className="h-7 sm:h-8 w-8 bg-gray-200 rounded animate-pulse mt-1"></div>
+                ) : (
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.inProgress}</p>
+                )}
               </div>
             </div>
           </div>
@@ -1224,7 +1238,23 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                     </tr>
                   );
                 })}
-                {sortedRows.length === 0 && (
+                {sortedRows.length === 0 && initialLoading && (
+                  <>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-36"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+                {sortedRows.length === 0 && !initialLoading && (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
