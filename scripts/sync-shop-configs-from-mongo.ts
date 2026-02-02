@@ -58,6 +58,9 @@ async function syncShopConfigs() {
     const settings = shop.settings || null;
     const billing = shop.billing || null;
     const stickerConfig = shop.stickerConfig || shop.sticker_config || null;
+    const branding = shop.branding || null;
+    const preferences = shop.preferences || null;
+    const maintenance = shop.maintenance || null;
     
     console.log(`Updating shop ${shopId} (${shop.name}):`);
     console.log(`  - Enterprise: ${pgEnterpriseId || 'none'} (from ${mongoEnterpriseId || 'none'})`);
@@ -65,6 +68,8 @@ async function syncShopConfigs() {
     console.log(`  - Tekmetric: ${tekmetricConfig?.shopId ? 'configured' : 'none'}`);
     console.log(`  - Protractor: ${protractorConfig?.configured ? 'configured' : 'none'}`);
     console.log(`  - AutoFlow: ${autoflowConfig?.configured ? 'configured' : 'none'}`);
+    console.log(`  - Branding: ${branding ? 'yes' : 'none'}`);
+    console.log(`  - Settings: ${settings ? 'yes' : 'none'}`);
     
     try {
       await sql`
@@ -79,6 +84,9 @@ async function syncShopConfigs() {
           settings = ${settings ? sql.json(settings) : sql`settings`},
           billing = ${billing ? sql.json(billing) : sql`billing`},
           sticker_config = ${stickerConfig ? sql.json(stickerConfig) : sql`sticker_config`},
+          branding = ${branding ? sql.json(branding) : sql`branding`},
+          preferences = ${preferences ? sql.json(preferences) : sql`preferences`},
+          maintenance = ${maintenance ? sql.json(maintenance) : sql`maintenance`},
           updated_at = NOW()
         WHERE shop_id = ${shopId}
       `;
