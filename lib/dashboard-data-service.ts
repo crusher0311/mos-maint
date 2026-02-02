@@ -72,34 +72,40 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
   
   const eventRows = await sql`
     SELECT e.*, 
-           COALESCE(e.received_at, e.created_at) as created_at_date,
-           UPPER(COALESCE(e.vehicle_vin, e.vin, e.payload->'vehicle'->>'vin')) as vin_norm,
-           COALESCE(e.payload->'ticket'->>'status', e.status, e.payload->>'status', e.type) as status_raw
+           COALESCE(e.received_at, e.created_at) as created_at_date
     FROM events e
-    WHERE e.shop_id = ${shopUuid}
+    WHERE e.shop_id = ${shopUuid}::uuid
       AND e.provider = 'autoflow'
       AND COALESCE(e.received_at, e.created_at) >= ${thirtyDaysAgo}
-    ORDER BY UPPER(COALESCE(e.vehicle_vin, e.vin, e.payload->'vehicle'->>'vin')) ASC,
-             COALESCE(e.received_at, e.created_at) DESC
+    ORDER BY COALESCE(e.received_at, e.created_at) DESC
   `;
 
   const activeStatuses = ["CHECKED IN", "IN PROGRESS", "EST", "RACK ATTACK", 
     "Build Estimate (Workflow) and Presentation (Advisor)", "Authorized ready for work"];
   
-  const vinGroups = new Map<string, { latest: any; lastActive: Date | null; lastClose: Date | null }>();
+  const vinGroups = new Map<string, { latest: any; payload: any; lastActive: Date | null; lastClose: Date | null }>();
   
   for (const e of eventRows) {
-    const vin = e.vin_norm;
+    let payload = e.payload;
+    if (typeof payload === 'string') {
+      try { payload = JSON.parse(payload); } catch { continue; }
+    }
+    
+    const vehicleVin = payload?.vehicle?.vin;
+    const vehicleLicense = payload?.vehicle?.license;
+    const vin = (vehicleVin && vehicleVin.length >= 5) ? vehicleVin.toUpperCase() : 
+                (vehicleLicense ? `LICENSE:${vehicleLicense.toUpperCase()}` : null);
     if (!vin) continue;
     
-    const ticketStatus = e.payload?.ticket?.status;
+    const ticketStatus = payload?.ticket?.status;
     const createdAt = e.created_at_date;
     const isActive = activeStatuses.includes(ticketStatus);
     const isClose = ticketStatus === "Close";
     
     if (!vinGroups.has(vin)) {
       vinGroups.set(vin, { 
-        latest: e, 
+        latest: e,
+        payload, 
         lastActive: isActive ? createdAt : null,
         lastClose: isClose ? createdAt : null
       });
@@ -121,7 +127,8 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
     if (group.lastClose && group.lastActive <= group.lastClose) continue;
     
     const e = group.latest;
-    const payload = e.payload || {};
+    const payload = group.payload || {};
+    const ticketStatus = payload?.ticket?.status;
     
     const roNumber = payload.ticket?.invoice || payload.ticket?.id || payload.event?.invoice || e.ro_number;
     let dviDone = false;
@@ -163,7 +170,7 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
       source: 'autoflow',
       af: {
         createdAt: e.created_at_date,
-        status: e.status_raw,
+        status: ticketStatus,
         miles
       },
       vehicle: {
