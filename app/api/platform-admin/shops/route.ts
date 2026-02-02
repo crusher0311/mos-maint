@@ -35,8 +35,10 @@ export async function GET() {
     
     const shopUuids = shops.map(s => s.id).filter(Boolean);
     
+    const allShopIdentifiers = [...shopIds, ...shopUuids];
+    
     const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
-      shopIds.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM users WHERE shop_id = ANY(${shopIds}) GROUP BY shop_id` : Promise.resolve([]),
+      allShopIdentifiers.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM users WHERE shop_id = ANY(${allShopIdentifiers}) GROUP BY shop_id` : Promise.resolve([]),
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM vehicles WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM viewed_vins WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
       shopIds.length > 0 ? sql`SELECT * FROM backfill_progress WHERE shop_id::text = ANY(${shopIds})` : Promise.resolve([]),
@@ -46,7 +48,10 @@ export async function GET() {
       shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) AND created_at >= ${monthStart} GROUP BY shop_id` : Promise.resolve([])
     ]);
     
-    const userCountMap = new Map(userCounts.map(u => [String(u.shop_id), parseInt(u.count as string, 10)]));
+    const userCountMap = new Map<string, number>();
+    for (const u of userCounts) {
+      userCountMap.set(String(u.shop_id), parseInt(u.count as string, 10));
+    }
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v.shop_id), parseInt(v.count as string, 10)]));
     const backfillMap = new Map(backfillProgress.map(b => [String(b.shop_id), b]));
     const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shop_id), b]));
@@ -111,7 +116,7 @@ export async function GET() {
         enterpriseId: shop.enterprise_id || null,
         enterpriseName: enterprise?.name || null,
         createdAt: shop.created_at || new Date(),
-        userCount: userCountMap.get(String(shop.shop_id)) || 0,
+        userCount: userCountMap.get(String(shop.shop_id)) || userCountMap.get(shop.id) || 0,
         vehicleCount: vehicleCountMap.get(shop.id) || 0,
         integrations,
         isLocked: shop.is_locked || false,
