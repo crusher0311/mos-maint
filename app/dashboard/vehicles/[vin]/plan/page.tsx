@@ -1017,7 +1017,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     shopUuid ? sql`
       SELECT * FROM protractor_work_orders
       WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vin}
-      ORDER BY fetched_at DESC NULLS LAST, created_at DESC NULLS LAST
+      ORDER BY synced_at DESC NULLS LAST, closed_date DESC NULLS LAST
       LIMIT 1
     ` : sql`SELECT NULL WHERE FALSE`,
     // Tekmetric work orders
@@ -1182,7 +1182,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       shopUuid ? sql`
         SELECT * FROM protractor_work_orders
         WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vinUpper}
-        ORDER BY fetched_at DESC NULLS LAST
+        ORDER BY synced_at DESC NULLS LAST
         LIMIT 20
       ` : sql`SELECT NULL WHERE FALSE`,
       shopUuid ? sql`
