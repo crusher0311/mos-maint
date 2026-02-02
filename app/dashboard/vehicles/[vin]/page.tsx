@@ -80,7 +80,7 @@ async function getLatestMilesForVin(vin: string): Promise<number | null> {
       ) as miles
     FROM events
     WHERE UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vinUpper}
-      AND (provider = 'autoflow' OR (provider = 'ui' AND type = 'manual_closed'))
+      AND (provider = 'autoflow' OR (provider = 'ui' AND event_type = 'manual_closed'))
     ORDER BY created_at DESC NULLS LAST
     LIMIT 1
   `;
