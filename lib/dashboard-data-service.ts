@@ -45,12 +45,26 @@ interface ShopConfig {
 }
 
 async function getShopConfig(shopId: string | number): Promise<ShopConfig | null> {
-  const rows = await sql`
-    SELECT id, shop_id, settings, tekmetric, protractor, autoflow
-    FROM shops
-    WHERE shop_id = ${String(shopId)} OR shop_id = ${String(Number(shopId))}
-    LIMIT 1
-  `;
+  // Handle both text shop_id (like "29") and UUID (shop's id column)
+  const shopIdStr = String(shopId);
+  const isUuid = shopIdStr.includes('-') && shopIdStr.length === 36;
+  
+  let rows;
+  if (isUuid) {
+    rows = await sql`
+      SELECT id, shop_id, settings, tekmetric, protractor, autoflow
+      FROM shops
+      WHERE id = ${shopIdStr}::uuid
+      LIMIT 1
+    `;
+  } else {
+    rows = await sql`
+      SELECT id, shop_id, settings, tekmetric, protractor, autoflow
+      FROM shops
+      WHERE shop_id = ${shopIdStr}
+      LIMIT 1
+    `;
+  }
   
   if (!rows[0]) return null;
   

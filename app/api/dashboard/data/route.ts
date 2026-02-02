@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     const sessRows = await sql`
-      SELECT user_id, expires_at FROM sessions 
+      SELECT user_id, expires_at, shop_id as session_shop_id FROM sessions 
       WHERE token = ${sid} AND expires_at > ${now}
       LIMIT 1
     `;
@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    const userShopId = user.shop_id;
+    // Use session's shop_id for impersonation, otherwise use user's shop_id
+    const userShopId = sessRows[0].session_shop_id || user.shop_id;
 
     const shopRows = await sql`
       SELECT id, shop_id, settings FROM shops
