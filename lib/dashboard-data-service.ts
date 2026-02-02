@@ -200,28 +200,14 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
   return rows;
 }
 
-async function fetchProtractorRows(shopId: string, settings: any): Promise<DashboardRow[]> {
-  const DEFAULT_WORKFLOW_STAGES = [
-    "InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted",
-    "EstimatePresented", "EstimateRejected", "WaitingForParts", "VehicleInBay",
-    "VehicleReadyForPickup", "Deferred", "WorkCompleted"
-  ];
-  const allowedStages = settings?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
-  const TERMINAL_WORKFLOW_STAGES = ["Invoiced", "Closed", "Void", "ClosedInvoiced", "ClosedVoid"];
-
+async function fetchProtractorRows(shopUuid: string, settings: any): Promise<DashboardRow[]> {
   const protractorWoRows = await sql`
-    SELECT wo.*, pv.year as vehicle_year, pv.make as vehicle_make, pv.model as vehicle_model,
-           pv.engine as vehicle_engine, pv.mileage as vehicle_mileage, pv.odometer as vehicle_odometer,
-           pv.customer
+    SELECT wo.*
     FROM protractor_work_orders wo
-    LEFT JOIN protractor_vehicles pv ON wo.vin = pv.vin AND wo.shop_id = pv.shop_id
-    WHERE wo.shop_id = ${shopId}
+    WHERE wo.shop_id = ${shopUuid}::uuid
       AND wo.vin IS NOT NULL
-      AND wo.completed IS NOT TRUE
       AND wo.status NOT IN ('Invoiced', 'Closed', 'Void')
-      AND wo.workflow_stage = ANY(${allowedStages})
-      AND wo.workflow_stage != ALL(${TERMINAL_WORKFLOW_STAGES})
-    ORDER BY wo.fetched_at DESC
+    ORDER BY wo.synced_at DESC
   `;
 
   return protractorWoRows.map((wo: any) => {
@@ -229,33 +215,30 @@ async function fetchProtractorRows(shopId: string, settings: any): Promise<Dashb
     const vMake = wo.vehicle_make || '';
     const vModel = wo.vehicle_model || '';
     const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
-    const mileage = wo.vehicle_mileage || wo.vehicle_odometer || wo.mileage || null;
-    const customerData = wo.customer || {};
-    const fullName = customerData.name || 
-      `${customerData.firstName || ''} ${customerData.lastName || ''}`.trim() || 
-      'Unknown Customer';
+    const mileage = wo.mileage || null;
+    const fullName = wo.customer_name || 'Unknown Customer';
 
     return {
-      updatedAt: wo.fetched_at || new Date(),
+      updatedAt: wo.synced_at || new Date(),
       displayName: fullName,
       displayVehicle,
       displayVin: wo.vin,
       displayMiles: mileage,
-      displayRo: wo.work_order_number?.toString() || wo.invoice_number || null,
+      displayRo: wo.work_order_number?.toString() || null,
       workOrderId: wo.id?.toString(),
-      dviDone: wo.dvi_done || false,
+      dviDone: false,
       source: 'protractor' as SMSProvider,
-      displayStatus: wo.workflow_stage || wo.status || 'Open',
+      displayStatus: wo.status || 'Open',
       af: {
-        status: wo.workflow_stage || wo.status || 'Open',
-        createdAt: wo.fetched_at,
+        status: wo.status || 'Open',
+        createdAt: wo.synced_at,
         miles: mileage
       },
       vehicle: {
         year: wo.vehicle_year || null,
         make: wo.vehicle_make || null,
         model: wo.vehicle_model || null,
-        engine: wo.vehicle_engine || null
+        engine: null
       }
     };
   });
@@ -340,7 +323,7 @@ export async function getDashboardData(shopId: string | number): Promise<Dashboa
   }
 
   if (shopConfig.isProtractorConfigured) {
-    const protractorRows = await fetchProtractorRows(shopConfig.shopId, shopConfig.settings);
+    const protractorRows = await fetchProtractorRows(shopConfig.id, shopConfig.settings);
     allRows.push(...protractorRows);
     configuredProviders.push('protractor');
     if (!primarySmsType) primarySmsType = 'protractor';
