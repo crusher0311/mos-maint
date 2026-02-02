@@ -99,8 +99,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
-  const [sortColumn, setSortColumn] = useState<SortColumn>('mileage');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortColumn, setSortColumn] = useState<SortColumn>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dashboard_sort_column');
+      if (saved && ['customer', 'vehicle', 'vin', 'ro', 'status', 'dvi', 'mileage'].includes(saved)) {
+        return saved as SortColumn;
+      }
+    }
+    return 'mileage';
+  });
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dashboard_sort_direction');
+      if (saved === 'asc' || saved === 'desc') {
+        return saved;
+      }
+    }
+    return 'desc';
+  });
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -691,12 +707,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   }
 
   const handleSort = (column: SortColumn) => {
+    let newDirection: SortDirection;
     if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      setSortDirection(newDirection);
     } else {
+      newDirection = column === 'mileage' ? 'desc' : 'asc';
       setSortColumn(column);
-      setSortDirection(column === 'mileage' ? 'desc' : 'asc');
+      setSortDirection(newDirection);
+      localStorage.setItem('dashboard_sort_column', column);
     }
+    localStorage.setItem('dashboard_sort_direction', newDirection);
   };
 
   const sortedRows = [...(data.rows || [])].sort((a, b) => {
