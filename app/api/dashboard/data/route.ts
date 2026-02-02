@@ -331,28 +331,31 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Fetch Tekmetric work orders
+    // Fetch Tekmetric work orders - use shop UUID (shopConfig.id) to match tekmetric_work_orders.shop_id
     const TEKMETRIC_ALLOWED_STATUSES = ["Estimate", "Estimates", "Work-In-Progress", "Complete", "Completed"];
     const tekmetricLabelFilter = settings?.preferences?.tekmetricLabels || [];
+    const shopUuid = shopConfig?.id;
     
-    let tekmetricWoRows;
-    if (tekmetricLabelFilter.length > 0) {
-      tekmetricWoRows = await sql`
-        SELECT * FROM tekmetric_work_orders
-        WHERE shop_id = ${String(userShopId)}
-          AND vin IS NOT NULL
-          AND status = ANY(${TEKMETRIC_ALLOWED_STATUSES})
-          AND label = ANY(${tekmetricLabelFilter})
-        ORDER BY fetched_at DESC
-      `;
-    } else {
-      tekmetricWoRows = await sql`
-        SELECT * FROM tekmetric_work_orders
-        WHERE shop_id = ${String(userShopId)}
-          AND vin IS NOT NULL
-          AND status = ANY(${TEKMETRIC_ALLOWED_STATUSES})
-        ORDER BY fetched_at DESC
-      `;
+    let tekmetricWoRows: any[] = [];
+    if (shopUuid) {
+      if (tekmetricLabelFilter.length > 0) {
+        tekmetricWoRows = await sql`
+          SELECT * FROM tekmetric_work_orders
+          WHERE shop_id = ${shopUuid}
+            AND vin IS NOT NULL
+            AND status = ANY(${TEKMETRIC_ALLOWED_STATUSES})
+            AND label = ANY(${tekmetricLabelFilter})
+          ORDER BY synced_at DESC
+        `;
+      } else {
+        tekmetricWoRows = await sql`
+          SELECT * FROM tekmetric_work_orders
+          WHERE shop_id = ${shopUuid}
+            AND vin IS NOT NULL
+            AND status = ANY(${TEKMETRIC_ALLOWED_STATUSES})
+          ORDER BY synced_at DESC
+        `;
+      }
     }
 
     const tekmetricRows = tekmetricWoRows.map((wo: any) => {
@@ -361,24 +364,25 @@ export async function GET(request: NextRequest) {
       const vModel = wo.vehicle_model || '';
       const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
       const displayStatus = (wo.label && wo.label !== '') ? wo.label : (wo.status || 'Open');
+      const mileage = wo.mileage_in || wo.mileage_out || null;
       
       return {
-        updatedAt: wo.fetched_at || new Date(),
+        updatedAt: wo.synced_at || new Date(),
         displayName: wo.customer_name || 'Unknown Customer',
         displayVehicle,
         displayVin: wo.vin,
-        displayMiles: wo.odometer,
+        displayMiles: mileage,
         displayRo: wo.work_order_number,
         workOrderId: wo.work_order_id,
-        dviDone: wo.dvi_done || false,
+        dviDone: false, // DVI tracking handled separately
         source: "tekmetric",
         displayStatus,
         label: wo.label || null,
         labelColor: wo.label_color || null,
         af: {
           status: wo.status || 'Open',
-          createdAt: wo.fetched_at,
-          miles: wo.odometer
+          createdAt: wo.synced_at,
+          miles: mileage
         },
         vehicle: {
           year: wo.vehicle_year || null,

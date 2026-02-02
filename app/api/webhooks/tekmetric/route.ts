@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         
         await sql`
           UPDATE tekmetric_work_orders
-          SET status = ${statusName || "Posted"}, status_code = ${statusCode || "POSTED"}, closed_at = NOW(), updated_at = NOW()
+          SET status = ${statusName || "Posted"}, status_code = ${statusCode || "POSTED"}, closed_date = NOW(), synced_at = NOW()
           WHERE work_order_id = ${String(roId)}
         `;
         
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
           const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
           await sql`
             UPDATE tekmetric_work_orders
-            SET status = ${statusName}, status_code = ${statusCode}, label = ${newLabel}, label_color = ${repairOrder.color || null}, updated_at = NOW()
+            SET status = ${statusName}, status_code = ${statusCode}, label = ${newLabel}, label_color = ${repairOrder.color || null}, synced_at = NOW()
             WHERE work_order_id = ${String(roId)}
           `;
           console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}`);
@@ -135,20 +135,21 @@ export async function POST(req: NextRequest) {
                   customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer";
                 } catch (e) {}
                 
-                const mileage = repairOrder.milesIn || repairOrder.milesOut || vehicle.mileageIn || vehicle.mileageOut || null;
+                const mileageIn = repairOrder.milesIn || vehicle.mileageIn || null;
+                const mileageOut = repairOrder.milesOut || vehicle.mileageOut || null;
                 
                 await sql`
                   INSERT INTO tekmetric_work_orders (
-                    work_order_id, work_order_number, shop_id, tekmetric_shop_id, vin,
-                    vehicle_year, vehicle_make, vehicle_model, vehicle_engine,
-                    customer_name, customer_id, odometer, status, status_code,
-                    label, label_color, fetched_at, created_at, updated_at
+                    work_order_id, work_order_number, shop_id, external_shop_id, vin,
+                    vehicle_year, vehicle_make, vehicle_model, vehicle_submodel,
+                    customer_name, customer_id, mileage_in, mileage_out, status, status_code,
+                    label, label_color, created_date, synced_at
                   ) VALUES (
-                    ${String(roId)}, ${String(roNumber)}, ${shop.shop_id}, ${String(tekmetricShopId)}, ${vehicle.vin.toUpperCase()},
-                    ${vehicle.year || null}, ${vehicle.make || null}, ${vehicle.model || null}, ${vehicle.engine || null},
-                    ${customerName}, ${String(repairOrder.customerId)}, ${mileage}, ${statusName || "Estimate"}, ${statusCode || null},
+                    ${String(roId)}, ${String(roNumber)}, ${shop.id}, ${String(tekmetricShopId)}, ${vehicle.vin.toUpperCase()},
+                    ${vehicle.year || null}, ${vehicle.make || null}, ${vehicle.model || null}, ${vehicle.subModel || null},
+                    ${customerName}, ${String(repairOrder.customerId)}, ${mileageIn}, ${mileageOut}, ${statusName || "Estimate"}, ${statusCode || null},
                     ${repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null}, ${repairOrder.color || null},
-                    NOW(), NOW(), NOW()
+                    NOW(), NOW()
                   )
                 `;
                 
