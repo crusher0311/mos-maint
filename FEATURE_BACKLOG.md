@@ -911,6 +911,42 @@ psql $QA_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
 
 ---
 
+## License Plate State Display
+
+**Priority:** Low  
+**Status:** Backlog
+
+### Overview
+When vehicles are displayed with `LICENSE:XXXXX` instead of a VIN (because no VIN was provided), include the license plate state if available.
+
+### Current Behavior
+- Vehicles without VINs show `LICENSE:VAT221` format
+- No state information is displayed
+- These vehicles cannot use VIN-based features (OE schedules, CARFAX, VIN decoding)
+
+### Proposed Solutions
+
+#### Option 1: AutoFlow Enhancement (Preferred)
+- Request AutoFlow to include `licenseState` in their webhook vehicle payload
+- Update dashboard-data-service.ts to display as `LICENSE:VA-VAT221`
+- No additional cost or API calls
+
+#### Option 2: License Plate Lookup Service
+- Integrate with a license plate lookup API (e.g., Clearview, Plate Recognizer)
+- Lookup state and possibly VIN from license plate
+- Additional cost per lookup
+
+#### Option 3: Visual De-emphasis
+- Keep current behavior but visually distinguish license plate entries
+- Add tooltip explaining limited functionality
+- No additional development needed
+
+### Files to Modify
+- `lib/dashboard-data-service.ts` - Line 95-97 where LICENSE: prefix is added
+- AutoFlow webhook handler if state data becomes available
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
@@ -919,4 +955,4 @@ psql $QA_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
 
 ---
 
-*Last Updated: January 31, 2026*
+*Last Updated: February 2, 2026*
