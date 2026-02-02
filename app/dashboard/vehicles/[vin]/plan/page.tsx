@@ -956,10 +956,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
       SELECT 
         COALESCE(
           payload->'ticket'->>'invoice',
-          payload->'ticket'->>'id',
-          ro_number
+          payload->'ticket'->>'id'
         ) as ro_number,
-        COALESCE(payload->'ticket'->>'status', status) as status,
+        payload->'ticket'->>'status' as status,
         COALESCE(
           (payload->'ticket'->>'mileage')::numeric,
           (payload->'vehicle'->>'mileage')::numeric
