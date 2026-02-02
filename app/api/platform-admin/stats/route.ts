@@ -38,21 +38,22 @@ export async function GET() {
     if (cachedStats && (now - cachedStats.cachedAt) < CACHE_TTL_MS) {
       usage = { totalRequests: cachedStats.totalRequests, totalCost: cachedStats.totalCost };
     } else {
-      const [requestCountResult, costResult] = await Promise.all([
-        sql<{count: string}[]>`SELECT COUNT(*) as count FROM usage_logs`,
-        sql<{total_cost: string | null}[]>`SELECT COALESCE(SUM(estimated_cost), 0) as total_cost FROM usage_logs`
-      ]);
-      
-      const totalRequests = parseInt(requestCountResult[0]?.count || "0", 10);
-      const totalCost = parseFloat(costResult[0]?.total_cost || "0");
-      
-      cachedStats = {
-        totalRequests,
-        totalCost,
-        cachedAt: Date.now()
-      };
-      
-      usage = { totalRequests, totalCost };
+      try {
+        const requestCountResult = await sql<{count: string}[]>`SELECT COUNT(*) as count FROM usage_logs`;
+        const totalRequests = parseInt(requestCountResult[0]?.count || "0", 10);
+        const totalCost = 0; // Cost tracking not implemented yet
+        
+        cachedStats = {
+          totalRequests,
+          totalCost,
+          cachedAt: Date.now()
+        };
+        
+        usage = { totalRequests, totalCost };
+      } catch {
+        // Table may not exist
+        usage = { totalRequests: 0, totalCost: 0 };
+      }
     }
     
     return NextResponse.json({

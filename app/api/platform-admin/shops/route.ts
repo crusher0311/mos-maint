@@ -42,7 +42,7 @@ export async function GET() {
       sql`SELECT shop_id, COUNT(*) as count FROM job_history WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
       sql`SELECT shop_id, COUNT(*) as count FROM job_index WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
       sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shops.map(s => s.id)}) GROUP BY shop_id`,
-      sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shops.map(s => s.id)}) AND generated_at >= ${monthStart} GROUP BY shop_id`
+      sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shops.map(s => s.id)}) AND created_at >= ${monthStart} GROUP BY shop_id`
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u.shop_id), parseInt(u.count as string, 10)]));
@@ -78,12 +78,12 @@ export async function GET() {
     const enrichedShops = shops.map(shop => {
       const settings = shop.settings as Record<string, unknown> | null;
       const billing = shop.billing as Record<string, unknown> | null;
-      const tekmetricConfig = shop.tekmetric_config as Record<string, unknown> | null;
-      const protractorConfig = shop.protractor_config as Record<string, unknown> | null;
-      const carfaxConfig = shop.carfax_config as Record<string, unknown> | null;
-      const autoflowConfig = shop.autoflow_config as Record<string, unknown> | null;
-      const autovitalsConfig = shop.autovitals_config as Record<string, unknown> | null;
-      const enabledFeatures = shop.enabled_features as Record<string, boolean> | null;
+      const tekmetricConfig = shop.tekmetric as Record<string, unknown> | null;
+      const protractorConfig = shop.protractor as Record<string, unknown> | null;
+      const carfaxConfig = shop.carfax as Record<string, unknown> | null;
+      const autoflowConfig = shop.autoflow as Record<string, unknown> | null;
+      const autovitalsConfig = shop.autovitals as Record<string, unknown> | null;
+      const enabledFeatures = settings?.enabledFeatures as Record<string, boolean> | null;
       const stickerConfig = shop.sticker_config as Record<string, unknown> | null;
       
       const integrations: string[] = [];

@@ -14,7 +14,7 @@ export async function GET() {
     const userId = `admin:${session.email}`;
     const result = await sql`
       SELECT COUNT(*)::int as count FROM notifications
-      WHERE user_id = ${userId} AND read = false
+      WHERE user_id::text = ${userId} AND is_read = false
     `;
     const unreadCount = result[0]?.count ?? 0;
 
