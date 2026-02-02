@@ -202,21 +202,28 @@ async function fetchAutoFlowRows(shopId: string, shopUuid: string): Promise<Dash
 
 async function fetchProtractorRows(shopUuid: string, settings: any): Promise<DashboardRow[]> {
   const protractorWoRows = await sql`
-    SELECT wo.*
+    SELECT wo.*, 
+           COALESCE(v.year, wo.vehicle_year) as v_year,
+           COALESCE(v.make, wo.vehicle_make) as v_make,
+           COALESCE(v.model, wo.vehicle_model) as v_model,
+           COALESCE(v.mileage, wo.mileage) as v_mileage,
+           c.name as c_name, c.first_name as c_first, c.last_name as c_last
     FROM protractor_work_orders wo
+    LEFT JOIN vehicles v ON UPPER(wo.vin) = UPPER(v.vin) AND v.shop_id = wo.shop_id
+    LEFT JOIN customers c ON v.customer_id = c.id
     WHERE wo.shop_id = ${shopUuid}::uuid
       AND wo.vin IS NOT NULL
-      AND wo.status NOT IN ('Invoiced', 'Closed', 'Void')
+      AND wo.status NOT IN ('Invoiced', 'Invoice', 'Closed', 'Void')
     ORDER BY wo.synced_at DESC
   `;
 
   return protractorWoRows.map((wo: any) => {
-    const vYear = wo.vehicle_year;
-    const vMake = wo.vehicle_make || '';
-    const vModel = wo.vehicle_model || '';
+    const vYear = wo.v_year;
+    const vMake = wo.v_make || '';
+    const vModel = wo.v_model || '';
     const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
-    const mileage = wo.mileage || null;
-    const fullName = wo.customer_name || 'Unknown Customer';
+    const mileage = wo.v_mileage || wo.mileage || null;
+    const fullName = wo.c_name || (wo.c_first && wo.c_last ? `${wo.c_first} ${wo.c_last}`.trim() : null) || wo.customer_name || 'Unknown Customer';
 
     return {
       updatedAt: wo.synced_at || new Date(),
@@ -235,9 +242,9 @@ async function fetchProtractorRows(shopUuid: string, settings: any): Promise<Das
         miles: mileage
       },
       vehicle: {
-        year: wo.vehicle_year || null,
-        make: wo.vehicle_make || null,
-        model: wo.vehicle_model || null,
+        year: wo.v_year || null,
+        make: wo.v_make || null,
+        model: wo.v_model || null,
         engine: null
       }
     };

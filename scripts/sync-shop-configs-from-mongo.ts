@@ -61,6 +61,12 @@ async function syncShopConfigs() {
     const branding = shop.branding || null;
     const preferences = shop.preferences || null;
     const maintenance = shop.maintenance || null;
+    const enabledFeatures = shop.enabledFeatures || null;
+    
+    let settingsWithFeatures = settings || {};
+    if (enabledFeatures) {
+      settingsWithFeatures = { ...settingsWithFeatures, enabledFeatures };
+    }
     
     console.log(`Updating shop ${shopId} (${shop.name}):`);
     console.log(`  - Enterprise: ${pgEnterpriseId || 'none'} (from ${mongoEnterpriseId || 'none'})`);
@@ -81,7 +87,7 @@ async function syncShopConfigs() {
           autovitals = ${autovitalsConfig ? sql.json(autovitalsConfig) : sql`autovitals`},
           enterprise_id = ${pgEnterpriseId ? sql`${pgEnterpriseId}::uuid` : sql`enterprise_id`},
           location_identifier = ${locationIdentifier || sql`location_identifier`},
-          settings = ${settings ? sql.json(settings) : sql`settings`},
+          settings = ${Object.keys(settingsWithFeatures).length > 0 ? sql.json(settingsWithFeatures) : sql`settings`},
           billing = ${billing ? sql.json(billing) : sql`billing`},
           sticker_config = ${stickerConfig ? sql.json(stickerConfig) : sql`sticker_config`},
           branding = ${branding ? sql.json(branding) : sql`branding`},
