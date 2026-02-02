@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs";
@@ -8,53 +8,44 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
-    const token = String(body?.token || body?.pendingId || "").trim();
+    const pendingId = String(body?.pendingId || "").trim();
 
-    if (!token) {
-      return NextResponse.json({ error: "Missing token" }, { status: 400 });
+    if (!pendingId) {
+      return NextResponse.json({ error: "Missing pending ID" }, { status: 400 });
     }
 
-    let pendingResult = await sql`
-      SELECT * FROM pending_signups WHERE token = ${token} LIMIT 1
-    `;
-    let pending = pendingResult[0];
+    const db = await getDb();
+    
+    const pending = await db.collection("pending_signups").findOne({ pendingId });
     
     if (!pending) {
       return NextResponse.json({ error: "Invalid or expired setup link" }, { status: 404 });
     }
 
-    const signupData = (pending.signup_data as Record<string, unknown>) || {};
     let attempts = 0;
     const maxAttempts = 10;
     
-    while (!signupData.completed && attempts < maxAttempts) {
+    while (!pending.completed && attempts < maxAttempts) {
       await new Promise(r => setTimeout(r, 1000));
-      const updatedResult = await sql`
-        SELECT * FROM pending_signups WHERE token = ${token} LIMIT 1
-      `;
-      const updated = updatedResult[0];
-      const updatedData = (updated?.signup_data as Record<string, unknown>) || {};
-      if (updatedData.completed) {
-        pending = updated;
-        Object.assign(signupData, updatedData);
+      const updated = await db.collection("pending_signups").findOne({ pendingId });
+      if (updated?.completed) {
+        Object.assign(pending, updated);
         break;
       }
       attempts++;
     }
 
-    if (!signupData.completed) {
+    if (!pending.completed) {
       return NextResponse.json({ 
         error: "Payment is still processing. Please wait a moment and try again." 
       }, { status: 202 });
     }
 
-    const shopId = signupData.shopId || signupData.reservedShopId;
-    const userResult = await sql`
-      SELECT id FROM users 
-      WHERE LOWER(email) = ${pending.email} AND shop_id = ${String(shopId)}
-      LIMIT 1
-    `;
-    const user = userResult[0];
+    const shopId = pending.shopId || pending.reservedShopId;
+    const user = await db.collection("users").findOne({ 
+      emailLower: pending.adminEmail,
+      shopId 
+    });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -65,10 +56,13 @@ export async function POST(req: NextRequest) {
     const ttlDays = 30;
     const expiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
     
-    await sql`
-      INSERT INTO sessions (token, user_id, shop_id, created_at, expires_at)
-      VALUES (${sessionId}, ${user.id}, ${String(shopId)}, ${now}, ${expiresAt})
-    `;
+    await db.collection("sessions").insertOne({
+      token: sessionId,
+      userId: user._id,
+      shopId,
+      createdAt: now,
+      expiresAt,
+    });
 
     const res = NextResponse.json({ ok: true, shopId });
     
@@ -81,9 +75,8 @@ export async function POST(req: NextRequest) {
     });
     
     return res;
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+  } catch (e: any) {
     console.error("Setup complete error:", e);
-    return NextResponse.json({ error: message || "Setup failed" }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "Setup failed" }, { status: 500 });
   }
 }

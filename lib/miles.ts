@@ -1,40 +1,92 @@
-import sql from "@/lib/db/postgres";
+// lib/miles.ts
+import { Db } from "mongodb";
 
-export async function getLatestMilesForVin(vin: string): Promise<number | null> {
+/**
+ * Prefer (in order, and ignoring 0/undefined):
+ *   1) Latest repair_orders.mileage for the VIN
+ *   2) Latest AutoFlow event mileage for the VIN
+ *   3) vehicles.odometer (or vehicles.lastMiles)
+ */
+export async function getLatestMilesForVin(db: Db, vin: string): Promise<number | null> {
   const cleanVin = (vin || "").toUpperCase();
 
-  const roRows = await sql`
-    SELECT mileage FROM work_orders
-    WHERE vin = ${cleanVin}
-    ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-    LIMIT 1
-  `;
-  const mRO = toPosNum(roRows[0]?.mileage);
+  // Latest RO for this VIN
+  const ro = await db.collection("repair_orders").findOne(
+    { vin: cleanVin },
+    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1 } }
+  );
+  const mRO = toPosNum(ro?.mileage);
 
-  const afRows = await sql`
-    SELECT 
-      COALESCE(
-        payload->'ticket'->>'mileage',
-        payload->>'mileage',
-        payload->'vehicle'->>'mileage',
-        payload->'vehicle'->>'miles',
-        payload->'vehicle'->>'odometer'
-      )::text as miles
-    FROM events
-    WHERE UPPER(COALESCE(vehicle_vin, vin, payload->'vehicle'->>'vin')) = ${cleanVin}
-      AND (provider = 'autoflow' OR (provider = 'ui' AND type = 'manual_closed'))
-    ORDER BY created_at DESC
-    LIMIT 1
-  `;
-  const mAF = toPosNum(afRows[0]?.miles);
+  // Latest AF / ManualClosed event, project mileage from common paths
+  const af = await db.collection("events").aggregate([
+    {
+      $match: {
+        $expr: {
+          $eq: [
+            {
+              $toUpper: {
+                $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }],
+              },
+            },
+            cleanVin,
+          ],
+        },
+        $or: [
+          { provider: "autoflow" },
+          { provider: "ui", type: "manual_closed" },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        createdAtDate: {
+          $cond: [
+            { $eq: [{ $type: "$createdAt" }, "date"] },
+            "$createdAt",
+            { $dateFromString: { dateString: { $toString: "$createdAt" }, onError: null, onNull: null } },
+          ],
+        },
+      },
+    },
+    { $sort: { createdAtDate: -1 } },
+    { $limit: 1 },
+    {
+      $project: {
+        _id: 0,
+        miles: {
+          $ifNull: [
+            "$payload.ticket.mileage",
+            {
+              $ifNull: [
+                "$payload.mileage",
+                {
+                  $ifNull: [
+                    "$payload.vehicle.mileage",
+                    {
+                      $ifNull: [
+                        "$payload.vehicle.miles",
+                        "$payload.vehicle.odometer",
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ]).next();
+  const mAF = toPosNum(af?.miles);
 
-  const vehRows = await sql`
-    SELECT odometer, last_miles FROM vehicles
-    WHERE vin = ${cleanVin}
-    LIMIT 1
-  `;
-  const mVeh = toPosNum(vehRows[0]?.odometer) ?? toPosNum(vehRows[0]?.last_miles);
+  // Vehicle-level (odometer/lastMiles)
+  const veh = await db.collection("vehicles").findOne(
+    { vin: cleanVin },
+    { projection: { odometer: 1, lastMiles: 1 } }
+  );
+  const mVeh = toPosNum(veh?.odometer) ?? toPosNum(veh?.lastMiles);
 
+  // Priority: RO → AF → Vehicle
   return mRO ?? mAF ?? mVeh ?? null;
 }
 

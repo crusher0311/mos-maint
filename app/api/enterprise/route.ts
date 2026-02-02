@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { 
-  createEnterprise, 
-  getEnterpriseById, 
-  addShopToEnterprise, 
-  removeShopFromEnterprise 
-} from "@/lib/enterprise-pg";
-import sql from "@/lib/db/postgres";
+import { createEnterprise, getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
+import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,42 +34,30 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
       }
       
-      const availableUsers = enterprise.shop_ids.length > 0 ? await sql`
-        SELECT DISTINCT ON (email) id, email, name, role 
-        FROM users 
-        WHERE shop_id::int = ANY(${enterprise.shop_ids})
-        ORDER BY email
-      ` : [];
+      const db = await getDb();
+      const availableUsers = await db.collection("users")
+        .find({ shopId: { $in: enterprise.shopIds } })
+        .project({ email: 1, name: 1, role: 1 })
+        .toArray();
+      
+      const uniqueUsers = new Map();
+      availableUsers.forEach((u: any) => {
+        if (!uniqueUsers.has(u.email)) {
+          uniqueUsers.set(u.email, u);
+        }
+      });
       
       return NextResponse.json({ 
-        enterprise: {
-          id: enterprise.id,
-          name: enterprise.name,
-          shopIds: enterprise.shop_ids,
-          sharedMappings: enterprise.shared_mappings,
-          sharedIntegrations: enterprise.shared_integrations,
-          createdAt: enterprise.created_at,
-          updatedAt: enterprise.updated_at,
-        },
-        availableUsers
+        enterprise,
+        availableUsers: Array.from(uniqueUsers.values())
       });
     }
     
-    const enterprises = await sql`SELECT * FROM enterprise_accounts ORDER BY name`;
-    return NextResponse.json({ 
-      enterprises: enterprises.map(e => ({
-        id: e.id,
-        name: e.name,
-        shopIds: e.shop_ids,
-        sharedMappings: e.shared_mappings,
-        sharedIntegrations: e.shared_integrations,
-        createdAt: e.created_at,
-        updatedAt: e.updated_at,
-      }))
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const db = await getDb();
+    const enterprises = await db.collection("enterprise_accounts").find({}).toArray();
+    return NextResponse.json({ enterprises });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
 
@@ -94,23 +78,16 @@ export async function POST(req: NextRequest) {
     const enterprise = await createEnterprise(name, shopIds || []);
     
     if (shopIds?.length > 0) {
-      await sql`
-        UPDATE shops 
-        SET enterprise_id = ${enterprise.id}, updated_at = NOW()
-        WHERE shop_id::int = ANY(${shopIds})
-      `;
+      const db = await getDb();
+      await db.collection("shops").updateMany(
+        { shopId: { $in: shopIds } },
+        { $set: { enterpriseId: enterprise._id, updatedAt: new Date() } }
+      );
     }
     
-    return NextResponse.json({ 
-      enterprise: {
-        id: enterprise.id,
-        name: enterprise.name,
-        shopIds: enterprise.shop_ids,
-      }
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ enterprise });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
 
@@ -128,81 +105,84 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Enterprise ID is required" }, { status: 400 });
     }
     
+    const db = await getDb();
+    
     if (action === "add_shop" && shopId) {
       const numericShopId = Number(shopId);
       await addShopToEnterprise(enterpriseId, numericShopId);
       
+      // Get existing enterprise shops to copy features and preferences from
       const enterprise = await getEnterpriseById(enterpriseId);
       let featuresToCopy: string[] = [];
-      let preferencesToCopy: Record<string, unknown> | null = null;
+      let preferencesToCopy: Record<string, any> | null = null;
       
-      if (enterprise && enterprise.shop_ids.length > 0) {
-        const otherShopIds = enterprise.shop_ids.filter((id: number) => Number(id) !== numericShopId);
+      if (enterprise && enterprise.shopIds.length > 0) {
+        // Filter out the new shop from the list of existing shops
+        const otherShopIds = enterprise.shopIds.filter((id: number) => Number(id) !== numericShopId);
         console.log(`[Enterprise] Adding shop ${numericShopId} to enterprise. Other shops:`, otherShopIds);
         
         if (otherShopIds.length > 0) {
+          // Get features and preferences from existing enterprise shops
+          // Prioritize the current user's shop if they're logged in
           const currentUserShopId = auth.session?.shopId ? Number(auth.session.shopId) : null;
           
-          const existingShops = await sql<{shop_id: string, settings: Record<string, unknown> | null}[]>`
-            SELECT shop_id, settings FROM shops 
-            WHERE shop_id::int = ANY(${otherShopIds})
-          `;
+          const existingShops = await db.collection("shops")
+            .find({ shopId: { $in: otherShopIds } })
+            .project({ shopId: 1, enabledFeatures: 1, preferences: 1 })
+            .toArray();
           
           console.log(`[Enterprise] Found ${existingShops.length} enterprise shops, currentUserShopId: ${currentUserShopId}`);
           
+          // Try to use the current user's shop first, otherwise use first shop with data
           let sourceShop = currentUserShopId 
-            ? existingShops.find((s) => Number(s.shop_id) === Number(currentUserShopId))
+            ? existingShops.find((s: any) => Number(s.shopId) === Number(currentUserShopId))
             : null;
           
           if (!sourceShop) {
-            sourceShop = existingShops.find((s) => {
-              const settings = s.settings as Record<string, unknown> | null;
-              const enabledFeatures = settings?.enabledFeatures as string[] | undefined;
-              return Array.isArray(enabledFeatures) && enabledFeatures.length > 0;
-            });
-            console.log(`[Enterprise] Using fallback - first shop with features: ${sourceShop?.shop_id || 'none'}`);
+            // Fall back to first shop with features
+            sourceShop = existingShops.find((s: any) => 
+              Array.isArray(s.enabledFeatures) && s.enabledFeatures.length > 0
+            );
+            console.log(`[Enterprise] Using fallback - first shop with features: ${sourceShop?.shopId || 'none'}`);
           } else {
-            console.log(`[Enterprise] Using current user's shop ${sourceShop.shop_id} as source`);
+            console.log(`[Enterprise] Using current user's shop ${sourceShop.shopId} as source`);
           }
           
           if (sourceShop) {
-            const settings = sourceShop.settings as Record<string, unknown> | null;
-            const enabledFeatures = settings?.enabledFeatures as string[] | undefined;
-            const preferences = settings?.preferences as Record<string, unknown> | undefined;
-            
-            console.log(`[Enterprise] Source shop ${sourceShop.shop_id} enabledFeatures: ${JSON.stringify(enabledFeatures)?.slice(0, 300)}`);
-            if (Array.isArray(enabledFeatures) && enabledFeatures.length > 0) {
-              featuresToCopy = enabledFeatures;
+            console.log(`[Enterprise] Source shop ${sourceShop.shopId} enabledFeatures: ${JSON.stringify(sourceShop.enabledFeatures)?.slice(0, 300)}`);
+            if (Array.isArray(sourceShop.enabledFeatures) && sourceShop.enabledFeatures.length > 0) {
+              featuresToCopy = sourceShop.enabledFeatures;
             }
-            if (preferences && Object.keys(preferences).length > 0) {
-              const { jobHistoryShopIds, ...otherPrefs } = preferences as Record<string, unknown>;
+            if (sourceShop.preferences && Object.keys(sourceShop.preferences).length > 0) {
+              // Copy preferences but exclude job history shop IDs (those should be set per-shop)
+              const { jobHistoryShopIds, ...otherPrefs } = sourceShop.preferences;
               preferencesToCopy = otherPrefs;
             }
-            console.log(`[Enterprise] Copying from shop ${sourceShop.shop_id} to new location ${numericShopId}: features=${featuresToCopy.length}, hasPrefs=${!!preferencesToCopy}`);
+            console.log(`[Enterprise] Copying from shop ${sourceShop.shopId} to new location ${numericShopId}: features=${featuresToCopy.length}, hasPrefs=${!!preferencesToCopy}`);
           } else {
             console.log(`[Enterprise] No source shop found for copying`);
           }
         }
       }
       
-      const existingShop = await sql<{settings: Record<string, unknown> | null}[]>`
-        SELECT settings FROM shops WHERE shop_id = ${String(numericShopId)} LIMIT 1
-      `;
-      const existingSettings = existingShop[0]?.settings || {};
-      
-      const updatedSettings = {
-        ...existingSettings,
-        ...(featuresToCopy.length > 0 ? { enabledFeatures: featuresToCopy } : {}),
-        ...(preferencesToCopy ? { preferences: preferencesToCopy } : {}),
+      // Update the new shop with enterprise ID, copied features, and preferences
+      const updateFields: Record<string, any> = { 
+        enterpriseId: new ObjectId(enterpriseId), 
+        updatedAt: new Date() 
       };
       
-      await sql`
-        UPDATE shops 
-        SET enterprise_id = ${enterpriseId}, 
-            settings = ${JSON.stringify(updatedSettings)}::jsonb,
-            updated_at = NOW()
-        WHERE shop_id = ${String(numericShopId)}
-      `;
+      if (featuresToCopy.length > 0) {
+        updateFields.enabledFeatures = featuresToCopy;
+      }
+      
+      if (preferencesToCopy) {
+        updateFields.preferences = preferencesToCopy;
+      }
+      
+      await db.collection("shops").updateOne(
+        { shopId: numericShopId },
+        { $set: updateFields }
+      );
       
       return NextResponse.json({ 
         ok: true, 
@@ -212,20 +192,18 @@ export async function PUT(req: NextRequest) {
     }
     
     if (action === "remove_shop" && shopId) {
-      await removeShopFromEnterprise(enterpriseId, Number(shopId));
+      await removeShopFromEnterprise(enterpriseId, shopId);
       
-      await sql`
-        UPDATE shops 
-        SET enterprise_id = NULL, updated_at = NOW()
-        WHERE shop_id = ${String(shopId)}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $unset: { enterpriseId: "" }, $set: { updatedAt: new Date() } }
+      );
       
       return NextResponse.json({ ok: true });
     }
     
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }

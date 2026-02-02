@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: str
   }
 
   try {
+    // Use the same logo URL as the sticker generation
     const devDomain = process.env.REPLIT_DEV_DOMAIN || process.env.RENDER_EXTERNAL_HOSTNAME || "mos-maintenance-mvp.replit.app";
     const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
     
@@ -61,7 +62,7 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: str
   }
 }
 
-async function downloadAndCacheQR(pngUrl: string, shopId: number, qrId: string): Promise<string | null> {
+async function downloadAndCacheQR(pngUrl: string, shopId: number, qrId: string, db: any): Promise<string | null> {
   try {
     const response = await fetch(pngUrl);
     if (!response.ok) {
@@ -73,12 +74,21 @@ async function downloadAndCacheQR(pngUrl: string, shopId: number, qrId: string):
     const base64 = Buffer.from(buffer).toString("base64");
     const dataUri = `data:image/png;base64,${base64}`;
 
-    await sql`
-      INSERT INTO shop_media (shop_id, type, data_uri, hovercode_id, content_type, updated_at)
-      VALUES (${String(shopId)}, 'qr_code', ${dataUri}, ${qrId}, 'image/png', NOW())
-      ON CONFLICT (shop_id, type) 
-      DO UPDATE SET data_uri = ${dataUri}, hovercode_id = ${qrId}, updated_at = NOW()
-    `;
+    // Store in shop_media collection
+    await db.collection("shop_media").updateOne(
+      { shopId, type: "qr_code" },
+      {
+        $set: {
+          shopId,
+          type: "qr_code",
+          dataUri,
+          hovercodeId: qrId,
+          contentType: "image/png",
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
 
     return dataUri;
   } catch (error) {
@@ -114,6 +124,7 @@ async function fetchExistingQR(hovercodeId: string): Promise<string | null> {
   }
 }
 
+// GET - Retrieve cached QR code or generate new one
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -126,25 +137,29 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const shopRows = await sql`
-      SELECT sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
+    const db = await getDb();
 
-    const stickerConfig = (shopRows[0]?.sticker_config as any) || {};
-    const configuredQRId = stickerConfig.hovercodeQRId;
-    const appointmentUrl = stickerConfig.appointmentUrl;
+    // Get shop config first to check for configured hovercodeQRId
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
+    );
 
-    const cachedRows = await sql`
-      SELECT data_uri, hovercode_id FROM shop_media 
-      WHERE shop_id = ${String(shopId)} AND type = 'qr_code'
-      LIMIT 1
-    `;
-    const cached = cachedRows[0];
+    const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
+    const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
 
+    // Check for cached QR code
+    const cached = await db.collection("shop_media").findOne({
+      shopId,
+      type: "qr_code",
+    });
+
+    // If there's a configured QR ID in platform admin, use that
     if (configuredQRId) {
-      if (cached?.data_uri && cached?.hovercode_id === configuredQRId) {
+      // Check if cache matches the configured ID
+      if (cached?.dataUri && cached?.hovercodeId === configuredQRId) {
         console.log("[QR Cache GET] Using cached QR matching configured ID:", configuredQRId);
-        const matches = cached.data_uri.match(/^data:([^;]+);base64,(.+)$/);
+        const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
         if (matches) {
           const buffer = Buffer.from(matches[2], "base64");
           return new NextResponse(buffer, {
@@ -156,10 +171,11 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Cache doesn't match configured ID - fetch and cache the configured QR
       console.log("[QR Cache GET] Fetching configured QR ID:", configuredQRId);
       const existingPngUrl = await fetchExistingQR(configuredQRId);
       if (existingPngUrl) {
-        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId);
+        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId, db);
         if (dataUri) {
           const matches = dataUri.match(/^data:([^;]+);base64,(.+)$/);
           if (matches) {
@@ -177,9 +193,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch configured QR code" }, { status: 500 });
     }
 
-    if (cached?.data_uri) {
+    // No configured QR ID - check if we have any cached QR
+    if (cached?.dataUri) {
       console.log("[QR Cache GET] Using existing cached QR");
-      const matches = cached.data_uri.match(/^data:([^;]+);base64,(.+)$/);
+      const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
       if (matches) {
         const buffer = Buffer.from(matches[2], "base64");
         return new NextResponse(buffer, {
@@ -191,11 +208,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // No configured ID and no cache - create new if appointment URL exists
     if (!appointmentUrl) {
       console.log("[QR Cache GET] No appointment URL for shop:", shopId);
       return NextResponse.json({ error: "No appointment URL configured" }, { status: 400 });
     }
 
+    // Generate new QR code via HoverCode
     console.log("[QR Cache GET] Creating new QR for appointment URL");
     const result = await fetchQRFromHoverCode(appointmentUrl);
     if (!result || result.error) {
@@ -208,17 +227,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "No QR image URL returned" }, { status: 500 });
     }
 
-    const dataUri = await downloadAndCacheQR(result.pngUrl, shopId, result.qrId);
+    // Download and cache the QR code
+    const dataUri = await downloadAndCacheQR(result.pngUrl, shopId, result.qrId, db);
     if (!dataUri) {
       return NextResponse.json({ error: "Failed to cache QR code" }, { status: 500 });
     }
 
-    const updatedConfig = { ...stickerConfig, hovercodeQRId: result.qrId };
-    await sql`
-      UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
-      WHERE shop_id = ${String(shopId)}
-    `;
+    // Also save the new QR ID to shop config
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { "stickerConfig.hovercodeQRId": result.qrId } }
+    );
 
+    // Return the QR image
     const matches = dataUri.match(/^data:([^;]+);base64,(.+)$/);
     if (matches) {
       const buffer = Buffer.from(matches[2], "base64");
@@ -237,6 +258,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// POST - Refresh cached QR code (re-fetch from HoverCode if configured, or create new)
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -253,25 +275,28 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const shopRows = await sql`
-      SELECT sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
+    const db = await getDb();
 
-    const stickerConfig = (shopRows[0]?.sticker_config as any) || {};
-    const configuredQRId = stickerConfig.hovercodeQRId;
-    const appointmentUrl = stickerConfig.appointmentUrl;
+    // Get shop's config
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
+    );
 
+    const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
+    const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
+
+    // If shop has a configured QR ID (set by platform admin), re-fetch that from HoverCode
     if (configuredQRId) {
       console.log("[QR Cache POST] Re-fetching configured QR ID:", configuredQRId);
       const existingPngUrl = await fetchExistingQR(configuredQRId);
       if (existingPngUrl) {
-        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId);
+        const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId, db);
         if (dataUri) {
-          const updatedConfig = { ...stickerConfig, qrCachedAt: new Date().toISOString() };
-          await sql`
-            UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
-            WHERE shop_id = ${String(shopId)}
-          `;
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: { "stickerConfig.qrCachedAt": new Date() } }
+          );
           return NextResponse.json({
             success: true,
             message: "QR code cache refreshed from HoverCode",
@@ -282,11 +307,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to refresh configured QR code" }, { status: 500 });
     }
 
+    // No configured QR ID - create a new one if appointment URL exists
     if (!appointmentUrl) {
       console.log("[QR Cache POST] No appointment URL for shop:", shopId);
       return NextResponse.json({ error: "No appointment URL configured" }, { status: 400 });
     }
 
+    // Generate new QR code via HoverCode
     console.log("[QR Cache POST] Creating new QR for shop without configured ID");
     const result = await fetchQRFromHoverCode(appointmentUrl);
     if (!result || result.error) {
@@ -299,20 +326,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No QR image URL returned" }, { status: 500 });
     }
 
-    const dataUri = await downloadAndCacheQR(result.pngUrl, shopId, result.qrId);
+    // Download and cache the QR code
+    const dataUri = await downloadAndCacheQR(result.pngUrl, shopId, result.qrId, db);
     if (!dataUri) {
       return NextResponse.json({ error: "Failed to cache QR code" }, { status: 500 });
     }
 
-    const updatedConfig = { 
-      ...stickerConfig, 
-      hovercodeQRId: result.qrId.toString(),
-      qrCachedAt: new Date().toISOString()
-    };
-    await sql`
-      UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
-      WHERE shop_id = ${String(shopId)}
-    `;
+    // Update shop's hovercodeQRId for reference
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $set: {
+          "stickerConfig.hovercodeQRId": result.qrId.toString(),
+          "stickerConfig.qrCachedAt": new Date(),
+        },
+      }
+    );
 
     return NextResponse.json({
       success: true,

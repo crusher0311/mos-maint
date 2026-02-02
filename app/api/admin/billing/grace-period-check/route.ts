@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { sendEmail, makeAccountSuspendedEmail, makeGraceReminderEmail } from "@/lib/email";
-import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,122 +19,108 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const db = await getDb();
   const now = new Date();
   
-  const expiredGracePeriodShops = await sql`
-    SELECT * FROM shops 
-    WHERE billing->>'status' = 'past_due' 
-    AND (billing->>'gracePeriodEndsAt')::timestamp <= ${now}
-  `;
+  const expiredGracePeriodShops = await db.collection("shops").find({
+    "billing.status": "past_due",
+    "billing.gracePeriodEndsAt": { $lte: now }
+  }).toArray();
   
   const results = {
     checked: expiredGracePeriodShops.length,
-    suspended: [] as string[],
+    suspended: [] as number[],
     remindersSent: 0,
-    transitioned: [] as { shopId: string; shopName: string }[],
-    errors: [] as { shopId: string; error: string }[],
+    transitioned: [] as { shopId: number; shopName: string }[],
+    errors: [] as { shopId: number; error: string }[],
   };
   
-  const activeGracePeriodShops = await sql`
-    SELECT * FROM shops 
-    WHERE billing->>'status' = 'past_due' 
-    AND (billing->>'gracePeriodEndsAt')::timestamp > ${now}
-  `;
+  const activeGracePeriodShops = await db.collection("shops").find({
+    "billing.status": "past_due",
+    "billing.gracePeriodEndsAt": { $gt: now }
+  }).toArray();
   
   for (const shop of activeGracePeriodShops) {
     try {
-      const billing = shop.billing as Record<string, unknown>;
-      const gracePeriodEndsAt = new Date(billing.gracePeriodEndsAt as string);
+      const gracePeriodEndsAt = new Date(shop.billing.gracePeriodEndsAt);
       const daysRemaining = Math.ceil((gracePeriodEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
       
-      const lastReminderSent = billing?.lastReminderSentAt 
-        ? new Date(billing.lastReminderSentAt as string) 
+      const lastReminderSent = shop.billing?.lastReminderSentAt 
+        ? new Date(shop.billing.lastReminderSentAt) 
         : null;
       const hoursSinceLastReminder = lastReminderSent 
         ? (now.getTime() - lastReminderSent.getTime()) / (1000 * 60 * 60)
         : 999;
       
       if ((daysRemaining === 3 || daysRemaining === 4 || daysRemaining === 2 || daysRemaining === 1) && hoursSinceLastReminder > 20) {
-        const ownerResult = await sql`
-          SELECT email FROM users WHERE shop_id = ${shop.shop_id} AND role = 'owner' LIMIT 1
-        `;
-        const owner = ownerResult[0];
+        const owner = await db.collection("users").findOne({ shopId: shop.shopId, role: "owner" });
         if (owner?.email) {
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
           const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
-          const emailContent = makeGraceReminderEmail(shop.name || `Shop ${shop.shop_id}`, updatePaymentUrl, daysRemaining);
+          const emailContent = makeGraceReminderEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl, daysRemaining);
           
           await sendEmail({ to: owner.email, ...emailContent });
-          
-          const updatedBilling = { ...billing, lastReminderSentAt: now.toISOString() };
-          await sql`
-            UPDATE shops SET billing = ${JSON.stringify(updatedBilling)}::jsonb WHERE shop_id = ${shop.shop_id}
-          `;
+          await db.collection("shops").updateOne(
+            { shopId: shop.shopId },
+            { $set: { "billing.lastReminderSentAt": now } }
+          );
           results.remindersSent++;
-          console.log(`[Grace Period] Sent ${daysRemaining}-day reminder to ${owner.email} for shop ${shop.shop_id}`);
+          console.log(`[Grace Period] Sent ${daysRemaining}-day reminder to ${owner.email} for shop ${shop.shopId}`);
         }
       }
     } catch (error) {
-      console.error(`[Grace Period] Error sending reminder for shop ${shop.shop_id}:`, error);
+      console.error(`[Grace Period] Error sending reminder for shop ${shop.shopId}:`, error);
     }
   }
   
   for (const shop of expiredGracePeriodShops) {
     try {
-      const billing = (shop.billing as Record<string, unknown>) || {};
-      const enabledFeatures = (shop.enabled_features as Record<string, boolean>) || {};
+      await db.collection("shops").updateOne(
+        { shopId: shop.shopId },
+        {
+          $set: {
+            "billing.status": "suspended",
+            "billing.suspendedAt": now,
+            "billing.updatedAt": now,
+            "enabledFeatures.maintenance": false,
+            "enabledFeatures.job_lookup": false,
+            "enabledFeatures.common_failures": false,
+            "enabledFeatures.oil_sticker": false,
+            "enabledFeatures.keytags": false,
+            "enabledFeatures.auto_booking": false,
+            "enabledFeatures.part_xref": false,
+          }
+        }
+      );
       
-      const updatedBilling = {
-        ...billing,
-        status: "suspended",
-        suspendedAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
+      results.suspended.push(shop.shopId);
+      results.transitioned.push({ shopId: shop.shopId, shopName: shop.name || `Shop ${shop.shopId}` });
+      console.log(`[Grace Period] Shop ${shop.shopId} (${shop.name}) suspended - grace period expired`);
       
-      const updatedFeatures = {
-        ...enabledFeatures,
-        maintenance: false,
-        job_lookup: false,
-        common_failures: false,
-        oil_sticker: false,
-        keytags: false,
-        auto_booking: false,
-        part_xref: false,
-      };
-
-      await sql`
-        UPDATE shops 
-        SET billing = ${JSON.stringify(updatedBilling)}::jsonb,
-            enabled_features = ${JSON.stringify(updatedFeatures)}::jsonb,
-            updated_at = ${now}
-        WHERE shop_id = ${shop.shop_id}
-      `;
-      
-      results.suspended.push(shop.shop_id);
-      results.transitioned.push({ shopId: shop.shop_id, shopName: shop.name || `Shop ${shop.shop_id}` });
-      console.log(`[Grace Period] Shop ${shop.shop_id} (${shop.name}) suspended - grace period expired`);
-      
-      const ownerResult = await sql`
-        SELECT email FROM users WHERE shop_id = ${shop.shop_id} AND role = 'owner' LIMIT 1
-      `;
-      const owner = ownerResult[0];
+      const owner = await db.collection("users").findOne({ shopId: shop.shopId, role: "owner" });
       if (owner?.email) {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
         const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
-        const emailContent = makeAccountSuspendedEmail(shop.name || `Shop ${shop.shop_id}`, updatePaymentUrl);
+        const emailContent = makeAccountSuspendedEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl);
         sendEmail({ to: owner.email, ...emailContent }).catch(err => {
           console.error(`[Grace Period] Failed to send suspended email to ${owner.email}:`, err);
         });
       }
       
-      await sql`
-        INSERT INTO billing_status_log (shop_id, shop_name, previous_status, new_status, reason, grace_period_started_at, grace_period_ends_at, created_at)
-        VALUES (${shop.shop_id}, ${shop.name}, 'past_due', 'suspended', 'grace_period_expired', ${billing.gracePeriodStartedAt as string || null}, ${billing.gracePeriodEndsAt as string || null}, ${now})
-      `;
+      await db.collection("billing_status_log").insertOne({
+        shopId: shop.shopId,
+        shopName: shop.name,
+        previousStatus: "past_due",
+        newStatus: "suspended",
+        reason: "grace_period_expired",
+        gracePeriodStartedAt: shop.billing?.gracePeriodStartedAt,
+        gracePeriodEndsAt: shop.billing?.gracePeriodEndsAt,
+        createdAt: now,
+      });
       
     } catch (error) {
-      console.error(`[Grace Period] Error suspending shop ${shop.shop_id}:`, error);
-      results.errors.push({ shopId: shop.shop_id, error: String(error) });
+      console.error(`[Grace Period] Error suspending shop ${shop.shopId}:`, error);
+      results.errors.push({ shopId: shop.shopId, error: String(error) });
     }
   }
   
@@ -147,40 +133,46 @@ export async function POST(req: NextRequest) {
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const db = await getDb();
   const now = new Date();
   
-  const pastDueShops = await sql`
-    SELECT shop_id, name, billing FROM shops WHERE billing->>'status' = 'past_due'
-  `;
+  const pastDueShops = await db.collection("shops").find({
+    "billing.status": "past_due"
+  }).project({
+    shopId: 1,
+    name: 1,
+    "billing.gracePeriodStartedAt": 1,
+    "billing.gracePeriodEndsAt": 1,
+    "billing.gracePeriodExtendedBy": 1,
+  }).toArray();
   
-  const suspendedShops = await sql`
-    SELECT shop_id, name, billing FROM shops WHERE billing->>'status' = 'suspended'
-  `;
+  const suspendedShops = await db.collection("shops").find({
+    "billing.status": "suspended"
+  }).project({
+    shopId: 1,
+    name: 1,
+    "billing.suspendedAt": 1,
+    "billing.gracePeriodStartedAt": 1,
+  }).toArray();
   
   return NextResponse.json({
     timestamp: now.toISOString(),
-    pastDue: pastDueShops.map(shop => {
-      const billing = shop.billing as Record<string, unknown>;
-      return {
-        shopId: shop.shop_id,
-        name: shop.name,
-        gracePeriodStartedAt: billing?.gracePeriodStartedAt,
-        gracePeriodEndsAt: billing?.gracePeriodEndsAt,
-        daysRemaining: billing?.gracePeriodEndsAt 
-          ? Math.max(0, Math.ceil((new Date(billing.gracePeriodEndsAt as string).getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
-          : null,
-        extendedBy: billing?.gracePeriodExtendedBy,
-      };
-    }),
-    suspended: suspendedShops.map(shop => {
-      const billing = shop.billing as Record<string, unknown>;
-      return {
-        shopId: shop.shop_id,
-        name: shop.name,
-        suspendedAt: billing?.suspendedAt,
-        gracePeriodStartedAt: billing?.gracePeriodStartedAt,
-      };
-    }),
+    pastDue: pastDueShops.map(shop => ({
+      shopId: shop.shopId,
+      name: shop.name,
+      gracePeriodStartedAt: shop.billing?.gracePeriodStartedAt,
+      gracePeriodEndsAt: shop.billing?.gracePeriodEndsAt,
+      daysRemaining: shop.billing?.gracePeriodEndsAt 
+        ? Math.max(0, Math.ceil((new Date(shop.billing.gracePeriodEndsAt).getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+        : null,
+      extendedBy: shop.billing?.gracePeriodExtendedBy,
+    })),
+    suspended: suspendedShops.map(shop => ({
+      shopId: shop.shopId,
+      name: shop.name,
+      suspendedAt: shop.billing?.suspendedAt,
+      gracePeriodStartedAt: shop.billing?.gracePeriodStartedAt,
+    })),
   });
 }

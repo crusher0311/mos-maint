@@ -1,4 +1,5 @@
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 import { createNotificationsForUsers } from "@/lib/notifications";
 
 export type AnnouncementPriority = "info" | "warning" | "critical";
@@ -14,7 +15,7 @@ export interface AnnouncementTarget {
 }
 
 export interface Announcement {
-  id?: number;
+  _id?: ObjectId;
   title: string;
   message: string;
   priority: AnnouncementPriority;
@@ -28,7 +29,6 @@ export interface Announcement {
   createdAt: Date;
   sentAt?: Date;
   expiresAt?: Date;
-  scheduledAt?: Date;
   stats?: {
     totalRecipients: number;
     emailsSent: number;
@@ -44,29 +44,16 @@ export interface AnnouncementRecipient {
 }
 
 export async function createAnnouncement(
-  announcement: Omit<Announcement, "id" | "createdAt" | "stats">
-): Promise<number | null> {
+  announcement: Omit<Announcement, "_id" | "createdAt" | "stats">
+): Promise<ObjectId | null> {
   try {
-    const result = await sql`
-      INSERT INTO system_announcements (
-        title, message, priority, target_audience, delivery_channels, 
-        status, scheduled_at, expires_at, created_by, stats
-      )
-      VALUES (
-        ${announcement.title}, 
-        ${announcement.message}, 
-        ${announcement.priority}, 
-        ${JSON.stringify(announcement.target)}, 
-        ${JSON.stringify(announcement.deliveryChannels)}, 
-        ${announcement.status}, 
-        ${announcement.scheduledAt || null}, 
-        ${announcement.expiresAt || null}, 
-        ${announcement.createdBy},
-        '{"totalRecipients": 0, "emailsSent": 0, "inAppSent": 0}'::jsonb
-      )
-      RETURNING id
-    `;
-    return result[0]?.id || null;
+    const db = await getDb();
+    const result = await db.collection("system_announcements").insertOne({
+      ...announcement,
+      createdAt: new Date(),
+      stats: { totalRecipients: 0, emailsSent: 0, inAppSent: 0 },
+    });
+    return result.insertedId;
   } catch (error) {
     console.error("Error creating announcement:", error);
     return null;
@@ -78,30 +65,16 @@ export async function getAnnouncements(
   status?: AnnouncementStatus
 ): Promise<Announcement[]> {
   try {
-    let results;
-    if (status) {
-      results = await sql`
-        SELECT id, title, message, priority, target_audience as target, 
-               delivery_channels as "deliveryChannels", status, 
-               scheduled_at as "scheduledAt", sent_at as "sentAt", 
-               expires_at as "expiresAt", created_by as "createdBy", 
-               stats, created_at as "createdAt"
-        FROM system_announcements 
-        WHERE status = ${status}
-        ORDER BY created_at DESC LIMIT ${limit}
-      `;
-    } else {
-      results = await sql`
-        SELECT id, title, message, priority, target_audience as target, 
-               delivery_channels as "deliveryChannels", status, 
-               scheduled_at as "scheduledAt", sent_at as "sentAt", 
-               expires_at as "expiresAt", created_by as "createdBy", 
-               stats, created_at as "createdAt"
-        FROM system_announcements 
-        ORDER BY created_at DESC LIMIT ${limit}
-      `;
-    }
-    return results as unknown as Announcement[];
+    const db = await getDb();
+    const query: Record<string, unknown> = {};
+    if (status) query.status = status;
+
+    return (await db
+      .collection("system_announcements")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray()) as Announcement[];
   } catch (error) {
     console.error("Error fetching announcements:", error);
     return [];
@@ -110,17 +83,10 @@ export async function getAnnouncements(
 
 export async function getAnnouncementById(id: string): Promise<Announcement | null> {
   try {
-    const results = await sql`
-      SELECT id, title, message, priority, target_audience as target, 
-             delivery_channels as "deliveryChannels", status, 
-             scheduled_at as "scheduledAt", sent_at as "sentAt", 
-             expires_at as "expiresAt", created_by as "createdBy", 
-             stats, created_at as "createdAt"
-      FROM system_announcements 
-      WHERE id = ${Number(id)}
-      LIMIT 1
-    `;
-    return results[0] as unknown as Announcement || null;
+    const db = await getDb();
+    return (await db
+      .collection("system_announcements")
+      .findOne({ _id: new ObjectId(id) })) as Announcement | null;
   } catch (error) {
     console.error("Error fetching announcement:", error);
     return null;
@@ -129,74 +95,99 @@ export async function getAnnouncementById(id: string): Promise<Announcement | nu
 
 export async function getTargetedUsers(target: AnnouncementTarget): Promise<AnnouncementRecipient[]> {
   try {
+    const db = await getDb();
     const recipients: AnnouncementRecipient[] = [];
 
     if (target.type === "all") {
-      const users = await sql`
-        SELECT id, email, shop_id FROM users WHERE email IS NOT NULL
-      `;
+      const users = await db
+        .collection("users")
+        .find({ email: { $exists: true } })
+        .project({ email: 1, shopId: 1 })
+        .toArray();
+
       for (const user of users) {
         recipients.push({
-          email: user.email as string,
-          userId: String(user.id),
-          shopId: user.shop_id ? Number(user.shop_id) : undefined,
+          email: user.email,
+          userId: user._id.toString(),
+          shopId: user.shopId,
         });
       }
     } else if (target.type === "shops" && target.shopIds?.length) {
-      const shopIdStrings = target.shopIds.map(String);
-      const users = await sql`
-        SELECT id, email, shop_id FROM users 
-        WHERE email IS NOT NULL AND shop_id = ANY(${shopIdStrings})
-      `;
+      const users = await db
+        .collection("users")
+        .find({
+          shopId: { $in: target.shopIds },
+          email: { $exists: true },
+        })
+        .project({ email: 1, shopId: 1 })
+        .toArray();
+
       for (const user of users) {
         recipients.push({
-          email: user.email as string,
-          userId: String(user.id),
-          shopId: user.shop_id ? Number(user.shop_id) : undefined,
+          email: user.email,
+          userId: user._id.toString(),
+          shopId: user.shopId,
         });
       }
     } else if (target.type === "roles" && target.roles?.length) {
-      const users = await sql`
-        SELECT id, email, shop_id FROM users 
-        WHERE email IS NOT NULL AND role = ANY(${target.roles})
-      `;
+      const users = await db
+        .collection("users")
+        .find({
+          role: { $in: target.roles },
+          email: { $exists: true },
+        })
+        .project({ email: 1, shopId: 1, role: 1 })
+        .toArray();
+
       for (const user of users) {
         recipients.push({
-          email: user.email as string,
-          userId: String(user.id),
-          shopId: user.shop_id ? Number(user.shop_id) : undefined,
+          email: user.email,
+          userId: user._id.toString(),
+          shopId: user.shopId,
         });
       }
     } else if (target.type === "sms_integration" && target.smsIntegrations?.length) {
-      const shops = await sql`
-        SELECT shop_id, name, tekmetric, protractor, autoflow 
-        FROM shops 
-        WHERE is_active = TRUE
-      `;
-      
-      const matchingShops = shops.filter((shop: Record<string, unknown>) => {
-        for (const sms of target.smsIntegrations!) {
-          if (sms === "tekmetric" && shop.tekmetric) return true;
-          if (sms === "protractor" && shop.protractor) return true;
-          if (sms === "autoflow" && shop.autoflow) return true;
+      const integrationQueries = target.smsIntegrations.map((sms) => {
+        if (sms === "tekmetric") {
+          return { "integrations.tekmetric.shopId": { $exists: true } };
+        } else if (sms === "protractor") {
+          return {
+            $or: [
+              { "integrations.protractor.apiKey": { $exists: true } },
+              { protractorApiKey: { $exists: true } },
+            ],
+          };
+        } else if (sms === "autoflow") {
+          return { "integrations.autoflow.webhookToken": { $exists: true } };
         }
-        return false;
+        return {};
       });
 
-      const shopIdStrings = matchingShops.map((s: Record<string, unknown>) => String(s.shop_id));
-      const shopNameMap = new Map(matchingShops.map((s: Record<string, unknown>) => [String(s.shop_id), s.name]));
+      const shops = await db
+        .collection("shops")
+        .find({ $or: integrationQueries })
+        .project({ shopId: 1, name: 1 })
+        .toArray();
 
-      if (shopIdStrings.length > 0) {
-        const users = await sql`
-          SELECT id, email, shop_id FROM users 
-          WHERE email IS NOT NULL AND shop_id = ANY(${shopIdStrings})
-        `;
+      const shopIds = shops.map((s) => s.shopId);
+      const shopNameMap = new Map(shops.map((s) => [s.shopId, s.name]));
+
+      if (shopIds.length > 0) {
+        const users = await db
+          .collection("users")
+          .find({
+            shopId: { $in: shopIds },
+            email: { $exists: true },
+          })
+          .project({ email: 1, shopId: 1 })
+          .toArray();
+
         for (const user of users) {
           recipients.push({
-            email: user.email as string,
-            userId: String(user.id),
-            shopId: user.shop_id ? Number(user.shop_id) : undefined,
-            shopName: shopNameMap.get(String(user.shop_id)) as string | undefined,
+            email: user.email,
+            userId: user._id.toString(),
+            shopId: user.shopId,
+            shopName: shopNameMap.get(user.shopId),
           });
         }
       }
@@ -217,6 +208,7 @@ export async function sendAnnouncement(
   announcementId: string
 ): Promise<{ success: boolean; stats?: Announcement["stats"]; error?: string }> {
   try {
+    const db = await getDb();
     const announcement = await getAnnouncementById(announcementId);
 
     if (!announcement) {
@@ -266,11 +258,16 @@ export async function sendAnnouncement(
       emailsSent,
     };
 
-    await sql`
-      UPDATE system_announcements 
-      SET status = 'sent', sent_at = NOW(), stats = ${JSON.stringify(stats)}
-      WHERE id = ${Number(announcementId)}
-    `;
+    await db.collection("system_announcements").updateOne(
+      { _id: new ObjectId(announcementId) },
+      {
+        $set: {
+          status: "sent",
+          sentAt: new Date(),
+          stats,
+        },
+      }
+    );
 
     return { success: true, stats };
   } catch (error) {
@@ -281,18 +278,18 @@ export async function sendAnnouncement(
 
 export async function getActiveAnnouncements(userId: string): Promise<Announcement[]> {
   try {
-    const results = await sql`
-      SELECT id, title, message, priority, target_audience as target, 
-             delivery_channels as "deliveryChannels", status, 
-             scheduled_at as "scheduledAt", sent_at as "sentAt", 
-             expires_at as "expiresAt", created_by as "createdBy", 
-             stats, created_at as "createdAt"
-      FROM system_announcements 
-      WHERE status = 'sent' 
-        AND (expires_at IS NULL OR expires_at > NOW())
-      ORDER BY sent_at DESC LIMIT 5
-    `;
-    return results as unknown as Announcement[];
+    const db = await getDb();
+    const now = new Date();
+
+    return (await db
+      .collection("system_announcements")
+      .find({
+        status: "sent",
+        $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: now } }],
+      })
+      .sort({ sentAt: -1 })
+      .limit(5)
+      .toArray()) as Announcement[];
   } catch (error) {
     console.error("Error fetching active announcements:", error);
     return [];
@@ -301,10 +298,11 @@ export async function getActiveAnnouncements(userId: string): Promise<Announceme
 
 export async function deleteAnnouncement(id: string): Promise<boolean> {
   try {
-    const result = await sql`
-      DELETE FROM system_announcements WHERE id = ${Number(id)}
-    `;
-    return result.count > 0;
+    const db = await getDb();
+    const result = await db
+      .collection("system_announcements")
+      .deleteOne({ _id: new ObjectId(id) });
+    return result.deletedCount > 0;
   } catch (error) {
     console.error("Error deleting announcement:", error);
     return false;

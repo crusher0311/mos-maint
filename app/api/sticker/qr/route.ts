@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { createCanvas, loadImage } from "canvas";
 import { getSession } from "@/lib/auth";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import path from "path";
 import fs from "fs";
@@ -72,6 +72,9 @@ async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> 
     
     const data = await response.json();
     console.log(`[Sticker QR] HoverCode response keys:`, Object.keys(data));
+    console.log(`[Sticker QR] png value:`, data.png);
+    console.log(`[Sticker QR] svg value:`, data.svg);
+    console.log(`[Sticker QR] svg_file value:`, data.svg_file);
     
     const imageUrl = data.png || data.svg_file;
     if (imageUrl) {
@@ -275,12 +278,13 @@ export async function GET(req: NextRequest) {
   const includeLogo = searchParams.get("includeLogo") !== "false";
 
   try {
-    const shopRows = await sql`
-      SELECT sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId: { $in: [shopId, String(shopId)] } },
+      { projection: { "stickerConfig.hovercodeQRId": 1 } }
+    );
     
-    const stickerConfig = (shopRows[0]?.sticker_config as any) || {};
-    const hovercodeQRId = stickerConfig.hovercodeQRId;
+    const hovercodeQRId = shop?.stickerConfig?.hovercodeQRId;
     console.log(`[Sticker QR] Shop ${shopId} hovercodeQRId:`, hovercodeQRId || "not set");
     
     if (hovercodeQRId) {

@@ -1,83 +1,60 @@
+// app/api/debug/events/route.ts
 import { NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export async function GET() {
   try {
-    const sampleEventResult = await sql`
-      SELECT * FROM events WHERE provider = 'autoflow' LIMIT 1
-    `;
-    const sampleEvent = sampleEventResult[0];
+    const db = await getDb();
     
-    const eventsWithROResult = await sql`
-      SELECT * FROM events 
-      WHERE payload->>'ticket' IS NOT NULL 
-        AND payload->'ticket'->>'roNumber' IS NOT NULL 
-      LIMIT 1
-    `;
-    const eventsWithRO = eventsWithROResult[0];
-    
-    const recentEvents = await sql`
-      SELECT * FROM events 
-      WHERE provider = 'autoflow'
-      ORDER BY created_at DESC 
-      LIMIT 3
-    `;
-    
-    const eventsData = recentEvents.map((event, i) => {
-      const payload = (event.payload as Record<string, unknown>) || {};
-      const ticket = (payload.ticket as Record<string, unknown>) || {};
-      return {
-        index: i + 1,
-        ro: ticket.roNumber || 'MISSING',
-        status: ticket.status || event.status || 'MISSING',
-        createdAt: event.created_at,
-        vin: event.vehicle_vin || event.vin || (payload.vehicle as Record<string, unknown>)?.vin || 'MISSING',
-        payloadStructure: {
-          hasTicket: !!ticket,
-          hasRoNumber: !!ticket.roNumber,
-          hasStatus: !!ticket.status,
-          ticketKeys: Object.keys(ticket)
-        }
-      };
+    // Get a sample event to see the structure
+    const sampleEvent = await db.collection("events").findOne({
+      provider: "autoflow"
     });
     
-    const totalAutoflowResult = await sql`
-      SELECT COUNT(*) as count FROM events WHERE provider = 'autoflow'
-    `;
-    const totalAutoflowEvents = Number(totalAutoflowResult[0]?.count) || 0;
+    // Check for RO numbers
+    const eventsWithRO = await db.collection("events").findOne({
+      "payload.ticket.roNumber": { $exists: true, $ne: null }
+    });
     
-    const eventsWithROCountResult = await sql`
-      SELECT COUNT(*) as count FROM events 
-      WHERE provider = 'autoflow'
-        AND payload->'ticket'->>'roNumber' IS NOT NULL 
-        AND payload->'ticket'->>'roNumber' != ''
-    `;
-    const eventsWithROCount = Number(eventsWithROCountResult[0]?.count) || 0;
+    // Check recent events structure
+    const recentEvents = await db.collection("events").find({
+      provider: "autoflow"
+    }).sort({ createdAt: -1 }).limit(3).toArray();
     
-    const samplePayload = (sampleEvent?.payload as Record<string, unknown>) || {};
-    const sampleTicket = (samplePayload.ticket as Record<string, unknown>) || {};
-    
-    const eventsWithROPayload = (eventsWithRO?.payload as Record<string, unknown>) || {};
-    const eventsWithROTicket = (eventsWithROPayload.ticket as Record<string, unknown>) || {};
+    const eventsData = recentEvents.map((event, i) => ({
+      index: i + 1,
+      ro: event.payload?.ticket?.roNumber || 'MISSING',
+      status: event.payload?.ticket?.status || event.status || 'MISSING',
+      createdAt: event.createdAt,
+      vin: event.vehicleVin || event.vin || event.payload?.vehicle?.vin || 'MISSING',
+      payloadStructure: {
+        hasTicket: !!event.payload?.ticket,
+        hasRoNumber: !!event.payload?.ticket?.roNumber,
+        hasStatus: !!event.payload?.ticket?.status,
+        ticketKeys: event.payload?.ticket ? Object.keys(event.payload.ticket) : []
+      }
+    }));
     
     return NextResponse.json({
       sampleEvent: sampleEvent ? {
-        _id: sampleEvent.id,
+        _id: sampleEvent._id,
         provider: sampleEvent.provider,
-        createdAt: sampleEvent.created_at,
-        hasPayload: !!samplePayload,
-        hasTicket: !!sampleTicket,
-        ticketFields: Object.keys(sampleTicket),
-        roNumber: sampleTicket.roNumber
+        createdAt: sampleEvent.createdAt,
+        hasPayload: !!sampleEvent.payload,
+        hasTicket: !!sampleEvent.payload?.ticket,
+        ticketFields: sampleEvent.payload?.ticket ? Object.keys(sampleEvent.payload.ticket) : [],
+        roNumber: sampleEvent.payload?.ticket?.roNumber
       } : null,
       eventsWithRO: eventsWithRO ? {
-        _id: eventsWithRO.id,
-        roNumber: eventsWithROTicket.roNumber,
-        status: eventsWithROTicket.status
+        _id: eventsWithRO._id,
+        roNumber: eventsWithRO.payload?.ticket?.roNumber,
+        status: eventsWithRO.payload?.ticket?.status
       } : null,
       recentEventsAnalysis: eventsData,
-      totalAutoflowEvents,
-      eventsWithROCount
+      totalAutoflowEvents: await db.collection("events").countDocuments({ provider: "autoflow" }),
+      eventsWithROCount: await db.collection("events").countDocuments({
+        "payload.ticket.roNumber": { $exists: true, $ne: null, $ne: "" }
+      })
     });
     
   } catch (error) {

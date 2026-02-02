@@ -1,6 +1,9 @@
+// app/api/jobs/open-work-orders/route.ts
+// Get open work orders with full details for Job Lookup feature
+
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
@@ -10,39 +13,79 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = String(session.shopId);
+  const shopId = session.shopId;
+  const db = await getDb();
 
-  const shopRows = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
-  const shop = shopRows[0];
-  const settings = shop?.settings || {};
+  const shop = await db.collection("shops").findOne(
+    { shopId: { $in: [String(shopId), Number(shopId)] } },
+    { projection: { preferences: 1 } }
+  );
 
   const DEFAULT_WORKFLOW_STAGES = ["InspectionInProgress", "Unassigned", "WorkAuthorized", "EstimateCompleted"];
-  const allowedStages = settings.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
+  const allowedStages = shop?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES;
 
-  const protractorWOs = await sql`
-    SELECT DISTINCT ON (pwo.vin)
-      pwo.work_order_id,
-      pwo.work_order_number,
-      pwo.vin,
-      pv.year,
-      pv.make,
-      pv.model,
-      pv.engine,
-      COALESCE(pwo.company_name, pwo.contact_name, 'Unknown Customer') as customer_name,
-      COALESCE(pwo.workflow_stage, pwo.status, 'Open') as status,
-      COALESCE(pwo.odometer, pv.odometer) as odometer,
-      pwo.fetched_at
-    FROM protractor_work_orders pwo
-    LEFT JOIN protractor_vehicles pv ON pwo.vin = pv.vin AND pwo.shop_id = pv.shop_id
-    WHERE pwo.shop_id = ${shopId}
-      AND pwo.vin IS NOT NULL AND pwo.vin != ''
-      AND pwo.workflow_stage = ANY(${allowedStages})
-    ORDER BY pwo.vin, pwo.fetched_at DESC
-  `;
+  const protractorWOs = await db.collection("protractor_work_orders").aggregate([
+    {
+      $match: {
+        shopId: { $in: [String(shopId), Number(shopId)] },
+        vin: { $ne: null, $type: "string" },
+        workflowStage: { $in: allowedStages }
+      }
+    },
+    { $sort: { fetchedAt: -1 } },
+    {
+      $group: {
+        _id: "$vin",
+        latest: { $first: "$$ROOT" }
+      }
+    },
+    { $replaceRoot: { newRoot: "$latest" } },
+    {
+      $lookup: {
+        from: "protractor_vehicles",
+        let: { vin: "$vin", shopIdNum: Number(shopId), shopIdStr: String(shopId) },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $or: [
+                    { $eq: ["$shopId", "$$shopIdNum"] },
+                    { $eq: ["$shopId", "$$shopIdStr"] }
+                  ]},
+                  { $eq: ["$vin", "$$vin"] }
+                ]
+              }
+            }
+          },
+          { $limit: 1 }
+        ],
+        as: "vehicle"
+      }
+    },
+    { $unwind: { path: "$vehicle", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        workOrderId: "$workOrderId",
+        workOrderNumber: "$workOrderNumber",
+        vin: "$vin",
+        year: { $ifNull: ["$vehicle.year", null] },
+        make: { $ifNull: ["$vehicle.make", null] },
+        model: { $ifNull: ["$vehicle.model", null] },
+        engine: { $ifNull: ["$vehicle.engine", null] },
+        customerName: { $ifNull: ["$companyName", { $ifNull: ["$contactName", "Unknown Customer"] }] },
+        status: { $ifNull: ["$workflowStage", { $ifNull: ["$status", "Open"] }] },
+        odometer: { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] },
+        fetchedAt: "$fetchedAt"
+      }
+    },
+    { $sort: { fetchedAt: -1 } }
+  ]).toArray();
 
-  const workOrders = protractorWOs.map((wo: any) => ({
-    workOrderId: wo.work_order_id,
-    workOrderNumber: wo.work_order_number,
+  const workOrders = protractorWOs.map(wo => ({
+    workOrderId: wo.workOrderId,
+    workOrderNumber: wo.workOrderNumber,
     vehicle: {
       vin: wo.vin,
       year: wo.year,
@@ -50,10 +93,14 @@ export async function GET() {
       model: wo.model,
       engine: wo.engine,
     },
-    customerName: wo.customer_name,
+    customerName: wo.customerName,
     status: wo.status,
     odometer: wo.odometer,
   }));
 
-  return NextResponse.json({ workOrders });
+  return NextResponse.json({
+    ok: true,
+    workOrders,
+    count: workOrders.length,
+  });
 }

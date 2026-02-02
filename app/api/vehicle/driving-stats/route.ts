@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 
 function parseCarfaxDate(val: string | null): Date | null {
@@ -30,12 +30,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const vehicleRows = await sql`
-      SELECT last_mileage, odometer FROM vehicles WHERE vin = ${vin.toUpperCase()}
-    `;
-    const vehicle = vehicleRows[0] as any;
-    const currentMiles = vehicle?.last_mileage ?? vehicle?.odometer ?? null;
+    const db = await getDb();
+    
+    // Get vehicle's current mileage
+    const vehicle = await db.collection("vehicles").findOne(
+      { vin: vin.toUpperCase() },
+      { projection: { lastMileage: 1, odometer: 1 } }
+    );
+    const currentMiles = vehicle?.lastMileage ?? vehicle?.odometer ?? null;
 
+    // Get CARFAX data (cached)
     const carfaxCfg = await resolveCarfaxConfig(shopId);
     if (!carfaxCfg.configured) {
       return NextResponse.json({
@@ -57,6 +61,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Calculate miles per day using same logic as plan page
     const recs = ((carfax as any).serviceRecords as any[])
       .map((r: any) => ({
         date: parseCarfaxDate(r?.date ?? null),
@@ -94,17 +99,13 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       vin: vin.toUpperCase(),
-      milesPerDay: mpdBlended != null && mpdBlended > 0 ? Math.round(mpdBlended * 10) / 10 : null,
-      hasEnoughData: mpdBlended != null && mpdBlended > 0,
+      milesPerDay: mpdBlended,
+      hasEnoughData: mpdBlended !== null && mpdBlended > 0,
       source: "carfax",
-      currentMiles,
-      records: recs.length,
+      dataPoints: recs.length,
     });
   } catch (error) {
-    console.error("Driving stats error:", error);
-    return NextResponse.json(
-      { error: "Failed to calculate driving stats" },
-      { status: 500 }
-    );
+    console.error("[Vehicle Driving Stats] Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

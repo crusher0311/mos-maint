@@ -1,51 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { cookies } from "next/headers";
+import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/tekmetric";
 import { syncSingleShop } from "@/lib/tekmetric-sync";
 
-async function triggerJobHistoryBackfill(shopId: string) {
+async function triggerJobHistoryBackfill(shopId: number) {
   try {
-    await sql`
-      INSERT INTO tekmetric_backfill_progress (shop_id, queued_at, completed, logic_version)
-      VALUES (${shopId}, ${new Date()}, false, 2)
-      ON CONFLICT (shop_id) DO UPDATE SET 
-        queued_at = ${new Date()},
-        completed = false,
-        logic_version = 2
-    `;
+    const db = await getDb();
+    await db.collection("tekmetric_backfill_progress").updateOne(
+      { shopId },
+      { 
+        $set: { 
+          shopId, 
+          queuedAt: new Date(),
+          completed: false,
+          logicVersion: 2
+        },
+        $setOnInsert: { startedAt: null }
+      },
+      { upsert: true }
+    );
     
-    const shopResult = await sql`SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
-    const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
-    const updatedSettings = { ...existingSettings, tekmetricBackfillComplete: false };
-    
-    await sql`
-      UPDATE shops SET settings = ${JSON.stringify(updatedSettings)}::jsonb
-      WHERE shop_id = ${shopId}
-    `;
+    await db.collection("shops").updateOne(
+      { shopId: { $in: [shopId, String(shopId)] } },
+      { $set: { tekmetricBackfillComplete: false } }
+    );
     
     console.log(`[Tekmetric Settings] Queued job history backfill for shop ${shopId}`);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`[Tekmetric Settings] Failed to queue backfill for shop ${shopId}:`, message);
+  } catch (err: any) {
+    console.error(`[Tekmetric Settings] Failed to queue backfill for shop ${shopId}:`, err.message);
   }
 }
 
-export async function GET() {
+async function getUserShopId(): Promise<string | null> {
+  const store = await cookies();
+  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
+  if (!sid) return null;
+
+  const db = await getDb();
+  const now = new Date();
+  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
+  if (!sess) return null;
+
+  const user = await db.collection("users").findOne({ _id: sess.userId });
+  return user?.shopId ? String(user.shopId) : null;
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
+    const shopId = await getUserShopId();
+    if (!shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const shopId = String(session.shopId);
 
-    const shopResult = await sql`
-      SELECT tekmetric_config FROM shops WHERE shop_id = ${shopId} LIMIT 1
-    `;
-    const shop = shopResult[0];
-    const tekmetricConfig = shop?.tekmetric_config as Record<string, unknown> | null;
+    const db = await getDb();
     
-    if (!tekmetricConfig?.shopId) {
+    const shop = await db.collection("shops").findOne({
+      shopId: { $in: [shopId, Number(shopId)] }
+    });
+    
+    if (!shop?.tekmetric?.shopId) {
       return NextResponse.json({
         configured: false,
         shopId: null,
@@ -55,15 +69,14 @@ export async function GET() {
 
     return NextResponse.json({
       configured: true,
-      shopId: tekmetricConfig.shopId,
-      shopName: tekmetricConfig.shopName,
-      lastSync: tekmetricConfig.lastSync,
+      shopId: shop.tekmetric.shopId,
+      shopName: shop.tekmetric.shopName,
+      lastSync: shop.tekmetric.lastSync,
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+  } catch (error: any) {
     console.error("Error fetching Tekmetric settings:", error);
     return NextResponse.json(
-      { error: message || "Failed to fetch settings" },
+      { error: error.message || "Failed to fetch settings" },
       { status: 500 }
     );
   }
@@ -71,11 +84,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
+    const userShopId = await getUserShopId();
+    if (!userShopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userShopId = String(session.shopId);
 
     const body = await request.json();
     const { shopId } = body;
@@ -110,40 +122,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const shopResult = await sql`SELECT tekmetric_config, settings FROM shops WHERE shop_id = ${userShopId} LIMIT 1`;
-    const existingTekmetricConfig = (shopResult[0]?.tekmetric_config as Record<string, unknown>) || {};
-    const existingSettings = (shopResult[0]?.settings as Record<string, unknown>) || {};
-    
-    const updatedTekmetricConfig = {
-      ...existingTekmetricConfig,
-      shopId: tekmetricShopId,
-      shopName: validation.shop?.name,
-      connectedAt: new Date().toISOString(),
-    };
-    
-    const updatedSettings = {
-      ...existingSettings,
-      integrationProvider: "tekmetric",
-    };
+    const db = await getDb();
 
-    await sql`
-      UPDATE shops 
-      SET tekmetric_config = ${JSON.stringify(updatedTekmetricConfig)}::jsonb,
-          settings = ${JSON.stringify(updatedSettings)}::jsonb,
-          updated_at = ${new Date()}
-      WHERE shop_id = ${userShopId}
-    `;
+    await db.collection("shops").updateOne(
+      { shopId: { $in: [userShopId, Number(userShopId)] } },
+      {
+        $set: {
+          "tekmetric.shopId": tekmetricShopId,
+          "tekmetric.shopName": validation.shop?.name,
+          "tekmetric.connectedAt": new Date(),
+          integrationProvider: "tekmetric",
+        },
+      },
+      { upsert: true }
+    );
 
     let syncResult: { success: boolean; synced: number; error?: string } = { success: false, synced: 0 };
     try {
       syncResult = await syncSingleShop(userShopId, tekmetricShopId);
-    } catch (syncErr: unknown) {
-      const message = syncErr instanceof Error ? syncErr.message : "Unknown error";
-      console.error("[Tekmetric Settings] Initial sync failed:", message);
-      syncResult.error = message;
+    } catch (syncErr: any) {
+      console.error("[Tekmetric Settings] Initial sync failed:", syncErr.message);
+      syncResult.error = syncErr.message;
     }
 
-    triggerJobHistoryBackfill(userShopId).catch(() => {});
+    // Queue the 5-year job history backfill (runs via cron)
+    triggerJobHistoryBackfill(Number(userShopId)).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -156,35 +159,34 @@ export async function POST(request: NextRequest) {
       },
       jobHistoryBackfill: "queued"
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+  } catch (error: any) {
     console.error("Error saving Tekmetric settings:", error);
     return NextResponse.json(
-      { error: message || "Failed to save settings" },
+      { error: error.message || "Failed to save settings" },
       { status: 500 }
     );
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
+    const userShopId = await getUserShopId();
+    if (!userShopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userShopId = String(session.shopId);
 
-    await sql`
-      UPDATE shops SET tekmetric_config = NULL, updated_at = ${new Date()}
-      WHERE shop_id = ${userShopId}
-    `;
+    const db = await getDb();
+
+    await db.collection("shops").updateOne(
+      { shopId: { $in: [userShopId, Number(userShopId)] } },
+      { $unset: { tekmetric: "" } }
+    );
 
     return NextResponse.json({ success: true });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+  } catch (error: any) {
     console.error("Error disconnecting Tekmetric:", error);
     return NextResponse.json(
-      { error: message || "Failed to disconnect" },
+      { error: error.message || "Failed to disconnect" },
       { status: 500 }
     );
   }

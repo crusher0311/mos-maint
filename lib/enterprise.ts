@@ -1,7 +1,8 @@
-import sql from "@/lib/db/postgres";
+import { getDb } from "./mongo";
+import { ObjectId } from "mongodb";
 
 export interface EnterpriseAccount {
-  id?: string;
+  _id?: ObjectId;
   name: string;
   shopIds: number[];
   sharedMappings?: {
@@ -22,9 +23,9 @@ export interface EnterpriseAccount {
 }
 
 export interface RecommendationEvent {
-  id?: number;
-  shopId: string;
-  enterpriseId?: string;
+  _id?: ObjectId;
+  shopId: number;
+  enterpriseId?: ObjectId;
   vin: string;
   vehicleId?: string;
   workOrderId: string;
@@ -44,9 +45,9 @@ export interface RecommendationEvent {
 }
 
 export interface RevenueAttributionDaily {
-  id?: number;
-  shopId: string;
-  enterpriseId?: string;
+  _id?: ObjectId;
+  shopId: number;
+  enterpriseId?: ObjectId;
   date: Date;
   provider: string;
   recommendationType: string;
@@ -57,217 +58,164 @@ export interface RevenueAttributionDaily {
   partsRevenue: number;
 }
 
-export async function getEnterpriseById(enterpriseId: string): Promise<EnterpriseAccount | null> {
-  const result = await sql`
-    SELECT id, name, shop_ids, shared_mappings, shared_integrations, created_at, updated_at
-    FROM enterprise_accounts
-    WHERE id = ${enterpriseId}::uuid
-    LIMIT 1
-  `;
-  
-  if (result.length === 0) return null;
-  
-  const row = result[0];
-  return {
-    id: row.id,
-    name: row.name,
-    shopIds: row.shop_ids || [],
-    sharedMappings: row.shared_mappings,
-    sharedIntegrations: row.shared_integrations,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+export async function getEnterpriseById(enterpriseId: ObjectId | string) {
+  const db = await getDb();
+  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
+  return db.collection<EnterpriseAccount>("enterprise_accounts").findOne({ _id: id });
+}
+
+export async function getEnterpriseByShopId(shopId: number) {
+  const db = await getDb();
+  return db.collection<EnterpriseAccount>("enterprise_accounts").findOne({ 
+    shopIds: shopId 
+  });
+}
+
+export async function createEnterprise(name: string, shopIds: number[]) {
+  const db = await getDb();
+  const now = new Date();
+  const doc: EnterpriseAccount = {
+    name,
+    shopIds,
+    createdAt: now,
+    updatedAt: now,
   };
+  const result = await db.collection<EnterpriseAccount>("enterprise_accounts").insertOne(doc);
+  return { ...doc, _id: result.insertedId };
 }
 
-export async function getEnterpriseByShopId(shopId: number | string): Promise<EnterpriseAccount | null> {
-  const shopIdNum = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
-  
-  if (isNaN(shopIdNum)) return null;
-  
-  const result = await sql`
-    SELECT id, name, shop_ids, shared_mappings, shared_integrations, created_at, updated_at
-    FROM enterprise_accounts
-    WHERE ${shopIdNum} = ANY(shop_ids)
-    LIMIT 1
-  `;
-  
-  if (result.length === 0) return null;
-  
-  const row = result[0];
-  return {
-    id: row.id,
-    name: row.name,
-    shopIds: row.shop_ids || [],
-    sharedMappings: row.shared_mappings,
-    sharedIntegrations: row.shared_integrations,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+export async function addShopToEnterprise(enterpriseId: ObjectId | string, shopId: number) {
+  const db = await getDb();
+  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
+  return db.collection("enterprise_accounts").updateOne(
+    { _id: id },
+    { 
+      $addToSet: { shopIds: shopId },
+      $set: { updatedAt: new Date() }
+    }
+  );
+}
+
+export async function removeShopFromEnterprise(enterpriseId: ObjectId | string, shopId: number) {
+  const db = await getDb();
+  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
+  return db.collection("enterprise_accounts").updateOne(
+    { _id: id },
+    { 
+      $pull: { shopIds: shopId } as any,
+      $set: { updatedAt: new Date() }
+    }
+  );
+}
+
+export async function logRecommendationEvent(event: Omit<RecommendationEvent, "_id" | "createdAt">) {
+  const db = await getDb();
+  const doc: RecommendationEvent = {
+    ...event,
+    createdAt: new Date(),
   };
-}
-
-export async function createEnterprise(name: string, shopIds: (number | string)[]): Promise<EnterpriseAccount> {
-  const shopIdNums = shopIds.map(id => typeof id === "string" ? parseInt(id, 10) : id).filter(id => !isNaN(id));
   
-  const result = await sql`
-    INSERT INTO enterprise_accounts (name, shop_ids)
-    VALUES (${name}, ${shopIdNums}::int[])
-    RETURNING id, name, shop_ids, created_at, updated_at
-  `;
-  
-  const row = result[0];
-  return {
-    id: row.id,
-    name: row.name,
-    shopIds: row.shop_ids || [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-export async function addShopToEnterprise(enterpriseId: string, shopId: number | string): Promise<void> {
-  const shopIdNum = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
-  
-  if (isNaN(shopIdNum)) return;
-  
-  await sql`
-    UPDATE enterprise_accounts
-    SET shop_ids = array_append(shop_ids, ${shopIdNum}), updated_at = NOW()
-    WHERE id = ${enterpriseId}::uuid AND NOT (${shopIdNum} = ANY(shop_ids))
-  `;
-}
-
-export async function removeShopFromEnterprise(enterpriseId: string, shopId: number | string): Promise<void> {
-  const shopIdNum = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
-  
-  if (isNaN(shopIdNum)) return;
-  
-  await sql`
-    UPDATE enterprise_accounts
-    SET shop_ids = array_remove(shop_ids, ${shopIdNum}), updated_at = NOW()
-    WHERE id = ${enterpriseId}::uuid
-  `;
-}
-
-export async function logRecommendationEvent(event: Omit<RecommendationEvent, "id" | "createdAt">): Promise<void> {
-  let enterpriseId = event.enterpriseId;
-  
-  if (event.shopId && !enterpriseId) {
+  if (event.shopId) {
     const enterprise = await getEnterpriseByShopId(event.shopId);
-    if (enterprise?.id) {
-      enterpriseId = enterprise.id;
+    if (enterprise?._id) {
+      doc.enterpriseId = enterprise._id;
     }
   }
   
-  await sql`
-    INSERT INTO recommendation_events (
-      shop_id, enterprise_id, vin, vehicle_id, work_order_id, work_order_number,
-      provider, event_type, recommendation_type, service_code, service_name,
-      line_item_id, price, labor_price, parts_price, total_price, added_by
-    )
-    VALUES (
-      ${event.shopId}, ${enterpriseId ? sql`${enterpriseId}::uuid` : null}, ${event.vin}, ${event.vehicleId || null},
-      ${event.workOrderId}, ${event.workOrderNumber || null}, ${event.provider},
-      ${event.eventType}, ${event.recommendationType}, ${event.serviceCode || null},
-      ${event.serviceName}, ${event.lineItemId || null}, ${event.price || null},
-      ${event.laborPrice || null}, ${event.partsPrice || null}, ${event.totalPrice || null},
-      ${event.addedBy || null}
-    )
-  `;
+  return db.collection<RecommendationEvent>("recommendation_events").insertOne(doc);
 }
 
-export async function getEnterpriseAnalytics(enterpriseId: string, startDate?: Date, endDate?: Date) {
-  const enterprise = await getEnterpriseById(enterpriseId);
+export async function getEnterpriseAnalytics(enterpriseId: ObjectId | string, startDate?: Date, endDate?: Date) {
+  const db = await getDb();
+  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
+  
+  const enterprise = await getEnterpriseById(id);
   if (!enterprise) return null;
   
-  const shopIds = enterprise.shopIds.map(String);
+  const dateFilter: any = {};
+  if (startDate) dateFilter.$gte = startDate;
+  if (endDate) dateFilter.$lte = endDate;
   
-  let events;
-  if (startDate && endDate) {
-    events = await sql`
-      SELECT shop_id, event_type, recommendation_type,
-             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as total_revenue,
-             SUM(COALESCE(labor_price, 0)) as labor_revenue, SUM(COALESCE(parts_price, 0)) as parts_revenue
-      FROM recommendation_events
-      WHERE shop_id = ANY(${shopIds}::text[]) AND created_at >= ${startDate} AND created_at <= ${endDate}
-      GROUP BY shop_id, event_type, recommendation_type
-    `;
-  } else if (startDate) {
-    events = await sql`
-      SELECT shop_id, event_type, recommendation_type,
-             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as total_revenue,
-             SUM(COALESCE(labor_price, 0)) as labor_revenue, SUM(COALESCE(parts_price, 0)) as parts_revenue
-      FROM recommendation_events
-      WHERE shop_id = ANY(${shopIds}::text[]) AND created_at >= ${startDate}
-      GROUP BY shop_id, event_type, recommendation_type
-    `;
-  } else {
-    events = await sql`
-      SELECT shop_id, event_type, recommendation_type,
-             COUNT(*) as count, SUM(COALESCE(total_price, 0)) as total_revenue,
-             SUM(COALESCE(labor_price, 0)) as labor_revenue, SUM(COALESCE(parts_price, 0)) as parts_revenue
-      FROM recommendation_events
-      WHERE shop_id = ANY(${shopIds}::text[])
-      GROUP BY shop_id, event_type, recommendation_type
-    `;
+  const matchStage: any = { 
+    shopId: { $in: enterprise.shopIds }
+  };
+  if (startDate || endDate) {
+    matchStage.createdAt = dateFilter;
   }
   
-  const shops = await sql`
-    SELECT shop_id, name FROM shops WHERE shop_id = ANY(${shopIds}::text[])
-  `;
+  const pipeline = [
+    { $match: matchStage },
+    {
+      $group: {
+        _id: {
+          shopId: "$shopId",
+          eventType: "$eventType",
+          recommendationType: "$recommendationType"
+        },
+        count: { $sum: 1 },
+        totalRevenue: { $sum: { $ifNull: ["$totalPrice", 0] } },
+        laborRevenue: { $sum: { $ifNull: ["$laborPrice", 0] } },
+        partsRevenue: { $sum: { $ifNull: ["$partsPrice", 0] } }
+      }
+    },
+    {
+      $group: {
+        _id: "$_id.shopId",
+        events: {
+          $push: {
+            eventType: "$_id.eventType",
+            recommendationType: "$_id.recommendationType",
+            count: "$count",
+            totalRevenue: "$totalRevenue",
+            laborRevenue: "$laborRevenue",
+            partsRevenue: "$partsRevenue"
+          }
+        },
+        totalJobs: { $sum: "$count" },
+        totalRevenue: { $sum: "$totalRevenue" }
+      }
+    }
+  ];
   
-  const shopMap = new Map(shops.map((s: Record<string, unknown>) => [String(s.shop_id), s.name as string]));
+  const results = await db.collection<RecommendationEvent>("recommendation_events")
+    .aggregate(pipeline)
+    .toArray();
   
-  const shopBreakdownMap = new Map<string, {
-    shopId: string;
-    shopName: string;
-    jobsAdded: number;
-    jobsSold: number;
-    revenue: number;
-    events: unknown[];
-  }>();
+  const shops = await db.collection("shops")
+    .find({ shopId: { $in: enterprise.shopIds } })
+    .toArray();
+  
+  const shopMap = new Map(shops.map(s => [s.shopId, s.name]));
   
   let totalJobsAdded = 0;
   let totalJobsSold = 0;
   let totalRevenue = 0;
   
-  for (const event of events) {
-    const shopId = String(event.shop_id);
-    if (!shopBreakdownMap.has(shopId)) {
-      shopBreakdownMap.set(shopId, {
-        shopId,
-        shopName: shopMap.get(shopId) || `Shop ${shopId}`,
-        jobsAdded: 0,
-        jobsSold: 0,
-        revenue: 0,
-        events: []
-      });
-    }
+  const shopBreakdown = results.map((r: any) => {
+    const added = r.events.filter((e: any) => e.eventType === "recommendation_added")
+      .reduce((sum: number, e: any) => sum + e.count, 0);
+    const sold = r.events.filter((e: any) => e.eventType === "recommendation_sold")
+      .reduce((sum: number, e: any) => sum + e.count, 0);
+    const revenue = r.events.filter((e: any) => e.eventType === "recommendation_sold")
+      .reduce((sum: number, e: any) => sum + e.totalRevenue, 0);
     
-    const shop = shopBreakdownMap.get(shopId)!;
-    shop.events.push({
-      eventType: event.event_type,
-      recommendationType: event.recommendation_type,
-      count: Number(event.count),
-      totalRevenue: Number(event.total_revenue),
-      laborRevenue: Number(event.labor_revenue),
-      partsRevenue: Number(event.parts_revenue)
-    });
+    totalJobsAdded += added;
+    totalJobsSold += sold;
+    totalRevenue += revenue;
     
-    if (event.event_type === "recommendation_added") {
-      shop.jobsAdded += Number(event.count);
-      totalJobsAdded += Number(event.count);
-    } else if (event.event_type === "recommendation_sold") {
-      shop.jobsSold += Number(event.count);
-      shop.revenue += Number(event.total_revenue);
-      totalJobsSold += Number(event.count);
-      totalRevenue += Number(event.total_revenue);
-    }
-  }
+    return {
+      shopId: r._id,
+      shopName: shopMap.get(r._id) || `Shop ${r._id}`,
+      jobsAdded: added,
+      jobsSold: sold,
+      revenue: revenue,
+      events: r.events
+    };
+  });
   
-  for (const shopIdNum of enterprise.shopIds) {
-    const shopId = String(shopIdNum);
-    if (!shopBreakdownMap.has(shopId)) {
-      shopBreakdownMap.set(shopId, {
+  for (const shopId of enterprise.shopIds) {
+    if (!shopBreakdown.find((s: any) => s.shopId === shopId)) {
+      shopBreakdown.push({
         shopId,
         shopName: shopMap.get(shopId) || `Shop ${shopId}`,
         jobsAdded: 0,
@@ -278,12 +226,11 @@ export async function getEnterpriseAnalytics(enterpriseId: string, startDate?: D
     }
   }
   
-  const shopBreakdown = Array.from(shopBreakdownMap.values())
-    .sort((a, b) => b.revenue - a.revenue);
+  shopBreakdown.sort((a: any, b: any) => b.revenue - a.revenue);
   
   return {
     enterprise: {
-      id: enterprise.id,
+      id: enterprise._id,
       name: enterprise.name,
       shopCount: enterprise.shopIds.length
     },
@@ -297,21 +244,18 @@ export async function getEnterpriseAnalytics(enterpriseId: string, startDate?: D
   };
 }
 
-export async function getShopsForEnterprise(enterpriseId: string) {
+export async function getShopsForEnterprise(enterpriseId: ObjectId | string) {
+  const db = await getDb();
   const enterprise = await getEnterpriseById(enterpriseId);
   if (!enterprise) return [];
   
-  const shopIds = enterprise.shopIds.map(String);
-  
-  const shops = await sql`
-    SELECT * FROM shops WHERE shop_id = ANY(${shopIds}::text[])
-  `;
-  
-  return shops;
+  return db.collection("shops")
+    .find({ shopId: { $in: enterprise.shopIds } })
+    .toArray();
 }
 
 export async function attributeRevenueFromWorkOrder(
-  shopId: number | string,
+  shopId: number,
   workOrderId: string,
   vin: string,
   packageSummaries: Array<{
@@ -326,12 +270,15 @@ export async function attributeRevenueFromWorkOrder(
   }>,
   provider: "protractor" | "tekmetric" = "protractor"
 ) {
-  const shopIdStr = String(shopId);
+  const db = await getDb();
   
-  const addedEvents = await sql`
-    SELECT * FROM recommendation_events
-    WHERE shop_id = ${shopIdStr} AND work_order_id = ${String(workOrderId)} AND event_type = 'recommendation_added'
-  `;
+  const addedEvents = await db.collection<RecommendationEvent>("recommendation_events")
+    .find({
+      shopId,
+      workOrderId: String(workOrderId),
+      eventType: "recommendation_added"
+    })
+    .toArray();
   
   if (addedEvents.length === 0) {
     return { matched: 0, revenue: 0 };
@@ -341,32 +288,32 @@ export async function attributeRevenueFromWorkOrder(
   let totalRevenue = 0;
   
   for (const event of addedEvents) {
-    const eventCode = (event.service_code || "").toLowerCase();
+    const eventCode = (event.serviceCode || "").toLowerCase();
     const matchedPkg = packageSummaries.find(pkg => 
       pkg.code.toLowerCase() === eventCode ||
-      pkg.id === event.service_code ||
+      pkg.id === event.serviceCode ||
       (pkg.templateId && pkg.templateId.toLowerCase() === eventCode) ||
-      pkg.title.toLowerCase() === (event.service_name || "").toLowerCase()
+      pkg.title.toLowerCase() === (event.serviceName || "").toLowerCase()
     );
     
     if (matchedPkg) {
-      const alreadySold = await sql`
-        SELECT id FROM recommendation_events
-        WHERE shop_id = ${shopIdStr} AND work_order_id = ${String(workOrderId)}
-          AND service_code = ${event.service_code} AND event_type = 'recommendation_sold'
-        LIMIT 1
-      `;
+      const alreadySold = await db.collection<RecommendationEvent>("recommendation_events").findOne({
+        shopId,
+        workOrderId: String(workOrderId),
+        serviceCode: event.serviceCode,
+        eventType: "recommendation_sold"
+      });
       
-      if (alreadySold.length === 0) {
+      if (!alreadySold) {
         await logRecommendationEvent({
-          shopId: shopIdStr,
+          shopId,
           vin,
           workOrderId: String(workOrderId),
           provider,
           eventType: "recommendation_sold",
-          recommendationType: event.recommendation_type,
-          serviceCode: event.service_code,
-          serviceName: event.service_name,
+          recommendationType: event.recommendationType,
+          serviceCode: event.serviceCode,
+          serviceName: event.serviceName,
           laborPrice: matchedPkg.laborTotal,
           partsPrice: matchedPkg.partsTotal,
           totalPrice: matchedPkg.total,

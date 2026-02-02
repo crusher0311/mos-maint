@@ -1,6 +1,11 @@
+// app/api/jobs/search/route.ts
+// Job Lookup / Parts Intelligence - Search API
+// Uses two-stage matching: Hard gates + Weighted scoring
+// Queries both legacy job_index and normalized collections for SMS migration support
+
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 
@@ -52,6 +57,7 @@ function parseEngineString(engine: string): EngineInfo {
 }
 
 function getScoreBand(score: number, yearDiff?: number): ScoreBand {
+  // "Exact" requires high score AND close year match (within 1 year)
   if (score >= 90 && (yearDiff === undefined || yearDiff <= 1)) return "exact";
   if (score >= 75) return "likely";
   if (score >= 50) return "possible";
@@ -67,8 +73,13 @@ function getBandLabel(band: ScoreBand): string {
   }
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function searchNormalizedCollections(
-  searchShopIds: string[],
+  db: any,
+  searchShopIds: number[],
   coreTokens: string[],
   vehicleMake?: string,
   limit: number = 50
@@ -76,80 +87,75 @@ async function searchNormalizedCollections(
   if (coreTokens.length === 0) return [];
 
   try {
-    const searchPattern = coreTokens.map(t => `%${t}%`).join('%');
-    
-    let rows: any[];
+    const shopMatch = searchShopIds.length === 1 
+      ? { shopId: searchShopIds[0] }
+      : { shopId: { $in: searchShopIds } };
+
+    // Build regex match conditions - each token must match in at least one of the text fields
+    // Using $and to require ALL tokens, with $or to allow matching in any field
+    const tokenConditions = coreTokens.map(t => {
+      const regex = { $regex: new RegExp(escapeRegex(t), 'i') };
+      return {
+        $or: [
+          { title: regex },
+          { description: regex },
+          { cannedJobName: regex },
+        ]
+      };
+    });
+
+    const serviceJobsPipeline: any[] = [
+      {
+        $match: {
+          ...shopMatch,
+          deletedAt: null,
+          $and: tokenConditions
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit * 2 },
+      {
+        $lookup: {
+          from: 'normalized_work_orders',
+          localField: 'workOrderId',
+          foreignField: '_id',
+          as: 'workOrder'
+        }
+      },
+      { $unwind: { path: '$workOrder', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'normalized_vehicles',
+          localField: 'workOrder.vehicleId',
+          foreignField: '_id',
+          as: 'vehicle'
+        }
+      },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
+    ];
+
     if (vehicleMake) {
-      rows = await sql`
-        SELECT 
-          sj.id as _id,
-          sj.shop_id as "shopId",
-          sj.title,
-          sj.description,
-          sj.canned_job_name as "cannedJobName",
-          sj.line_items as "lineItems",
-          sj.work_order_id as "workOrderId",
-          sj.created_at as "createdAt",
-          sj.provenance,
-          wo.completed_date as "completedDate",
-          v.vin,
-          v.year,
-          v.make,
-          v.model,
-          v.engine
-        FROM service_jobs sj
-        LEFT JOIN work_orders wo ON sj.work_order_id = wo.id::text
-        LEFT JOIN vehicles v ON wo.vehicle_id = v.id::text
-        WHERE sj.shop_id = ANY(${searchShopIds})
-          AND sj.deleted_at IS NULL
-          AND (LOWER(sj.title) LIKE ${`%${searchPattern}%`}
-            OR LOWER(sj.description) LIKE ${`%${searchPattern}%`}
-            OR LOWER(sj.canned_job_name) LIKE ${`%${searchPattern}%`})
-          AND LOWER(v.make) = LOWER(${vehicleMake})
-        ORDER BY sj.created_at DESC
-        LIMIT ${limit}
-      `;
-    } else {
-      rows = await sql`
-        SELECT 
-          sj.id as _id,
-          sj.shop_id as "shopId",
-          sj.title,
-          sj.description,
-          sj.canned_job_name as "cannedJobName",
-          sj.line_items as "lineItems",
-          sj.work_order_id as "workOrderId",
-          sj.created_at as "createdAt",
-          sj.provenance,
-          wo.completed_date as "completedDate",
-          v.vin,
-          v.year,
-          v.make,
-          v.model,
-          v.engine
-        FROM service_jobs sj
-        LEFT JOIN work_orders wo ON sj.work_order_id = wo.id::text
-        LEFT JOIN vehicles v ON wo.vehicle_id = v.id::text
-        WHERE sj.shop_id = ANY(${searchShopIds})
-          AND sj.deleted_at IS NULL
-          AND (LOWER(sj.title) LIKE ${`%${searchPattern}%`}
-            OR LOWER(sj.description) LIKE ${`%${searchPattern}%`}
-            OR LOWER(sj.canned_job_name) LIKE ${`%${searchPattern}%`})
-        ORDER BY sj.created_at DESC
-        LIMIT ${limit}
-      `;
+      serviceJobsPipeline.push({
+        $match: { 'vehicle.make': { $regex: new RegExp(escapeRegex(vehicleMake), 'i') } }
+      });
     }
 
-    return rows.map((nj: any) => ({
+    serviceJobsPipeline.push({ $limit: limit });
+
+    const normalizedJobs = await db.collection('normalized_service_jobs')
+      .aggregate(serviceJobsPipeline)
+      .toArray();
+
+    return normalizedJobs.map((nj: any) => ({
       _id: nj._id,
       shopId: nj.shopId,
-      vin: nj.vin,
+      vin: nj.vehicle?.vin,
       vehicle: {
-        vin: nj.vin,
-        year: nj.year,
-        make: nj.make,
-        model: nj.model,
-        engine: nj.engine?.description || nj.engine,
+        vin: nj.vehicle?.vin,
+        year: nj.vehicle?.year,
+        make: nj.vehicle?.make,
+        model: nj.vehicle?.model,
+        engine: nj.vehicle?.engine?.description,
       },
       job: {
         title: nj.title,
@@ -165,7 +171,7 @@ async function searchNormalizedCollections(
         unitPrice: li.unitPrice,
         total: li.totalPrice,
       })),
-      performedAt: nj.completedDate || nj.createdAt,
+      performedAt: nj.workOrder?.completedDate || nj.createdAt,
       workOrderId: nj.workOrderId,
       sourceSystem: nj.provenance?.sourceSystem || 'normalized',
     }));
@@ -182,7 +188,6 @@ export async function GET(req: NextRequest) {
   }
 
   const shopId = Number(session.shopId);
-  const shopIdStr = String(session.shopId);
   
   const entitlements = await getFeatureEntitlements(shopId);
   if (!entitlements.canUseFeature("job_lookup")) {
@@ -209,91 +214,115 @@ export async function GET(req: NextRequest) {
     }, { status: 400 });
   }
 
-  let searchShopIds: string[] = [shopIdStr];
+  const db = await getDb();
+  
+  // Check if shop is part of an enterprise - if so, search enterprise shops based on preferences
+  let searchShopIds: number[] = [shopId];
   const enterprise = await getEnterpriseByShopId(shopId);
   if (enterprise && enterprise.shopIds.length > 1) {
-    const shopRows = await sql`SELECT preferences FROM shops WHERE shop_id = ${shopIdStr}`;
-    const jobHistoryShopIds = (shopRows[0] as any)?.preferences?.jobHistoryShopIds;
+    // Check shop preferences for job history location selection
+    const shop = await db.collection("shops").findOne({ shopId });
+    const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
     
     if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
-      searchShopIds = jobHistoryShopIds
-        .filter((id: number) => enterprise.shopIds.includes(id))
-        .map(String);
-      if (!searchShopIds.includes(shopIdStr)) {
-        searchShopIds.push(shopIdStr);
+      // Use the shop's selected locations (must be within enterprise)
+      searchShopIds = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
+      // Always include own shop
+      if (!searchShopIds.includes(shopId)) {
+        searchShopIds.push(shopId);
       }
       console.log(`[Jobs Search] Enterprise search (custom): shops ${searchShopIds.join(', ')}`);
     } else {
-      searchShopIds = enterprise.shopIds.map(String);
+      // Default: search all enterprise shops
+      searchShopIds = enterprise.shopIds;
       console.log(`[Jobs Search] Enterprise search (all): shops ${searchShopIds.join(', ')}`);
     }
   }
   
-  const shopDocs = await sql`
-    SELECT shop_id, name, location_identifier FROM shops WHERE shop_id = ANY(${searchShopIds})
-  `;
+  // Build shop lookup map for location names
+  const shopDocs = await db.collection("shops")
+    .find({ shopId: { $in: searchShopIds } })
+    .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+    .toArray();
   
   const shopLookup = new Map<number, { name: string; locationIdentifier: string | null }>();
   for (const s of shopDocs) {
-    shopLookup.set(Number((s as any).shop_id), {
-      name: (s as any).name || `Shop ${(s as any).shop_id}`,
-      locationIdentifier: (s as any).location_identifier || null,
+    shopLookup.set(Number(s.shopId), {
+      name: s.name || `Shop ${s.shopId}`,
+      locationIdentifier: s.locationIdentifier || null,
     });
   }
   
+  const matchStage: any = searchShopIds.length === 1 
+    ? { shopId: searchShopIds[0] }
+    : { shopId: { $in: searchShopIds } };
+  
+  // Stopwords: common verbs and filler terms that don't identify the service
   const stopwords = new Set([
     "replace", "inspect", "check", "service", "repair", "install", "remove",
     "adjust", "flush", "bleed", "test", "clean", "lube", "lubricate", 
     "change", "perform", "complete", "top", "off", "the", "and", "for"
   ]);
   
-  const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  const coreTokens = allTokens.filter(w => !stopwords.has(w));
-  const searchPattern = coreTokens.length > 0 ? coreTokens.map(t => `%${t}%`).join('%') : allTokens.map(t => `%${t}%`).join('%');
+  let useTextSearch = false;
+  let textSearchQuery = "";
   
-  let jobIndexRows: any[] = [];
-  if (searchPattern) {
-    if (vehicleMake) {
-      jobIndexRows = await sql`
-        SELECT * FROM job_index 
-        WHERE shop_id = ANY(${searchShopIds})
-          AND job->'keywords' ?| ${coreTokens.length > 0 ? coreTokens : allTokens}
-          AND LOWER(vehicle->>'make') = LOWER(${vehicleMake})
-        ORDER BY performed_at DESC
-        LIMIT ${limit * 5}
-      `;
-    } else {
-      jobIndexRows = await sql`
-        SELECT * FROM job_index 
-        WHERE shop_id = ANY(${searchShopIds})
-          AND job->'keywords' ?| ${coreTokens.length > 0 ? coreTokens : allTokens}
-        ORDER BY performed_at DESC
-        LIMIT ${limit * 5}
-      `;
+  if (query) {
+    const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    // Core tokens: remove stopwords to get the essential service identifiers
+    const coreTokens = allTokens.filter(w => !stopwords.has(w));
+    
+    if (coreTokens.length > 0) {
+      // Use keywords array match (uses compound index shopId_keywords)
+      // This is fast with the index and more precise than text search
+      matchStage["job.keywords"] = { $all: coreTokens };
+      
+      // Also enable text search as alternative query strategy
+      useTextSearch = true;
+      textSearchQuery = coreTokens.join(" ");
+    } else if (allTokens.length > 0) {
+      // Fallback: if only stopwords, match any token in keywords
+      matchStage["job.keywords"] = { $in: allTokens };
     }
   }
   
-  const normalizedResults = await searchNormalizedCollections(
-    searchShopIds, 
-    coreTokens.length > 0 ? coreTokens : allTokens, 
-    vehicleMake || undefined, 
-    limit * 2
-  );
+  if (vehicleMake) {
+    matchStage["vehicle.make"] = { $regex: new RegExp(escapeRegex(vehicleMake), "i") };
+  }
   
+  // NOTE: Model is NOT used as a hard filter - it's used for scoring only.
+  // This allows "oil change on HHR" to find results from other Chevrolet models
+  // (Trax, Cruze, etc.) when no exact HHR jobs exist in history.
+
+  const pipeline: any[] = [
+    { $match: matchStage },
+    { $sort: { performedAt: -1 } },
+    { $limit: limit * 5 },
+    { $project: {
+      shopId: 1,
+      vin: 1,
+      vehicle: 1,
+      job: 1,
+      lines: 1,
+      performedAt: 1,
+      workOrderId: 1,
+    }},
+  ];
+
+  // Query both legacy job_index and normalized collections in parallel
+  const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const coreTokensForNormalized = allTokens.filter(w => !stopwords.has(w));
+  
+  const [jobIndexResults, normalizedResults] = await Promise.all([
+    db.collection("job_index").aggregate(pipeline).toArray(),
+    searchNormalizedCollections(db, searchShopIds, coreTokensForNormalized, vehicleMake || undefined, limit * 2)
+  ]);
+  
+  // Merge results from both sources, deduping by workOrderId + job title
   const seenKeys = new Set<string>();
   const jobs: any[] = [];
   
-  for (const row of jobIndexRows) {
-    const job = {
-      _id: row.id,
-      shopId: row.shop_id,
-      vin: row.vin,
-      vehicle: row.vehicle,
-      job: row.job,
-      lines: row.lines,
-      performedAt: row.performed_at,
-      workOrderId: row.work_order_id,
-    };
+  for (const job of jobIndexResults) {
     const key = `${job.workOrderId || ''}-${job.job?.title || ''}-legacy`;
     if (!seenKeys.has(key)) {
       seenKeys.add(key);
@@ -309,7 +338,7 @@ export async function GET(req: NextRequest) {
     }
   }
   
-  console.log(`[Jobs Search] Found ${jobIndexRows.length} from job_index, ${normalizedResults.length} from normalized`);
+  console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
   
   const targetEngine = parseEngineString(vehicleEngine || "");
   const targetYear = vehicleYear ? parseInt(vehicleYear) : null;
@@ -426,11 +455,14 @@ export async function GET(req: NextRequest) {
       matchDetails.push("Has part numbers");
     }
     
+    // Recency scoring - exponential decay with 180-day half-life (max +10 points)
+    // Recent jobs likely have more up-to-date pricing
     let recencyScore = 0;
     if (job.performedAt) {
       const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
+      // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
       recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
-      recencyScore = Math.max(0, Math.min(10, recencyScore));
+      recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
       
       if (recencyScore >= 8) {
         matchDetails.push("Very recent job");
@@ -439,16 +471,19 @@ export async function GET(req: NextRequest) {
       }
     }
     
+    // Location bonus: prefer jobs from current shop
     const jobShopId = Number(job.shopId);
     const isCurrentLocation = jobShopId === shopId;
     const locationBonus = isCurrentLocation ? 5 : 0;
     
+    // Get location info for display
     const shopInfo = shopLookup.get(jobShopId);
     const locationName = shopInfo?.locationIdentifier || shopInfo?.name || `Shop ${jobShopId}`;
     
     const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore + locationBonus;
     const normalizedScore = Math.max(0, Math.min(100, totalScore));
     
+    // Calculate year difference for band determination
     const yearDiffForBand = (targetYear && jobYear) ? Math.abs(targetYear - jobYear) : undefined;
     const band = getScoreBand(normalizedScore, yearDiffForBand);
     
@@ -474,13 +509,16 @@ export async function GET(req: NextRequest) {
     };
   });
   
+  // Lower threshold to 40 to include more results - let user decide relevance
   const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
   
+  // Sort by score descending, then by band quality (exact > likely > possible > poor)
   const bandOrder: Record<string, number> = { exact: 0, likely: 1, possible: 2, poor: 3 };
   eligibleJobs.sort((a, b) => {
     if (b.matchScore !== a.matchScore) {
       return b.matchScore - a.matchScore;
     }
+    // When scores are equal, prioritize by band (Exact Fit before Great Match)
     return (bandOrder[a.matchBand] ?? 3) - (bandOrder[b.matchBand] ?? 3);
   });
 
@@ -505,7 +543,7 @@ export async function GET(req: NextRequest) {
     results,
     stats: {
       totalFound: jobs.length,
-      fromJobIndex: jobIndexRows.length,
+      fromJobIndex: jobIndexResults.length,
       fromNormalized: normalizedResults.length,
       gatesFailed: gateFailCount,
       belowThreshold: belowThresholdCount,

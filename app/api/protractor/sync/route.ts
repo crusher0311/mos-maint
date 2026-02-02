@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
@@ -41,11 +41,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(shopId)}`;
-  const shop = shopRows[0] as any;
-  if (shop && !shop.protractor_backfill_complete) {
-    const backfillRows = await sql`SELECT * FROM backfill_progress WHERE shop_id = ${String(shopId)}`;
-    const backfillProgress = backfillRows[0] as any;
+  const db = await getDb();
+
+  // Check if backfill has been completed - if not, trigger it
+  const shop = await db.collection("shops").findOne({ shopId });
+  if (shop && !shop.protractorBackfillComplete) {
+    const backfillProgress = await db.collection("backfill_progress").findOne({ shopId });
     if (!backfillProgress || !backfillProgress.completed) {
       console.log(`[Protractor Sync] Backfill not complete for shop ${shopId}, triggering in background`);
       runProtractorBackfill(shopId).then(result => {
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Use 30-day window for manual sync (fast) - background worker handles full history
   const endDate = new Date();
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 30);
@@ -87,13 +89,15 @@ export async function POST(req: NextRequest) {
   
   const allJobIndexEntries: any[] = [];
 
+  // Sync canned jobs / service package templates
   console.log(`[Protractor Sync] Fetching service packages...`);
   try {
     const cannedJobsResult = await fetchCannedJobs(shopId);
     console.log(`[Protractor Sync] Canned jobs API result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}`);
     
     if (cannedJobsResult.ok && cannedJobsResult.cannedJobs?.length) {
-      const templateLimit = pLimit(5);
+      // Fetch full details for each template (with lines) using rate limiting
+      const templateLimit = pLimit(5); // 5 concurrent requests
       console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
       
       const templatesWithDetails = await Promise.all(
@@ -111,6 +115,7 @@ export async function POST(req: NextRequest) {
             } catch (err: any) {
               console.log(`[Protractor Sync] Failed to fetch detail for ${template.Code}: ${err.message}`);
             }
+            // Fall back to summary if detail fetch fails
             return template;
           })
         )
@@ -122,6 +127,7 @@ export async function POST(req: NextRequest) {
       const withLines = templatesWithDetails.filter((t: any) => t.ServicePackageLines?.ItemCollection?.length > 0);
       console.log(`[Protractor Sync] Synced ${results.cannedJobsSynced} templates (${withLines.length} with line details)`);
     } else {
+      // API not available - discover from existing synced data
       console.log(`[Protractor Sync] API not available, discovering from cached data...`);
       const discovered = await discoverCannedJobsFromCache(shopId);
       if (discovered.length > 0) {
@@ -135,13 +141,15 @@ export async function POST(req: NextRequest) {
     results.errors.push(`Canned jobs: ${err.message}`);
   }
 
+  // Helper: discover canned jobs from cached deferred work and work orders
   async function discoverCannedJobsFromCache(shopId: number) {
     const discovered = new Map<string, { id: string; title: string; description: string; chapter: string; code: string }>();
     
-    const deferredWork = await sql`SELECT * FROM protractor_deferred_work WHERE shop_id = ${String(shopId)}`;
+    // Get from deferred work
+    const deferredWork = await db.collection("protractor_deferred_work").find({ shopId }).toArray();
     console.log(`[Protractor Sync] Checking ${deferredWork.length} deferred work records for service packages...`);
-    for (const dw of deferredWork as any[]) {
-      const items = dw.items || dw.deferred_work || [];
+    for (const dw of deferredWork) {
+      const items = dw.items || dw.deferredWork || [];
       for (const item of items) {
         const code = item.Code || item.code || item.ServicePackageCode;
         const title = item.Title || item.title || item.Description || item.description;
@@ -157,10 +165,11 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    const workOrders = await sql`SELECT * FROM protractor_work_orders WHERE shop_id = ${String(shopId)}`;
+    // Get from work orders service packages
+    const workOrders = await db.collection("protractor_work_orders").find({ shopId }).toArray();
     console.log(`[Protractor Sync] Checking ${workOrders.length} work orders for service packages...`);
-    for (const wo of workOrders as any[]) {
-      const packages = wo.service_packages || wo.data?.ServicePackages || [];
+    for (const wo of workOrders) {
+      const packages = wo.servicePackages || wo.ServicePackages || [];
       const pkgArray = Array.isArray(packages) ? packages : (packages?.ItemCollection || []);
       for (const pkg of pkgArray) {
         const code = pkg.Code || pkg.code || pkg.ServicePackageTemplateCode;
@@ -183,25 +192,30 @@ export async function POST(req: NextRequest) {
   }
   
   async function mergeCannedJobsToCache(shopId: number, discovered: any[]) {
-    const existingRows = await sql`SELECT * FROM protractor_canned_jobs WHERE shop_id = ${String(shopId)}`;
-    const existing = existingRows[0] as any;
+    const existing = await db.collection("protractor_canned_jobs").findOne({ shopId });
     const existingItems = existing?.items || [];
     const existingCodes = new Set(existingItems.map((i: any) => (i.code || i.id)?.toLowerCase()));
     
     const newItems = discovered.filter(d => !existingCodes.has(d.code?.toLowerCase()));
     const merged = [...existingItems, ...newItems];
     
-    await sql`
-      INSERT INTO protractor_canned_jobs (shop_id, items, fetched_at, source, created_at, updated_at)
-      VALUES (${String(shopId)}, ${JSON.stringify(merged)}::jsonb, NOW(), 'discovered', NOW(), NOW())
-      ON CONFLICT (shop_id) DO UPDATE SET
-        items = EXCLUDED.items,
-        fetched_at = NOW(),
-        source = EXCLUDED.source,
-        updated_at = NOW()
-    `;
+    await db.collection("protractor_canned_jobs").updateOne(
+      { shopId },
+      {
+        $set: {
+          shopId,
+          items: merged,
+          fetchedAt: new Date(),
+          source: "discovered",
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
   }
 
+  // Fetch individual work orders to get complete data (including Odometer)
+  // Rate limit to 3 concurrent requests to avoid overwhelming the API
   const limit = pLimit(3);
   
   const detailedWorkOrders = await Promise.all(
@@ -211,6 +225,7 @@ export async function POST(req: NextRequest) {
         if (detailResult.ok && detailResult.workOrder) {
           return detailResult.workOrder;
         }
+        // Fallback to list data if detail fetch fails
         return wo;
       })
     )
@@ -222,25 +237,29 @@ export async function POST(req: NextRequest) {
         const vehicle = wo.ServiceItem;
         const vin = vehicle.VIN?.toUpperCase();
         
+        // Use work order InUsage (more current) or fall back to vehicle Usage
         const currentOdometer = wo.InUsage ?? vehicle.Usage ?? wo.Odometer ?? vehicle.Odometer;
         
         if (vin) {
           await upsertProtractorVehicleSnapshot(shopId, vin, vehicle);
           
+          // Build the active source entry for this work order
           const workOrderSource = {
             provider: "protractor",
             workOrderId: String(wo.ID),
             workOrderNumber: wo.WorkOrderNumber,
             status: wo.Status || "Open",
-            addedAt: new Date().toISOString(),
+            addedAt: new Date(),
           };
 
-          const existingVehicleRows = await sql`
-            SELECT * FROM vehicles WHERE shop_id = ${String(shopId)} AND vin = ${vin}
-          `;
-          const existingVehicle = existingVehicleRows[0] as any;
+          // Check if vehicle already exists
+          const existingVehicle = await db.collection("vehicles").findOne({
+            $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+            vin,
+          });
 
           if (existingVehicle) {
+            // Update existing vehicle, add/update this work order source
             const existingSources = existingVehicle.status?.sources || [];
             const sourceIndex = existingSources.findIndex(
               (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(wo.ID)
@@ -248,47 +267,50 @@ export async function POST(req: NextRequest) {
             
             let updatedSources;
             if (sourceIndex >= 0) {
+              // Update existing source
               updatedSources = [...existingSources];
               updatedSources[sourceIndex] = workOrderSource;
             } else {
+              // Add new source
               updatedSources = [...existingSources, workOrderSource];
             }
 
-            const statusData = {
-              active: true,
-              sources: updatedSources,
-              updatedAt: new Date().toISOString(),
-            };
-
-            await sql`
-              UPDATE vehicles SET
-                year = COALESCE(${vehicle.Year}, year),
-                make = COALESCE(${vehicle.Make}, make),
-                model = COALESCE(${vehicle.Model}, model),
-                license_plate = COALESCE(${vehicle.LicensePlate}, license_plate),
-                last_mileage = COALESCE(${currentOdometer}, last_mileage),
-                protractor_id = COALESCE(${vehicle.ID}, protractor_id),
-                status = ${JSON.stringify(statusData)}::jsonb,
-                updated_at = NOW()
-              WHERE id = ${existingVehicle.id}
-            `;
+            await db.collection("vehicles").updateOne(
+              { _id: existingVehicle._id },
+              {
+                $set: {
+                  year: vehicle.Year,
+                  make: vehicle.Make,
+                  model: vehicle.Model,
+                  license: vehicle.LicensePlate,
+                  lastMileage: currentOdometer,
+                  updatedAt: new Date(),
+                  protractorId: vehicle.ID,
+                  "status.active": true,
+                  "status.sources": updatedSources,
+                  "status.updatedAt": new Date(),
+                },
+              }
+            );
           } else {
-            const statusData = {
-              active: true,
-              sources: [workOrderSource],
-              updatedAt: new Date().toISOString(),
-            };
-
-            await sql`
-              INSERT INTO vehicles (
-                shop_id, vin, year, make, model, license_plate, last_mileage, protractor_id, status,
-                created_at, updated_at
-              ) VALUES (
-                ${String(shopId)}, ${vin}, ${vehicle.Year}, ${vehicle.Make}, ${vehicle.Model},
-                ${vehicle.LicensePlate}, ${currentOdometer}, ${vehicle.ID},
-                ${JSON.stringify(statusData)}::jsonb, NOW(), NOW()
-              )
-            `;
+            // Insert new vehicle with active status
+            await db.collection("vehicles").insertOne({
+              shopId: String(shopId),
+              vin,
+              year: vehicle.Year,
+              make: vehicle.Make,
+              model: vehicle.Model,
+              license: vehicle.LicensePlate,
+              lastMileage: currentOdometer,
+              protractorId: vehicle.ID,
+              status: {
+                active: true,
+                sources: [workOrderSource],
+                updatedAt: new Date(),
+              },
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
           }
 
           results.vehiclesSynced++;
@@ -325,6 +347,7 @@ export async function POST(req: NextRequest) {
 
       await upsertProtractorWorkOrderSnapshot(shopId, wo);
       
+      // Extract job index entries for parts intelligence
       try {
         const jobEntries = extractJobIndexFromWorkOrder(shopId, wo, "protractor");
         if (jobEntries.length > 0) {
@@ -338,6 +361,7 @@ export async function POST(req: NextRequest) {
     }
   }
   
+  // Index jobs for parts intelligence / job lookup
   if (allJobIndexEntries.length > 0) {
     try {
       console.log(`[Protractor Sync] Indexing ${allJobIndexEntries.length} jobs for parts intelligence...`);
@@ -354,6 +378,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // If we didn't get canned jobs from the API, try discovering from the just-synced data
   if (results.cannedJobsSynced === 0) {
     console.log(`[Protractor Sync] No canned jobs from API, attempting discovery from synced data...`);
     try {
@@ -391,21 +416,21 @@ export async function GET(req: NextRequest) {
       message: "Protractor is not configured",
     });
   }
-  
-  const [vehicleCountRows, workOrderCountRows, deferredWorkCountRows, cannedJobsRows, lastSyncRows] = await Promise.all([
-    sql`SELECT COUNT(*) as count FROM protractor_vehicles WHERE shop_id = ${String(shopId)}`,
-    sql`SELECT COUNT(*) as count FROM protractor_work_orders WHERE shop_id = ${String(shopId)}`,
-    sql`SELECT COUNT(*) as count FROM protractor_deferred_work WHERE shop_id = ${String(shopId)}`,
-    sql`SELECT * FROM protractor_canned_jobs WHERE shop_id = ${String(shopId)}`,
-    sql`SELECT fetched_at FROM protractor_vehicles WHERE shop_id = ${String(shopId)} ORDER BY fetched_at DESC NULLS LAST LIMIT 1`,
-  ]);
 
-  const vehicleCount = parseInt((vehicleCountRows[0] as any)?.count || '0', 10);
-  const workOrderCount = parseInt((workOrderCountRows[0] as any)?.count || '0', 10);
-  const deferredWorkCount = parseInt((deferredWorkCountRows[0] as any)?.count || '0', 10);
-  const cannedJobsCache = cannedJobsRows[0] as any;
+  const db = await getDb();
+  
+  const vehicleCount = await db.collection("protractor_vehicles").countDocuments({ shopId });
+  const workOrderCount = await db.collection("protractor_work_orders").countDocuments({ shopId });
+  const deferredWorkCount = await db.collection("protractor_deferred_work").countDocuments({ shopId });
+  
+  const cannedJobsCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
   const cannedJobsCount = cannedJobsCache?.items?.length || 0;
-  const lastSync = (lastSyncRows[0] as any)?.fetched_at || null;
+
+  const lastSync = await db.collection("protractor_vehicles")
+    .find({ shopId })
+    .sort({ fetchedAt: -1 })
+    .limit(1)
+    .toArray();
 
   return NextResponse.json({
     ok: true,
@@ -415,7 +440,7 @@ export async function GET(req: NextRequest) {
       workOrders: workOrderCount,
       deferredWorkItems: deferredWorkCount,
       cannedJobs: cannedJobsCount,
-      lastSync,
+      lastSync: lastSync[0]?.fetchedAt || null,
     },
     cannedJobs: cannedJobsCache?.items || [],
   });

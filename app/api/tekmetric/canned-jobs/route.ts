@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getCannedJobs } from "@/lib/tekmetric";
 
 export const runtime = "nodejs";
@@ -13,14 +13,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = String(session.shopId);
+    const db = await getDb();
+    const shopId = Number(session.shopId);
     if (!shopId) {
       return NextResponse.json({ error: "No shop associated" }, { status: 400 });
     }
 
-    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
-    const shop = shopRows[0] as any;
-    const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetric_shop_id;
+    const shop = await db.collection("shops").findOne({ shopId });
+    const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
     
     if (!tekmetricShopId) {
       return NextResponse.json({
@@ -31,19 +31,19 @@ export async function GET(req: NextRequest) {
     }
 
     const refresh = req.nextUrl.searchParams.get("refresh") === "true";
+    const cacheKey = `tekmetric_canned_jobs_${tekmetricShopId}`;
     
     if (!refresh) {
-      const cachedRows = await sql`
-        SELECT * FROM tekmetric_canned_jobs_cache WHERE shop_id = ${String(tekmetricShopId)}
-      `;
-      const cached = cachedRows[0] as any;
+      const cached = await db.collection("tekmetric_canned_jobs_cache").findOne({ 
+        shopId: tekmetricShopId 
+      });
       
-      if (cached && cached.fetched_at) {
-        const cacheAge = Date.now() - new Date(cached.fetched_at).getTime();
+      if (cached && cached.fetchedAt) {
+        const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
         const ONE_HOUR = 60 * 60 * 1000;
         if (cacheAge < ONE_HOUR) {
           return NextResponse.json({
-            cannedJobs: cached.canned_jobs || [],
+            cannedJobs: cached.cannedJobs || [],
             source: "cache",
           });
         }
@@ -73,11 +73,17 @@ export async function GET(req: NextRequest) {
       totalAmount: job.totalAmount || 0,
     }));
 
-    await sql`
-      INSERT INTO tekmetric_canned_jobs_cache (shop_id, canned_jobs, fetched_at)
-      VALUES (${String(tekmetricShopId)}, ${JSON.stringify(normalizedJobs)}::jsonb, NOW())
-      ON CONFLICT (shop_id) DO UPDATE SET canned_jobs = ${JSON.stringify(normalizedJobs)}::jsonb, fetched_at = NOW()
-    `;
+    await db.collection("tekmetric_canned_jobs_cache").updateOne(
+      { shopId: tekmetricShopId },
+      {
+        $set: {
+          shopId: tekmetricShopId,
+          cannedJobs: normalizedJobs,
+          fetchedAt: new Date(),
+        }
+      },
+      { upsert: true }
+    );
 
     return NextResponse.json({
       cannedJobs: normalizedJobs,

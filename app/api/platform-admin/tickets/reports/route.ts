@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,12 +9,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get("days") || "30");
 
+    const db = await getDb();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const tickets = await sql`
-      SELECT * FROM support_tickets WHERE created_at >= ${startDate}
-    `;
+    const tickets = await db.collection("support_tickets")
+      .find({ createdAt: { $gte: startDate } })
+      .toArray();
 
     const statusCounts = {
       open: 0,
@@ -31,32 +32,29 @@ export async function GET(request: NextRequest) {
     let resolvedCount = 0;
 
     for (const ticket of tickets) {
-      const t = ticket as any;
-      if (t.status === "open") statusCounts.open++;
-      else if (t.status === "in_progress") statusCounts.inProgress++;
-      else if (t.status === "resolved") statusCounts.resolved++;
-      else if (t.status === "closed") statusCounts.closed++;
+      if (ticket.status === "open") statusCounts.open++;
+      else if (ticket.status === "in_progress") statusCounts.inProgress++;
+      else if (ticket.status === "resolved") statusCounts.resolved++;
+      else if (ticket.status === "closed") statusCounts.closed++;
 
-      const cat = t.category || "general";
+      const cat = ticket.category || "general";
       byCategory[cat] = (byCategory[cat] || 0) + 1;
 
-      const pri = t.priority || "medium";
+      const pri = ticket.priority || "medium";
       byPriority[pri] = (byPriority[pri] || 0) + 1;
 
-      const dayKey = new Date(t.created_at).toISOString().split("T")[0];
+      const dayKey = new Date(ticket.createdAt).toISOString().split("T")[0];
       byDay[dayKey] = (byDay[dayKey] || 0) + 1;
 
-      const email = t.user_email;
-      if (email) {
-        if (!byUser[email]) {
-          byUser[email] = { count: 0, shopName: t.shop_name || null, locationIdentifier: t.location_identifier || null };
-        }
-        byUser[email].count++;
+      const email = ticket.userEmail;
+      if (!byUser[email]) {
+        byUser[email] = { count: 0, shopName: ticket.shopName || null, locationIdentifier: ticket.locationIdentifier || null };
       }
+      byUser[email].count++;
 
-      if ((t.status === "resolved" || t.status === "closed") && t.resolved_at) {
-        const createdAt = new Date(t.created_at).getTime();
-        const resolvedAt = new Date(t.resolved_at).getTime();
+      if ((ticket.status === "resolved" || ticket.status === "closed") && ticket.resolvedAt) {
+        const createdAt = new Date(ticket.createdAt).getTime();
+        const resolvedAt = new Date(ticket.resolvedAt).getTime();
         totalResolutionTime += (resolvedAt - createdAt) / (1000 * 60 * 60);
         resolvedCount++;
       }

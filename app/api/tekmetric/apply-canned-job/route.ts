@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { addCannedJobsToRepairOrder } from "@/lib/tekmetric";
 import { logRecommendationEvent } from "@/lib/enterprise";
 import { trackPushToRO } from "@/lib/extension-analytics";
@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = String(session.shopId);
+  const db = await getDb();
+  const shopId = Number(session.shopId);
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
   }
 
-  const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
-  const shop = shopRows[0] as any;
-  const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetric_shop_id;
+  const shop = await db.collection("shops").findOne({ shopId });
+  const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
   
   if (!tekmetricShopId) {
     return NextResponse.json({ error: "Tekmetric not configured" }, { status: 400 });
@@ -49,21 +49,21 @@ export async function POST(req: NextRequest) {
   let targetRepairOrderId = repairOrderId ? Number(repairOrderId) : null;
 
   if (!targetRepairOrderId && vin) {
-    const cachedRows = await sql`
-      SELECT * FROM tekmetric_work_orders
-      WHERE shop_id = ${shopId}
-        AND vin = ${vin.toUpperCase()}
-        AND status NOT IN ('Invoiced', 'Void', 'Archived')
-      ORDER BY fetched_at DESC, updated_date DESC
-      LIMIT 1
-    `;
-    const cached = cachedRows[0] as any;
+    // Find most recent open work order for this VIN
+    // Sort by fetchedAt (Date) for reliable ordering, filter out closed statuses
+    const cached = await db.collection("tekmetric_work_orders").findOne({
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      vin: vin.toUpperCase(),
+      status: { $nin: ["Invoiced", "Void", "Archived"] }
+    }, { sort: { fetchedAt: -1, updatedDate: -1 } });
 
     if (cached) {
-      const roIdFromWorkOrderId = cached.work_order_id ? Number(cached.work_order_id) : NaN;
+      // workOrderId is stored as String(ro.id) in sync, convert back to number for Tekmetric API
+      // Tekmetric uses numeric IDs (not GUIDs), so Number() conversion is safe
+      const roIdFromWorkOrderId = cached.workOrderId ? Number(cached.workOrderId) : NaN;
       const roIdFromData = cached.data?.id ? Number(cached.data.id) : NaN;
       targetRepairOrderId = !isNaN(roIdFromWorkOrderId) ? roIdFromWorkOrderId : (!isNaN(roIdFromData) ? roIdFromData : null);
-      console.log(`[Tekmetric Apply Canned Job] Found cached RO: ${targetRepairOrderId} from workOrderId: ${cached.work_order_id}, status: ${cached.status}`);
+      console.log(`[Tekmetric Apply Canned Job] Found cached RO: ${targetRepairOrderId} from workOrderId: ${cached.workOrderId}, status: ${cached.status}`);
     }
   }
 
@@ -80,10 +80,16 @@ export async function POST(req: NextRequest) {
   try {
     const result = await addCannedJobsToRepairOrder(targetRepairOrderId, [Number(cannedJobId)]);
     
-    await sql`
-      INSERT INTO canned_job_applications (shop_id, tekmetric_shop_id, vin, repair_order_id, canned_job_id, provider, applied_at, applied_by)
-      VALUES (${shopId}, ${String(tekmetricShopId)}, ${vin?.toUpperCase() || null}, ${String(targetRepairOrderId)}, ${cannedJobId}, 'tekmetric', NOW(), ${session.email || null})
-    `;
+    await db.collection("canned_job_applications").insertOne({
+      shopId,
+      tekmetricShopId,
+      vin: vin?.toUpperCase() || null,
+      repairOrderId: targetRepairOrderId,
+      cannedJobId,
+      provider: "tekmetric",
+      appliedAt: new Date(),
+      appliedBy: session.email || null,
+    });
 
     try {
       await logRecommendationEvent({
@@ -102,7 +108,7 @@ export async function POST(req: NextRequest) {
     }
 
     trackPushToRO({
-      shopId: Number(shopId),
+      shopId,
       userId: session.email,
       vin: vin?.toUpperCase(),
       jobTitle: cannedJobTitle || `Canned Job ${cannedJobId}`,

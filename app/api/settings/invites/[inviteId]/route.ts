@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,20 +19,19 @@ export async function DELETE(
 
   const { inviteId } = params;
 
-  const inviteResult = await sql`
-    SELECT * FROM setup_tokens WHERE id = ${inviteId} LIMIT 1
-  `;
-  const invite = inviteResult[0];
-  
+  const db = await getDb();
+  const invites = db.collection("setup_tokens");
+
+  const invite = await invites.findOne({ _id: new ObjectId(inviteId) });
   if (!invite) {
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
   }
 
-  if (invite.shop_id !== String(sess.shopId) && sess.role !== "admin") {
+  if (invite.shopId !== sess.shopId && sess.role !== "admin") {
     return NextResponse.json({ error: "Cannot cancel invite from another shop" }, { status: 403 });
   }
 
-  await sql`DELETE FROM setup_tokens WHERE id = ${inviteId}`;
+  await invites.deleteOne({ _id: new ObjectId(inviteId) });
 
   return NextResponse.json({ ok: true });
 }

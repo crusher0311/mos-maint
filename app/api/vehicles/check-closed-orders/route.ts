@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import pLimit from "p-limit";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { fetchWorkOrderById } from "@/lib/integrations/protractor";
 import { getTekmetricWorkOrderWithMileage } from "@/lib/tekmetric";
 
-const BATCH_SIZE = 3;
-const BATCH_DELAY_MS = 3000;
-const MAX_VEHICLES_PER_REQUEST = 20;
+const BATCH_SIZE = 3; // Reduced from 5 to avoid rate limits
+const BATCH_DELAY_MS = 3000; // Increased from 2000
+const MAX_VEHICLES_PER_REQUEST = 20; // Reduced from 50 to limit API calls
 
+// In-memory cache to avoid re-checking same work orders frequently
 const recentlyCheckedOrders = new Map<string, { checkedAt: number; isClosed: boolean }>();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
 function getCachedResult(workOrderId: string): { isClosed: boolean } | null {
   const cached = recentlyCheckedOrders.get(workOrderId);
@@ -21,6 +22,7 @@ function getCachedResult(workOrderId: string): { isClosed: boolean } | null {
 
 function setCachedResult(workOrderId: string, isClosed: boolean) {
   recentlyCheckedOrders.set(workOrderId, { checkedAt: Date.now(), isClosed });
+  // Clean up old entries periodically
   if (recentlyCheckedOrders.size > 500) {
     const now = Date.now();
     for (const [key, value] of recentlyCheckedOrders) {
@@ -46,27 +48,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "shopId required" }, { status: 400 });
     }
 
-    const shopRows = await sql`
-      SELECT id, tekmetric_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    
-    if (shopRows.length === 0) {
+    const db = await getDb();
+
+    const shop = await db.collection("shops").findOne({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
+    if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
-    
-    const shop = shopRows[0];
-    const tekmetricConfig = shop.tekmetric_config as any;
 
-    const vehicleRows = await sql`
-      SELECT id, vin, mileage, odometer, last_mileage, status 
-      FROM vehicles 
-      WHERE shop_id = ${String(shopId)} 
-        AND (status->>'active')::boolean = true 
-        AND jsonb_array_length(COALESCE(status->'sources', '[]'::jsonb)) > 0
-      LIMIT ${MAX_VEHICLES_PER_REQUEST}
-    `;
+    const activeVehicles = await db.collection("vehicles").find({
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+      "status.active": true,
+      "status.sources": { $exists: true, $ne: [] }
+    }).limit(MAX_VEHICLES_PER_REQUEST).toArray();
 
-    if (vehicleRows.length === 0) {
+    if (activeVehicles.length === 0) {
       return NextResponse.json({ checked: 0, closed: 0, mileageUpdated: 0 });
     }
 
@@ -81,10 +78,9 @@ export async function POST(request: NextRequest) {
       currentMileage: number;
     }> = [];
 
-    for (const vehicle of vehicleRows) {
-      const status = vehicle.status as any;
-      const sources = status?.sources || [];
-      const currentMileage = vehicle.mileage || vehicle.odometer || vehicle.last_mileage || 0;
+    for (const vehicle of activeVehicles) {
+      const sources = vehicle.status?.sources || [];
+      const currentMileage = vehicle.mileage || vehicle.odometer || vehicle.lastMileage || 0;
       
       for (const source of sources) {
         workOrderChecks.push({ vehicle, source, currentMileage });
@@ -118,7 +114,7 @@ export async function POST(request: NextRequest) {
               } catch (err) {
                 console.error(`Error checking Protractor WO ${source.workOrderId}:`, err);
               }
-            } else if (source.provider === "tekmetric" && tekmetricConfig?.shopId) {
+            } else if (source.provider === "tekmetric" && shop.tekmetric?.shopId) {
               try {
                 const woData = await getTekmetricWorkOrderWithMileage(source.workOrderId);
                 if (woData) {
@@ -141,14 +137,17 @@ export async function POST(request: NextRequest) {
         const { vehicle, source, currentMileage, isClosed, workOrderMileage } = result;
 
         if (workOrderMileage && workOrderMileage > 0 && workOrderMileage > currentMileage) {
-          await sql`
-            UPDATE vehicles SET 
-              mileage = ${workOrderMileage},
-              mileage_source = ${source.provider},
-              mileage_updated_at = NOW(),
-              updated_at = NOW()
-            WHERE id = ${vehicle.id}
-          `;
+          await db.collection("vehicles").updateOne(
+            { _id: vehicle._id },
+            {
+              $set: {
+                mileage: workOrderMileage,
+                mileageSource: source.provider,
+                mileageUpdatedAt: new Date(),
+                updatedAt: new Date()
+              }
+            }
+          );
           mileageUpdatedCount++;
         }
 
@@ -161,15 +160,25 @@ export async function POST(request: NextRequest) {
           });
           
           if (source.provider === "protractor") {
-            await sql`
-              UPDATE protractor_work_orders SET
-                workflow_stage = 'Invoiced',
-                status = 'Invoiced',
-                closed_at = NOW(),
-                updated_at = NOW()
-              WHERE shop_id = ${String(shopId)} 
-                AND (work_order_guid = ${source.workOrderId} OR data->>'ID' = ${source.workOrderId})
-            `;
+            await db.collection("protractor_work_orders").updateMany(
+              {
+                $and: [
+                  { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+                  { $or: [
+                    { workOrderGuid: source.workOrderId },
+                    { "data.ID": source.workOrderId }
+                  ]}
+                ]
+              },
+              {
+                $set: {
+                  workflowStage: "Invoiced",
+                  status: "Invoiced",
+                  closedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            );
           }
         }
       }
@@ -180,35 +189,30 @@ export async function POST(request: NextRequest) {
     }
 
     for (const order of closedOrders) {
-      const vehicleRows = await sql`
-        SELECT id, status FROM vehicles 
-        WHERE shop_id = ${String(shopId)} AND vin = ${order.vin}
-        LIMIT 1
-      `;
+      const vehicle = await db.collection("vehicles").findOne({
+        $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+        vin: order.vin
+      });
 
-      if (vehicleRows.length > 0) {
-        const vehicle = vehicleRows[0];
-        const status = vehicle.status as any || {};
-        const existingSources = status.sources || [];
+      if (vehicle) {
+        const existingSources = vehicle.status?.sources || [];
         const updatedSources = existingSources.filter(
           (s: any) => !(s.provider === order.provider && String(s.workOrderId) === order.workOrderId)
         );
 
         const hasActiveSources = updatedSources.length > 0;
 
-        const newStatus = {
-          ...status,
-          active: hasActiveSources,
-          sources: updatedSources,
-          ...(hasActiveSources ? {} : { lastClosedAt: new Date().toISOString() }),
-        };
-
-        await sql`
-          UPDATE vehicles SET 
-            status = ${JSON.stringify(newStatus)}::jsonb,
-            updated_at = NOW()
-          WHERE id = ${vehicle.id}
-        `;
+        await db.collection("vehicles").updateOne(
+          { _id: vehicle._id },
+          {
+            $set: {
+              "status.active": hasActiveSources,
+              "status.sources": updatedSources,
+              ...(hasActiveSources ? {} : { "status.lastClosedAt": new Date() }),
+              updatedAt: new Date()
+            }
+          }
+        );
 
         if (!hasActiveSources) {
           closedCount++;

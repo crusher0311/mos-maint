@@ -5,7 +5,7 @@ import {
   fetchWorkOrderById,
   protractorFetch 
 } from "@/lib/integrations/protractor";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const dynamic = "force-dynamic";
@@ -124,12 +124,13 @@ export async function POST(req: NextRequest) {
   }
   
   if (shopLaborRate === 0) {
-    const shopRows = await sql`
-      SELECT settings->'cachedLaborRate' as cached_labor_rate FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    const cachedRate = shopRows[0]?.cached_labor_rate;
-    if (cachedRate && Number(cachedRate) > 0) {
-      shopLaborRate = Number(cachedRate);
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { cachedLaborRate: 1 } }
+    );
+    if (shop?.cachedLaborRate && shop.cachedLaborRate > 0) {
+      shopLaborRate = shop.cachedLaborRate;
     }
   }
   

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
@@ -9,21 +9,31 @@ export async function POST(
 ) {
   const { vin } = await ctx.params;
   const url = new URL(req.url);
-  const redirectTo = url.searchParams.get("redirect");
+  const redirectTo = url.searchParams.get("redirect"); // e.g. /dashboard
 
   const cleanVin = (vin || "").toUpperCase();
   if (!cleanVin || cleanVin.length < 6) {
     return NextResponse.json({ error: "Invalid VIN" }, { status: 400 });
   }
 
-  await sql`
-    INSERT INTO events (provider, type, vehicle_vin, status, created_at, payload)
-    VALUES ('ui', 'manual_closed', ${cleanVin}, 'Closed', NOW(), ${JSON.stringify({ reason: "manual_close_from_dashboard" })}::jsonb)
-  `;
+  const db = await getDb();
 
+  // Immutable log event
+  await db.collection("events").insertOne({
+    provider: "ui",
+    type: "manual_closed",
+    vehicleVin: cleanVin,
+    status: "Closed",
+    createdAt: new Date(),
+    payload: { reason: "manual_close_from_dashboard" },
+  });
+
+  // If caller asked for a redirect, send them there (back to dashboard)
   if (redirectTo) {
+    // 303 ensures the browser does a GET to the redirect location
     return NextResponse.redirect(new URL(redirectTo, url), 303);
   }
 
+  // Default JSON (useful for programmatic calls)
   return NextResponse.json({ ok: true, vin: cleanVin });
 }

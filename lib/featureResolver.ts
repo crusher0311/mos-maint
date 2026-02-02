@@ -1,4 +1,4 @@
-import sql from "@/lib/db/postgres";
+import { getDb } from "./mongo";
 
 export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
 
@@ -130,10 +130,10 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
 
 async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSettings> {
   try {
-    const platformFeatures = await sql`
-      SELECT key, name, metadata FROM feature_flags 
-      WHERE enabled_by_default = TRUE
-    `;
+    const db = await getDb();
+    const platformFeatures = await db.collection("platform_features")
+      .find({ status: "active" })
+      .toArray();
 
     if (!platformFeatures || platformFeatures.length === 0) {
       return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
@@ -152,9 +152,8 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
     };
 
     for (const pf of platformFeatures) {
-      const metadata = pf.metadata as Record<string, unknown> || {};
-      const includedInTiers = (metadata.includedInTiers as string[]) || [];
-      const featureKey = FEATURE_SLUG_TO_KEY[pf.key as string];
+      const includedInTiers = pf.includedInTiers || [];
+      const featureKey = FEATURE_SLUG_TO_KEY[pf.slug];
       
       if (featureKey && includedInTiers.includes(tierSlug)) {
         features[featureKey] = true;
@@ -169,38 +168,31 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
 }
 
 export async function getFeatureEntitlements(shopId: number): Promise<FeatureEntitlements> {
-  const shops = await sql`
-    SELECT id, shop_id, settings, billing, enterprise_id FROM shops 
-    WHERE shop_id = ${String(shopId)} LIMIT 1
-  `;
+  const db = await getDb();
   
-  const shop = shops[0];
+  const shop = await db.collection("shops").findOne({ shopId });
+  
   if (!shop) {
     return createDefaultEntitlements();
   }
   
   let enterpriseFeatures: Partial<FeatureSettings> = {};
-  if (shop.enterprise_id) {
-    const enterprises = await sql`
-      SELECT settings FROM enterprises WHERE id = ${shop.enterprise_id} LIMIT 1
-    `;
-    const enterprise = enterprises[0];
-    if (enterprise?.settings) {
-      const settings = enterprise.settings as Record<string, unknown>;
-      enterpriseFeatures = (settings.featureSettings as Partial<FeatureSettings>) || {};
+  if (shop.enterpriseId) {
+    const enterprise = await db.collection("enterprise_accounts").findOne({ 
+      _id: shop.enterpriseId 
+    });
+    if (enterprise?.featureSettings) {
+      enterpriseFeatures = enterprise.featureSettings;
     }
   }
   
-  const billingData = (shop.billing as Record<string, unknown>) || {};
-  const settingsData = (shop.settings as Record<string, unknown>) || {};
-  
-  const plan: BillingPlan = (billingData.plan as BillingPlan) || "trial";
-  const status: BillingStatus = (billingData.status as BillingStatus) || "trial";
-  const vinLimit = (settingsData.trialVinLimit as number) ?? (billingData.vinLimit as number) ?? 10;
+  const plan: BillingPlan = shop.billing?.plan || "trial";
+  const status: BillingStatus = shop.billing?.status || "trial";
+  const vinLimit = shop.trialVinLimit ?? shop.billing?.vinLimit ?? 10;
   
   const planFeatures = await getPlanFeaturesFromDatabase(plan);
   
-  const shopFeatures: Partial<FeatureSettings> = (settingsData.enabledFeatures as Partial<FeatureSettings>) || {};
+  const shopFeatures: Partial<FeatureSettings> = shop.enabledFeatures || {};
   
   const effectiveFeatures: FeatureSettings = {
     maintenance: shopFeatures.maintenance ?? enterpriseFeatures.maintenance ?? planFeatures.maintenance,
@@ -217,10 +209,6 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     status,
     vinLimit,
     vinViewCount: 0,
-    gracePeriodStartedAt: billingData.gracePeriodStartedAt ? new Date(billingData.gracePeriodStartedAt as string) : null,
-    gracePeriodEndsAt: billingData.gracePeriodEndsAt ? new Date(billingData.gracePeriodEndsAt as string) : null,
-    gracePeriodExtendedBy: (billingData.gracePeriodExtendedBy as string) || null,
-    gracePeriodExtendedAt: billingData.gracePeriodExtendedAt ? new Date(billingData.gracePeriodExtendedAt as string) : null,
   };
   
   const isBillingActive = () => {
@@ -266,76 +254,54 @@ export async function updateShopFeatures(
   shopId: number, 
   features: Partial<FeatureSettings>
 ): Promise<void> {
-  const shops = await sql`
-    SELECT settings FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-  `;
+  const db = await getDb();
   
-  const shop = shops[0];
-  const settingsData = (shop?.settings as Record<string, unknown>) || {};
-  const existingFeatures = (settingsData.enabledFeatures as Partial<FeatureSettings>) || {};
+  const shop = await db.collection("shops").findOne({ shopId });
+  const existingFeatures = shop?.enabledFeatures || {};
   
   const mergedFeatures = { ...existingFeatures, ...features };
-  const newSettings = { ...settingsData, enabledFeatures: mergedFeatures };
   
-  await sql`
-    UPDATE shops SET settings = ${JSON.stringify(newSettings)}::jsonb, updated_at = NOW()
-    WHERE shop_id = ${String(shopId)}
-  `;
+  await db.collection("shops").updateOne(
+    { shopId },
+    { $set: { enabledFeatures: mergedFeatures, updatedAt: new Date() } }
+  );
 }
 
 export async function updateShopBilling(
   shopId: number,
-  billingUpdates: Partial<ShopBilling>
+  billing: Partial<ShopBilling>
 ): Promise<void> {
-  const shops = await sql`
-    SELECT billing, settings FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-  `;
+  const db = await getDb();
   
-  const shop = shops[0];
-  const existingBilling = (shop?.billing as Record<string, unknown>) || {};
-  const existingSettings = (shop?.settings as Record<string, unknown>) || {};
+  const updateFields: any = { updatedAt: new Date() };
+  if (billing.plan !== undefined) updateFields["billing.plan"] = billing.plan;
+  if (billing.status !== undefined) updateFields["billing.status"] = billing.status;
+  if (billing.vinLimit !== undefined) updateFields.trialVinLimit = billing.vinLimit;
   
-  const newBilling = { ...existingBilling };
-  if (billingUpdates.plan !== undefined) newBilling.plan = billingUpdates.plan;
-  if (billingUpdates.status !== undefined) newBilling.status = billingUpdates.status;
-  if (billingUpdates.vinLimit !== undefined) newBilling.vinLimit = billingUpdates.vinLimit;
-  if (billingUpdates.gracePeriodStartedAt !== undefined) newBilling.gracePeriodStartedAt = billingUpdates.gracePeriodStartedAt;
-  if (billingUpdates.gracePeriodEndsAt !== undefined) newBilling.gracePeriodEndsAt = billingUpdates.gracePeriodEndsAt;
-  if (billingUpdates.gracePeriodExtendedBy !== undefined) newBilling.gracePeriodExtendedBy = billingUpdates.gracePeriodExtendedBy;
-  if (billingUpdates.gracePeriodExtendedAt !== undefined) newBilling.gracePeriodExtendedAt = billingUpdates.gracePeriodExtendedAt;
-  
-  const newSettings = { ...existingSettings };
-  if (billingUpdates.vinLimit !== undefined) newSettings.trialVinLimit = billingUpdates.vinLimit;
-  
-  await sql`
-    UPDATE shops 
-    SET billing = ${JSON.stringify(newBilling)}::jsonb, 
-        settings = ${JSON.stringify(newSettings)}::jsonb,
-        updated_at = NOW()
-    WHERE shop_id = ${String(shopId)}
-  `;
+  await db.collection("shops").updateOne(
+    { shopId },
+    { $set: updateFields }
+  );
 }
 
 export async function updateEnterpriseFeatures(
   enterpriseId: string,
   features: Partial<FeatureSettings>
 ): Promise<void> {
-  const enterprises = await sql`
-    SELECT settings FROM enterprises WHERE id = ${enterpriseId}::uuid LIMIT 1
-  `;
+  const db = await getDb();
+  const { ObjectId } = await import("mongodb");
   
-  const enterprise = enterprises[0];
-  const existingSettings = (enterprise?.settings as Record<string, unknown>) || {};
-  const existingFeatures = (existingSettings.featureSettings as Partial<FeatureSettings>) || {};
+  const enterprise = await db.collection("enterprise_accounts").findOne({ 
+    _id: new ObjectId(enterpriseId) 
+  });
+  const existingFeatures = enterprise?.featureSettings || {};
   
   const mergedFeatures = { ...existingFeatures, ...features };
-  const newSettings = { ...existingSettings, featureSettings: mergedFeatures };
   
-  await sql`
-    UPDATE enterprises 
-    SET settings = ${JSON.stringify(newSettings)}::jsonb, updated_at = NOW()
-    WHERE id = ${enterpriseId}::uuid
-  `;
+  await db.collection("enterprise_accounts").updateOne(
+    { _id: new ObjectId(enterpriseId) },
+    { $set: { featureSettings: mergedFeatures, updatedAt: new Date() } }
+  );
 }
 
 export async function getAvailablePlans(): Promise<{ id: BillingPlan; name: string; features: FeatureSettings }[]> {

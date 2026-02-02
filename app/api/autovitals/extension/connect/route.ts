@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 
@@ -24,13 +24,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rows = await sql`
-      SELECT id, shop_id, name, settings FROM shops 
-      WHERE settings->>'autovitalsApiKey' = ${apiKey}
-         OR settings->'autovitalsExtension'->'apiKeys' @> ${JSON.stringify([{ value: apiKey }])}::jsonb
-      LIMIT 1
-    `;
-    const shop = rows[0];
+    const db = await getDb();
+    
+    const shop = await db.collection("shops").findOne({
+      $or: [
+        { autovitalsApiKey: apiKey },
+        { "autovitalsExtension.apiKeys.value": apiKey }
+      ]
+    });
 
     if (!shop) {
       return NextResponse.json(
@@ -39,22 +40,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await sql`
-      UPDATE shops SET
-        settings = jsonb_set(
-          jsonb_set(
-            COALESCE(settings, '{}'),
-            '{autovitals,extensionConnected}', 'true'::jsonb
-          ),
-          '{autovitals,extensionConnectedAt}', ${JSON.stringify(new Date().toISOString())}::jsonb
-        ),
-        updated_at = NOW()
-      WHERE id = ${shop.id}
-    `;
+    await db.collection("shops").updateOne(
+      { _id: shop._id },
+      {
+        $set: {
+          "autovitals.extensionConnected": true,
+          "autovitals.extensionConnectedAt": new Date(),
+          updatedAt: new Date(),
+        }
+      }
+    );
 
     return NextResponse.json({
       ok: true,
-      shopName: shop.name || "Your Shop",
+      shopName: shop.name || shop.shopName || "Your Shop",
       message: "Connected successfully"
     }, { headers: corsHeaders });
   } catch (error: any) {

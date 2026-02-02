@@ -2,7 +2,7 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getTestAuthFromHeaders, isTestAuthEnabled } from "@/lib/test-auth";
 
 export const SESSION_COOKIE = "session_token";
@@ -53,26 +53,27 @@ export async function getSession(): Promise<SessionInfo | null> {
   
   if (!token) return null;
 
-  const sessions = await sql`
-    SELECT s.shop_id, s.user_id, s.is_impersonation, s.impersonated_by,
-           u.email, u.role, u.is_super_admin
-    FROM sessions s
-    JOIN users u ON s.user_id = u.id
-    WHERE s.token = ${token} AND s.expires_at > NOW()
-    LIMIT 1
-  `;
-  
-  if (sessions.length === 0) return null;
-  const sess = sessions[0];
+  const db = await getDb();
+  const sess = await db.collection("sessions").findOne({
+    token,
+    expiresAt: { $gt: new Date() },
+  });
+  if (!sess) return null;
+
+  const user = await db.collection("users").findOne(
+    { _id: sess.userId },
+    { projection: { email: 1, role: 1, isPlatformAdmin: 1 } }
+  );
+  if (!user) return null;
 
   return {
     token,
-    shopId: Number(sess.shop_id),
-    email: String(sess.email),
-    role: String(sess.role ?? "owner"),
-    isPlatformAdmin: Boolean(sess.is_super_admin),
-    isImpersonation: Boolean(sess.is_impersonation),
-    impersonatedBy: sess.impersonated_by ? String(sess.impersonated_by) : undefined,
+    shopId: Number(sess.shopId),
+    email: String(user.email),
+    role: String(user.role ?? "owner"),
+    isPlatformAdmin: Boolean(user.isPlatformAdmin),
+    isImpersonation: Boolean(sess.isImpersonation),
+    impersonatedBy: sess.impersonatedBy ? String(sess.impersonatedBy) : undefined,
   };
 }
 

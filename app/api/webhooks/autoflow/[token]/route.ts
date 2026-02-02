@@ -1,34 +1,14 @@
 // app/api/webhooks/autoflow/[token]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import crypto from "node:crypto";
 import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflow";
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
-import { processAutoflowWebhook } from "@/lib/webhook-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Forward webhooks to dev environment if configured
-async function forwardToDevEnvironment(token: string, raw: string, headers: Headers) {
-  const devUrl = process.env.DEV_WEBHOOK_FORWARD_URL;
-  if (!devUrl) return;
-  
-  try {
-    const forwardUrl = `${devUrl}/api/webhooks/autoflow/${token}`;
-    await fetch(forwardUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forwarded-From': 'production',
-      },
-      body: raw,
-    });
-    console.log(`[Webhook] Forwarded to dev: ${forwardUrl}`);
-  } catch (e) {
-    console.error('[Webhook] Dev forward failed:', e);
-  }
-}
+// ---- Helpers -------------------------------------------------------------
 
 function timingSafeEqual(a: Buffer, b: Buffer) {
   if (a.length !== b.length) return false;
@@ -45,10 +25,10 @@ function verifyHmacSHA256(secret: string, rawBody: string, signatureHex: string)
 }
 
 async function findShopByToken(token: string) {
-  const rows = await sql`
-    SELECT shop_id, name FROM shops WHERE webhook_token = ${token}
-  `;
-  return rows[0] as any;
+  const db = await getDb();
+  return db
+    .collection("shops")
+    .findOne({ webhookToken: token }, { projection: { shopId: 1, name: 1 } });
 }
 
 function getEventName(payload: any): string {
@@ -80,6 +60,8 @@ function resolveVin(payload: any): string | null {
     : null;
 }
 
+// ---- GET: token validity ------------------------------------------------
+
 export async function GET(req: NextRequest, ctx: { params: { token: string } }) {
   const token = ctx.params?.token || "";
   if (!token) return NextResponse.json({ error: "missing token" }, { status: 400 });
@@ -89,10 +71,12 @@ export async function GET(req: NextRequest, ctx: { params: { token: string } }) 
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
 
   if (isPing) {
-    return NextResponse.json({ ok: true, shopId: shop.shop_id, tokenValid: true });
+    return NextResponse.json({ ok: true, shopId: shop.shopId, tokenValid: true });
   }
-  return NextResponse.json({ ok: true, shopId: shop.shop_id });
+  return NextResponse.json({ ok: true, shopId: shop.shopId });
 }
+
+// ---- POST: accept webhook -----------------------------------------------
 
 export async function POST(req: NextRequest, ctx: { params: { token: string } }) {
   const token = ctx.params?.token || "";
@@ -101,6 +85,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   const shop = await findShopByToken(token);
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
 
+  // Read raw body for optional HMAC verification and for safe logging
   const raw = await req.text();
   let payload: any = null;
   try {
@@ -109,6 +94,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     // keep payload as null; raw is still saved
   }
 
+  // OPTIONAL signature verification (enable by setting AUTOFLOW_SIGNING_SECRET)
   const secret = process.env.AUTOFLOW_SIGNING_SECRET || "";
   if (secret) {
     const sig =
@@ -120,29 +106,26 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     }
   }
 
-  // Forward to dev environment (non-blocking, don't wait)
-  const isForwarded = req.headers.get("X-Forwarded-From") === "production";
-  if (!isForwarded) {
-    forwardToDevEnvironment(token, raw, req.headers);
-  }
+  const db = await getDb();
 
-  await sql`
-    INSERT INTO events (provider, shop_id, token, payload, raw, received_at)
-    VALUES ('autoflow', ${shop.shop_id}, ${token}, ${payload ? JSON.stringify(payload) : null}::jsonb, ${raw}, NOW())
-  `;
+  // Persist raw event for audit / console
+  await db.collection("events").insertOne({
+    provider: "autoflow",
+    shopId: shop.shopId,
+    token,
+    payload,
+    raw,
+    receivedAt: new Date(),
+  });
 
+  // ---- Normalize into first-class docs so dashboards light up ---------
   try {
     const eventName = String(getEventName(payload)).toLowerCase();
-    const shopId = Number(shop.shop_id);
 
-    await upsertCustomerFromEvent(shopId, payload);
+    // 1) Ensure/refresh a customer row for dashboard lists
+    await upsertCustomerFromEvent(db, Number(shop.shopId), payload);
 
-    // Real-time sync: Update normalized tables and queue prefetch
-    const syncResult = await processAutoflowWebhook(shop.shop_id, payload);
-    if (syncResult.prefetchQueued > 0) {
-      console.log(`[AutoFlow Webhook] Queued ${syncResult.prefetchQueued} prefetch(es) for shop ${shop.shop_id}`);
-    }
-
+    // 2) Optionally mark a customer closed on terminal events
     const closeTypes = new Set<string>([
       "dvi_signoff",
       "dvi.signoff",
@@ -158,15 +141,20 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     if (closeTypes.has(eventName)) {
       const now = new Date();
       const vin = resolveVin(payload);
+      const shopOr = [{ shopId: shop.shopId }, { shopId: Number(shop.shopId) }];
 
-      if (vin) {
-        await sql`
-          UPDATE customers SET status = 'closed', closed_at = ${now}, updated_at = ${now}
-          WHERE shop_id = ${String(shopId)} AND vehicle_vin = ${vin}
-        `;
-      }
+      await db.collection("customers").updateOne(
+        {
+          $and: [
+            { $or: shopOr as any },
+            vin ? { "vehicle.vin": vin } : {},
+          ],
+        },
+        { $set: { status: "closed", closedAt: now, updatedAt: now } }
+      );
     }
 
+    // 3) Auto-fetch DVI snapshot on signoff/completion-ish events
     const isDviEvent = /dvi/i.test(eventName) && /(signoff|complete|completed|update)/i.test(eventName);
 
     const roNumber =
@@ -176,12 +164,13 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
       null;
 
     if (isDviEvent && roNumber != null) {
-      const dvi = await fetchDviByInvoice(shopId, String(roNumber));
-      await upsertDviSnapshot(shopId, String(roNumber), dvi);
+      const dvi = await fetchDviByInvoice(Number(shop.shopId), String(roNumber));
+      await upsertDviSnapshot(Number(shop.shopId), String(roNumber), dvi);
     }
   } catch (e) {
+    // Swallow normalization errors; raw event is still stored for replay
     console.error("Webhook normalization error:", e);
   }
 
-  return NextResponse.json({ ok: true, shopId: shop.shop_id });
+  return NextResponse.json({ ok: true, shopId: shop.shopId });
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
-import { scoreJob, buildSearchQuery, ScoredJob } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getValidToken } from "@/lib/tekmetric-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q") || "";
     const smsShopId = searchParams.get("shopId");
-    const roId = searchParams.get("roId");
+    const roId = searchParams.get("roId"); // RO ID for vehicle lookup fallback
     let year = searchParams.get("year");
     let make = searchParams.get("make");
     let model = searchParams.get("model");
@@ -33,26 +33,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
-    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(String(id)));
+    const db = await getDb();
+    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
-    let mosShopId: number | null = auth.user.shopId ? parseInt(String(auth.user.shopId)) : null;
+    // Use user's session shop if available (most reliable)
+    let mosShopId: number | null = auth.user.shopId ? parseInt(auth.user.shopId) : null;
     let provider: string = 'tekmetric';
     
+    // Look up shop to get the correct integration provider
     if (mosShopId) {
-      const shopRows = await sql`
-        SELECT settings FROM shops WHERE shop_id = ${String(mosShopId)} LIMIT 1
-      `;
-      const shopDoc = shopRows[0];
+      // User has a session shop - look up its integration provider
+      const shopDoc = await db.collection("shops").findOne(
+        { shopId: { $in: [mosShopId, String(mosShopId)] } },
+        { projection: { integrationProvider: 1, tekmetric: 1, protractor: 1, autoflow: 1 } }
+      );
       if (shopDoc) {
-        const settings = shopDoc.settings || {};
-        provider = settings.integrationProvider 
-          || (settings.tekmetric?.shopId ? 'tekmetric' 
-            : settings.protractor?.connectionId ? 'protractor' 
-            : settings.autoflow?.domain ? 'autoflow' 
+        provider = shopDoc.integrationProvider 
+          || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
+            : shopDoc.protractor?.connectionId ? 'protractor' 
+            : shopDoc.autoflow?.domain ? 'autoflow' 
             : 'tekmetric');
       }
     } else if (smsShopId) {
+      // Fall back to SMS shop ID lookup
       const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
       if (shopResult) {
         mosShopId = shopResult.mosShopId;
@@ -64,21 +68,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
+    // If no vehicle context provided but we have roId, look up the work order to get vehicle info
     if (!year && !make && !model && roId && mosShopId) {
-      const workOrderRows = await sql`
-        SELECT vehicle_year, vehicle_make, vehicle_model, vehicle_engine FROM tekmetric_work_orders
-        WHERE shop_id = ${String(mosShopId)} AND work_order_id = ${roId}
-        LIMIT 1
-      `;
-      const workOrder = workOrderRows[0];
+      // Get vehicle info directly from tekmetric_work_orders (stores vehicleYear/vehicleMake/vehicleModel)
+      const workOrder = await db.collection("tekmetric_work_orders").findOne({
+        shopId: { $in: [String(mosShopId), Number(mosShopId)] },
+        workOrderId: String(roId)
+      });
       
       if (workOrder) {
-        year = workOrder.vehicle_year?.toString() || null;
-        make = workOrder.vehicle_make || null;
-        model = workOrder.vehicle_model || null;
-        engine = workOrder.vehicle_engine || null;
+        // Work order has vehicle fields at top level (vehicleYear, vehicleMake, etc.)
+        year = workOrder.vehicleYear?.toString() || null;
+        make = workOrder.vehicleMake || null;
+        model = workOrder.vehicleModel || null;
+        engine = workOrder.vehicleEngine || null;
         console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
       } else if (provider === "tekmetric") {
+        // Work order not in sync cache - fetch directly from Tekmetric API
         console.log(`[Jobs Search] WO ${roId} not in cache, fetching from Tekmetric API`);
         try {
           const tekApiToken = await getValidToken();
@@ -87,6 +93,7 @@ export async function GET(request: NextRequest) {
           });
           if (res.ok) {
             const data = await res.json();
+            // If no VIN but we have vehicleId, fetch vehicle details
             if (data?.vehicleId) {
               const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
                 headers: { Authorization: `Bearer ${tekApiToken}` }
@@ -109,23 +116,25 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    // Check if shop is part of an enterprise - if so, search enterprise shops based on preferences
     let searchShopIds: number[] = [];
     if (mosShopId) {
       const enterprise = await getEnterpriseByShopId(mosShopId);
       if (enterprise && enterprise.shopIds.length > 1) {
-        const shopRows = await sql`
-          SELECT settings FROM shops WHERE shop_id = ${String(mosShopId)} LIMIT 1
-        `;
-        const shop = shopRows[0];
-        const jobHistoryShopIds = shop?.settings?.preferences?.jobHistoryShopIds;
+        // Check shop preferences for job history location selection
+        const shop = await db.collection("shops").findOne({ shopId: mosShopId });
+        const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
         
         if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
+          // Use the shop's selected locations (must be within enterprise)
           searchShopIds = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
+          // Always include own shop
           if (!searchShopIds.includes(mosShopId)) {
             searchShopIds.push(mosShopId);
           }
           console.log(`[Jobs Search] Enterprise search (custom): shops ${searchShopIds.join(', ')}`);
         } else {
+          // Default: search all enterprise shops
           searchShopIds = enterprise.shopIds;
           console.log(`[Jobs Search] Enterprise search (all): shops ${searchShopIds.join(', ')}`);
         }
@@ -138,62 +147,67 @@ export async function GET(request: NextRequest) {
     
     console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, shopIds: ${searchShopIds.join(',')}`);
 
+    const jobsCollection = db.collection("job_index");
+
+    // Build search query using same stopword logic as web app
     const { coreTokens, allTokens } = buildSearchQuery(query);
     
-    let jobs: any[] = [];
+    const matchStage: Record<string, any> = {};
     
-    if (searchShopIds.length > 0) {
-      const searchShopIdsStr = searchShopIds.map(String);
-      
-      if (coreTokens.length > 0) {
-        const keywordsPattern = coreTokens.join(' & ');
-        const titlePattern = `%${coreTokens.join('%')}%`;
-        
-        jobs = await sql`
-          SELECT * FROM job_index
-          WHERE shop_id = ANY(${searchShopIdsStr}::text[])
-            AND (
-              job->'keywords' @> ${JSON.stringify(coreTokens)}::jsonb
-              OR job->>'title' ILIKE ${titlePattern}
-            )
-            ${make ? sql`AND vehicle->>'make' ILIKE ${`%${make}%`}` : sql``}
-            ${model ? sql`AND vehicle->>'model' ILIKE ${`%${model}%`}` : sql``}
-          ORDER BY performed_at DESC
-          LIMIT ${limit * 5}
-        `;
-      } else if (allTokens.length > 0) {
-        jobs = await sql`
-          SELECT * FROM job_index
-          WHERE shop_id = ANY(${searchShopIdsStr}::text[])
-            AND job->'keywords' ?| ${allTokens}
-            ${make ? sql`AND vehicle->>'make' ILIKE ${`%${make}%`}` : sql``}
-            ${model ? sql`AND vehicle->>'model' ILIKE ${`%${model}%`}` : sql``}
-          ORDER BY performed_at DESC
-          LIMIT ${limit * 5}
-        `;
-      } else {
-        const searchPattern = `%${query}%`;
-        jobs = await sql`
-          SELECT * FROM job_index
-          WHERE shop_id = ANY(${searchShopIdsStr}::text[])
-            AND (job->>'title' ILIKE ${searchPattern} OR title ILIKE ${searchPattern})
-            ${make ? sql`AND vehicle->>'make' ILIKE ${`%${make}%`}` : sql``}
-            ${model ? sql`AND vehicle->>'model' ILIKE ${`%${model}%`}` : sql``}
-          ORDER BY performed_at DESC
-          LIMIT ${limit * 5}
-        `;
-      }
+    // Shop filter - search all enterprise shops if applicable
+    if (searchShopIds.length === 1) {
+      matchStage.shopId = searchShopIds[0];
+    } else if (searchShopIds.length > 1) {
+      matchStage.shopId = { $in: searchShopIds };
     }
+    
+    // Text search using same logic as web app
+    if (coreTokens.length > 0) {
+      matchStage.$or = [
+        { "job.keywords": { $all: coreTokens } },
+        { "job.title": { $regex: coreTokens.map(t => `(?=.*${t})`).join(""), $options: "i" } },
+      ];
+    } else if (allTokens.length > 0) {
+      matchStage["job.keywords"] = { $in: allTokens };
+    } else {
+      // Fallback to regex on title
+      const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      matchStage.$or = [
+        { "job.title": searchRegex },
+        { "title": searchRegex },
+      ];
+    }
+    
+    // Optional make/model filtering for pre-filtering (same as web app)
+    if (make) {
+      matchStage["vehicle.make"] = { $regex: new RegExp(make, "i") };
+    }
+    if (model) {
+      matchStage["vehicle.model"] = { $regex: new RegExp(model, "i") };
+    }
+
+    // Fetch candidates
+    const jobs: any[] = await jobsCollection
+      .aggregate([
+        { $match: matchStage },
+        { $sort: { performedAt: -1 } },
+        { $limit: limit * 5 }
+      ])
+      .toArray();
 
     console.log(`[Jobs Search] Found ${jobs.length} candidates for scoring`);
 
+    // Score using shared scoring logic
     const targetVehicle = { year, make, model, engine };
     const scoredJobs: ScoredJob[] = jobs.map(job => scoreJob(job, targetVehicle));
     
+    // Filter by gate pass and minimum score threshold
     const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
     
+    // Sort by score
     eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
     
+    // Deduplicate by job title + vehicle
     const uniqueJobs = new Map<string, ScoredJob>();
     for (const job of eligibleJobs) {
       const key = `${job.job?.title || job.title || ''}-${job.vehicle?.make || ''}-${job.vehicle?.model || ''}-${job.vehicle?.year || ''}`;
@@ -233,12 +247,12 @@ export async function GET(request: NextRequest) {
       const totalAmount = rawTotals.totalAmount || (partsAmount + laborAmount);
       
       return {
-        _id: job.id?.toString(),
+        _id: job._id.toString(),
         title: job.job?.title || job.title || "Job",
         description: job.job?.description,
         code: job.job?.code,
         vehicle: job.vehicle,
-        workOrderNumber: job.workOrderNumber || job.work_order_number,
+        workOrderNumber: job.workOrderNumber,
         laborItems: laborLines.map((l: any) => ({
           name: l.description,
           hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0

@@ -1,28 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = String(session.shopId);
+  const shopId = Number(session.shopId);
   
-  const shopResult = await sql`
-    SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1
-  `;
-  const shop = shopResult[0];
-  const settings = shop?.settings as Record<string, unknown> | null;
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
   
-  if (!settings?.platformAdmin) {
+  if (!shop?.platformAdmin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  const tables = [
+  const collections = [
     'normalized_vehicles',
     'normalized_customers',
     'normalized_work_orders',
@@ -32,55 +29,50 @@ export async function GET(_req: NextRequest) {
     'normalized_recommendations',
   ];
 
-  const stats: Record<string, { total: number; bySource: Record<string, number>; last24Hours: number }> = {};
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const stats: Record<string, any> = {};
 
-  for (const tableName of tables) {
-    try {
-      const totalResult = await sql.unsafe(`SELECT COUNT(*) as count FROM ${tableName} WHERE deleted_at IS NULL`);
-      const total = Number(totalResult[0]?.count || 0);
-
-      const bySourceResult = await sql.unsafe(`
-        SELECT provenance->>'sourceSystem' as source, COUNT(*) as count 
-        FROM ${tableName} WHERE deleted_at IS NULL 
-        GROUP BY provenance->>'sourceSystem'
-      `);
-      
-      const bySource: Record<string, number> = {};
-      for (const item of bySourceResult) {
-        bySource[item.source || 'unknown'] = Number(item.count);
-      }
-
-      const recentResult = await sql.unsafe(`
-        SELECT COUNT(*) as count FROM ${tableName} 
-        WHERE deleted_at IS NULL AND created_at >= $1
-      `, [yesterday]);
-      const recentCount = Number(recentResult[0]?.count || 0);
-
-      stats[tableName] = {
-        total,
-        bySource,
-        last24Hours: recentCount,
-      };
-    } catch {
-      stats[tableName] = { total: 0, bySource: {}, last24Hours: 0 };
+  for (const collName of collections) {
+    const collection = db.collection(collName);
+    
+    const totalCount = await collection.countDocuments({ deletedAt: null });
+    
+    const bySourceAgg = await collection.aggregate([
+      { $match: { deletedAt: null } },
+      { $group: { _id: '$provenance.sourceSystem', count: { $sum: 1 } } }
+    ]).toArray();
+    
+    const bySource: Record<string, number> = {};
+    for (const item of bySourceAgg) {
+      bySource[item._id || 'unknown'] = item.count;
     }
+
+    const recentCount = await collection.countDocuments({
+      deletedAt: null,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    stats[collName] = {
+      total: totalCount,
+      bySource,
+      last24Hours: recentCount,
+    };
   }
 
-  const jobIndexResult = await sql`SELECT COUNT(*) as count FROM job_index`;
-  const jobIndexCount = Number(jobIndexResult[0]?.count || 0);
-  
-  const coverageByShop = await sql`
-    SELECT shop_id, COUNT(*) as count FROM normalized_work_orders 
-    WHERE deleted_at IS NULL 
-    GROUP BY shop_id ORDER BY count DESC LIMIT 20
-  `;
+  const jobIndex = db.collection('job_index');
+  const jobIndexCount = await jobIndex.countDocuments();
+  stats.legacy_job_index = { total: jobIndexCount };
+
+  const coverageByShop = await db.collection('normalized_work_orders').aggregate([
+    { $match: { deletedAt: null } },
+    { $group: { _id: '$shopId', count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 20 }
+  ]).toArray();
 
   return NextResponse.json({
     ok: true,
     timestamp: new Date().toISOString(),
     stats,
-    legacy_job_index: { total: jobIndexCount },
-    coverageByShop: coverageByShop.map(s => ({ shopId: s.shop_id, workOrders: Number(s.count) })),
+    coverageByShop: coverageByShop.map(s => ({ shopId: s._id, workOrders: s.count })),
   });
 }

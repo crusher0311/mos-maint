@@ -1,34 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const sess = await getSession();
+  const sess = await getSession(req);
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { user } = sess;
+  // If you want owner-only, uncomment:
+  // if (user.role !== "owner") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const limit = clampInt(req.nextUrl.searchParams.get("limit"), 50, 1, 200);
-  const shopId = String(sess.shopId);
 
-  const docs = await sql`
-    SELECT id, provider, event, payload, received_at
-    FROM events
-    WHERE shop_id = ${shopId}
-    ORDER BY received_at DESC
-    LIMIT ${limit}
-  `;
+  const db = await getDb();
+  const events = db.collection("events");
 
-  const items = docs.map(doc => ({
-    _id: doc.id,
-    provider: doc.provider,
-    event: doc.event,
-    payload: doc.payload,
-    receivedAt: doc.received_at,
-  }));
+  const docs = await events
+    .find({ shopId: user.shopId })
+    .sort({ receivedAt: -1 })
+    .limit(limit)
+    .project({
+      _id: 1,
+      provider: 1,
+      event: 1,
+      payload: 1,
+      receivedAt: 1,
+    })
+    .toArray();
 
-  return NextResponse.json({ ok: true, items });
+  return NextResponse.json({ ok: true, items: docs });
 }
 
 function clampInt(val: string | null, def: number, min: number, max: number) {
@@ -36,3 +39,4 @@ function clampInt(val: string | null, def: number, min: number, max: number) {
   if (!Number.isFinite(n)) return def;
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
+

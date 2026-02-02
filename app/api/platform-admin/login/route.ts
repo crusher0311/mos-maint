@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -17,10 +17,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userRows = await sql`
-      SELECT * FROM users WHERE LOWER(email) = LOWER(${email.trim()})
-    `;
-    const user = userRows[0] as any;
+    const db = await getDb();
+    const user = await db.collection("users").findOne({
+      email: email.toLowerCase().trim(),
+    });
 
     if (!user) {
       return NextResponse.json(
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!user.is_platform_admin) {
+    if (!user.isPlatformAdmin) {
       return NextResponse.json(
         { ok: false, error: "Access denied. Platform admin privileges required." },
         { status: 403 }
@@ -37,15 +37,17 @@ export async function POST(req: NextRequest) {
     }
 
     let valid = false;
-    const storedPassword = user.password_hash || user.password;
-    if (storedPassword) {
-      if (storedPassword.startsWith("$2")) {
-        valid = await bcrypt.compare(password, storedPassword);
+    if (user.password) {
+      if (user.password.startsWith("$2")) {
+        valid = await bcrypt.compare(password, user.password);
       } else {
-        valid = storedPassword === password;
+        valid = user.password === password;
         if (valid) {
           const hashed = await bcrypt.hash(password, 12);
-          await sql`UPDATE users SET password_hash = ${hashed} WHERE id = ${user.id}`;
+          await db.collection("users").updateOne(
+            { _id: user._id },
+            { $set: { password: hashed } }
+          );
         }
       }
     }
@@ -60,10 +62,15 @@ export async function POST(req: NextRequest) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    await sql`
-      INSERT INTO sessions (token, user_id, shop_id, email, is_platform_admin, created_at, expires_at)
-      VALUES (${token}, ${user.id}, ${user.shop_id}, ${user.email}, true, NOW(), ${expiresAt})
-    `;
+    await db.collection("sessions").insertOne({
+      token,
+      userId: user._id,
+      shopId: user.shopId,
+      email: user.email,
+      isPlatformAdmin: true,
+      createdAt: new Date(),
+      expiresAt,
+    });
 
     const store = await cookies();
     store.set(SESSION_COOKIE, token, sessionCookieOptions());

@@ -1,8 +1,7 @@
 // app/api/vehicles/[vin]/refresh/route.ts
 import { NextResponse, NextRequest } from "next/server";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { importDVI } from "@/lib/integrations/dvi";
-import { getShopByShopId } from "@/lib/db/shops-pg";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,30 +60,25 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
     }
 
     const { vin, shopId, customerId } = parsed;
+    const db = await getDb();
     const now = new Date();
 
-    // Get shop UUID
-    const shop = await getShopByShopId(shopId);
-    if (!shop) {
-      return NextResponse.json({ error: "Shop not found" }, { status: 404 });
-    }
+    // Most recent ticket for RO#
+    const ticket = await db.collection("tickets").findOne(
+      { shopId, vin },
+      { sort: { updatedAt: -1 }, projection: { roNumber: 1 } }
+    );
+    const ro = ticket?.roNumber ? String(ticket.roNumber) : null;
 
-    // Most recent work order for RO#
-    const ticketRows = await sql`
-      SELECT work_order_number FROM work_orders
-      WHERE shop_id = ${shop.id} AND vin = ${vin.toUpperCase()}
-      ORDER BY updated_at DESC NULLS LAST
-      LIMIT 1
-    `;
-    const ro = ticketRows.length > 0 && ticketRows[0].work_order_number 
-      ? String(ticketRows[0].work_order_number) 
-      : null;
-
-    // Log job start
-    await sql`
-      INSERT INTO jobs (type, shop_id, vin, customer_id, status, started_at, updated_at)
-      VALUES ('vehicle-refresh', ${shop.id}, ${vin}, ${customerId}, 'running', ${now}, ${now})
-    `;
+    await db.collection("jobs").insertOne({
+      type: "vehicle-refresh",
+      shopId,
+      vin,
+      customerId,
+      status: "running",
+      startedAt: now,
+      updatedAt: now,
+    });
 
     // Step 1: DVI import (if we have RO)
     let dviSummary: any = { skipped: true };
@@ -94,27 +88,31 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
         dviSummary = { inserted: res.insertedCount };
       } catch (e: any) {
         dviSummary = { error: String(e?.message || e) };
-        await sql`
-          INSERT INTO jobs (type, shop_id, vin, customer_id, stage, error, created_at)
-          VALUES ('vehicle-refresh-error', ${shop.id}, ${vin}, ${customerId}, 'dvi', ${dviSummary.error}, NOW())
-        `;
+        await db.collection("jobs").insertOne({
+          type: "vehicle-refresh-error",
+          shopId,
+          vin,
+          customerId,
+          stage: "dvi",
+          error: dviSummary.error,
+          at: new Date(),
+        });
       }
     } else {
-      await sql`
-        INSERT INTO jobs (type, shop_id, vin, customer_id, note, created_at)
-        VALUES ('vehicle-refresh-note', ${shop.id}, ${vin}, ${customerId}, 'No RO# found for VIN; skipped DVI.', NOW())
-      `;
+      await db.collection("jobs").insertOne({
+        type: "vehicle-refresh-note",
+        shopId,
+        vin,
+        customerId,
+        note: "No RO# found for VIN; skipped DVI.",
+        at: new Date(),
+      });
     }
 
-    await sql`
-      UPDATE jobs 
-      SET status = 'done', updated_at = NOW()
-      WHERE type = 'vehicle-refresh' 
-        AND shop_id = ${shop.id} 
-        AND vin = ${vin} 
-        AND customer_id = ${customerId} 
-        AND status = 'running'
-    `;
+    await db.collection("jobs").updateMany(
+      { type: "vehicle-refresh", shopId, vin, customerId, status: "running" },
+      { $set: { status: "done", updatedAt: new Date() } }
+    );
 
     // -------- Fixed redirect: build absolute URL from req.url --------
     if (req.method === "POST") {

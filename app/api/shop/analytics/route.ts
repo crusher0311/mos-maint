@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = String(session.shopId);
+  const shopId = Number(session.shopId);
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
   }
@@ -21,34 +21,36 @@ export async function GET(req: NextRequest) {
     const startDateStr = searchParams.get("startDate");
     const endDateStr = searchParams.get("endDate");
 
-    let dateFilter = "";
-    const params: any[] = [shopId];
-    
-    if (startDateStr && endDateStr) {
-      dateFilter = ` AND created_at >= $2 AND created_at <= $3`;
-      params.push(new Date(startDateStr), new Date(endDateStr));
-    } else if (startDateStr) {
-      dateFilter = ` AND created_at >= $2`;
-      params.push(new Date(startDateStr));
-    } else if (endDateStr) {
-      dateFilter = ` AND created_at <= $2`;
-      params.push(new Date(endDateStr));
+    const db = await getDb();
+
+    const dateFilter: any = {};
+    if (startDateStr) dateFilter.$gte = new Date(startDateStr);
+    if (endDateStr) dateFilter.$lte = new Date(endDateStr);
+
+    const matchStage: any = { shopId };
+    if (startDateStr || endDateStr) {
+      matchStage.createdAt = dateFilter;
     }
 
-    const events = await sql`
-      SELECT 
-        event_type,
-        recommendation_type,
-        COUNT(*)::int as count,
-        SUM(COALESCE(total_price, 0))::float as total_revenue,
-        SUM(COALESCE(labor_price, 0))::float as labor_revenue,
-        SUM(COALESCE(parts_price, 0))::float as parts_revenue
-      FROM recommendation_events
-      WHERE shop_id = ${shopId}
-        ${startDateStr ? sql`AND created_at >= ${new Date(startDateStr)}` : sql``}
-        ${endDateStr ? sql`AND created_at <= ${new Date(endDateStr)}` : sql``}
-      GROUP BY event_type, recommendation_type
-    `;
+    const eventsPipeline = [
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            eventType: "$eventType",
+            recommendationType: "$recommendationType"
+          },
+          count: { $sum: 1 },
+          totalRevenue: { $sum: { $ifNull: ["$totalPrice", 0] } },
+          laborRevenue: { $sum: { $ifNull: ["$laborPrice", 0] } },
+          partsRevenue: { $sum: { $ifNull: ["$partsPrice", 0] } }
+        }
+      }
+    ];
+
+    const events = await db.collection("recommendation_events")
+      .aggregate(eventsPipeline)
+      .toArray();
 
     let jobsAdded = 0;
     let jobsSold = 0;
@@ -59,81 +61,95 @@ export async function GET(req: NextRequest) {
     const byType: Record<string, { added: number; sold: number; revenue: number }> = {};
 
     for (const event of events) {
-      const e = event as any;
-      const { event_type, recommendation_type } = e;
+      const { eventType, recommendationType } = event._id;
       
-      if (!byType[recommendation_type]) {
-        byType[recommendation_type] = { added: 0, sold: 0, revenue: 0 };
+      if (!byType[recommendationType]) {
+        byType[recommendationType] = { added: 0, sold: 0, revenue: 0 };
       }
 
-      if (event_type === "recommendation_added") {
-        jobsAdded += e.count;
-        byType[recommendation_type].added += e.count;
-      } else if (event_type === "recommendation_sold") {
-        jobsSold += e.count;
-        totalRevenue += e.total_revenue || 0;
-        laborRevenue += e.labor_revenue || 0;
-        partsRevenue += e.parts_revenue || 0;
-        byType[recommendation_type].sold += e.count;
-        byType[recommendation_type].revenue += e.total_revenue || 0;
+      if (eventType === "recommendation_added") {
+        jobsAdded += event.count;
+        byType[recommendationType].added += event.count;
+      } else if (eventType === "recommendation_sold") {
+        jobsSold += event.count;
+        totalRevenue += event.totalRevenue;
+        laborRevenue += event.laborRevenue;
+        partsRevenue += event.partsRevenue;
+        byType[recommendationType].sold += event.count;
+        byType[recommendationType].revenue += event.totalRevenue;
       }
     }
 
-    const dailyData = await sql`
-      SELECT 
-        DATE(created_at) as date,
-        event_type,
-        COUNT(*)::int as count,
-        SUM(COALESCE(total_price, 0))::float as revenue
-      FROM recommendation_events
-      WHERE shop_id = ${shopId}
-        ${startDateStr ? sql`AND created_at >= ${new Date(startDateStr)}` : sql``}
-        ${endDateStr ? sql`AND created_at <= ${new Date(endDateStr)}` : sql``}
-      GROUP BY DATE(created_at), event_type
-      ORDER BY date DESC
-      LIMIT 60
-    `;
+    const dailyPipeline = [
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            eventType: "$eventType"
+          },
+          count: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ["$totalPrice", 0] } }
+        }
+      },
+      { $sort: { "_id.date": -1 } },
+      { $limit: 60 }
+    ];
+
+    const dailyData = await db.collection("recommendation_events")
+      .aggregate(dailyPipeline)
+      .toArray();
 
     const dailyMap: Record<string, { date: string; added: number; sold: number; revenue: number }> = {};
     
     for (const d of dailyData) {
-      const dd = d as any;
-      const date = dd.date?.toISOString?.()?.split("T")?.[0] || String(dd.date);
+      const date = d._id.date;
       if (!dailyMap[date]) {
         dailyMap[date] = { date, added: 0, sold: 0, revenue: 0 };
       }
-      if (dd.event_type === "recommendation_added") {
-        dailyMap[date].added += dd.count;
-      } else if (dd.event_type === "recommendation_sold") {
-        dailyMap[date].sold += dd.count;
-        dailyMap[date].revenue += dd.revenue || 0;
+      if (d._id.eventType === "recommendation_added") {
+        dailyMap[date].added += d.count;
+      } else if (d._id.eventType === "recommendation_sold") {
+        dailyMap[date].sold += d.count;
+        dailyMap[date].revenue += d.revenue;
       }
     }
 
     const daily = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 
-    const viewCountResult = await sql`
-      SELECT COUNT(*)::int as count FROM viewed_vins
-      WHERE shop_id = ${shopId}
-        ${startDateStr ? sql`AND first_viewed_at >= ${new Date(startDateStr)}` : sql``}
-        ${endDateStr ? sql`AND first_viewed_at <= ${new Date(endDateStr)}` : sql``}
-    `;
-    const viewCount = (viewCountResult[0] as any)?.count ?? 0;
+    const viewMatch: any = { shopId };
+    if (startDateStr || endDateStr) {
+      viewMatch.firstViewedAt = {};
+      if (startDateStr) viewMatch.firstViewedAt.$gte = new Date(startDateStr);
+      if (endDateStr) viewMatch.firstViewedAt.$lte = new Date(endDateStr);
+    }
+    const viewCount = await db.collection("viewed_vins").countDocuments(viewMatch);
 
-    const usageStats = await sql`
-      SELECT 
-        SUM(COALESCE(estimated_cost, 0))::float as total_cost,
-        COUNT(*)::int as total_requests,
-        COUNT(DISTINCT vin) as unique_vins
-      FROM usage_logs
-      WHERE shop_id = ${shopId}
-        ${startDateStr ? sql`AND created_at >= ${new Date(startDateStr)}` : sql``}
-        ${endDateStr ? sql`AND created_at <= ${new Date(endDateStr)}` : sql``}
-    `;
+    const usageMatch: any = { 
+      $or: [
+        { shopId: shopId },
+        { shopId: String(shopId) }
+      ]
+    };
+    if (startDateStr || endDateStr) {
+      usageMatch.createdAt = dateFilter;
+    }
 
-    const aiCost = (usageStats[0] as any)?.total_cost || 0;
-    const aiRequests = (usageStats[0] as any)?.total_requests || 0;
-    const uniqueVinsProcessed = (usageStats[0] as any)?.unique_vins || 0;
+    const usageStats = await db.collection("usage_logs").aggregate([
+      { $match: usageMatch },
+      {
+        $group: {
+          _id: null,
+          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          totalRequests: { $sum: 1 },
+          uniqueVins: { $addToSet: "$vin" }
+        }
+      }
+    ]).toArray();
+
+    const aiCost = usageStats[0]?.totalCost || 0;
+    const aiRequests = usageStats[0]?.totalRequests || 0;
+    const uniqueVinsProcessed = usageStats[0]?.uniqueVins?.filter(Boolean)?.length || 0;
 
     const costPerVin = uniqueVinsProcessed > 0 ? aiCost / uniqueVinsProcessed : 0;
     const costPerView = viewCount > 0 ? aiCost / viewCount : 0;

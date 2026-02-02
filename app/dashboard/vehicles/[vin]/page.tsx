@@ -1,12 +1,12 @@
 // app/dashboard/vehicles/[vin]/page.tsx
 import { requireSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
-import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle } from "@/lib/integrations/protractor";
+import { resolveProtractorConfig, fetchAllActiveInspections } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -38,6 +38,7 @@ function parseCarfaxDate(d?: string | null): Date | null {
 }
 function toSquish(vin: string) {
   const v = String(vin).toUpperCase().trim();
+  // DataOne “squish” = 8 VIN chars + 2 after the check digit (skip position 9)
   return v.slice(0, 8) + v.slice(9, 11);
 }
 function StatusChip({ value }: { value: unknown }) {
@@ -48,73 +49,76 @@ function StatusChip({ value }: { value: unknown }) {
   return <>{s || ""}</>;
 }
 
-/* ---------- resolve current miles: RO → Protractor → AutoFlow → vehicle → CARFAX ---------- */
-async function getLatestMilesForVin(vin: string): Promise<number | null> {
-  const vinUpper = String(vin || "").toUpperCase();
+/* ---------- resolve current miles: RO → AutoFlow → vehicle ---------- */
+async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | null> {
+  const vin = String(vinRaw || "").toUpperCase();
   const toPos = (v: unknown) => {
     if (v == null) return null;
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  // Latest RO mileage from normalized work_orders (join with vehicles to get by VIN)
-  const roResult = await sql`
-    SELECT w.odometer_in as mileage 
-    FROM work_orders w
-    JOIN vehicles v ON w.vehicle_id = v.id
-    WHERE v.vin = ${vinUpper}
-    ORDER BY w.updated_at DESC NULLS LAST, w.created_at DESC NULLS LAST
-    LIMIT 1
-  `;
-  const mRO = toPos(roResult[0]?.mileage);
-
-  // Latest Protractor work order mileage
-  const protResult = await sql`
-    SELECT mileage
-    FROM protractor_work_orders
-    WHERE vin = ${vinUpper}
-    ORDER BY created_date DESC NULLS LAST
-    LIMIT 1
-  `;
-  const mProt = toPos(protResult[0]?.mileage);
+  // Latest RO mileage
+  const ro = await db.collection("repair_orders").findOne(
+    { vin },
+    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1 } }
+  );
+  const mRO = toPos(ro?.mileage);
 
   // Latest AF or manual close event with mileage
-  const afResult = await sql`
-    SELECT 
-      COALESCE(
-        (payload->>'mileage')::numeric,
-        (payload->'ticket'->>'mileage')::numeric,
-        (payload->'vehicle'->>'mileage')::numeric,
-        (payload->'vehicle'->>'miles')::numeric,
-        (payload->'vehicle'->>'odometer')::numeric
-      ) as miles
-    FROM events
-    WHERE UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vinUpper}
-      AND (provider = 'autoflow' OR (provider = 'ui' AND event_type = 'manual_closed'))
-    ORDER BY created_at DESC NULLS LAST
-    LIMIT 1
-  `;
-  const mAF = toPos(afResult[0]?.miles);
+  const af = await db.collection("events").aggregate([
+    {
+      $match: {
+        $expr: {
+          $eq: [
+            {
+              $toUpper: {
+                $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }],
+              },
+            },
+            vin,
+          ],
+        },
+        $or: [{ provider: "autoflow" }, { provider: "ui", type: "manual_closed" }],
+      },
+    },
+    {
+      $addFields: {
+        createdAtDate: {
+          $cond: [
+            { $eq: [{ $type: "$createdAt" }, "date"] },
+            "$createdAt",
+            { $dateFromString: { dateString: { $toString: "$createdAt" }, onError: null, onNull: null } },
+          ],
+        },
+      },
+    },
+    { $sort: { createdAtDate: -1 } },
+    { $limit: 1 },
+    {
+      $project: {
+        _id: 0,
+        miles: {
+          $ifNull: [
+            "$payload.ticket.mileage",
+            {
+              $ifNull: [
+                "$payload.mileage",
+                { $ifNull: ["$payload.vehicle.mileage", { $ifNull: ["$payload.vehicle.miles", "$payload.vehicle.odometer"] }] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ]).next();
+  const mAF = toPos(af?.miles);
 
-  // Vehicle-level odometer/lastMileage/mileage
-  const vehResult = await sql`
-    SELECT mileage, odometer, last_mileage FROM vehicles 
-    WHERE vin = ${vinUpper}
-    LIMIT 1
-  `;
-  const veh = vehResult[0];
-  const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.last_mileage);
+  // Vehicle-level odometer/lastMileage/mileage (Tekmetric stores as mileage)
+  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1, mileage: 1 } });
+  const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
 
-  // Fallback to CARFAX lastReportedMileage
-  const carfaxResult = await sql`
-    SELECT (report_data->>'lastReportedMileage')::numeric as mileage
-    FROM carfax_reports
-    WHERE vin = ${vinUpper}
-    LIMIT 1
-  `;
-  const mCarfax = toPos(carfaxResult[0]?.mileage);
-
-  return mRO ?? mProt ?? mAF ?? mVeh ?? mCarfax ?? null;
+  return mRO ?? mAF ?? mVeh ?? null;
 }
 
 /* ---------- page ---------- */
@@ -122,54 +126,54 @@ type PageProps = { params: Promise<{ vin: string }> };
 
 export default async function VehicleDetailPage({ params }: PageProps) {
   const session = await requireSession();
-  const shopId = String(session.shopId);
+  const db = await getDb();
+  const shopId = Number(session.shopId);
 
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
 
-  // Get shop UUID from shop_id
-  const shopUuidResult = await sql`SELECT id FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
-  const shopUuid = shopUuidResult[0]?.id as string | undefined;
-
-  // Find vehicle in PostgreSQL
-  const vehicleResult = shopUuid ? await sql`
-    SELECT 
-      id, vin, year, make, model, license_plate, last_mileage, odometer, updated_at, customer_id,
-      declined_services, metadata, raw_data
-    FROM vehicles
-    WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
-    LIMIT 1
-  ` : [];
-  
-  let vehicle: any = vehicleResult[0] ? {
-    _id: vehicleResult[0].id,
-    vin: vehicleResult[0].vin,
-    year: vehicleResult[0].year,
-    make: vehicleResult[0].make,
-    model: vehicleResult[0].model,
-    license: vehicleResult[0].license_plate,
-    lastMileage: vehicleResult[0].last_mileage,
-    odometer: vehicleResult[0].odometer,
-    updatedAt: vehicleResult[0].updated_at,
-    customerId: vehicleResult[0].customer_id,
-    hasComponents: vehicleResult[0].metadata?.hasComponents || {},
-    declinedServices: vehicleResult[0].declined_services || [],
-    tekmetric: vehicleResult[0].raw_data?.tekmetric,
-  } : null;
+  let vehicle = await db.collection("vehicles").findOne(
+    { 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+      vin 
+    },
+    {
+      projection: {
+        year: 1,
+        make: 1,
+        model: 1,
+        vin: 1,
+        license: 1,
+        lastMileage: 1,
+        odometer: 1,
+        updatedAt: 1,
+        customerId: 1,
+        hasComponents: 1,
+        declinedServices: 1,
+      },
+    }
+  );
 
   // If not in vehicles collection, try to build from events (AutoFlow data)
-  if (!vehicle && shopUuid) {
-    const eventResult = await sql`
-      SELECT payload, created_at
-      FROM events
-      WHERE shop_id = ${shopUuid}::uuid
-        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
+  if (!vehicle) {
+    const eventVehicle = await db.collection("events").findOne(
+      {
+        $and: [
+          { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+          { 
+            $or: [
+              { vehicleVin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+              { vin: { $regex: new RegExp(`^${vin}$`, 'i') } },
+              { "payload.vehicle.vin": { $regex: new RegExp(`^${vin}$`, 'i') } }
+            ]
+          }
+        ]
+      },
+      { sort: { createdAt: -1 } }
+    );
 
-    if (eventResult[0]) {
-      const payload = eventResult[0].payload || {};
+    if (eventVehicle) {
+      const payload = eventVehicle.payload || {};
       const veh = payload.vehicle || {};
       vehicle = {
         _id: null,
@@ -180,7 +184,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         license: veh.license || veh.plate || null,
         lastMileage: veh.mileage || veh.miles || veh.odometer || payload.ticket?.mileage || null,
         odometer: veh.odometer || veh.mileage || veh.miles || null,
-        updatedAt: eventResult[0].created_at || new Date(),
+        updatedAt: eventVehicle.createdAt || new Date(),
         customerId: null,
       };
     }
@@ -188,10 +192,10 @@ export default async function VehicleDetailPage({ params }: PageProps) {
 
   // If still not found, try to fetch from Tekmetric API using direct VIN search
   if (!vehicle) {
-    const shopResult = await sql`SELECT tekmetric FROM shops LIMIT 1`;
-    const shop = shopResult[0];
+    const shop = await db.collection("shops").findOne({});
     if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_CLIENT_ID) {
       try {
+        // Direct VIN search - single API call
         const vehicleResponse = await searchVehiclesByVin(shop.tekmetric.shopId, vin);
         
         if (vehicleResponse.content.length > 0) {
@@ -208,58 +212,29 @@ export default async function VehicleDetailPage({ params }: PageProps) {
             odometer: tekVehicle.mileageIn || tekVehicle.mileageOut || null,
             updatedAt: tekVehicle.updatedDate ? new Date(tekVehicle.updatedDate) : new Date(),
             customerId: null,
-            tekmetric: {
-              vehicleId: tekVehicle.id,
-              customerId: tekVehicle.customerId,
-              lastSynced: new Date()
-            }
           };
           
           // Store in database for future lookups
-          if (shopUuid) {
-            await sql`
-              INSERT INTO vehicles (vin, shop_id, year, make, model, license_plate, last_mileage, odometer, updated_at, tekmetric, created_at)
-              VALUES (${vin}, ${shopUuid}::uuid, ${tekVehicle.year}, ${tekVehicle.make}, ${tekVehicle.model}, 
-                      ${tekVehicle.licensePlate}, ${tekVehicle.mileageIn || tekVehicle.mileageOut}, 
-                      ${tekVehicle.mileageIn || tekVehicle.mileageOut}, NOW(),
-                      ${JSON.stringify(vehicle.tekmetric)}::jsonb, NOW())
-              ON CONFLICT (vin, shop_id) DO UPDATE SET
-                year = COALESCE(EXCLUDED.year, vehicles.year),
-                make = COALESCE(EXCLUDED.make, vehicles.make),
-                model = COALESCE(EXCLUDED.model, vehicles.model),
-                tekmetric = EXCLUDED.tekmetric,
-                updated_at = NOW()
-            `;
-          }
+          await db.collection("vehicles").updateOne(
+            { vin },
+            { 
+              $set: {
+                ...vehicle,
+                shopId: String(shopId),
+                tekmetric: {
+                  vehicleId: tekVehicle.id,
+                  customerId: tekVehicle.customerId,
+                  lastSynced: new Date()
+                }
+              },
+              $setOnInsert: { createdAt: new Date() }
+            },
+            { upsert: true }
+          );
         }
       } catch (error) {
         console.error('[Vehicle Detail] Error fetching from Tekmetric:', error);
       }
-    }
-  }
-
-  // If still not found, try to use cached plan data and DataOne VIN decoding
-  if (!vehicle && shopUuid) {
-    const cachedPlan = await sql`
-      SELECT vin, mileage FROM cached_plans 
-      WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
-      LIMIT 1
-    `;
-    if (cachedPlan[0]) {
-      // Get vehicle info from DataOne VIN decoding
-      const enhanced = await getEnhancedVehicleData(vin);
-      vehicle = {
-        _id: null,
-        vin: vin,
-        year: enhanced.ok ? enhanced.vehicle?.year : null,
-        make: enhanced.ok ? enhanced.vehicle?.make : null,
-        model: enhanced.ok ? enhanced.vehicle?.model : null,
-        license: null,
-        lastMileage: cachedPlan[0].mileage,
-        odometer: cachedPlan[0].mileage,
-        updatedAt: new Date(),
-        customerId: null,
-      };
     }
   }
 
@@ -292,107 +267,66 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // Resolve current miles (used in header and to patch the latest RO row if it's 0)
-  const resolvedMiles = await getLatestMilesForVin(vin);
+  // ✅ Resolve current miles (used in header and to patch the latest RO row if it's 0)
+  const resolvedMiles = await getLatestMilesForVin(db, vin);
 
-  // Get customer info
-  let customer: any = null;
-  if (vehicle.customerId) {
-    const custResult = await sql`
-      SELECT first_name, last_name, name, email, phone
-      FROM customers WHERE id = ${vehicle.customerId}
-      LIMIT 1
-    `;
-    customer = custResult[0];
-  }
+  const customer = vehicle.customerId
+    ? await db.collection("customers").findOne(
+        { _id: vehicle.customerId },
+        { projection: { firstName: 1, lastName: 1, name: 1, email: 1, phone: 1 } }
+      )
+    : null;
 
   const ownerName =
-    [customer?.first_name, customer?.last_name].filter(Boolean).join(" ").trim() || (customer?.name || "");
+    [customer?.firstName, customer?.lastName].filter(Boolean).join(" ").trim() || (customer?.name || "");
 
-  // Get repair orders from events collection (AutoFlow webhooks) and Protractor
-  const eventRos = await sql`
-    WITH event_ros AS (
-      SELECT 
-        COALESCE(
-          payload->'ticket'->>'invoice',
-          payload->'ticket'->>'id'
-        ) as ro_number,
-        payload->'ticket'->>'status' as status,
-        COALESCE(
-          (payload->'ticket'->>'mileage')::numeric,
-          (payload->'vehicle'->>'mileage')::numeric
-        ) as mileage,
-        created_at,
-        'autoflow' as source
-      FROM events
-      WHERE shop_id = ${shopUuid}::uuid
-        AND provider = 'autoflow'
-        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
-    ),
-    protractor_ros AS (
-      SELECT 
-        work_order_number as ro_number,
-        status,
-        mileage::numeric as mileage,
-        created_date as created_at,
-        'protractor' as source
-      FROM protractor_work_orders
-      WHERE shop_id = ${shopUuid}::uuid
-        AND UPPER(vin) = ${vin}
-    ),
-    all_ros AS (
-      SELECT * FROM event_ros
-      UNION ALL
-      SELECT * FROM protractor_ros
-    ),
-    grouped_ros AS (
-      SELECT DISTINCT ON (ro_number)
-        ro_number,
-        status,
-        mileage,
-        created_at as updated_at,
-        created_at,
-        source
-      FROM all_ros
-      WHERE ro_number IS NOT NULL
-      ORDER BY ro_number, created_at DESC
-    )
-    SELECT * FROM grouped_ros
-    ORDER BY updated_at DESC
-    LIMIT 20
-  `;
-
-  let ros = eventRos as any[];
-  
-  // If no repair orders found yet, try fetching invoices from Protractor API
-  if (ros.length === 0) {
-    // Get Protractor vehicle ID from protractor_vehicles table
-    const protVehicleResult = await sql`
-      SELECT vehicle_id FROM protractor_vehicles WHERE vin = ${vin} LIMIT 1
-    `;
-    const protractorVehicleId = protVehicleResult[0]?.vehicle_id;
-    
-    if (protractorVehicleId) {
-      console.log(`[Vehicle Detail] Fetching Protractor invoices for vehicle ${protractorVehicleId}`);
-      const invoiceResult = await fetchInvoicesForVehicle(Number(shopId), protractorVehicleId);
-      if (invoiceResult.ok && invoiceResult.invoices && invoiceResult.invoices.length > 0) {
-        console.log(`[Vehicle Detail] Found ${invoiceResult.invoices.length} Protractor invoices`);
-        ros = invoiceResult.invoices.map((inv: any) => ({
-          ro_number: inv.InvoiceNumber ? String(inv.InvoiceNumber) : inv.ID,
-          status: 'Invoiced',
-          mileage: inv.Odometer ?? null,
-          updated_at: inv.InvoiceDate ? new Date(inv.InvoiceDate) : null,
-          created_at: inv.InvoiceDate ? new Date(inv.InvoiceDate) : null,
-          source: 'protractor'
-        }));
+  // Get repair orders from events collection (AutoFlow webhooks store RO data here)
+  const eventRos = await db.collection("events").aggregate([
+    {
+      $match: {
+        $and: [
+          { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+          { provider: "autoflow" },
+          {
+            $expr: {
+              $eq: [
+                { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+                vin.toUpperCase()
+              ]
+            }
+          }
+        ]
       }
-    }
-  }
-  
-  const latestRoNumber = ros[0]?.ro_number ?? null;
+    },
+    {
+      $addFields: {
+        roNumber: { $ifNull: ["$payload.ticket.invoice", { $ifNull: ["$payload.ticket.id", "$roNumber"] }] },
+        status: { $ifNull: ["$payload.ticket.status", "$status"] },
+        mileage: { $ifNull: ["$payload.ticket.mileage", { $ifNull: ["$payload.vehicle.mileage", null] }] }
+      }
+    },
+    { $match: { roNumber: { $ne: null } } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: "$roNumber",
+        roNumber: { $first: "$roNumber" },
+        status: { $first: "$status" },
+        mileage: { $first: "$mileage" },
+        updatedAt: { $first: "$createdAt" },
+        createdAt: { $first: "$createdAt" }
+      }
+    },
+    { $sort: { updatedAt: -1 } },
+    { $limit: 20 }
+  ]).toArray();
+
+  const ros = eventRos;
+
+  const latestRoNumber = ros[0]?.roNumber ?? null;
 
   // Autoflow - fetch DVI for the latest RO
-  const cfg = await resolveAutoflowConfig(Number(shopId));
+  const cfg = await resolveAutoflowConfig(shopId);
   
   let dvi: any;
   if (!latestRoNumber) {
@@ -400,7 +334,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   } else if (!cfg.configured) {
     dvi = { ok: false, error: "AutoFlow not connected." };
   } else {
-    dvi = await fetchDviWithCache(Number(shopId), String(latestRoNumber), 1000);
+    dvi = await fetchDviWithCache(shopId, String(latestRoNumber), 1000);
     if (dvi.raw) {
       console.log(`[DVI Debug] Full raw response keys:`, JSON.stringify(Object.keys(dvi.raw)));
       console.log(`[DVI Debug] dvis array:`, JSON.stringify(dvi.raw?.content?.dvis?.map((d: any) => ({ name: d.dvi_name, catCount: d.dvi_category?.length }))));
@@ -410,10 +344,10 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   // Try Tekmetric inspections if no AutoFlow DVI and vehicle has Tekmetric data
   let tekmetricDvi: any = null;
   if (vehicle.tekmetric?.repairOrderId || vehicle.tekmetric?.vehicleId) {
-    const shopResult = await sql`SELECT tekmetric FROM shops LIMIT 1`;
-    const shop = shopResult[0];
+    const shop = await db.collection("shops").findOne({});
     if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_CLIENT_ID) {
       try {
+        // Get latest RO for this vehicle from Tekmetric
         const roResponse = await getRepairOrders(shop.tekmetric.shopId, {
           vehicleId: vehicle.tekmetric.vehicleId,
           size: 1,
@@ -449,9 +383,9 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   }
 
   // CARFAX
-  const carfaxCfg = await resolveCarfaxConfig(Number(shopId));
+  const carfaxCfg = await resolveCarfaxConfig(shopId);
   const carfax = carfaxCfg.configured
-    ? await fetchCarfaxWithCache(Number(shopId), vin, 7 * 24 * 60 * 60 * 1000)
+    ? await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000)
     : { ok: false, error: "CARFAX not configured." as const };
 
   // Miles/day from CARFAX (ignore invalid/zero/older 'today' readings)
@@ -480,13 +414,14 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         ? vehicle.lastMileage
         : null;
 
+    // valid only if positive and not behind latest CARFAX miles
     const todayIsValid = typeof todayMilesRaw === "number" && todayMilesRaw > 0 && (!recs[0] || todayMilesRaw >= recs[0].miles);
 
     if (todayIsValid && recs[0]) {
       const days = Math.max(1, daysBetween(now, recs[0].date));
       const delta = (todayMilesRaw as number) - recs[0].miles;
       const val = delta / days;
-      mpd.mpdFromToday = Math.abs(val) < 0.01 ? null : val;
+      mpd.mpdFromToday = Math.abs(val) < 0.01 ? null : val; // treat near-zero as no signal
       mpd.latestDate = recs[0].date;
       mpd.latestMiles = recs[0].miles;
     }
@@ -506,7 +441,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     }
   }
 
-  // OEM schedule - uses PostgreSQL cache
+  // OEM schedule - uses MongoDB Atlas cache (first call fetches from DataOne API, subsequent calls use cache)
   const oemData = await getMaintenanceScheduleCached(vin);
   console.log(`[Vehicle Detail] OEM data source: ${oemData.source}, count: ${oemData.count}`);
   
@@ -525,15 +460,15 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   };
 
   // Check if shop has Tekmetric connected
-  const shopCheckResult = await sql`SELECT tekmetric FROM shops LIMIT 1`;
-  const tekmetricConnected = !!shopCheckResult[0]?.tekmetric?.shopId;
+  const shop = await db.collection("shops").findOne({});
+  const tekmetricConnected = !!shop?.tekmetric?.shopId;
 
   // Protractor inspections (DVI data from AutoVitals pushed to Protractor)
   let protractorDvi: any = null;
-  const protractorCfg = await resolveProtractorConfig(Number(shopId));
+  const protractorCfg = await resolveProtractorConfig(shopId);
   if (protractorCfg.configured) {
     try {
-      const inspectionsResult = await fetchAllActiveInspections(Number(shopId));
+      const inspectionsResult = await fetchAllActiveInspections(shopId);
       if (inspectionsResult.ok && inspectionsResult.inspections && inspectionsResult.inspections.length > 0) {
         console.log(`[Protractor] Found ${inspectionsResult.inspections.length} inspections`);
         protractorDvi = {
@@ -572,11 +507,11 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       }}
       ownerName={ownerName}
       ros={ros.map((r: any) => ({
-        roNumber: r.ro_number,
+        roNumber: r.roNumber,
         status: r.status,
         mileage: r.mileage,
-        updatedAt: r.updated_at,
-        createdAt: r.created_at
+        updatedAt: r.updatedAt,
+        createdAt: r.createdAt
       }))}
       resolvedMiles={resolvedMiles}
       dvi={dvi}

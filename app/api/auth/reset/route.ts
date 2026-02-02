@@ -1,6 +1,23 @@
+// app/api/auth/reset/route.ts
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import crypto from "node:crypto";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+
+/**
+ * POST /api/auth/reset
+ * Body: { token: string, email: string, password: string }
+ *
+ * Flow:
+ * 1) Validate body.
+ * 2) Look up token in password_reset_tokens.
+ * 3) Ensure token not used and not expired.
+ * 4) Ensure emailLower matches token.emailLower.
+ * 5) Hash new password with scrypt (same format used in users.passwordHash).
+ * 6) Update users.{passwordHash}, mark token usedAt.
+ * 7) Invalidate existing sessions for this user.
+ * 8) Create a new session and set HttpOnly cookie so the user is signed in.
+ */
 
 export async function POST(req: Request) {
   try {
@@ -15,11 +32,13 @@ export async function POST(req: Request) {
 
     const emailLower = String(email).trim().toLowerCase();
 
-    const tokenResult = await sql`
-      SELECT * FROM password_reset_tokens WHERE token = ${token} LIMIT 1
-    `;
-    const t = tokenResult[0];
+    const db = await getDb();
+    const pwTokens = db.collection("password_reset_tokens");
+    const users = db.collection("users");
+    const sessions = db.collection("sessions");
 
+    // 2) Look up token
+    const t = await pwTokens.findOne({ token });
     if (!t) {
       return NextResponse.json(
         { ok: false, error: "Invalid or expired token." },
@@ -27,28 +46,28 @@ export async function POST(req: Request) {
       );
     }
 
+    // 3) Validate token timestamps
     const now = new Date();
-    if (t.used_at || (t.expires_at && new Date(t.expires_at) < now)) {
+    if (t.usedAt || (t.expiresAt && new Date(t.expiresAt) < now)) {
       return NextResponse.json(
         { ok: false, error: "Invalid or expired token." },
         { status: 400 }
       );
     }
 
-    if (t.email_lower !== emailLower) {
+    // 4) Ensure email matches token
+    if (t.emailLower !== emailLower) {
       return NextResponse.json(
         { ok: false, error: "Email mismatch for this reset token." },
         { status: 400 }
       );
     }
 
-    const userResult = await sql`
-      SELECT id FROM users 
-      WHERE LOWER(email) = ${emailLower} AND shop_id = ${t.shop_id}
-      LIMIT 1
-    `;
-    const user = userResult[0];
-
+    // 5) Find user by token’s shopId + emailLower
+    const user = await users.findOne(
+      { emailLower, shopId: Number(t.shopId) },
+      { projection: { _id: 1 } }
+    );
     if (!user) {
       return NextResponse.json(
         { ok: false, error: "User not found." },
@@ -56,8 +75,11 @@ export async function POST(req: Request) {
       );
     }
 
+    // 6) Hash new password with scrypt in the same format as existing users.passwordHash
+    // Format we produce: "scrypt:1:<saltHex>:<hashHex>"
     async function hashPasswordScrypt(pass: string): Promise<string> {
       const salt = crypto.randomBytes(16);
+      // Typical scrypt params; adjust if your existing helper uses different ones.
       const N = 16384, r = 8, p = 1, keylen = 32;
       const derivedKey: Buffer = await new Promise((resolve, reject) => {
         crypto.scrypt(pass, salt, keylen, { N, r, p, maxmem: 64 * 1024 * 1024 }, (err, dk) => {
@@ -70,27 +92,33 @@ export async function POST(req: Request) {
 
     const passwordHash = await hashPasswordScrypt(String(password));
 
-    await sql`
-      UPDATE users SET password_hash = ${passwordHash}, password = NULL, updated_at = ${now}
-      WHERE id = ${user.id}
-    `;
+    await users.updateOne(
+      { _id: user._id },
+      { $set: { passwordHash, updatedAt: now }, $unset: { password: "" } }
+    );
 
-    await sql`
-      UPDATE password_reset_tokens SET used_at = ${now} WHERE id = ${t.id}
-    `;
+    // 7) Mark token as used
+    await pwTokens.updateOne({ _id: t._id }, { $set: { usedAt: now } });
 
-    await sql`DELETE FROM sessions WHERE user_id = ${user.id}`;
+    // 8) Invalidate existing sessions for this user (optional but recommended)
+    await sessions.deleteMany({ userId: user._id });
 
+    // 9) Create new session and set cookie so the user is signed in immediately
     const sessionId = crypto.randomBytes(24).toString("hex");
-    const sessionTtlDays = 14;
+    const sessionTtlDays = 14; // adjust as needed
     const expiresAt = new Date(now.getTime() + sessionTtlDays * 24 * 60 * 60 * 1000);
 
-    await sql`
-      INSERT INTO sessions (token, user_id, shop_id, created_at, expires_at)
-      VALUES (${sessionId}, ${user.id}, ${t.shop_id}, ${now}, ${expiresAt})
-    `;
+    await sessions.insertOne({
+      _id: sessionId,
+      userId: user._id,
+      shopId: Number(t.shopId),
+      createdAt: now,
+      expiresAt,
+    });
 
-    const res = NextResponse.json({ ok: true, shopId: parseInt(t.shop_id, 10) });
+    // Set cookie "sid" (align name/options with the rest of your app)
+    const res = NextResponse.json({ ok: true, shopId: Number(t.shopId) });
+    // SameSite=Lax is typical for session cookies; tweak to your policy.
     res.headers.append(
       "Set-Cookie",
       [
@@ -104,7 +132,7 @@ export async function POST(req: Request) {
     );
 
     return res;
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("Password reset error:", err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }

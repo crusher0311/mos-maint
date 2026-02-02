@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,23 +14,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "orderedIds array is required" }, { status: 400 });
     }
 
-    for (let i = 0; i < orderedIds.length; i++) {
-      const id = orderedIds[i];
-      const numId = Number(id);
-      if (isNaN(numId)) continue;
-      
-      await sql`
-        UPDATE platform_features 
-        SET "order" = ${i + 1}, updated_at = NOW()
-        WHERE id = ${numId}
-      `;
+    const db = await getDb();
+
+    const bulkOps = orderedIds.map((id: string, index: number) => ({
+      updateOne: {
+        filter: { _id: new ObjectId(id) },
+        update: { $set: { order: index + 1, updatedAt: new Date() } }
+      }
+    }));
+
+    if (bulkOps.length > 0) {
+      await db.collection("platform_features").bulkWrite(bulkOps);
     }
 
     return NextResponse.json({ ok: true });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Error reordering features:", error);
-    const errMsg = error instanceof Error ? error.message : "Unknown error";
-    if (errMsg === "Unauthorized" || errMsg === "Not a platform admin") {
+    if (error.message === "Unauthorized" || error.message === "Not a platform admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json({ error: "Failed to reorder features" }, { status: 500 });

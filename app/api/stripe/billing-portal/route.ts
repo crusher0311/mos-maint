@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { stripe, getBaseUrl } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -12,10 +12,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(sess.shopId)}`;
-  const shop = shopRows[0] as any;
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId: Number(sess.shopId) });
 
-  if (!shop?.stripe_customer_id) {
+  if (!shop?.stripeCustomerId) {
     return NextResponse.json(
       { error: "No billing account found. Please upgrade first." },
       { status: 400 }
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const baseUrl = getBaseUrl();
     
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: shop.stripe_customer_id,
+      customer: shop.stripeCustomerId,
       return_url: `${baseUrl}/dashboard/settings/billing`,
     });
 

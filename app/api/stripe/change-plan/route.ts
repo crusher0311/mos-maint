@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getStripe } from "@/lib/stripe";
 
 export async function POST(request: NextRequest) {
@@ -16,16 +16,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Price ID is required" }, { status: 400 });
     }
 
-    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(session.shopId)}`;
-    const shop = shopRows[0] as any;
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne({ id: session.shopId });
     
-    if (!shop?.stripe_customer_id || !shop?.stripe_subscription_id) {
+    if (!shop?.stripeCustomerId || !shop?.stripeSubscriptionId) {
       return NextResponse.json({ error: "No active subscription found" }, { status: 400 });
     }
 
     const stripe = getStripe();
 
-    const subscriptionData = await stripe.subscriptions.retrieve(shop.stripe_subscription_id);
+    const subscriptionData = await stripe.subscriptions.retrieve(shop.stripeSubscriptionId);
     const subscription = subscriptionData as any;
     
     if (!subscription || subscription.status === "canceled") {
@@ -40,17 +40,20 @@ export async function POST(request: NextRequest) {
     const periodEnd = subscription.current_period_end as number;
 
     if (isDowngrade) {
-      await sql`
-        UPDATE shops SET 
-          pending_plan_change = ${JSON.stringify({
-            priceId,
-            planId,
-            effectiveDate: new Date(periodEnd * 1000),
-            currentSubscriptionId: shop.stripe_subscription_id,
-          })}::jsonb,
-          updated_at = NOW()
-        WHERE shop_id = ${String(session.shopId)}
-      `;
+      await db.collection("shops").updateOne(
+        { id: shop.id },
+        { 
+          $set: { 
+            pendingPlanChange: {
+              priceId,
+              planId,
+              effectiveDate: new Date(periodEnd * 1000),
+              currentSubscriptionId: shop.stripeSubscriptionId,
+            },
+            updatedAt: new Date()
+          }
+        }
+      );
 
       return NextResponse.json({
         success: true,
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
         effectiveDate: new Date(periodEnd * 1000).toISOString(),
       });
     } else {
-      await stripe.subscriptions.update(shop.stripe_subscription_id, {
+      await stripe.subscriptions.update(shop.stripeSubscriptionId, {
         items: [
           {
             id: currentItemId,
@@ -68,13 +71,16 @@ export async function POST(request: NextRequest) {
         proration_behavior: "create_prorations",
       });
 
-      await sql`
-        UPDATE shops SET 
-          plan = ${planId},
-          pending_plan_change = NULL,
-          updated_at = NOW()
-        WHERE shop_id = ${String(session.shopId)}
-      `;
+      await db.collection("shops").updateOne(
+        { id: shop.id },
+        { 
+          $set: { 
+            plan: planId,
+            updatedAt: new Date()
+          },
+          $unset: { pendingPlanChange: "" }
+        }
+      );
 
       return NextResponse.json({
         success: true,

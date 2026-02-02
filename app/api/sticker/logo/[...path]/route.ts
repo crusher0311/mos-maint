@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,18 +17,17 @@ export async function GET(
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }
 
-    const mediaRows = await sql`
-      SELECT data_uri FROM shop_media 
-      WHERE shop_id = ${String(shopIdNum)} AND type = 'logo'
-      LIMIT 1
-    `;
+    const db = await getDb();
+    const media = await db.collection("shop_media").findOne({
+      shopId: shopIdNum,
+      type: "logo",
+    });
 
-    if (mediaRows.length === 0 || !mediaRows[0].data_uri) {
+    if (!media?.dataUri) {
       return NextResponse.json({ error: "Logo not found" }, { status: 404 });
     }
 
-    const dataUri = mediaRows[0].data_uri;
-    const matches = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+    const matches = media.dataUri.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) {
       return NextResponse.json({ error: "Invalid logo data" }, { status: 500 });
     }

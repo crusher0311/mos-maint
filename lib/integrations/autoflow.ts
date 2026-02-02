@@ -1,8 +1,9 @@
 import "server-only";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 type Fetcher = typeof fetch;
 
+/** ---------- Types ---------- */
 export type DviItem = {
   itemId?: number | string | null;
   name?: string | null;
@@ -41,73 +42,81 @@ export type DviResult = {
     dateTime?: string | null;
   }[] | null;
   categories?: DviCategory[] | null;
-  raw?: unknown;
+  raw?: any;
   error?: string;
 };
 
-function toInt(val: unknown): number | null {
+/** ---------- Helpers ---------- */
+function toInt(val: any): number | null {
   if (val === null || val === undefined) return null;
   const n = Number(String(val).replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
-
-function nonEmpty(s: unknown): string | null {
+function nonEmpty(s: any): string | null {
   const t = s == null ? "" : String(s).trim();
   return t ? t : null;
 }
-
-function normalizeTime(s: unknown): string | null {
+function normalizeTime(s: any): string | null {
   const t = nonEmpty(s);
   if (!t) return null;
   if (/^0{4}-0{2}-0{2}T0{2}:0{2}:0{2}/.test(t)) return null;
   return t;
 }
-
 function basicAuthHeader(key: string, pwd: string) {
   const token = Buffer.from(`${key}:${pwd}`).toString("base64");
   return `Basic ${token}`;
 }
-
 function normalizeAutoflowDomain(input?: string | null): string {
   let d = (input ?? "").trim();
   if (!d) return "";
-  d = d.replace(/^https?:\/\//i, "");
-  d = d.replace(/\/.*$/, "");
-  d = d.replace(/[./]+$/, "");
-  if (d && !d.includes(".")) d = `${d}.autotext.me`;
+  d = d.replace(/^https?:\/\//i, ""); // strip protocol
+  d = d.replace(/\/.*$/, "");         // drop path/query
+  d = d.replace(/[./]+$/, "");        // trailing dots/slashes
+  if (d && !d.includes(".")) d = `${d}.autotext.me`; // subdomain-only case
   return d;
 }
 
-export async function resolveAutoflowConfig(shopId: number | string) {
-  const shopIdStr = String(shopId);
-  const result = await sql`
-    SELECT settings FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
-  `;
-
-  const shop = result[0];
-  const settings = shop?.settings as Record<string, unknown> | undefined;
-  const autoflow = settings?.autoflow as Record<string, unknown> | undefined;
+/** ---------- Config resolution (per-shop) ---------- */
+export async function resolveAutoflowConfig(shopId: number) {
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    {
+      projection: {
+        autoflow: 1,
+        autoflowDomain: 1,
+        autoflowApiKey: 1,
+        autoflowApiPassword: 1,
+      },
+    }
+  );
 
   const domainRaw =
-    autoflow?.domain ??
-    autoflow?.subdomain ??
+    shop?.autoflowDomain ??
+    shop?.autoflow?.domain ??
+    shop?.autoflow?.subdomain ??
     process.env.AUTOFLOW_DOMAIN ??
     process.env.AUTOFLOW_SUBDOMAIN ??
     "";
 
   const apiKey =
-    autoflow?.apiKey ??
+    shop?.autoflowApiKey ??
+    shop?.autoflow?.apiKey ??
     process.env.AUTOFLOW_API_KEY ??
     "";
 
   const apiPassword =
-    autoflow?.apiPassword ??
+    shop?.autoflowApiPassword ??
+    shop?.autoflow?.apiPassword ??
     process.env.AUTOFLOW_API_PASSWORD ??
     "";
 
-  const domain = normalizeAutoflowDomain(domainRaw as string);
+  const domain = normalizeAutoflowDomain(domainRaw);
   const base = domain ? `https://${domain}` : "";
+
+  // Per Autoflow docs: require BOTH key and password for Basic auth
   const configured = Boolean(domain && apiKey && apiPassword);
+
   const subdomain = domain ? domain.split(".")[0] : "";
 
   console.log(`[AutoFlow Config] Shop ${shopId}: domain=${domain}, base=${base}, configured=${configured}`);
@@ -116,14 +125,15 @@ export async function resolveAutoflowConfig(shopId: number | string) {
     base,
     domain,
     subdomain,
-    apiKey: (apiKey as string) || null,
-    apiPassword: (apiPassword as string) || null,
+    apiKey: apiKey || null,
+    apiPassword: apiPassword || null,
     configured,
   };
 }
 
+/** ---------- Live fetch from AutoFlow (getDvi) ---------- */
 export async function fetchDviByInvoice(
-  shopId: number | string,
+  shopId: number,
   invoice: string | number,
   doFetch: Fetcher = fetch
 ): Promise<DviResult> {
@@ -139,7 +149,7 @@ export async function fetchDviByInvoice(
   let res: Response;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
     res = await doFetch(url, {
       headers: {
@@ -151,10 +161,9 @@ export async function fetchDviByInvoice(
     });
     
     clearTimeout(timeoutId);
-  } catch (err: unknown) {
-    const error = err as { name?: string; message?: string };
-    const isTimeout = error?.name === 'AbortError';
-    const errorMsg = isTimeout ? 'Request timed out (10s)' : (error?.message || 'Network error');
+  } catch (err: any) {
+    const isTimeout = err?.name === 'AbortError';
+    const errorMsg = isTimeout ? 'Request timed out (10s)' : (err?.message || 'Network error');
     console.error(`[AutoFlow] ${isTimeout ? 'Timeout' : 'Network error'} fetching DVI for invoice ${inv} from ${cfg.domain}:`, errorMsg);
     return { ok: false, error: `AutoFlow connection failed: ${errorMsg}` };
   }
@@ -164,11 +173,10 @@ export async function fetchDviByInvoice(
     return { ok: false, error: `HTTP ${res.status}: ${text || res.statusText}` };
   }
 
-  const json = await res.json().catch(() => null) as Record<string, unknown> | null;
+  const json = await res.json().catch(() => null);
   if (!json || typeof json !== "object") return { ok: false, error: "Invalid JSON from AutoFlow." };
-  
   const success = Number(json.success || 0) === 1;
-  const content = (json.content || {}) as Record<string, unknown>;
+  const content = json.content || {};
   if (!success) {
     return { ok: false, error: nonEmpty(json.message) || "AutoFlow returned success=0", raw: json };
   }
@@ -179,9 +187,8 @@ export async function fetchDviByInvoice(
   const shopUrl = nonEmpty(content.shop_url);
   const customerUrl = nonEmpty(content.customer_url);
 
-  const hunterResults = content.hunter_results as Record<string, unknown>[] | undefined;
-  const hunter = Array.isArray(hunterResults)
-    ? hunterResults.map((h) => ({
+  const hunter = Array.isArray(content.hunter_results)
+    ? content.hunter_results.map((h: any) => ({
         vin: nonEmpty(h.vin),
         orderNumber: nonEmpty(h.order_number),
         odometer: toInt(h.odometer),
@@ -190,11 +197,12 @@ export async function fetchDviByInvoice(
       }))
     : null;
 
-  const dvis = Array.isArray(content.dvis) ? content.dvis as Record<string, unknown>[] : [];
+  const dvis = Array.isArray(content.dvis) ? content.dvis : [];
   
+  // Find the primary DVI - prefer one with categories, then completed, then first
   const primary =
-    dvis.find((d) => Array.isArray(d?.dvi_category) && (d.dvi_category as unknown[]).length > 0) ||
-    dvis.find((d) => normalizeTime(d?.completed_datetime)) || 
+    dvis.find((d: any) => Array.isArray(d?.dvi_category) && d.dvi_category.length > 0) ||
+    dvis.find((d: any) => normalizeTime(d?.completed_datetime)) || 
     dvis[0] || null;
 
   const sheetName = nonEmpty(primary?.dvi_name);
@@ -202,28 +210,31 @@ export async function fetchDviByInvoice(
   const completedBy = nonEmpty(primary?.completed_by);
   const pdfUrl = nonEmpty(primary?.pdf_url);
 
-  const rawCategories = (primary?.dvi_category || primary?.categories || primary?.dvi_items || []) as Record<string, unknown>[];
+  // ---- Category & item mapping with fallbacks ----
+  const rawCategories = primary?.dvi_category || primary?.categories || primary?.dvi_items || [];
   
   const categories = Array.isArray(rawCategories)
-    ? rawCategories.map((c) => {
-        const dviItems = c?.dvi_items as Record<string, unknown>[] | undefined;
-        const items = Array.isArray(dviItems)
-          ? dviItems.map((it) => {
+    ? rawCategories.map((c: any) => {
+        const items = Array.isArray(c?.dvi_items)
+          ? c.dvi_items.map((it: any) => {
+              // Status key can be "item_status" or "status"
               const status = it?.item_status ?? it?.status ?? null;
 
+              // Pictures can be array "item_picture" or a single "image" string
               let pictures: string[] | null = null;
-              const itemPicture = it?.item_picture as unknown[] | undefined;
-              if (Array.isArray(itemPicture)) {
-                pictures = itemPicture.map((u) => nonEmpty(u)).filter(Boolean) as string[];
+              if (Array.isArray(it?.item_picture)) {
+                pictures = it.item_picture.map((u: any) => nonEmpty(u)).filter(Boolean) as string[];
               } else if (nonEmpty(it?.image)) {
                 pictures = [String(nonEmpty(it.image))];
               }
 
-              const itemVideo = it?.item_video as unknown[] | undefined;
-              const videos = Array.isArray(itemVideo)
-                ? itemVideo.map((u) => nonEmpty(u)).filter(Boolean) as string[]
+              // Videos (if present)
+              const videos = Array.isArray(it?.item_video)
+                ? it.item_video.map((u: any) => nonEmpty(u)).filter(Boolean) as string[]
                 : null;
 
+              // Some sheets (e.g., Multi Axle Tire Inspection) use extra fields.
+              // Fold them into the notes so they show up usefully.
               const extras: string[] = [];
               const oe = nonEmpty(it?.oe);
               const actual = nonEmpty(it?.actual);
@@ -242,7 +253,7 @@ export async function fetchDviByInvoice(
               return {
                 itemId: it?.item_id ?? null,
                 name: nonEmpty(it?.item_name),
-                status,
+                status, // can be "0|1|2" or string
                 notes: combinedNotes || null,
                 pictures: pictures && pictures.length ? pictures : null,
                 videos: videos && videos.length ? videos : null,
@@ -279,78 +290,78 @@ export async function fetchDviByInvoice(
   };
 }
 
+
+/** ---------- Snapshot storage ---------- */
 export async function upsertDviSnapshot(
-  shopId: number | string,
+  shopId: number,
   roNumber: string | number,
   dvi: DviResult
 ) {
-  const shopIdStr = String(shopId);
-  const ro = String(roNumber);
-
-  await sql`
-    INSERT INTO dvi_results (shop_id, ro_number, fetched_at, vin, mileage, sheet_name, timestamp, advisor, technician,
-      pdf_url, shop_url, customer_url, categories, hunter, ok, error, raw, source)
-    VALUES (${shopIdStr}, ${ro}, NOW(), ${dvi.vin || null}, ${dvi.mileage || null}, ${dvi.sheetName || null},
-      ${dvi.timestamp || null}, ${dvi.advisor || null}, ${dvi.technician || null}, ${dvi.pdfUrl || null},
-      ${dvi.shopUrl || null}, ${dvi.customerUrl || null}, ${JSON.stringify(dvi.categories || null)}::jsonb,
-      ${JSON.stringify(dvi.hunter || null)}::jsonb, ${dvi.ok}, ${dvi.error || null},
-      ${JSON.stringify(dvi.raw || null)}::jsonb, 'autoflow')
-    ON CONFLICT (shop_id, ro_number) DO UPDATE SET
-      fetched_at = NOW(),
-      vin = ${dvi.vin || null},
-      mileage = ${dvi.mileage || null},
-      sheet_name = ${dvi.sheetName || null},
-      timestamp = ${dvi.timestamp || null},
-      advisor = ${dvi.advisor || null},
-      technician = ${dvi.technician || null},
-      pdf_url = ${dvi.pdfUrl || null},
-      shop_url = ${dvi.shopUrl || null},
-      customer_url = ${dvi.customerUrl || null},
-      categories = ${JSON.stringify(dvi.categories || null)}::jsonb,
-      hunter = ${JSON.stringify(dvi.hunter || null)}::jsonb,
-      ok = ${dvi.ok},
-      error = ${dvi.error || null},
-      raw = ${JSON.stringify(dvi.raw || null)}::jsonb
-  `;
+  const db = await getDb();
+  const now = new Date();
+  await db.collection("dvi_results").updateOne(
+    { shopId, roNumber: String(roNumber) },
+    {
+      $set: {
+        shopId,
+        roNumber: String(roNumber),
+        fetchedAt: now,
+        vin: dvi.vin ?? null,
+        mileage: dvi.mileage ?? null,
+        sheetName: dvi.sheetName ?? null,
+        timestamp: dvi.timestamp ?? null,
+        advisor: dvi.advisor ?? null,
+        technician: dvi.technician ?? null,
+        pdfUrl: dvi.pdfUrl ?? null,
+        shopUrl: dvi.shopUrl ?? null,
+        customerUrl: dvi.customerUrl ?? null,
+        categories: dvi.categories ?? null,
+        hunter: dvi.hunter ?? null,
+        ok: dvi.ok,
+        error: dvi.error ?? null,
+        raw: dvi.raw ?? null,
+        source: "autoflow",
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
 }
 
-function snapshotToResult(doc: Record<string, unknown>): DviResult {
+function snapshotToResult(doc: any): DviResult {
   if (!doc) return { ok: false, error: "No snapshot" };
   return {
     ok: !!doc.ok,
-    invoice: doc.ro_number as string ?? null,
-    vin: doc.vin as string ?? null,
-    mileage: doc.mileage as number ?? null,
-    advisor: doc.advisor as string ?? null,
-    technician: doc.technician as string ?? null,
-    sheetName: doc.sheet_name as string ?? null,
-    timestamp: doc.timestamp as string ?? null,
-    pdfUrl: doc.pdf_url as string ?? null,
-    shopUrl: doc.shop_url as string ?? null,
-    customerUrl: doc.customer_url as string ?? null,
-    categories: doc.categories as DviCategory[] ?? null,
-    hunter: doc.hunter as DviResult["hunter"] ?? null,
+    invoice: doc.roNumber ?? null,
+    vin: doc.vin ?? null,
+    mileage: doc.mileage ?? null,
+    advisor: doc.advisor ?? null,
+    technician: doc.technician ?? null,
+    sheetName: doc.sheetName ?? null,
+    timestamp: doc.timestamp ?? null,
+    pdfUrl: doc.pdfUrl ?? null,
+    shopUrl: doc.shopUrl ?? null,
+    customerUrl: doc.customerUrl ?? null,
+    categories: doc.categories ?? null,
+    hunter: doc.hunter ?? null,
     raw: doc.raw ?? null,
-    error: doc.error as string ?? null,
+    error: doc.error ?? null,
   };
 }
 
+/** Get cached snapshot if not older than maxAgeMs; else refresh live and save. */
 export async function fetchDviWithCache(
-  shopId: number | string,
+  shopId: number,
   invoice: string | number,
   maxAgeMs = 10 * 60 * 1000,
   doFetch: Fetcher = fetch
 ): Promise<DviResult> {
-  const shopIdStr = String(shopId);
-  const ro = String(invoice);
-
-  const result = await sql`
-    SELECT * FROM dvi_results WHERE shop_id = ${shopIdStr} AND ro_number = ${ro} LIMIT 1
-  `;
-  const doc = result[0];
+  const db = await getDb();
+  const key = { shopId, roNumber: String(invoice) };
+  const doc = await db.collection("dvi_results").findOne(key);
 
   const now = Date.now();
-  const fresh = doc?.fetched_at ? now - new Date(doc.fetched_at as string).getTime() <= maxAgeMs : false;
+  const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;
 
   if (fresh) return snapshotToResult(doc);
 

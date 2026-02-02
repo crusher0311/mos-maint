@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
@@ -158,6 +158,8 @@ async function runOnDemandAnalysis(
   carfaxRecords: any[] | null = null,
   prefetched?: PrefetchedData
 ) {
+  const db = await getDb();
+  
   const currentMileage = mileage || 0;
   console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage}, showInspect=${showInspectItems}`);
   
@@ -168,18 +170,10 @@ async function runOnDemandAnalysis(
   let shopWorkOrders: any[] = prefetched?.shopWorkOrders || [];
   if (!prefetched?.shopWorkOrders) {
     try {
-      const woRows = await sql`
-        SELECT * FROM tekmetric_work_orders 
-        WHERE shop_id = ${String(shopId)} AND vin = ${vin.toUpperCase()}
-        ORDER BY completed_date DESC LIMIT 50
-      `;
-      shopWorkOrders = woRows.map((r: any) => ({
-        ...r,
-        shopId: r.shop_id,
-        completedDate: r.completed_date,
-        odometer: r.odometer,
-        data: r.data
-      }));
+      shopWorkOrders = await db.collection("tekmetric_work_orders").find({
+        shopId: Number(shopId),
+        vin: vin.toUpperCase()
+      }).sort({ completedDate: -1 }).limit(50).toArray();
       console.log(`[Extension] Preloaded ${shopWorkOrders.length} work orders for VIN ${vin}`);
     } catch (e) {
       console.warn('[Extension] Error preloading shop work orders:', e);
@@ -305,19 +299,21 @@ async function runOnDemandAnalysis(
   });
 
   // Cache the analysis
-  const vinUpper = vin.toUpperCase();
-  const recsJson = JSON.stringify(uniqueRecs);
-  await sql`
-    INSERT INTO maintenance_analysis_cache (vin, shop_id, recommendations, analyzed_at, source, mileage_at_analysis, show_inspect_items)
-    VALUES (${vinUpper}, ${String(shopId)}, ${recsJson}::jsonb, NOW(), 'extension_on_demand', ${currentMileage}, ${showInspectItems})
-    ON CONFLICT (vin, shop_id)
-    DO UPDATE SET 
-      recommendations = ${recsJson}::jsonb,
-      analyzed_at = NOW(),
-      source = 'extension_on_demand',
-      mileage_at_analysis = ${currentMileage},
-      show_inspect_items = ${showInspectItems}
-  `;
+  await db.collection("maintenance_analysis_cache").updateOne(
+    { vin: vin.toUpperCase(), shopId },
+    {
+      $set: {
+        vin: vin.toUpperCase(),
+        shopId,
+        recommendations: uniqueRecs,
+        analyzedAt: new Date(),
+        source: "extension_on_demand",
+        mileageAtAnalysis: currentMileage,
+        showInspectItems
+      }
+    },
+    { upsert: true }
+  );
 
   const counts = { overdue: 0, due_soon: 0, upcoming: 0 };
   uniqueRecs.forEach(r => counts[r.status as keyof typeof counts]++);
@@ -347,58 +343,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
     }
 
-    const userShopIds = getUserShopIds(auth.user).map(id => String(id));
+    const db = await getDb();
+    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
     let mosShopId: number | null = null;
     let shopDoc: any = null;
     
-    // Try to find shop by SMS shop ID using PostgreSQL
+    // Try to find shop by SMS shop ID across all integration types
     const tekShopIdNum = parseInt(smsShopId);
+    const tekShopIdStr = String(smsShopId);
     
-    let shopRows;
-    if (!isPlatformAdmin && userShopIds.length > 0) {
-      shopRows = await sql`
-        SELECT id, shop_id, name, integration_provider, tekmetric_shop_id, protractor_connection_id, 
-               settings, preferences, billing, maintenance, trial_vin_limit
-        FROM shops
-        WHERE shop_id = ANY(${userShopIds})
-          AND (
-            tekmetric_shop_id = ${tekShopIdNum}
-            OR protractor_connection_id = ${smsShopId}
-            OR settings->'autoflow'->>'shopId' = ${smsShopId}
-          )
-        LIMIT 1
-      `;
-    } else {
-      shopRows = await sql`
-        SELECT id, shop_id, name, integration_provider, tekmetric_shop_id, protractor_connection_id,
-               settings, preferences, billing, maintenance, trial_vin_limit
-        FROM shops
-        WHERE (
-          tekmetric_shop_id = ${tekShopIdNum}
-          OR protractor_connection_id = ${smsShopId}
-          OR settings->'autoflow'->>'shopId' = ${smsShopId}
-        )
-        LIMIT 1
-      `;
+    // Build query to find shop by any integration's shop ID
+    const shopQuery: any = {
+      $or: [
+        // Tekmetric
+        { "tekmetric.shopId": tekShopIdNum },
+        { "tekmetric.shopId": tekShopIdStr },
+        { tekmetricShopId: tekShopIdNum },
+        { tekmetricShopId: tekShopIdStr },
+        // Protractor
+        { "protractor.connectionId": smsShopId },
+        { protractorConnectionId: smsShopId },
+        // AutoFlow
+        { "autoflow.shopId": smsShopId },
+      ]
+    };
+    
+    if (!isPlatformAdmin) {
+      shopQuery.shopId = { $in: userShopIds };
     }
     
-    const shopRow = shopRows[0];
-    if (shopRow) {
-      mosShopId = parseInt(shopRow.shop_id as string);
-      shopDoc = {
-        shopId: mosShopId,
-        name: shopRow.name,
-        integrationProvider: shopRow.integration_provider,
-        tekmetric: shopRow.tekmetric_shop_id ? { shopId: shopRow.tekmetric_shop_id } : null,
-        protractor: shopRow.protractor_connection_id ? { connectionId: shopRow.protractor_connection_id } : null,
-        autoflow: (shopRow.settings as any)?.autoflow || null,
-        preferences: shopRow.preferences,
-        billing: shopRow.billing,
-        maintenance: shopRow.maintenance,
-        trialVinLimit: shopRow.trial_vin_limit
-      };
+    shopDoc = await db.collection("shops").findOne(shopQuery);
+    
+    if (shopDoc) {
+      mosShopId = shopDoc.shopId;
       console.log(`[Extension] Found shop ${mosShopId} (${shopDoc.name}), integrationProvider: ${shopDoc.integrationProvider}`);
     } else {
       console.log(`[Extension] No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
@@ -433,16 +412,14 @@ export async function GET(request: NextRequest) {
     let mileage = null;
 
     if (roId && !vin) {
-      let workOrder: any = null;
+      let workOrder = null;
       
       if (provider === "tekmetric") {
         // tekmetric_work_orders uses MOS shopId and workOrderId (Tekmetric RO ID as string)
-        const woRows = await sql`
-          SELECT vin, odometer FROM tekmetric_work_orders 
-          WHERE shop_id = ${String(mosShopId)} AND work_order_id = ${String(roId)}
-          LIMIT 1
-        `;
-        workOrder = woRows[0] || null;
+        workOrder = await db.collection("tekmetric_work_orders").findOne({
+          shopId: { $in: [String(mosShopId), Number(mosShopId)] },
+          workOrderId: String(roId)
+        });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
         // If not found in cache, fetch directly from Tekmetric API
@@ -489,16 +466,15 @@ export async function GET(request: NextRequest) {
           console.log(`[Extension] WO data: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
         }
       } else {
-        const woRows = await sql`
-          SELECT vin, odometer, mileage_in FROM work_orders 
-          WHERE shop_id = ${String(mosShopId)} 
-            AND (sms_ro_id = ${roId} OR ro_number = ${roId})
-          LIMIT 1
-        `;
-        const wo = woRows[0];
-        if (wo) {
-          workOrder = { vin: wo.vin, odometer: wo.odometer || wo.mileage_in };
-        }
+        workOrder = await db.collection("work_orders").findOne({
+          shopId: mosShopId,
+          $or: [
+            { smsRoId: roId },
+            { smsRoId: parseInt(roId) },
+            { roNumber: roId },
+            { roNumber: parseInt(roId) }
+          ]
+        });
       }
       
       if (workOrder) {
@@ -510,20 +486,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (vin) {
-      const vehRows = await sql`
-        SELECT vin, year, make, model, current_mileage, mileage, last_mileage 
-        FROM vehicles WHERE vin = ${vin.toUpperCase()} AND shop_id = ${String(mosShopId)}
-        LIMIT 1
-      `;
-      vehicle = vehRows[0] ? {
-        vin: vehRows[0].vin,
-        year: vehRows[0].year,
-        make: vehRows[0].make,
-        model: vehRows[0].model,
-        currentMileage: vehRows[0].current_mileage,
-        mileage: vehRows[0].mileage,
-        lastMileage: vehRows[0].last_mileage
-      } : null;
+      vehicle = await db.collection("vehicles").findOne({
+        vin: vin.toUpperCase(),
+        shopId: mosShopId
+      });
 
       if (vehicle) {
         mileage = mileage || vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage;
@@ -546,14 +512,11 @@ export async function GET(request: NextRequest) {
     let vinTrackingResult: { allowed: boolean; count: number; limit: number | null } | null = null;
     
     if (!isPaid) {
-      const platformSettingsRows = await sql`
-        SELECT value FROM platform_settings WHERE key = 'trial' LIMIT 1
-      `;
-      const platformSettings = platformSettingsRows[0]?.value as any;
+      const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
       const defaultLimit = platformSettings?.vinLimit ?? 10;
       const shopLimit = shopDoc?.trialVinLimit ?? defaultLimit;
       
-      const trackResult = await checkAndTrackVin(mosShopId, vin.toUpperCase(), shopLimit, roId);
+      const trackResult = await checkAndTrackVin(db, mosShopId, vin.toUpperCase(), shopLimit, roId);
       vinTrackingResult = { allowed: trackResult.allowed, count: trackResult.count, limit: shopLimit };
       
       if (!trackResult.allowed) {
@@ -570,16 +533,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const cacheRows = await sql`
-      SELECT recommendations, analyzed_at, show_inspect_items FROM maintenance_analysis_cache
-      WHERE vin = ${vin.toUpperCase()} AND shop_id = ${String(mosShopId)}
-      LIMIT 1
-    `;
-    let analysisData: any = cacheRows[0] ? {
-      recommendations: cacheRows[0].recommendations,
-      analyzedAt: cacheRows[0].analyzed_at,
-      showInspectItems: cacheRows[0].show_inspect_items
-    } : null;
+    let analysisData: any = await db.collection("maintenance_analysis_cache").findOne({
+      vin: vin.toUpperCase(),
+      shopId: mosShopId
+    });
 
     const analysisAge = analysisData?.analyzedAt 
       ? Date.now() - new Date(analysisData.analyzedAt).getTime()
@@ -607,25 +564,13 @@ export async function GET(request: NextRequest) {
             return { ok: false, count: 0, items: [], vin, squish: '', source: 'cache' as const };
           }),
           // Shop work orders for last-performed lookups
-          (async () => {
-            try {
-              const woRows = await sql`
-                SELECT * FROM tekmetric_work_orders 
-                WHERE shop_id = ${String(mosShopId)} AND vin = ${vin.toUpperCase()}
-                ORDER BY completed_date DESC LIMIT 50
-              `;
-              return woRows.map((r: any) => ({
-                ...r,
-                shopId: r.shop_id,
-                completedDate: r.completed_date,
-                odometer: r.odometer,
-                data: r.data
-              }));
-            } catch (e) {
-              console.warn('[Extension] Work orders fetch failed:', e);
-              return [];
-            }
-          })()
+          db.collection("tekmetric_work_orders").find({
+            shopId: Number(mosShopId),
+            vin: vin.toUpperCase()
+          }).sort({ completedDate: -1 }).limit(50).toArray().catch(e => {
+            console.warn('[Extension] Work orders fetch failed:', e);
+            return [];
+          })
         ]);
         
         console.log(`[Extension] Parallel fetch completed in ${Date.now() - startTime}ms`);
@@ -658,19 +603,9 @@ export async function GET(request: NextRequest) {
     };
 
     // Look up enriched canned jobs to include full labor/parts details
-    const cannedJobRows = await sql`
-      SELECT id, title, name, labor_lines, part_lines, total_amount
-      FROM canned_jobs
-      WHERE shop_id = ${String(mosShopId)} AND enriched = true
-    `;
-    const cannedJobs = cannedJobRows.map((r: any) => ({
-      _id: r.id,
-      title: r.title,
-      name: r.name,
-      laborLines: r.labor_lines,
-      partLines: r.part_lines,
-      totalAmount: r.total_amount
-    }));
+    const cannedJobs = await db.collection("canned_jobs")
+      .find({ shopId: mosShopId, enriched: true })
+      .toArray();
     
     // Build a map for fuzzy matching service names to canned jobs
     const cannedJobMap = new Map<string, any>();

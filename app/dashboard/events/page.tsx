@@ -1,6 +1,6 @@
 // app/dashboard/events/page.tsx
 import { requireSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
@@ -76,41 +76,24 @@ function buildPreview(payload: any): string {
 export default async function EventsPage() {
   const sess = await requireSession();
 
+const db = await getDb();
+
 // Configurable limit:
 // - DEFAULT_EVENTS_LIMIT=0  → no limit (show all)
 // - DEFAULT_EVENTS_LIMIT>0  → use that number (clamped to 500)
 const raw = Number(process.env.DEFAULT_EVENTS_LIMIT ?? '0');
 const limit = Number.isFinite(raw) && raw >= 0 ? Math.min(raw, 500) : 0;
 
-let docs: EventDoc[];
+const cursor = db
+  .collection("events")
+  .find({ provider: "autoflow", shopId: sess.shopId })
+  .sort({ receivedAt: -1 });
+
 if (limit > 0) {
-  const results = await sql`
-    SELECT * FROM events 
-    WHERE provider = 'autoflow' AND shop_id = ${String(sess.shopId)}
-    ORDER BY received_at DESC
-    LIMIT ${limit}
-  `;
-  docs = results.map((r: any) => ({
-    _id: r.id,
-    receivedAt: r.received_at,
-    provider: r.provider,
-    payload: r.payload,
-    raw: r.raw_payload ? JSON.stringify(r.raw_payload) : null,
-  }));
-} else {
-  const results = await sql`
-    SELECT * FROM events 
-    WHERE provider = 'autoflow' AND shop_id = ${String(sess.shopId)}
-    ORDER BY received_at DESC
-  `;
-  docs = results.map((r: any) => ({
-    _id: r.id,
-    receivedAt: r.received_at,
-    provider: r.provider,
-    payload: r.payload,
-    raw: r.raw_payload ? JSON.stringify(r.raw_payload) : null,
-  }));
+  cursor.limit(limit);
 }
+
+const docs = (await cursor.toArray()) as EventDoc[];
 
   const items: EventRow[] = docs.map((d) => {
     let payload = d.payload;

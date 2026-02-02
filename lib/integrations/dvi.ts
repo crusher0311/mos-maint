@@ -1,5 +1,7 @@
-import sql from "@/lib/db/postgres";
+// lib/integrations/dvi.ts
+import { getDb } from "@/lib/mongo";
 
+/** Heuristic base64 decoder: if it looks like base64, decode; else return as-is */
 function maybeDecodeBase64(s?: string | null): string {
   if (!s) return "";
   const looksB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(s) && s.length % 4 === 0;
@@ -14,24 +16,21 @@ function maybeDecodeBase64(s?: string | null): string {
   }
 }
 
-async function getShopAutoflowCreds(shopId: number | string): Promise<{
+async function getShopAutoflowCreds(shopId: number): Promise<{
   apiBase: string;
   apiKeyRaw: string;
   apiPasswordRaw: string;
 }> {
-  const shopIdStr = String(shopId);
-  const result = await sql`
-    SELECT settings FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
-  `;
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { "credentials.autoflow": 1 } }
+  );
 
-  const shop = result[0];
-  const settings = shop?.settings as Record<string, unknown> | undefined;
-  const credentials = settings?.credentials as Record<string, unknown> | undefined;
-  const af = credentials?.autoflow as Record<string, unknown> || {};
-  
-  const apiKeyRaw = maybeDecodeBase64(af.apiKey as string);
-  const apiPasswordRaw = maybeDecodeBase64(af.apiPassword as string);
-  const apiBaseDecoded = maybeDecodeBase64(af.apiBase as string);
+  const af = (shop as any)?.credentials?.autoflow || {};
+  const apiKeyRaw = maybeDecodeBase64(af.apiKey);
+  const apiPasswordRaw = maybeDecodeBase64(af.apiPassword);
+  const apiBaseDecoded = maybeDecodeBase64(af.apiBase);
   const apiBase = (apiBaseDecoded || "").replace(/\/+$/, "");
 
   if (!apiKeyRaw || !apiPasswordRaw || !apiBase) {
@@ -40,7 +39,11 @@ async function getShopAutoflowCreds(shopId: number | string): Promise<{
   return { apiBase, apiKeyRaw, apiPasswordRaw };
 }
 
-function normalizeLineItem(x: Record<string, unknown>): {
+/**
+ * Try to normalize a single inspection/check/finding item from various possible shapes.
+ * We keep it flexible because different AutoFlow tenants/versions may differ.
+ */
+function normalizeLineItem(x: any): {
   section?: string | null;
   title?: string | null;
   status?: string | null;
@@ -50,60 +53,115 @@ function normalizeLineItem(x: Record<string, unknown>): {
   estParts?: number | null;
   estLaborHours?: number | null;
   estTotal?: number | null;
-  photos?: unknown[] | null;
-  raw?: unknown;
+  photos?: any[] | null;
+  raw?: any;
 } {
-  const section = x?.section ?? x?.group ?? x?.category ?? x?.heading ?? null;
-  const title = x?.title ?? x?.name ?? x?.line_item ?? x?.inspection_item ?? x?.item ?? null;
-  const status = x?.status ?? x?.result ?? x?.condition ?? null;
-  const severity = x?.severity ?? x?.priority ?? x?.level ?? null;
-  const recommendation = x?.recommendation ?? x?.recommendations ?? x?.action ?? x?.advice ?? null;
-  const notes = x?.notes ?? x?.note ?? x?.comment ?? x?.comments ?? null;
+  const section =
+    x?.section ??
+    x?.group ??
+    x?.category ??
+    x?.heading ??
+    null;
 
-  const estimate = x?.estimate as Record<string, unknown> | undefined;
-  const estParts = estimate?.parts != null ? Number(estimate.parts) : (x?.parts_total != null ? Number(x.parts_total) : null);
-  const estLaborHours = estimate?.labor_hours != null ? Number(estimate.labor_hours) : (x?.labor_hours != null ? Number(x.labor_hours) : null);
-  const estTotal = estimate?.total != null ? Number(estimate.total) : (x?.total != null ? Number(x.total) : null);
-  const photos = Array.isArray(x?.photos) ? x.photos : (Array.isArray(x?.images) ? x.images : null);
+  const title =
+    x?.title ??
+    x?.name ??
+    x?.line_item ??
+    x?.inspection_item ??
+    x?.item ??
+    null;
+
+  const status =
+    x?.status ??
+    x?.result ??
+    x?.condition ??
+    null;
+
+  const severity =
+    x?.severity ??
+    x?.priority ??
+    x?.level ??
+    null;
+
+  const recommendation =
+    x?.recommendation ??
+    x?.recommendations ??
+    x?.action ??
+    x?.advice ??
+    null;
+
+  const notes =
+    x?.notes ??
+    x?.note ??
+    x?.comment ??
+    x?.comments ??
+    null;
+
+  const estParts =
+    x?.estimate?.parts != null
+      ? Number(x.estimate.parts)
+      : x?.parts_total != null
+      ? Number(x.parts_total)
+      : null;
+
+  const estLaborHours =
+    x?.estimate?.labor_hours != null
+      ? Number(x.estimate.labor_hours)
+      : x?.labor_hours != null
+      ? Number(x.labor_hours)
+      : null;
+
+  const estTotal =
+    x?.estimate?.total != null
+      ? Number(x.estimate.total)
+      : x?.total != null
+      ? Number(x.total)
+      : null;
+
+  const photos =
+    Array.isArray(x?.photos) ? x.photos :
+    Array.isArray(x?.images) ? x.images :
+    null;
 
   return {
-    section: section as string | null,
-    title: title as string | null,
-    status: status as string | null,
-    severity: severity as string | number | null,
-    recommendation: recommendation as string | null,
-    notes: notes as string | null,
+    section: section ?? null,
+    title: title ?? null,
+    status: status ?? null,
+    severity: severity ?? null,
+    recommendation: recommendation ?? null,
+    notes: notes ?? null,
     estParts: Number.isFinite(estParts as number) ? (estParts as number) : null,
     estLaborHours: Number.isFinite(estLaborHours as number) ? (estLaborHours as number) : null,
     estTotal: Number.isFinite(estTotal as number) ? (estTotal as number) : null,
-    photos: photos as unknown[] | null,
+    photos: photos ?? null,
     raw: x,
   };
 }
 
-function extractLineItems(c: Record<string, unknown>): ReturnType<typeof normalizeLineItem>[] {
-  const buckets: unknown[][] = [];
-  const inspection = c?.inspection as Record<string, unknown> | undefined;
-  const dvi = c?.dvi as Record<string, unknown> | undefined;
-  const sheet = c?.sheet as Record<string, unknown> | undefined;
+/**
+ * From a single DVI "content" entry, try to extract an array of line items from common paths.
+ */
+function extractLineItems(c: any): ReturnType<typeof normalizeLineItem>[] {
+  const buckets: any[][] = [];
 
-  if (Array.isArray(inspection?.items)) buckets.push(inspection.items);
-  if (Array.isArray(inspection?.findings)) buckets.push(inspection.findings);
-  if (Array.isArray(c?.items)) buckets.push(c.items as unknown[]);
-  if (Array.isArray(c?.checks)) buckets.push(c.checks as unknown[]);
-  if (Array.isArray(dvi?.items)) buckets.push(dvi.items);
-  if (Array.isArray(sheet?.items)) buckets.push(sheet.items);
-  if (Array.isArray(sheet?.inspections)) buckets.push(sheet.inspections);
-  if (Array.isArray(c?.results)) buckets.push(c.results as unknown[]);
-  if (Array.isArray(c?.lines)) buckets.push(c.lines as unknown[]);
+  // Try a bunch of plausible paths:
+  if (Array.isArray(c?.inspection?.items)) buckets.push(c.inspection.items);
+  if (Array.isArray(c?.inspection?.findings)) buckets.push(c.inspection.findings);
+  if (Array.isArray(c?.items)) buckets.push(c.items);
+  if (Array.isArray(c?.checks)) buckets.push(c.checks);
+  if (Array.isArray(c?.dvi?.items)) buckets.push(c.dvi.items);
+  if (Array.isArray(c?.sheet?.items)) buckets.push(c.sheet.items);
+  if (Array.isArray(c?.sheet?.inspections)) buckets.push(c.sheet.inspections);
+  if (Array.isArray(c?.results)) buckets.push(c.results);
+  if (Array.isArray(c?.lines)) buckets.push(c.lines);
 
   const out: ReturnType<typeof normalizeLineItem>[] = [];
   for (const arr of buckets) {
     for (const x of arr) {
-      out.push(normalizeLineItem(x as Record<string, unknown>));
+      out.push(normalizeLineItem(x));
     }
   }
-
+  // De-dup by JSON string to avoid repeats if the same array was found in two places
   const seen = new Set<string>();
   return out.filter((li) => {
     const key = JSON.stringify([li.section, li.title, li.status, li.severity, li.recommendation, li.notes]);
@@ -113,11 +171,15 @@ function extractLineItems(c: Record<string, unknown>): ReturnType<typeof normali
   });
 }
 
-export async function importDVI(args: { shopId: number | string; roNumber: string | number }) {
-  const shopIdStr = String(args.shopId);
+/**
+ * Calls AutoFlow DVI API: GET /dvi/{RoNumber}
+ * Stores a DVI document per response entry with detailed `lines` array.
+ */
+export async function importDVI(args: { shopId: number; roNumber: string | number }) {
+  const { shopId } = args;
   const ro = String(args.roNumber);
 
-  const { apiBase, apiKeyRaw, apiPasswordRaw } = await getShopAutoflowCreds(args.shopId);
+  const { apiBase, apiKeyRaw, apiPasswordRaw } = await getShopAutoflowCreds(shopId);
   const basic = Buffer.from(`${apiKeyRaw}:${apiPasswordRaw}`, "utf8").toString("base64");
   const url = `${apiBase}/dvi/${encodeURIComponent(ro)}`;
 
@@ -131,33 +193,47 @@ export async function importDVI(args: { shopId: number | string; roNumber: strin
     cache: "no-store",
   });
 
-  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const json = (await res.json().catch(() => ({}))) as any;
+  const db = await getDb();
+  const now = new Date();
 
   if (!res.ok) {
-    const message = (json?.message || json?.error || `AutoFlow DVI HTTP ${res.status}`) as string;
-    await sql`
-      INSERT INTO dvi (shop_id, ro_number, ok, error, status, raw, fetched_at)
-      VALUES (${shopIdStr}, ${ro}, false, ${message}, ${res.status}, ${JSON.stringify(json)}::jsonb, NOW())
-    `;
+    const message = json?.message || json?.error || `AutoFlow DVI HTTP ${res.status}`;
+    await db.collection("dvi").insertOne({
+      shopId,
+      roNumber: ro,
+      ok: false,
+      error: message,
+      status: res.status,
+      raw: json ?? null,
+      fetchedAt: now,
+    });
     throw new Error(message);
   }
 
-  const content = Array.isArray(json?.content) ? json.content as Record<string, unknown>[] : [];
+  const content = Array.isArray(json?.content) ? json.content : [];
   if (!content.length) {
-    await sql`
-      INSERT INTO dvi (shop_id, ro_number, ok, empty, raw, fetched_at)
-      VALUES (${shopIdStr}, ${ro}, true, true, ${JSON.stringify(json)}::jsonb, NOW())
-    `;
+    await db.collection("dvi").insertOne({
+      shopId,
+      roNumber: ro,
+      ok: true,
+      empty: true,
+      raw: json ?? null,
+      fetchedAt: now,
+    });
     return { insertedCount: 0, rows: [] };
   }
 
-  const rows = content.map((c) => {
+  // Build one DVI doc per content entry, now including detailed "lines"
+  const rows = content.map((c: any) => {
     const vin = c?.vin ? String(c.vin).toUpperCase() : null;
-    const milesNum = c?.mileage != null ? Number(String(c.mileage).replace(/[^\d.-]/g, "")) : null;
+    const milesNum =
+      c?.mileage != null ? Number(String(c.mileage).replace(/[^\d.-]/g, "")) : null;
+
     const lines = extractLineItems(c);
 
     return {
-      shopId: shopIdStr,
+      shopId,
       roNumber: ro,
       vin,
       mileage: Number.isFinite(milesNum) ? milesNum : null,
@@ -175,39 +251,60 @@ export async function importDVI(args: { shopId: number | string; roNumber: strin
       },
       sheetId: c?.sheet_id ?? null,
       notes: c?.additional_notes ?? null,
-      lines,
+      lines, // <â€” detailed inspection items
       raw: c,
+      fetchedAt: now,
+      ok: true,
+      source: "autoflow",
     };
   });
 
-  for (const row of rows) {
-    await sql`
-      INSERT INTO dvi (shop_id, ro_number, vin, mileage, customer, vehicle, sheet_id, notes, lines, raw, fetched_at, ok, source)
-      VALUES (${row.shopId}, ${row.roNumber}, ${row.vin}, ${row.mileage}, ${JSON.stringify(row.customer)}::jsonb,
-        ${JSON.stringify(row.vehicle)}::jsonb, ${row.sheetId as string | null}, ${row.notes as string | null},
-        ${JSON.stringify(row.lines)}::jsonb, ${JSON.stringify(row.raw)}::jsonb, NOW(), true, 'autoflow')
-    `;
-  }
+  const result = await db.collection("dvi").insertMany(rows);
 
+  // Best-effort enrichment from the first row
   const first = rows[0];
-  if (first && first.vin) {
-    await sql`
-      INSERT INTO vehicles (shop_id, vin, year, make, model, license_plate, source)
-      VALUES (${shopIdStr}, ${first.vin}, ${first.vehicle.year as number | null}, ${first.vehicle.make as string | null}, 
-        ${first.vehicle.model as string | null}, ${first.vehicle.license as string | null}, 'autoflow-dvi')
-      ON CONFLICT (shop_id, vin) DO UPDATE SET
-        year = COALESCE(${first.vehicle.year as number | null}, vehicles.year),
-        make = COALESCE(${first.vehicle.make as string | null}, vehicles.make),
-        model = COALESCE(${first.vehicle.model as string | null}, vehicles.model),
-        license_plate = COALESCE(${first.vehicle.license as string | null}, vehicles.license_plate),
-        updated_at = NOW()
-    `;
-
-    await sql`
-      UPDATE customers SET last_vin = ${first.vin}, last_mileage = ${first.mileage}, updated_at = NOW()
-      WHERE shop_id = ${shopIdStr} AND last_ro = ${ro}
-    `;
+  if (first) {
+    if (first.vin) {
+      await db.collection("vehicles").updateOne(
+        { shopId, vin: first.vin },
+        {
+          $set: {
+            year: first.vehicle.year ?? null,
+            make: first.vehicle.make ?? null,
+            model: first.vehicle.model ?? null,
+            license: first.vehicle.license ?? null,
+            updatedAt: now,
+          },
+          $setOnInsert: { shopId, vin: first.vin, createdAt: now },
+        },
+        { upsert: true }
+      );
+      await db.collection("tickets").updateOne(
+        { shopId, roNumber: ro },
+        {
+          $set: {
+            vin: first.vin,
+            mileage: first.mileage ?? null,
+            updatedAt: now,
+            source: "autoflow-dvi",
+          },
+          $setOnInsert: { shopId, roNumber: ro, createdAt: now },
+        },
+        { upsert: true }
+      );
+      await db.collection("customers").updateMany(
+        { shopId, lastRo: ro },
+        {
+          $set: {
+            lastVin: first.vin,
+            lastMileage: Number.isFinite(first.mileage) ? first.mileage : undefined,
+            updatedAt: now,
+          },
+        }
+      );
+    }
   }
 
-  return { insertedCount: rows.length, rows };
+  return { insertedCount: result.insertedCount, rows };
 }
+

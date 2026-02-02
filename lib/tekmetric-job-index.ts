@@ -1,4 +1,4 @@
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getJobs, getVehicle, getRepairOrders } from "@/lib/tekmetric";
 
 type TekmetricJobWithDetails = {
@@ -100,7 +100,8 @@ export async function indexTekmetricWorkOrderJobs(
   vehicle: { vin?: string; year?: number; make?: string; model?: string; engine?: string },
   completedDate: string
 ): Promise<number> {
-  const shopIdStr = String(shopId);
+  const db = await getDb();
+  const jobIndexCollection = db.collection("job_index");
   
   let indexedCount = 0;
   
@@ -169,63 +170,39 @@ export async function indexTekmetricWorkOrderJobs(
         });
       }
       
-      const keywords = extractKeywords(job.name);
-      const totals = {
-        laborHours,
-        laborAmount: laborAmountDollars,
-        partsAmount: partsAmountDollars,
-        totalAmount: totalAmountDollars || (laborAmountDollars + partsAmountDollars)
+      const jobEntry: TekmetricJobIndexEntry = {
+        shopId,
+        workOrderId: String(workOrderId),
+        workOrderNumber,
+        servicePackageId: String(job.id),
+        performedAt: new Date(completedDate || new Date()),
+        vehicle,
+        job: {
+          title: job.name,
+          keywords: extractKeywords(job.name)
+        },
+        lines,
+        totals: {
+          laborHours,
+          laborAmount: laborAmountDollars,
+          partsAmount: partsAmountDollars,
+          totalAmount: totalAmountDollars || (laborAmountDollars + partsAmountDollars)
+        },
+        metadata: {
+          indexedAt: new Date(),
+          sourceType: "tekmetric"
+        }
       };
       
-      const jobData = {
-        title: job.name,
-        keywords,
-      };
-      
-      await sql`
-        INSERT INTO job_index (
-          shop_id, vin, work_order_id, job_title, job_label, keywords,
-          vehicle_make, vehicle_model, vehicle_year,
-          labor_amount, parts_amount, total_amount, labor_hours,
-          performed_at, job, lines, totals, created_at
-        )
-        SELECT 
-          s.id,
-          ${vehicle.vin?.toUpperCase() || null},
-          ${String(workOrderId)},
-          ${job.name},
-          ${String(job.id)},
-          ${keywords},
-          ${vehicle.make || null},
-          ${vehicle.model || null},
-          ${vehicle.year || null},
-          ${laborAmountDollars},
-          ${partsAmountDollars},
-          ${totals.totalAmount},
-          ${laborHours},
-          ${completedDate}::timestamp,
-          ${JSON.stringify(jobData)}::jsonb,
-          ${JSON.stringify(lines)}::jsonb,
-          ${JSON.stringify(totals)}::jsonb,
-          NOW()
-        FROM shops s
-        WHERE s.shop_id = ${shopIdStr}
-        ON CONFLICT (shop_id, work_order_id, job_label) 
-        DO UPDATE SET
-          job_title = EXCLUDED.job_title,
-          keywords = EXCLUDED.keywords,
-          vehicle_make = EXCLUDED.vehicle_make,
-          vehicle_model = EXCLUDED.vehicle_model,
-          vehicle_year = EXCLUDED.vehicle_year,
-          labor_amount = EXCLUDED.labor_amount,
-          parts_amount = EXCLUDED.parts_amount,
-          total_amount = EXCLUDED.total_amount,
-          labor_hours = EXCLUDED.labor_hours,
-          performed_at = EXCLUDED.performed_at,
-          job = EXCLUDED.job,
-          lines = EXCLUDED.lines,
-          totals = EXCLUDED.totals
-      `;
+      await jobIndexCollection.updateOne(
+        {
+          shopId,
+          workOrderId: String(workOrderId),
+          servicePackageId: String(job.id)
+        },
+        { $set: jobEntry },
+        { upsert: true }
+      );
       
       indexedCount++;
     }
@@ -245,7 +222,8 @@ export async function runTekmetricHistoryBackfill(
 ): Promise<{ rosProcessed: number; jobsIndexed: number }> {
   console.log(`[Tekmetric Backfill] Starting for shop ${shopId} (Tekmetric: ${tekmetricShopId}), ${yearsBack} years back`);
   
-  const shopIdStr = String(shopId);
+  const db = await getDb();
+  const jobIndexCollection = db.collection("job_index");
   
   const endDate = new Date();
   const startDate = new Date();
@@ -318,11 +296,10 @@ export async function runTekmetricHistoryBackfill(
       hasMore = !response.last;
       page++;
       
-      await sql`
-        UPDATE shops
-        SET settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object('tekmetric', COALESCE(settings->'tekmetric', '{}'::jsonb) || jsonb_build_object('jobIndexBackfillLastPage', ${page}))
-        WHERE shop_id = ${shopIdStr}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId: { $in: [shopId, String(shopId)] } },
+        { $set: { "tekmetric.jobIndexBackfillLastPage": page } }
+      );
       
       if (page > 100) {
         console.log("[Tekmetric Backfill] Reached page limit");
@@ -331,29 +308,31 @@ export async function runTekmetricHistoryBackfill(
       
     } catch (err: any) {
       console.error(`[Tekmetric Backfill] Error on page ${page}: ${err.message}`);
-      await sql`
-        UPDATE shops
-        SET settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object(
-          'tekmetric', COALESCE(settings->'tekmetric', '{}'::jsonb) || jsonb_build_object(
-            'jobIndexBackfillError', ${err.message},
-            'jobIndexBackfillErrorAt', ${new Date().toISOString()}
-          )
-        )
-        WHERE shop_id = ${shopIdStr}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId: { $in: [shopId, String(shopId)] } },
+        { 
+          $set: { 
+            "tekmetric.jobIndexBackfillError": err.message,
+            "tekmetric.jobIndexBackfillErrorAt": new Date()
+          },
+          $unset: { "tekmetric.jobIndexBackfillStartedAt": "" }
+        }
+      );
       throw err;
     }
   }
   
-  await sql`
-    UPDATE shops
-    SET settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object(
-      'tekmetric', COALESCE(settings->'tekmetric', '{}'::jsonb) || jsonb_build_object(
-        'jobIndexBackfillCompleted', ${new Date().toISOString()}
-      ) - 'jobIndexBackfillStartedAt' - 'jobIndexBackfillError' - 'jobIndexBackfillErrorAt'
-    )
-    WHERE shop_id = ${shopIdStr}
-  `;
+  await db.collection("shops").updateOne(
+    { shopId: { $in: [shopId, String(shopId)] } },
+    { 
+      $set: { "tekmetric.jobIndexBackfillCompleted": new Date() },
+      $unset: { 
+        "tekmetric.jobIndexBackfillStartedAt": "",
+        "tekmetric.jobIndexBackfillError": "",
+        "tekmetric.jobIndexBackfillErrorAt": ""
+      }
+    }
+  );
   
   console.log(`[Tekmetric Backfill] Complete: ${rosProcessed} ROs, ${jobsIndexed} jobs indexed`);
   
@@ -361,37 +340,40 @@ export async function runTekmetricHistoryBackfill(
 }
 
 export async function checkAndRunBackfillForNewShops(): Promise<void> {
+  const db = await getDb();
+  
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
   
-  const rows = await sql`
-    SELECT shop_id, tekmetric_shop_id, settings
-    FROM shops
-    WHERE (tekmetric_shop_id IS NOT NULL OR settings->'tekmetric'->>'shopId' IS NOT NULL)
-      AND (settings->'tekmetric'->>'jobIndexBackfillCompleted') IS NULL
-      AND (
-        (settings->'tekmetric'->>'jobIndexBackfillStartedAt') IS NULL
-        OR (settings->'tekmetric'->>'jobIndexBackfillStartedAt')::timestamp < ${oneHourAgo}
-      )
-  `;
+  const shops = await db.collection("shops").find({
+    $and: [
+      {
+        $or: [
+          { "tekmetric.shopId": { $exists: true, $ne: null } },
+          { tekmetricShopId: { $exists: true, $ne: null } }
+        ]
+      },
+      { "tekmetric.jobIndexBackfillCompleted": { $exists: false } },
+      {
+        $or: [
+          { "tekmetric.jobIndexBackfillStartedAt": { $exists: false } },
+          { "tekmetric.jobIndexBackfillStartedAt": { $lt: oneHourAgo } }
+        ]
+      }
+    ]
+  }).toArray();
   
-  for (const shop of rows) {
-    const shopId = Number(shop.shop_id);
-    const settings = shop.settings as Record<string, any> | null;
-    const tekmetricShopId = shop.tekmetric_shop_id || settings?.tekmetric?.shopId;
+  for (const shop of shops) {
+    const shopId = Number(shop.shopId);
+    const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
     
     if (!tekmetricShopId) continue;
     
     console.log(`[Tekmetric] New shop ${shopId} detected, starting 5-year backfill...`);
     
-    await sql`
-      UPDATE shops
-      SET settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object(
-        'tekmetric', COALESCE(settings->'tekmetric', '{}'::jsonb) || jsonb_build_object(
-          'jobIndexBackfillStartedAt', ${new Date().toISOString()}
-        )
-      )
-      WHERE shop_id = ${String(shopId)}
-    `;
+    await db.collection("shops").updateOne(
+      { shopId: { $in: [shopId, String(shopId)] } },
+      { $set: { "tekmetric.jobIndexBackfillStartedAt": new Date() } }
+    );
     
     try {
       await runTekmetricHistoryBackfill(shopId, tekmetricShopId, 5);

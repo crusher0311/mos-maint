@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findAndResumeStaleBackfills, runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,13 +24,11 @@ export async function GET(req: NextRequest) {
       const shopId = parseInt(shopIdParam, 10);
       console.log(`[Protractor Backfill Cron] Force-starting backfill for shop ${shopId}...`);
       
-      await sql`
-        INSERT INTO backfill_progress (shop_id, in_progress, updated_at)
-        VALUES (${String(shopId)}, FALSE, NOW())
-        ON CONFLICT (shop_id) DO UPDATE SET
-          in_progress = FALSE,
-          updated_at = NOW()
-      `;
+      const db = await getDb();
+      await db.collection("backfill_progress").updateOne(
+        { shopId },
+        { $set: { inProgress: false } }
+      );
       
       runProtractorBackfill(shopId).then(result => {
         console.log(`[Protractor Backfill Cron] Shop ${shopId} backfill completed:`, result);

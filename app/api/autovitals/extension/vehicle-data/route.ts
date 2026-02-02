@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 
@@ -24,13 +24,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const shopRows = await sql`
-      SELECT id, shop_id, settings FROM shops 
-      WHERE settings->>'autovitalsApiKey' = ${apiKey}
-         OR settings->'autovitalsExtension'->'apiKeys' @> ${JSON.stringify([{ value: apiKey }])}::jsonb
-      LIMIT 1
-    `;
-    const shop = shopRows[0];
+    const db = await getDb();
+    
+    const shop = await db.collection("shops").findOne({
+      $or: [
+        { autovitalsApiKey: apiKey },
+        { "autovitalsExtension.apiKeys.value": apiKey }
+      ]
+    });
 
     if (!shop) {
       return NextResponse.json(
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const shopId = shop.shop_id;
+    const shopId = shop.shopId;
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
 
     if (!vin) {
@@ -49,32 +50,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const vehicleRows = await sql`
-      SELECT * FROM vehicles WHERE shop_id = ${shopId} AND vin = ${vin} LIMIT 1
-    `;
-    const vehicle = vehicleRows[0];
+    const vehicle = await db.collection("vehicles").findOne({ shopId, vin });
 
-    const recommendationRows = await sql`
-      SELECT * FROM recommendations 
-      WHERE shop_id = ${shopId} AND vin = ${vin}
-      ORDER BY priority ASC
-    `;
+    const recommendations = await db.collection("recommendations").find({
+      shopId,
+      vin,
+    }).sort({ priority: 1 }).toArray();
 
-    const formattedRecs = recommendationRows.map((rec: any) => ({
-      id: rec.id.toString(),
-      name: rec.name || rec.service_name,
+    const formattedRecs = recommendations.map(rec => ({
+      id: rec._id.toString(),
+      name: rec.name || rec.serviceName,
       description: rec.description,
       source: rec.source || 'oem',
       priority: rec.priority || 'upcoming',
-      dueDate: rec.due_date,
-      dueMileage: rec.due_mileage,
+      dueDate: rec.dueDate,
+      dueMileage: rec.dueMileage,
       notes: rec.notes,
     }));
 
-    const oemScheduleRows = await sql`
-      SELECT items FROM oem_schedules WHERE vin = ${vin} LIMIT 1
-    `;
-    const oemScheduleDoc = oemScheduleRows[0];
+    const oemScheduleDoc = await db.collection("oem_schedules").findOne({ vin });
     const oemSchedule = oemScheduleDoc?.items?.map((item: any) => ({
       name: item.name || item.serviceName,
       intervalMiles: item.intervalMiles,
@@ -84,10 +78,7 @@ export async function GET(req: NextRequest) {
       dueSoon: item.dueSoon,
     })) || [];
 
-    const carfaxRows = await sql`
-      SELECT records FROM carfax_history WHERE vin = ${vin} LIMIT 1
-    `;
-    const carfaxDoc = carfaxRows[0];
+    const carfaxDoc = await db.collection("carfax_history").findOne({ vin });
     const carfaxHistory = carfaxDoc?.records?.map((record: any) => ({
       date: record.date,
       mileage: record.mileage,
@@ -95,32 +86,26 @@ export async function GET(req: NextRequest) {
       description: record.description,
     })) || [];
 
-    const avVehicleRows = await sql`
-      SELECT * FROM autovitals_vehicles 
-      WHERE shop_id = ${shopId} AND UPPER(vin) = ${vin}
-      LIMIT 1
-    `;
-    const avVehicle = avVehicleRows[0];
+    const shopIdStr = String(shopId);
+    
+    const avVehicle = await db.collection("autovitals_vehicles").findOne({
+      shopId: shopIdStr,
+      vin: { $regex: new RegExp(`^${vin}$`, 'i') }
+    });
 
     let dviResults: any[] = [];
     
-    if (avVehicle?.vehicle_id) {
-      const latestAppointmentRows = await sql`
-        SELECT * FROM autovitals_appointments 
-        WHERE shop_id = ${shopId} AND vehicle_id = ${avVehicle.vehicle_id}
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `;
-      const latestAppointment = latestAppointmentRows[0];
+    if (avVehicle?.vehicleId) {
+      const latestAppointment = await db.collection("autovitals_appointments").findOne(
+        { shopId: shopIdStr, vehicleId: avVehicle.vehicleId },
+        { sort: { updatedAt: -1 } }
+      );
 
-      if (latestAppointment?.appointment_id) {
-        const latestDviRows = await sql`
-          SELECT * FROM autovitals_inspections 
-          WHERE shop_id = ${shopId} AND appointment_id = ${latestAppointment.appointment_id}
-          ORDER BY updated_at DESC
-          LIMIT 1
-        `;
-        const latestDvi = latestDviRows[0];
+      if (latestAppointment?.appointmentId) {
+        const latestDvi = await db.collection("autovitals_inspections").findOne(
+          { shopId: shopIdStr, appointmentId: latestAppointment.appointmentId },
+          { sort: { updatedAt: -1 } }
+        );
 
         if (latestDvi?.items) {
           dviResults = latestDvi.items.map((item: any) => ({
@@ -141,12 +126,8 @@ export async function GET(req: NextRequest) {
         year: vehicle.year,
         make: vehicle.make,
         model: vehicle.model,
-        lastMileage: vehicle.last_mileage,
-        customer: {
-          name: vehicle.customer_name,
-          phone: vehicle.customer_phone,
-          email: vehicle.customer_email,
-        },
+        lastMileage: vehicle.lastMileage,
+        customer: vehicle.customer,
       } : null,
       recommendations: formattedRecs,
       oemSchedule,

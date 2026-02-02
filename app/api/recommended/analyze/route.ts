@@ -1,6 +1,6 @@
 // app/api/recommended/analyze/route.ts
 import { NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost, estimateTokens } from "@/lib/usage";
@@ -8,6 +8,7 @@ import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 export const runtime = "nodejs";
 
+/* ----------------- helpers ----------------- */
 function fmt(n?: number | null) {
   return typeof n === "number" ? n.toLocaleString() : "";
 }
@@ -33,6 +34,7 @@ function extractJsonBlock(text: string): string | null {
   return null;
 }
 
+/** Call OpenAI Responses API without the SDK */
 async function callOpenAI(model: string, systemPrompt: string, userPrompt: string): Promise<{
   ok: boolean; text?: string; error?: string;
 }> {
@@ -75,47 +77,114 @@ async function callOpenAI(model: string, systemPrompt: string, userPrompt: strin
   return { ok: true, text: String(outputText || "").trim() };
 }
 
-async function getLocalOeFromPostgres(vin: string) {
+/* ----------------- OEM (local) quick fetch (same shape as your pages) ----------------- */
+async function getLocalOeFromMongo(vin: string) {
+  const db = await getDb();
   const SQUISH = toSquish(vin);
 
-  const items = await sql`
-    WITH vin_maint AS (
-      SELECT DISTINCT lvm.vin_maintenance_id, lvm.maintenance_id
-      FROM dataone_lkp_vin_maintenance lvm
-      WHERE lvm.squish = ${SQUISH}
-    ),
-    intervals AS (
-      SELECT vm.maintenance_id, lvi.maintenance_interval_id
-      FROM vin_maint vm
-      JOIN dataone_lkp_vin_maintenance_interval lvi ON lvi.vin_maintenance_id = vm.vin_maintenance_id
-    ),
-    interval_defs AS (
-      SELECT i.maintenance_id, dmi.interval_type, dmi.value, dmi.units, dmi.initial_value
-      FROM intervals i
-      JOIN dataone_def_maintenance_interval dmi ON dmi.maintenance_interval_id = i.maintenance_interval_id
-    ),
-    grouped AS (
-      SELECT 
-        vm.maintenance_id,
-        dm.maintenance_name as name,
-        dm.maintenance_category as category,
-        dm.maintenance_notes as notes,
-        MAX(CASE WHEN id.units = 'Miles' THEN id.value END) as miles,
-        MAX(CASE WHEN id.units = 'Months' THEN id.value END) as months
-      FROM vin_maint vm
-      JOIN dataone_def_maintenance dm ON dm.maintenance_id = vm.maintenance_id
-      LEFT JOIN interval_defs id ON id.maintenance_id = vm.maintenance_id
-      GROUP BY vm.maintenance_id, dm.maintenance_name, dm.maintenance_category, dm.maintenance_notes
-    )
-    SELECT maintenance_id, name, category, notes, miles, months
-    FROM grouped
-    ORDER BY category, name
-    LIMIT 200
-  `;
+  const pipeline = [
+    { $match: { squish: SQUISH } },
+    { $project: { _id: 0, squish: 1, vin_maintenance_id: 1, maintenance_id: 1 } },
+    {
+      $lookup: {
+        from: "dataone_lkp_vin_maintenance_interval",
+        let: { vmi: "$vin_maintenance_id" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$vin_maintenance_id", "$$vmi"] } } },
+          { $project: { _id: 0, maintenance_interval_id: 1 } },
+        ],
+        as: "intervals",
+      },
+    },
+    { $unwind: "$intervals" },
+    {
+      $lookup: {
+        from: "dataone_def_maintenance_interval",
+        localField: "intervals.maintenance_interval_id",
+        foreignField: "maintenance_interval_id",
+        as: "intDef",
+      },
+    },
+    { $unwind: "$intDef" },
+    {
+      $lookup: {
+        from: "dataone_def_maintenance",
+        localField: "maintenance_id",
+        foreignField: "maintenance_id",
+        as: "def",
+      },
+    },
+    { $unwind: "$def" },
+    {
+      $group: {
+        _id: { maintenance_id: "$maintenance_id", interval_id: "$intervals.maintenance_interval_id" },
+        maintenance_name: { $first: "$def.maintenance_name" },
+        maintenance_category: { $first: "$def.maintenance_category" },
+        maintenance_notes: { $first: "$def.maintenance_notes" },
+        interval_type: { $first: "$intDef.interval_type" },
+        value: { $first: "$intDef.value" },
+        units: { $first: "$intDef.units" },
+        initial_value: { $first: "$intDef.initial_value" },
+      },
+    },
+    {
+      $group: {
+        _id: "$_id.maintenance_id",
+        name: { $first: "$maintenance_name" },
+        category: { $first: "$maintenance_category" },
+        notes: { $first: "$maintenance_notes" },
+        intervals: {
+          $push: {
+            type: "$interval_type",
+            value: "$value",
+            units: "$units",
+            initial_value: "$initial_value",
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        miles: {
+          $let: {
+            vars: { m: { $filter: { input: "$intervals", as: "i", cond: { $eq: ["$$i.units", "Miles"] } } } },
+            in: {
+              $cond: [
+                { $gt: [{ $size: "$$m" }, 0] },
+                { $arrayElemAt: [{ $map: { input: "$$m", as: "x", in: "$$x.value" } }, 0] },
+                null,
+              ],
+            },
+          },
+        },
+        months: {
+          $let: {
+            vars: { m: { $filter: { input: "$intervals", as: "i", cond: { $eq: ["$$i.units", "Months"] } } } },
+            in: {
+              $cond: [
+                { $gt: [{ $size: "$$m" }, 0] },
+                { $arrayElemAt: [{ $map: { input: "$$m", as: "x", in: "$$x.value" } }, 0] },
+                null,
+              ],
+            },
+          },
+        },
+      },
+    },
+    { $project: { _id: 0, name: 1, category: 1, notes: 1, miles: 1, months: 1 } },
+    { $sort: { category: 1, name: 1 } },
+    { $limit: 200 },
+  ];
+
+  const items = await db
+    .collection("dataone_lkp_vin_maintenance")
+    .aggregate(pipeline, { allowDiskUse: true, hint: "squish_1" })
+    .toArray();
 
   return items;
 }
 
+/* ----------------- route ----------------- */
 export async function POST(req: Request) {
   try {
     let body: any = {};
@@ -128,38 +197,48 @@ export async function POST(req: Request) {
     const vin = String(body?.vin || "").toUpperCase().trim();
     const model = String(body?.model || "gpt-4.1");
 
+    // Prefer pre-fetched inputs from the UI, fallback to fetching by VIN if provided.
     let dvi = body?.dviData ?? null;
     let carfax = body?.carfaxData ?? null;
     let oem = Array.isArray(body?.oemData) ? body.oemData : null;
 
+    // If anything missing but VIN present, try to fetch what we can
     if (vin && (!dvi || !carfax || !oem)) {
-      const vehicleRows = await sql`
-        SELECT shop_id FROM vehicles WHERE vin = ${vin}
-      `;
-      const vehicle = vehicleRows[0] as any;
+      const db = await getDb();
 
-      const shopId = Number(vehicle?.shop_id ?? NaN);
+      // vehicle so we can get shopId and latest RO
+      const vehicle = await db
+        .collection("vehicles")
+        .findOne(
+          { vin },
+          { projection: { shopId: 1 } }
+        );
 
-      const roRows = await sql`
-        SELECT ro_number, updated_at, created_at FROM work_orders
-        WHERE vin = ${vin}
-        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
-        LIMIT 1
-      `;
-      const ro = roRows[0] as any;
+      const shopId = Number(vehicle?.shopId ?? NaN);
 
+      // latest RO (for DVI)
+      const ro = await db
+        .collection("repair_orders")
+        .find({ $or: [{ vin }, { vehicleId: vehicle?._id }] })
+        .project({ roNumber: 1, updatedAt: 1, createdAt: 1 })
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .limit(1)
+        .next();
+
+      // DVI
       if (!dvi) {
         try {
           const afCfg = await resolveAutoflowConfig(shopId);
           dvi =
-            ro?.ro_number && afCfg.configured
-              ? await fetchDviWithCache(shopId, String(ro.ro_number), 10 * 60 * 1000)
-              : { ok: false, error: ro?.ro_number ? "AutoFlow not connected." : "No RO found." };
+            ro?.roNumber && afCfg.configured
+              ? await fetchDviWithCache(shopId, String(ro.roNumber), 10 * 60 * 1000)
+              : { ok: false, error: ro?.roNumber ? "AutoFlow not connected." : "No RO found." };
         } catch {
           dvi = { ok: false, error: "Failed to fetch DVI" };
         }
       }
 
+      // CARFAX
       if (!carfax) {
         try {
           const carfaxCfg = await resolveCarfaxConfig(shopId);
@@ -171,15 +250,17 @@ export async function POST(req: Request) {
         }
       }
 
+      // OEM local
       if (!oem) {
         try {
-          oem = await getLocalOeFromPostgres(vin);
+          oem = await getLocalOeFromMongo(vin);
         } catch {
           oem = [];
         }
       }
     }
 
+    // Build prompts (robust to missing components)
     const systemPrompt =
       "You are a master service advisor with decades of experience. " +
       "Based ONLY on the DVI, CARFAX, and OEM data provided (some may be missing), " +
@@ -213,19 +294,22 @@ export async function POST(req: Request) {
       safeJson(Array.isArray(oem) ? oem : []),
     ].join("\n");
 
+    // Get shopId from request body or vehicle lookup for tracking
     let logShopId: string | number | null = body?.shopId || null;
     if (!logShopId && vin) {
       try {
-        const vehicleRows = await sql`SELECT shop_id FROM vehicles WHERE vin = ${vin}`;
-        const vehicleForLog = vehicleRows[0] as any;
-        logShopId = vehicleForLog?.shop_id;
+        const usageDb = await getDb();
+        const vehicleForLog = await usageDb.collection("vehicles").findOne({ vin }, { projection: { shopId: 1 } });
+        logShopId = vehicleForLog?.shopId;
       } catch {}
     }
 
+    // OpenAI call
     const aiStartTime = Date.now();
     const ai = await callOpenAI(model, systemPrompt, userPrompt);
     const aiDuration = Date.now() - aiStartTime;
     
+    // Track API request for traffic monitoring
     trackApiRequest('openai', '/responses', 'POST', ai.ok ? 200 : 500, aiDuration, logShopId ? Number(logShopId) : undefined).catch(() => {});
     
     if (!ai.ok) {
@@ -243,6 +327,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // Log usage for analytics (estimate tokens since Responses API doesn't return usage)
     const inputTokens = estimateTokens(systemPrompt + userPrompt);
     const outputTokens = estimateTokens(raw);
     const cost = estimateCost(model, inputTokens, outputTokens);

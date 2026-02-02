@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { markAllAsRead } from "@/lib/notifications";
 
 export async function GET(req: NextRequest) {
@@ -16,43 +16,26 @@ export async function GET(req: NextRequest) {
   const unreadOnly = searchParams.get("unreadOnly") === "true";
 
   try {
-    const userId = `admin:${session.email}`;
-    
-    let notifications;
+    const db = await getDb();
+    const query: any = { userId: `admin:${session.email}` };
     if (unreadOnly) {
-      notifications = await sql`
-        SELECT * FROM notifications 
-        WHERE user_id = ${userId} AND read = false
-        ORDER BY created_at DESC
-        LIMIT ${limit}
-      `;
-    } else {
-      notifications = await sql`
-        SELECT * FROM notifications 
-        WHERE user_id = ${userId}
-        ORDER BY created_at DESC
-        LIMIT ${limit}
-      `;
+      query.read = false;
     }
     
-    const countResult = await sql`
-      SELECT COUNT(*)::int as count FROM notifications
-      WHERE user_id = ${userId} AND read = false
-    `;
-    const unreadCount = countResult[0]?.count ?? 0;
+    const notifications = await db.collection("notifications")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+    
+    const unreadCount = await db.collection("notifications").countDocuments({
+      userId: `admin:${session.email}`,
+      read: false,
+    });
 
     return NextResponse.json({
       ok: true,
-      notifications: notifications.map((n: any) => ({
-        _id: n.id,
-        userId: n.user_id,
-        type: n.type,
-        title: n.title,
-        message: n.message,
-        read: n.read,
-        data: n.data,
-        createdAt: n.created_at,
-      })),
+      notifications,
       unreadCount,
     });
   } catch (error) {

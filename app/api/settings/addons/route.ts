@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getDb } from "@/lib/mongo";
 import { getBillingSettings } from "@/lib/stripe";
-import sql from "@/lib/db/postgres";
 
 export interface FeatureAddon {
   slug: string;
@@ -22,6 +22,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const db = await getDb();
     const settings = await getBillingSettings();
 
     const vinPacks = [
@@ -45,22 +46,21 @@ export async function GET() {
       },
     ];
 
-    const platformFeatures = await sql`
-      SELECT * FROM platform_features 
-      WHERE status = 'active' AND category IN ('core', 'addon')
-      ORDER BY "order" ASC
-    `;
+    const platformFeatures = await db.collection("platform_features")
+      .find({ status: "active", category: { $in: ["core", "addon"] } })
+      .sort({ order: 1 })
+      .toArray();
 
     const featureAddons: FeatureAddon[] = platformFeatures.map(f => ({
       slug: f.slug,
       name: f.name,
       description: f.description,
       icon: f.icon || "Package",
-      monthlyPrice: f.price_per_month || f.monthly_price || 0,
-      stripePriceId: f.stripe_price_id,
-      stripeProductId: f.stripe_product_id,
+      monthlyPrice: f.pricePerMonth || f.monthlyPrice || 0,
+      stripePriceId: f.stripePriceId,
+      stripeProductId: f.stripeProductId,
       category: f.category,
-      requiresFeature: f.requires_feature,
+      requiresFeature: f.requiresFeature,
     }));
 
     return NextResponse.json({

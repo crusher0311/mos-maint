@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { sendEmail, makeWelcomeEmail, makePaymentFailedEmail, makePaymentRecoveredEmail } from "@/lib/email";
 import { createHovercodeQR } from "@/lib/hovercode";
 import Stripe from "stripe";
@@ -10,25 +10,32 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function logWebhookEvent(
+  db: any,
   event: Stripe.Event,
   status: "received" | "processed" | "failed",
   error?: string
 ) {
   try {
-    if (status === "received") {
-      await sql`
-        INSERT INTO stripe_webhook_events (event_id, type, status, payload, retry_count, created_at, updated_at)
-        VALUES (${event.id}, ${event.type}, ${status}, ${JSON.stringify(event.data.object)}::jsonb, 0, NOW(), NOW())
-        ON CONFLICT (event_id) DO UPDATE SET status = ${status}, updated_at = NOW()
-      `;
-    } else {
-      await sql`
-        UPDATE stripe_webhook_events
-        SET status = ${status}, error = ${error || null}, processed_at = NOW(), updated_at = NOW()
-            ${status === "failed" ? sql`, retry_count = retry_count + 1` : sql``}
-        WHERE event_id = ${event.id}
-      `;
-    }
+    await db.collection("stripe_webhook_events").updateOne(
+      { eventId: event.id },
+      {
+        $set: {
+          eventId: event.id,
+          type: event.type,
+          status,
+          error: error || null,
+          processedAt: status !== "received" ? new Date() : null,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+          payload: event.data.object,
+          retryCount: 0
+        },
+        $inc: status === "failed" ? { retryCount: 1 } : {}
+      },
+      { upsert: true }
+    );
   } catch (err) {
     console.error("[Stripe Webhook] Failed to log event:", err);
   }
@@ -62,16 +69,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const existingRows = await sql`
-    SELECT * FROM stripe_webhook_events WHERE event_id = ${event.id} AND status = 'processed'
-  `;
+  const db = await getDb();
   
-  if (existingRows.length > 0) {
+  const existingEvent = await db.collection("stripe_webhook_events").findOne({
+    eventId: event.id,
+    status: "processed"
+  });
+  
+  if (existingEvent) {
     console.log(`[Stripe Webhook] Event ${event.id} already processed, skipping`);
     return NextResponse.json({ received: true, duplicate: true });
   }
   
-  await logWebhookEvent(event, "received");
+  await logWebhookEvent(db, event, "received");
 
   try {
     switch (event.type) {
@@ -81,8 +91,7 @@ export async function POST(req: NextRequest) {
         const pendingId = session.metadata?.pendingId;
         
         if (isSignupFlow && pendingId) {
-          const pendingRows = await sql`SELECT * FROM pending_signups WHERE pending_id = ${pendingId}`;
-          const pending = pendingRows[0] as any;
+          const pending = await db.collection("pending_signups").findOne({ pendingId });
           
           if (!pending) {
             console.error(`[Stripe] Pending signup not found: ${pendingId}`);
@@ -94,69 +103,79 @@ export async function POST(req: NextRequest) {
             break;
           }
           
-          const shopId = pending.reserved_shop_id;
+          const shopId = pending.reservedShopId;
           const now = new Date();
           const billingSettings = await getBillingSettings();
           const baseVins = billingSettings.mosProIncludedVins || 300;
           const bonusVins = billingSettings.skipTrialBonusVins || 50;
           const webhookToken = crypto.randomBytes(12).toString("hex");
           
-          await sql`
-            INSERT INTO shops (
-              shop_id, name, webhook_token, created_at, updated_at,
-              billing, enabled_features
-            ) VALUES (
-              ${shopId}, ${pending.shop_name}, ${webhookToken}, ${now}, ${now},
-              ${JSON.stringify({
-                plan: "pro",
-                status: "active",
-                vinLimit: baseVins + bonusVins,
-                stripeSubscriptionId: session.subscription,
-                stripeCustomerId: session.customer,
-                skippedTrialBonus: bonusVins,
-                updatedAt: now,
-              })}::jsonb,
-              ${JSON.stringify({
-                maintenance: true,
-                job_lookup: true,
-                common_failures: true,
-                oil_sticker: true,
-                keytags: true,
-                auto_booking: true,
-                part_xref: true,
-              })}::jsonb
-            )
-          `;
-          console.log(`[Stripe] Created shop ${shopId} (${pending.shop_name}) from signup`);
+          const shopDoc = {
+            shopId,
+            name: pending.shopName,
+            webhookToken,
+            createdAt: now,
+            updatedAt: now,
+            billing: {
+              plan: "pro",
+              status: "active",
+              vinLimit: baseVins + bonusVins,
+              stripeSubscriptionId: session.subscription,
+              stripeCustomerId: session.customer,
+              skippedTrialBonus: bonusVins,
+              updatedAt: now,
+            },
+            enabledFeatures: {
+              maintenance: true,
+              job_lookup: true,
+              common_failures: true,
+              oil_sticker: true,
+              keytags: true,
+              auto_booking: true,
+              part_xref: true,
+            },
+          };
           
-          await sql`
-            INSERT INTO users (shop_id, email, email_lower, role, password_hash, created_at, updated_at)
-            VALUES (${shopId}, ${pending.admin_email}, ${pending.admin_email.toLowerCase()}, 'owner', ${pending.password_hash}, ${now}, ${now})
-          `;
-          console.log(`[Stripe] Created user ${pending.admin_email} for shop ${shopId}`);
+          await db.collection("shops").insertOne(shopDoc);
+          console.log(`[Stripe] Created shop ${shopId} (${pending.shopName}) from signup`);
           
-          await sql`
-            UPDATE pending_signups SET completed = true, completed_at = ${now}, shop_id = ${shopId}
-            WHERE pending_id = ${pendingId}
-          `;
+          const userDoc = {
+            shopId,
+            email: pending.adminEmail,
+            emailLower: pending.adminEmail,
+            role: "owner",
+            passwordHash: pending.passwordHash,
+            createdAt: now,
+            updatedAt: now,
+          };
           
-          createHovercodeQR({ shopId, shopName: pending.shop_name }).then(async (result) => {
+          await db.collection("users").insertOne(userDoc);
+          console.log(`[Stripe] Created user ${pending.adminEmail} for shop ${shopId}`);
+          
+          await db.collection("pending_signups").updateOne(
+            { pendingId },
+            { $set: { completed: true, completedAt: now, shopId } }
+          );
+          
+          createHovercodeQR({ shopId, shopName: pending.shopName }).then(async (result) => {
             if (result.success && result.hovercodeId) {
-              await sql`
-                UPDATE shops SET sticker_config = COALESCE(sticker_config, '{}'::jsonb) || ${JSON.stringify({
-                  hovercodeQRId: result.hovercodeId,
-                  hovercodeShortUrl: result.shortUrl,
-                  hovercodeProvisionedAt: new Date(),
-                })}::jsonb
-                WHERE shop_id = ${shopId}
-              `;
+              await db.collection("shops").updateOne(
+                { shopId },
+                { 
+                  $set: { 
+                    "stickerConfig.hovercodeQRId": result.hovercodeId,
+                    "stickerConfig.hovercodeShortUrl": result.shortUrl,
+                    "stickerConfig.hovercodeProvisionedAt": new Date(),
+                  } 
+                }
+              );
             }
           }).catch(() => {});
           
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
           try {
-            const welcomeMsg = makeWelcomeEmail(pending.shop_name, `${baseUrl}/login`);
-            await sendEmail({ to: pending.admin_email, ...welcomeMsg });
+            const welcomeMsg = makeWelcomeEmail(pending.shopName, `${baseUrl}/login`);
+            await sendEmail({ to: pending.adminEmail, ...welcomeMsg });
           } catch (emailErr) {
             console.error("[Stripe] Failed to send welcome email:", emailErr);
           }
@@ -164,23 +183,22 @@ export async function POST(req: NextRequest) {
           break;
         }
         
-        const shopId = session.metadata?.shopId;
+        const shopId = Number(session.metadata?.shopId);
         const plan = session.metadata?.plan || "pro";
         const skippedTrial = session.metadata?.skippedTrial === "true";
         
         if (shopId) {
           const updateData: Record<string, any> = {
-            plan,
-            status: "active",
-            stripeSubscriptionId: session.subscription,
-            stripeCustomerId: session.customer,
-            updatedAt: new Date(),
-            pendingCheckoutSessionId: null,
+            "billing.plan": plan,
+            "billing.status": "active",
+            "billing.stripeSubscriptionId": session.subscription,
+            "billing.stripeCustomerId": session.customer,
+            "billing.updatedAt": new Date(),
+            "billing.pendingCheckoutSessionId": null,
           };
           
           if (skippedTrial) {
-            const settingsRows = await sql`SELECT * FROM platform_settings WHERE type = 'billing'`;
-            const billingSettings = settingsRows[0]?.settings as any || {};
+            const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
             let baseVins = billingSettings?.defaultVinLimit || 300;
             if (plan === "starter" && billingSettings?.starterIncludedVins) {
               baseVins = billingSettings.starterIncludedVins;
@@ -190,27 +208,24 @@ export async function POST(req: NextRequest) {
               baseVins = billingSettings.eliteIncludedVins;
             }
             const bonus = billingSettings?.skipTrialBonusVins || 50;
-            updateData.vinLimit = baseVins + bonus;
-            updateData.skippedTrialBonus = bonus;
+            updateData["billing.vinLimit"] = baseVins + bonus;
+            updateData["billing.skippedTrialBonus"] = bonus;
             console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus} (tier: ${plan})`);
           }
           
-          const enabledFeatures = {
-            maintenance: true,
-            job_lookup: true,
-            common_failures: true,
-            oil_sticker: true,
-            keytags: true,
-            auto_booking: true,
-            part_xref: true,
-          };
+          updateData["enabledFeatures.maintenance"] = true;
+          updateData["enabledFeatures.job_lookup"] = true;
+          updateData["enabledFeatures.common_failures"] = true;
+          updateData["enabledFeatures.oil_sticker"] = true;
+          updateData["enabledFeatures.keytags"] = true;
+          updateData["enabledFeatures.auto_booking"] = true;
+          updateData["enabledFeatures.part_xref"] = true;
           console.log(`[Stripe] Shop ${shopId} - enabling all features for paid plan`);
           
-          await sql`
-            UPDATE shops SET billing = COALESCE(billing, '{}'::jsonb) || ${JSON.stringify(updateData)}::jsonb,
-            enabled_features = COALESCE(enabled_features, '{}'::jsonb) || ${JSON.stringify(enabledFeatures)}::jsonb
-            WHERE shop_id = ${shopId}
-          `;
+          await db.collection("shops").updateOne(
+            { shopId },
+            { $set: updateData }
+          );
           console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skip trial bonus applied)" : ""}`);
         }
         break;
@@ -218,7 +233,7 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
-        const shopId = subscription.metadata?.shopId;
+        const shopId = Number(subscription.metadata?.shopId);
         
         if (shopId) {
           const status = subscription.status === "active" ? "active" : subscription.status;
@@ -226,14 +241,16 @@ export async function POST(req: NextRequest) {
             ? new Date((subscription as any).current_period_end * 1000)
             : null;
           
-          await sql`
-            UPDATE shops SET billing = COALESCE(billing, '{}'::jsonb) || ${JSON.stringify({
-              status,
-              nextBillingDate: currentPeriodEnd,
-              updatedAt: new Date(),
-            })}::jsonb
-            WHERE shop_id = ${shopId}
-          `;
+          await db.collection("shops").updateOne(
+            { shopId },
+            {
+              $set: {
+                "billing.status": status,
+                "billing.nextBillingDate": currentPeriodEnd,
+                "billing.updatedAt": new Date(),
+              },
+            }
+          );
           console.log(`[Stripe] Shop ${shopId} subscription updated: ${status}`);
         }
         break;
@@ -241,18 +258,20 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        const shopId = subscription.metadata?.shopId;
+        const shopId = Number(subscription.metadata?.shopId);
         
         if (shopId) {
-          await sql`
-            UPDATE shops SET billing = COALESCE(billing, '{}'::jsonb) || ${JSON.stringify({
-              plan: "trial",
-              status: "canceled",
-              stripeSubscriptionId: null,
-              updatedAt: new Date(),
-            })}::jsonb
-            WHERE shop_id = ${shopId}
-          `;
+          await db.collection("shops").updateOne(
+            { shopId },
+            {
+              $set: {
+                "billing.plan": "trial",
+                "billing.status": "canceled",
+                "billing.stripeSubscriptionId": null,
+                "billing.updatedAt": new Date(),
+              },
+            }
+          );
           console.log(`[Stripe] Shop ${shopId} subscription canceled`);
         }
         break;
@@ -264,28 +283,26 @@ export async function POST(req: NextRequest) {
         
         if (subscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const shopId = subscription.metadata?.shopId;
+          const shopId = Number(subscription.metadata?.shopId);
           const periodEnd = (subscription as any).current_period_end;
           
           if (shopId) {
-            const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
-            const shop = shopRows[0] as any;
+            const shop = await db.collection("shops").findOne({ shopId });
             const wasInGracePeriod = shop?.billing?.status === "past_due" || shop?.billing?.status === "suspended";
             
             const updateData: Record<string, any> = {
-              status: "active",
-              lastPaymentAt: new Date(),
-              nextBillingDate: periodEnd ? new Date(periodEnd * 1000) : null,
-              gracePeriodStartedAt: null,
-              gracePeriodEndsAt: null,
-              gracePeriodExtendedBy: null,
-              gracePeriodExtendedAt: null,
+              "billing.status": "active",
+              "billing.lastPaymentAt": new Date(),
+              "billing.nextBillingDate": periodEnd ? new Date(periodEnd * 1000) : null,
+              "billing.gracePeriodStartedAt": null,
+              "billing.gracePeriodEndsAt": null,
+              "billing.gracePeriodExtendedBy": null,
+              "billing.gracePeriodExtendedAt": null,
             };
             
-            let enabledFeatures = null;
             if (wasInGracePeriod && shop?.billing?.status === "suspended") {
               const plan = shop?.billing?.plan || "starter";
-              enabledFeatures = {
+              const planFeatures: Record<string, boolean> = {
                 maintenance: true,
                 job_lookup: plan !== "starter" && plan !== "trial",
                 common_failures: plan !== "starter" && plan !== "trial",
@@ -295,10 +312,17 @@ export async function POST(req: NextRequest) {
                 part_xref: plan === "elite" || plan === "enterprise",
               };
               
+              updateData["enabledFeatures.maintenance"] = planFeatures.maintenance;
+              updateData["enabledFeatures.job_lookup"] = planFeatures.job_lookup;
+              updateData["enabledFeatures.common_failures"] = planFeatures.common_failures;
+              updateData["enabledFeatures.oil_sticker"] = planFeatures.oil_sticker;
+              updateData["enabledFeatures.keytags"] = planFeatures.keytags;
+              updateData["enabledFeatures.auto_booking"] = planFeatures.auto_booking;
+              updateData["enabledFeatures.part_xref"] = planFeatures.part_xref;
+              
               console.log(`[Stripe] Shop ${shopId} payment recovered from suspended - re-enabling features for ${plan} plan`);
               
-              const ownerRows = await sql`SELECT * FROM users WHERE shop_id = ${shopId} AND role = 'owner'`;
-              const owner = ownerRows[0] as any;
+              const owner = await db.collection("users").findOne({ shopId, role: "owner" });
               if (owner?.email && shop) {
                 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
                 const loginUrl = `${baseUrl}/dashboard`;
@@ -311,18 +335,10 @@ export async function POST(req: NextRequest) {
               console.log(`[Stripe] Shop ${shopId} payment recovered from past_due - clearing grace period`);
             }
             
-            if (enabledFeatures) {
-              await sql`
-                UPDATE shops SET billing = COALESCE(billing, '{}'::jsonb) || ${JSON.stringify(updateData)}::jsonb,
-                enabled_features = ${JSON.stringify(enabledFeatures)}::jsonb
-                WHERE shop_id = ${shopId}
-              `;
-            } else {
-              await sql`
-                UPDATE shops SET billing = COALESCE(billing, '{}'::jsonb) || ${JSON.stringify(updateData)}::jsonb
-                WHERE shop_id = ${shopId}
-              `;
-            }
+            await db.collection("shops").updateOne(
+              { shopId },
+              { $set: updateData }
+            );
           }
         }
         break;
@@ -334,27 +350,25 @@ export async function POST(req: NextRequest) {
         
         if (subscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const shopId = subscription.metadata?.shopId;
+          const shopId = Number(subscription.metadata?.shopId);
           
           if (shopId) {
-            const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
-            const shop = shopRows[0] as any;
+            const shop = await db.collection("shops").findOne({ shopId });
             const now = new Date();
             const gracePeriodDays = 7;
             const gracePeriodEndsAt = new Date(now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000);
             
             const updateData: Record<string, any> = {
-              status: "past_due",
-              updatedAt: now,
+              "billing.status": "past_due",
+              "billing.updatedAt": now,
             };
             
             if (!shop?.billing?.gracePeriodStartedAt) {
-              updateData.gracePeriodStartedAt = now;
-              updateData.gracePeriodEndsAt = gracePeriodEndsAt;
+              updateData["billing.gracePeriodStartedAt"] = now;
+              updateData["billing.gracePeriodEndsAt"] = gracePeriodEndsAt;
               console.log(`[Stripe] Shop ${shopId} payment failed - starting 7-day grace period (ends ${gracePeriodEndsAt.toISOString()})`);
               
-              const ownerRows = await sql`SELECT * FROM users WHERE shop_id = ${shopId} AND role = 'owner'`;
-              const owner = ownerRows[0] as any;
+              const owner = await db.collection("users").findOne({ shopId, role: "owner" });
               if (owner?.email && shop) {
                 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
                 const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
@@ -367,21 +381,21 @@ export async function POST(req: NextRequest) {
               console.log(`[Stripe] Shop ${shopId} payment failed again - grace period already active`);
             }
             
-            await sql`
-              UPDATE shops SET billing = COALESCE(billing, '{}'::jsonb) || ${JSON.stringify(updateData)}::jsonb
-              WHERE shop_id = ${shopId}
-            `;
+            await db.collection("shops").updateOne(
+              { shopId },
+              { $set: updateData }
+            );
           }
         }
         break;
       }
     }
 
-    await logWebhookEvent(event, "processed");
+    await logWebhookEvent(db, event, "processed");
     return NextResponse.json({ received: true });
   } catch (error: any) {
     console.error("Webhook processing error:", error);
-    await logWebhookEvent(event, "failed", error.message);
+    await logWebhookEvent(db, event, "failed", error.message);
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

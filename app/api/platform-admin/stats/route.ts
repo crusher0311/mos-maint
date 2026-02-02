@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,42 +18,41 @@ export async function GET() {
   }
 
   try {
-    const [shopCountResult, userCountResult, recentShopsResult] = await Promise.all([
-      sql<{count: string}[]>`SELECT COUNT(*) as count FROM shops`,
-      sql<{count: string}[]>`SELECT COUNT(*) as count FROM users`,
-      sql`SELECT id, shop_id, name, created_at FROM shops ORDER BY created_at DESC NULLS LAST LIMIT 5`
+    const db = await getDb();
+    
+    // Fast queries that use indexes
+    const [totalShops, totalUsers, recentShops] = await Promise.all([
+      db.collection("shops").estimatedDocumentCount(),
+      db.collection("users").estimatedDocumentCount(),
+      db.collection("shops")
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .project({ shopId: 1, name: 1, createdAt: 1 })
+        .toArray()
     ]);
     
-    const totalShops = parseInt(shopCountResult[0]?.count || "0", 10);
-    const totalUsers = parseInt(userCountResult[0]?.count || "0", 10);
-    const recentShops = recentShopsResult.map(s => ({
-      shopId: s.shop_id ? parseInt(s.shop_id, 10) : null,
-      name: s.name,
-      createdAt: s.created_at
-    }));
-    
+    // Use cached usage stats or compute in background
     let usage = { totalRequests: 0, totalCost: 0 };
     const now = Date.now();
     
     if (cachedStats && (now - cachedStats.cachedAt) < CACHE_TTL_MS) {
       usage = { totalRequests: cachedStats.totalRequests, totalCost: cachedStats.totalCost };
     } else {
-      try {
-        const requestCountResult = await sql<{count: string}[]>`SELECT COUNT(*) as count FROM usage_logs`;
-        const totalRequests = parseInt(requestCountResult[0]?.count || "0", 10);
-        const totalCost = 0; // Cost tracking not implemented yet
-        
+      // Use estimated count for requests (instant) and skip expensive cost aggregation
+      const estimatedRequests = await db.collection("usage_logs").estimatedDocumentCount();
+      usage = { totalRequests: estimatedRequests, totalCost: cachedStats?.totalCost || 0 };
+      
+      // Update cost in background (don't block response)
+      db.collection("usage_logs").aggregate([
+        { $group: { _id: null, totalCost: { $sum: "$estimatedCost" } } }
+      ]).toArray().then(result => {
         cachedStats = {
-          totalRequests,
-          totalCost,
+          totalRequests: estimatedRequests,
+          totalCost: result[0]?.totalCost || 0,
           cachedAt: Date.now()
         };
-        
-        usage = { totalRequests, totalCost };
-      } catch {
-        // Table may not exist
-        usage = { totalRequests: 0, totalCost: 0 };
-      }
+      }).catch(err => console.error("Background stats error:", err));
     }
     
     return NextResponse.json({
@@ -64,9 +63,8 @@ export async function GET() {
       totalCost: usage.totalCost,
       recentShops,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  } catch (err: any) {
     console.error("Platform stats error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }

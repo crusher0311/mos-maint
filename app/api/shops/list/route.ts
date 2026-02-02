@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,50 +12,42 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const db = await getDb();
     const { searchParams } = new URL(req.url);
     const scope = searchParams.get("scope");
     
-    let shops;
+    let query: any = {};
     
     if (session.isPlatformAdmin && scope === "all") {
-      shops = await sql`
-        SELECT shop_id, name, city, state, enterprise_id 
-        FROM shops 
-        ORDER BY name ASC
-      `;
+      query = {};
     } else {
       const sessionShopId = String(session.shopId);
+      const sessionShop = await db.collection("shops").findOne({
+        shopId: { $in: [sessionShopId, Number(sessionShopId)] }
+      });
       
-      const sessionShopResult = await sql`
-        SELECT enterprise_id FROM shops WHERE shop_id = ${sessionShopId} LIMIT 1
-      `;
-      const enterpriseId = sessionShopResult[0]?.enterprise_id;
+      const enterpriseId = sessionShop?.enterpriseId;
       
       if (enterpriseId && session.role === "owner") {
-        shops = await sql`
-          SELECT shop_id, name, city, state, enterprise_id 
-          FROM shops 
-          WHERE enterprise_id = ${enterpriseId}
-          ORDER BY name ASC
-        `;
+        query = { enterpriseId };
       } else {
-        const userResult = await sql`
-          SELECT shop_ids FROM users WHERE email = ${session.email} LIMIT 1
-        `;
-        const userShopIds = [sessionShopId, ...((userResult[0]?.shop_ids as string[]) || [])];
-        
-        shops = await sql`
-          SELECT shop_id, name, city, state, enterprise_id 
-          FROM shops 
-          WHERE shop_id = ANY(${userShopIds})
-          ORDER BY name ASC
-        `;
+        const user = await db.collection("users").findOne({ email: session.email });
+        const userShopIds = [session.shopId, ...(user?.shopIds || [])].map(id => 
+          isNaN(Number(id)) ? id : Number(id)
+        );
+        query = { shopId: { $in: userShopIds } };
       }
     }
     
+    const shops = await db.collection("shops")
+      .find(query)
+      .project({ shopId: 1, name: 1, city: 1, state: 1, enterpriseId: 1 })
+      .sort({ name: 1 })
+      .toArray();
+    
     const formattedShops = shops.map(shop => ({
-      shopId: shop.shop_id,
-      name: shop.name || `Shop ${shop.shop_id}`,
+      shopId: shop.shopId,
+      name: shop.name || `Shop ${shop.shopId}`,
       location: [shop.city, shop.state].filter(Boolean).join(", ") || null,
     }));
     
@@ -63,9 +55,8 @@ export async function GET(req: NextRequest) {
       ok: true,
       shops: formattedShops,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  } catch (err: any) {
     console.error("Error fetching shops:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }

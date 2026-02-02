@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -11,28 +11,38 @@ export async function DELETE() {
     }
 
     const session = await requireSession();
-    const shopId = String(session.shopId);
+    const shopId = Number(session.shopId);
 
-    const vehiclesResult = await sql`DELETE FROM vehicles WHERE shop_id = ${shopId}`;
-    const plansResult = await sql`DELETE FROM plans WHERE shop_id = ${shopId}`;
-    const customersResult = await sql`DELETE FROM customers WHERE shop_id = ${shopId}`;
-    const eventsResult = await sql`DELETE FROM events WHERE shop_id = ${shopId}`;
-    const protractorWoResult = await sql`DELETE FROM protractor_work_orders WHERE shop_id = ${shopId}`;
-    const protractorVehiclesResult = await sql`DELETE FROM protractor_vehicles WHERE shop_id = ${shopId}`;
-    const autovitalsVehiclesResult = await sql`DELETE FROM autovitals_vehicles WHERE shop_id = ${shopId}`;
-    const autovitalsAppointmentsResult = await sql`DELETE FROM autovitals_appointments WHERE shop_id = ${shopId}`;
+    const db = await getDb();
+
+    const vehiclesResult = await db.collection("vehicles").deleteMany({ shopId });
+    const plansResult = await db.collection("plans").deleteMany({ shopId });
+    const customersResult = await db.collection("customers").deleteMany({ shopId });
+    
+    const eventsResult = await db.collection("events").deleteMany({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
+
+    const protractorWoResult = await db.collection("protractor_work_orders").deleteMany({ shopId });
+    const protractorVehiclesResult = await db.collection("protractor_vehicles").deleteMany({ shopId });
+    const autovitalsVehiclesResult = await db.collection("autovitals_vehicles").deleteMany({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
+    const autovitalsAppointmentsResult = await db.collection("autovitals_appointments").deleteMany({ 
+      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
+    });
 
     return NextResponse.json({
       ok: true,
       deleted: {
-        vehicles: vehiclesResult.count,
-        plans: plansResult.count,
-        customers: customersResult.count,
-        events: eventsResult.count,
-        protractorWorkOrders: protractorWoResult.count,
-        protractorVehicles: protractorVehiclesResult.count,
-        autovitalsVehicles: autovitalsVehiclesResult.count,
-        autovitalsAppointments: autovitalsAppointmentsResult.count,
+        vehicles: vehiclesResult.deletedCount,
+        plans: plansResult.deletedCount,
+        customers: customersResult.deletedCount,
+        events: eventsResult.deletedCount,
+        protractorWorkOrders: protractorWoResult.deletedCount,
+        protractorVehicles: protractorVehiclesResult.deletedCount,
+        autovitalsVehicles: autovitalsVehiclesResult.deletedCount,
+        autovitalsAppointments: autovitalsAppointmentsResult.deletedCount,
       },
     });
   } catch (e: any) {

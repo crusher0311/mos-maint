@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,32 +15,25 @@ export async function GET() {
       return NextResponse.json({ isGhostMode: false });
     }
 
-    const sessionRows = await sql`
-      SELECT * FROM sessions 
-      WHERE token = ${currentToken} AND is_impersonation = true
-      LIMIT 1
-    `;
-    const currentSession = sessionRows[0];
+    const db = await getDb();
+    
+    const currentSession = await db.collection("sessions").findOne({
+      token: currentToken,
+      isImpersonation: true,
+    });
 
     if (!currentSession) {
       return NextResponse.json({ isGhostMode: false });
     }
 
-    const shopRows = await sql`
-      SELECT name FROM shops WHERE shop_id = ${currentSession.shop_id} LIMIT 1
-    `;
-    const shop = shopRows[0];
-
-    const userRows = await sql`
-      SELECT email FROM users WHERE id = ${currentSession.user_id} LIMIT 1
-    `;
-    const user = userRows[0];
+    const shop = await db.collection("shops").findOne({ shopId: currentSession.shopId });
+    const user = await db.collection("users").findOne({ _id: currentSession.userId });
 
     return NextResponse.json({
       isGhostMode: true,
-      adminEmail: currentSession.impersonated_by,
-      shopName: shop?.name || `Shop ${currentSession.shop_id}`,
-      shopId: currentSession.shop_id,
+      adminEmail: currentSession.impersonatedBy,
+      shopName: shop?.name || `Shop ${currentSession.shopId}`,
+      shopId: currentSession.shopId,
       impersonatingAs: user?.email || "Unknown User",
     });
   } catch (error) {

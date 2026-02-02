@@ -1,15 +1,24 @@
+// app/api/admin/promote-user/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { ENV } from "@/lib/env-safe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * POST /api/admin/promote-user
+ * Body: { email: string, adminToken: string }
+ * 
+ * Promotes a user to admin role using the admin token from environment
+ * This is useful for initial setup when you need to create the first admin
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { email, adminToken } = body;
 
+    // Verify admin token
     if (!adminToken || adminToken !== ENV.ADMIN_TOKEN) {
       return NextResponse.json({ error: "Invalid admin token" }, { status: 401 });
     }
@@ -18,22 +27,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    const emailLower = email.toLowerCase().trim();
-    const userResult = await sql`
-      SELECT id, email, role FROM users WHERE LOWER(email) = ${emailLower} LIMIT 1
-    `;
-    const user = userResult[0];
+    const db = await getDb();
+    
+    // Find user by email
+    const user = await db.collection("users").findOne({
+      email: email.toLowerCase().trim()
+    });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const result = await sql`
-      UPDATE users SET role = 'admin', updated_at = ${new Date()}
-      WHERE id = ${user.id}
-    `;
+    // Update user role to admin
+    const result = await db.collection("users").updateOne(
+      { _id: user._id },
+      { 
+        $set: { 
+          role: "admin",
+          updatedAt: new Date()
+        } 
+      }
+    );
 
-    if (result.count === 0) {
+    if (result.modifiedCount === 0) {
       return NextResponse.json({ error: "Failed to promote user" }, { status: 500 });
     }
 
@@ -41,7 +57,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `User ${email} has been promoted to admin`,
       user: {
-        id: user.id,
+        _id: user._id,
         email: user.email,
         role: "admin"
       }

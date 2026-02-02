@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,31 +21,31 @@ export async function GET() {
   }
 
   try {
-    const users = await sql`
-      SELECT id, email, role, shop_id, shop_ids, created_at, is_platform_admin 
-      FROM users
-    `;
+    const db = await getDb();
     
-    const allShopIds = new Set<string>();
+    const users = await db.collection("users")
+      .find()
+      .project({ email: 1, role: 1, shopId: 1, shopIds: 1, createdAt: 1, isPlatformAdmin: 1 })
+      .toArray();
+    
+    const allShopIds = new Set<number | string>();
     for (const u of users) {
-      if (u.shop_id) allShopIds.add(String(u.shop_id));
-      const shopIds = u.shop_ids as number[] | null;
-      if (shopIds?.length) shopIds.forEach(id => allShopIds.add(String(id)));
+      if (u.shopId) allShopIds.add(u.shopId);
+      if (u.shopIds?.length) u.shopIds.forEach((id: any) => allShopIds.add(id));
     }
     
-    const shops = allShopIds.size > 0 ? await sql`
-      SELECT id, shop_id, name, location_identifier 
-      FROM shops 
-      WHERE shop_id = ANY(${[...allShopIds]})
-    ` : [];
+    const shops = await db.collection("shops")
+      .find({ shopId: { $in: [...allShopIds] } })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+      .toArray();
     
     const shopDataMap = new Map<string, ShopInfo>();
     for (const s of shops) {
-      const key = String(s.shop_id);
+      const key = String(s.shopId);
       shopDataMap.set(key, { 
-        shopId: s.shop_id ? parseInt(s.shop_id, 10) : s.id,
-        name: s.name || `Shop ${s.shop_id}`,
-        locationIdentifier: s.location_identifier || null
+        shopId: s.shopId,
+        name: s.name || `Shop ${s.shopId}`,
+        locationIdentifier: s.locationIdentifier || null
       });
     }
     
@@ -63,8 +63,8 @@ export async function GET() {
       const email = user.email?.toLowerCase();
       if (!email) continue;
       
-      const userShopIds = user.shop_ids as number[] | null;
-      const allUserShopIds = [user.shop_id, ...(userShopIds || [])].filter(Boolean);
+      const primaryShopData = shopDataMap.get(String(user.shopId));
+      const allUserShopIds = [user.shopId, ...(user.shopIds || [])].filter(Boolean);
       const userShops: ShopInfo[] = [];
       
       for (const sid of allUserShopIds) {
@@ -86,18 +86,18 @@ export async function GET() {
         if (user.role === 'owner' && existing.role !== 'owner') {
           existing.role = 'owner';
         }
-        if (user.is_platform_admin) {
+        if (user.isPlatformAdmin) {
           existing.isPlatformAdmin = true;
         }
       } else {
         usersByEmail.set(email, {
-          _id: user.id,
+          _id: user._id.toString(),
           email: user.email,
           role: user.role || "user",
-          primaryShopId: user.shop_id,
+          primaryShopId: user.shopId,
           shops: userShops,
-          createdAt: user.created_at || null,
-          isPlatformAdmin: user.is_platform_admin || false,
+          createdAt: user.createdAt || user._id.getTimestamp?.() || null,
+          isPlatformAdmin: user.isPlatformAdmin || false,
         });
       }
     }
@@ -121,9 +121,8 @@ export async function GET() {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }),
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  } catch (err: any) {
     console.error("Platform users error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }

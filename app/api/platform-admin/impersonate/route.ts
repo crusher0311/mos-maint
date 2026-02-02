@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 import { getSession, sessionCookieOptions, adminSessionCookieOptions } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { logAdminAction } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
@@ -17,31 +17,31 @@ export async function POST(req: Request) {
     const { shopId: rawShopId } = await req.json();
 
     const shopId = typeof rawShopId === "string" && !isNaN(Number(rawShopId)) 
-      ? String(rawShopId) 
-      : String(rawShopId);
+      ? Number(rawShopId) 
+      : rawShopId;
 
-    if (shopId === undefined || shopId === null || shopId === "undefined" || shopId === "null") {
+    if (shopId === undefined || shopId === null) {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }
 
-    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${shopId}`;
-    const shop = shopRows[0] as any;
+    const db = await getDb();
+
+    const shop = await db.collection("shops").findOne({ shopId });
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    if (shop.is_locked) {
+    if (shop.isLocked) {
       return NextResponse.json({ error: "Shop is locked. Unlock it first to access." }, { status: 403 });
     }
 
-    // Look for users by both text shop_id and UUID shop.id
-    const shopUuid = shop.id;
-    let userRows = await sql`SELECT * FROM users WHERE (shop_id = ${shopId} OR shop_id = ${shopUuid}) AND role = 'owner' LIMIT 1`;
-    let targetUser = userRows[0] as any;
+    let targetUser = await db.collection("users").findOne({
+      shopId,
+      role: "owner",
+    });
 
     if (!targetUser) {
-      userRows = await sql`SELECT * FROM users WHERE (shop_id = ${shopId} OR shop_id = ${shopUuid}) LIMIT 1`;
-      targetUser = userRows[0] as any;
+      targetUser = await db.collection("users").findOne({ shopId });
     }
 
     if (!targetUser) {
@@ -49,18 +49,23 @@ export async function POST(req: Request) {
     }
 
     const newToken = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 4);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 4); // 4 hours for impersonation
 
-    await sql`
-      INSERT INTO sessions (token, user_id, shop_id, created_at, expires_at, impersonated_by, is_impersonation)
-      VALUES (${newToken}, ${targetUser.id}, ${shopId}, NOW(), ${expiresAt}, ${session.email}, true)
-    `;
+    await db.collection("sessions").insertOne({
+      token: newToken,
+      userId: targetUser._id,
+      shopId,
+      createdAt: new Date(),
+      expiresAt,
+      impersonatedBy: session.email,
+      isImpersonation: true,
+    });
 
     const headerStore = await headers();
     await logAdminAction({
       action: "impersonation",
       adminEmail: session.email,
-      targetShopId: Number(shopId),
+      targetShopId: shopId,
       targetShopName: shop.name,
       targetUserEmail: targetUser.email,
       ipAddress: headerStore.get("x-forwarded-for") || headerStore.get("x-real-ip") || undefined,
@@ -79,7 +84,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      shopId: Number(shopId),
+      shopId,
       shopName: shop.name || `Shop ${shopId}`,
       userEmail: targetUser.email,
     });

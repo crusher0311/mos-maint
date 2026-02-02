@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { stripe, getBaseUrl, getBillingSettings } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
   }
 
-  const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(sess.shopId)}`;
-  const shop = shopRows[0] as any;
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId: Number(sess.shopId) });
   
   if (!shop) {
     return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const baseUrl = getBaseUrl();
   
   try {
-    let customerId = shop.stripe_customer_id;
+    let customerId = shop.stripeCustomerId;
     
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -53,9 +53,10 @@ export async function POST(req: NextRequest) {
       });
       customerId = customer.id;
       
-      await sql`
-        UPDATE shops SET stripe_customer_id = ${customerId} WHERE shop_id = ${String(sess.shopId)}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId: Number(sess.shopId) },
+        { $set: { stripeCustomerId: customerId } }
+      );
     }
 
     if (isCart) {
@@ -70,10 +71,10 @@ export async function POST(req: NextRequest) {
         billingSettings.vinPack500PriceId,
       ].filter(Boolean);
 
-      const platformFeatures = await sql`
-        SELECT * FROM platform_features WHERE status = 'active' AND stripe_price_id IS NOT NULL AND stripe_price_id != ''
-      `;
-      const validFeaturePriceIds = platformFeatures.map((f: any) => f.stripe_price_id);
+      const platformFeatures = await db.collection("platform_features")
+        .find({ status: "active", stripePriceId: { $exists: true, $ne: "" } })
+        .toArray();
+      const validFeaturePriceIds = platformFeatures.map(f => f.stripePriceId);
 
       for (const item of cartItems) {
         if (item.type === "vin-pack" && !validVinPackPriceIds.includes(item.priceId)) {

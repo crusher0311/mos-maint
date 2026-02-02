@@ -1,183 +1,132 @@
-import sql from "@/lib/db/postgres";
+import { getDb } from "./mongo";
+import { ObjectId } from "mongodb";
 
 export interface KnowledgeArticle {
-  id?: number;
+  _id?: ObjectId;
   title: string;
   problem: string;
   solution: string;
   category: string;
   tags: string[];
   sourceTicketId?: string;
+  embedding?: number[];
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
   viewCount: number;
   helpfulCount: number;
-  notHelpfulCount?: number;
-  isPublished?: boolean;
 }
 
-export async function createArticle(article: Omit<KnowledgeArticle, "id" | "createdAt" | "updatedAt" | "viewCount" | "helpfulCount">): Promise<string> {
-  const result = await sql`
-    INSERT INTO knowledge_articles (
-      title, problem, solution, category, tags, created_by, is_published
-    )
-    VALUES (
-      ${article.title}, 
-      ${article.problem}, 
-      ${article.solution}, 
-      ${article.category}, 
-      ${JSON.stringify(article.tags)}, 
-      ${article.createdBy},
-      ${article.isPublished ?? false}
-    )
-    RETURNING id
-  `;
+export async function createArticle(article: Omit<KnowledgeArticle, "_id" | "createdAt" | "updatedAt" | "viewCount" | "helpfulCount">): Promise<string> {
+  const db = await getDb();
+  const now = new Date();
   
-  return String(result[0].id);
+  const result = await db.collection("knowledge_articles").insertOne({
+    ...article,
+    createdAt: now,
+    updatedAt: now,
+    viewCount: 0,
+    helpfulCount: 0
+  });
+  
+  return result.insertedId.toString();
 }
 
 export async function getArticleById(id: string): Promise<KnowledgeArticle | null> {
-  const numId = Number(id);
-  if (isNaN(numId)) return null;
-  
-  const results = await sql`
-    SELECT id, title, problem, solution, category, tags, 
-           created_by as "createdBy", created_at as "createdAt", 
-           updated_at as "updatedAt", view_count as "viewCount", 
-           helpful_count as "helpfulCount", not_helpful_count as "notHelpfulCount",
-           is_published as "isPublished"
-    FROM knowledge_articles 
-    WHERE id = ${numId} 
-    LIMIT 1
-  `;
-  return results[0] as unknown as KnowledgeArticle || null;
+  if (!ObjectId.isValid(id)) return null;
+  const db = await getDb();
+  return db.collection<KnowledgeArticle>("knowledge_articles").findOne({ _id: new ObjectId(id) });
 }
 
 export async function searchArticles(query: string, limit: number = 5): Promise<KnowledgeArticle[]> {
+  const db = await getDb();
+  
   const searchTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
   
   if (searchTerms.length === 0) {
-    const results = await sql`
-      SELECT id, title, problem, solution, category, tags, 
-             created_by as "createdBy", created_at as "createdAt", 
-             updated_at as "updatedAt", view_count as "viewCount", 
-             helpful_count as "helpfulCount"
-      FROM knowledge_articles 
-      WHERE is_published = TRUE
-      ORDER BY helpful_count DESC, view_count DESC 
-      LIMIT ${limit}
-    `;
-    return results as unknown as KnowledgeArticle[];
+    return db.collection<KnowledgeArticle>("knowledge_articles")
+      .find({})
+      .sort({ helpfulCount: -1, viewCount: -1 })
+      .limit(limit)
+      .toArray();
   }
   
-  const searchPattern = `%${searchTerms.join('%')}%`;
-  const results = await sql`
-    SELECT id, title, problem, solution, category, tags, 
-           created_by as "createdBy", created_at as "createdAt", 
-           updated_at as "updatedAt", view_count as "viewCount", 
-           helpful_count as "helpfulCount"
-    FROM knowledge_articles 
-    WHERE is_published = TRUE AND (
-      LOWER(title) LIKE ${searchPattern} OR
-      LOWER(problem) LIKE ${searchPattern} OR
-      LOWER(solution) LIKE ${searchPattern} OR
-      LOWER(category) LIKE ${searchPattern} OR
-      tags::text ILIKE ${searchPattern}
-    )
-    ORDER BY helpful_count DESC, view_count DESC 
-    LIMIT ${limit}
-  `;
-  return results as unknown as KnowledgeArticle[];
+  const searchRegex = searchTerms.map(term => new RegExp(term, "i"));
+  
+  return db.collection<KnowledgeArticle>("knowledge_articles")
+    .find({
+      $or: [
+        { title: { $in: searchRegex } },
+        { problem: { $in: searchRegex } },
+        { solution: { $in: searchRegex } },
+        { tags: { $in: searchTerms } },
+        { category: { $in: searchRegex } }
+      ]
+    })
+    .sort({ helpfulCount: -1, viewCount: -1 })
+    .limit(limit)
+    .toArray();
 }
 
 export async function getAllArticles(limit: number = 50, skip: number = 0): Promise<KnowledgeArticle[]> {
-  const results = await sql`
-    SELECT id, title, problem, solution, category, tags, 
-           created_by as "createdBy", created_at as "createdAt", 
-           updated_at as "updatedAt", view_count as "viewCount", 
-           helpful_count as "helpfulCount", is_published as "isPublished"
-    FROM knowledge_articles 
-    ORDER BY updated_at DESC 
-    OFFSET ${skip} LIMIT ${limit}
-  `;
-  return results as unknown as KnowledgeArticle[];
+  const db = await getDb();
+  return db.collection<KnowledgeArticle>("knowledge_articles")
+    .find({})
+    .sort({ updatedAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .toArray();
 }
 
 export async function updateArticle(id: string, updates: Partial<KnowledgeArticle>): Promise<boolean> {
-  const numId = Number(id);
-  if (isNaN(numId)) return false;
+  if (!ObjectId.isValid(id)) return false;
+  const db = await getDb();
   
-  const allowedFields: (keyof KnowledgeArticle)[] = ['title', 'problem', 'solution', 'category', 'tags', 'isPublished'];
-  const updateData: Record<string, unknown> = {};
+  const result = await db.collection("knowledge_articles").updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { ...updates, updatedAt: new Date() } }
+  );
   
-  for (const field of allowedFields) {
-    if (updates[field] !== undefined) {
-      if (field === 'tags') {
-        updateData['tags'] = JSON.stringify(updates[field]);
-      } else if (field === 'isPublished') {
-        updateData['is_published'] = updates[field];
-      } else {
-        updateData[field] = updates[field];
-      }
-    }
-  }
-  
-  if (Object.keys(updateData).length === 0) return false;
-  
-  const result = await sql`
-    UPDATE knowledge_articles 
-    SET ${sql(updateData)}, updated_at = NOW()
-    WHERE id = ${numId}
-  `;
-  
-  return result.count > 0;
+  return result.modifiedCount > 0;
 }
 
 export async function deleteArticle(id: string): Promise<boolean> {
-  const numId = Number(id);
-  if (isNaN(numId)) return false;
+  if (!ObjectId.isValid(id)) return false;
+  const db = await getDb();
   
-  const result = await sql`
-    DELETE FROM knowledge_articles WHERE id = ${numId}
-  `;
-  return result.count > 0;
+  const result = await db.collection("knowledge_articles").deleteOne({ _id: new ObjectId(id) });
+  return result.deletedCount > 0;
 }
 
 export async function incrementViewCount(id: string): Promise<void> {
-  const numId = Number(id);
-  if (isNaN(numId)) return;
+  if (!ObjectId.isValid(id)) return;
+  const db = await getDb();
   
-  await sql`
-    UPDATE knowledge_articles SET view_count = view_count + 1 WHERE id = ${numId}
-  `;
+  await db.collection("knowledge_articles").updateOne(
+    { _id: new ObjectId(id) },
+    { $inc: { viewCount: 1 } }
+  );
 }
 
 export async function incrementHelpfulCount(id: string): Promise<void> {
-  const numId = Number(id);
-  if (isNaN(numId)) return;
+  if (!ObjectId.isValid(id)) return;
+  const db = await getDb();
   
-  await sql`
-    UPDATE knowledge_articles SET helpful_count = helpful_count + 1 WHERE id = ${numId}
-  `;
+  await db.collection("knowledge_articles").updateOne(
+    { _id: new ObjectId(id) },
+    { $inc: { helpfulCount: 1 } }
+  );
 }
 
 export async function getArticlesByCategory(category: string): Promise<KnowledgeArticle[]> {
-  const results = await sql`
-    SELECT id, title, problem, solution, category, tags, 
-           created_by as "createdBy", created_at as "createdAt", 
-           updated_at as "updatedAt", view_count as "viewCount", 
-           helpful_count as "helpfulCount"
-    FROM knowledge_articles 
-    WHERE category = ${category} AND is_published = TRUE
-    ORDER BY helpful_count DESC
-  `;
-  return results as unknown as KnowledgeArticle[];
+  const db = await getDb();
+  return db.collection<KnowledgeArticle>("knowledge_articles")
+    .find({ category })
+    .sort({ helpfulCount: -1 })
+    .toArray();
 }
 
 export async function getCategories(): Promise<string[]> {
-  const results = await sql`
-    SELECT DISTINCT category FROM knowledge_articles WHERE category IS NOT NULL
-  `;
-  return results.map((r: Record<string, unknown>) => r.category as string);
+  const db = await getDb();
+  return db.collection("knowledge_articles").distinct("category");
 }

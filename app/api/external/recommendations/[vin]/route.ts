@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,16 +20,16 @@ export const GET = createExternalEndpoint(
     const mileage = Number(req.nextUrl.searchParams.get("mileage")) || undefined;
     const includeAI = req.nextUrl.searchParams.get("includeAI") === "true";
     
+    const db = await getDb();
+    
     try {
-      const cachedRows = await sql`
-        SELECT * FROM recommendations_cache 
-        WHERE vin = ${vin.toUpperCase()} AND shop_id = ${String(shopId)}
-        LIMIT 1
-      `;
-      const cachedRecs = cachedRows[0];
+      const cachedRecs = await db.collection("recommendations_cache").findOne({
+        vin: vin.toUpperCase(),
+        shopId,
+      });
       
       if (cachedRecs && !includeAI) {
-        const cacheAge = Date.now() - new Date(cachedRecs.updated_at).getTime();
+        const cacheAge = Date.now() - new Date(cachedRecs.updatedAt).getTime();
         const maxAge = 24 * 60 * 60 * 1000;
         
         if (cacheAge < maxAge) {
@@ -38,7 +38,7 @@ export const GET = createExternalEndpoint(
             vin,
             source: "cache",
             recommendations: cachedRecs.recommendations,
-            cachedAt: cachedRecs.updated_at,
+            cachedAt: cachedRecs.updatedAt,
           });
         }
       }
@@ -51,13 +51,16 @@ export const GET = createExternalEndpoint(
         includeAI,
       });
       
-      await sql`
-        INSERT INTO recommendations_cache (vin, shop_id, recommendations, updated_at)
-        VALUES (${vin.toUpperCase()}, ${String(shopId)}, ${JSON.stringify(recommendations)}::jsonb, NOW())
-        ON CONFLICT (vin, shop_id) DO UPDATE SET
-          recommendations = ${JSON.stringify(recommendations)}::jsonb,
-          updated_at = NOW()
-      `;
+      await db.collection("recommendations_cache").updateOne(
+        { vin: vin.toUpperCase(), shopId },
+        {
+          $set: {
+            recommendations,
+            updatedAt: new Date(),
+          }
+        },
+        { upsert: true }
+      );
       
       return NextResponse.json({
         success: true,

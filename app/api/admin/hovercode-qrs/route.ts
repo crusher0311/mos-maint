@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 interface HovercodeQR {
   id: string;
@@ -51,7 +51,7 @@ function extractShopIdFromUrl(url: string): string | null {
   }
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -96,21 +96,22 @@ export async function GET(_req: NextRequest) {
       nextUrl = data.next;
     }
 
-    const shops = await sql`
-      SELECT shop_id, name, sticker_config FROM shops
-    `;
+    const db = await getDb();
+    const shops = await db.collection("shops").find(
+      {},
+      { projection: { shopId: 1, name: 1, "stickerConfig.hovercodeQRId": 1 } }
+    ).toArray();
 
     const shopMap = new Map<string, { name: string; linkedQRId?: string }>();
     const linkedQRIds = new Set<string>();
     
     for (const shop of shops) {
-      const stickerConfig = shop.sticker_config as Record<string, unknown> | null;
-      shopMap.set(String(shop.shop_id), {
-        name: shop.name || `Shop ${shop.shop_id}`,
-        linkedQRId: stickerConfig?.hovercodeQRId as string | undefined,
+      shopMap.set(String(shop.shopId), {
+        name: shop.name || `Shop ${shop.shopId}`,
+        linkedQRId: shop.stickerConfig?.hovercodeQRId,
       });
-      if (stickerConfig?.hovercodeQRId) {
-        linkedQRIds.add(stickerConfig.hovercodeQRId as string);
+      if (shop.stickerConfig?.hovercodeQRId) {
+        linkedQRIds.add(shop.stickerConfig.hovercodeQRId);
       }
     }
 
@@ -174,31 +175,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const db = await getDb();
     const results: Array<{ shopId: string; hovercodeId: string; status: string }> = [];
 
     for (const { shopId, hovercodeId } of mappings) {
+      // Try both string and number versions of shopId
+      const shopIdVariants = [shopId, Number(shopId), String(shopId)];
+      
       if (dryRun) {
-        const shopResult = await sql`SELECT shop_id FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
+        const shop = await db.collection("shops").findOne({ 
+          shopId: { $in: shopIdVariants } 
+        });
         results.push({
           shopId,
           hovercodeId,
-          status: shopResult.length > 0 ? "would_update" : "shop_not_found",
+          status: shop ? "would_update" : "shop_not_found",
         });
       } else {
-        const shopResult = await sql`
-          SELECT sticker_config FROM shops WHERE shop_id = ${shopId} LIMIT 1
-        `;
-        if (shopResult.length > 0) {
-          const existingConfig = (shopResult[0]?.sticker_config as Record<string, unknown>) || {};
-          const updatedConfig = { ...existingConfig, hovercodeQRId: hovercodeId };
-          await sql`
-            UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb
-            WHERE shop_id = ${shopId}
-          `;
-          results.push({ shopId, hovercodeId, status: "updated" });
-        } else {
-          results.push({ shopId, hovercodeId, status: "shop_not_found" });
-        }
+        const result = await db.collection("shops").updateOne(
+          { shopId: { $in: shopIdVariants } },
+          { $set: { "stickerConfig.hovercodeQRId": hovercodeId } }
+        );
+        results.push({
+          shopId,
+          hovercodeId,
+          status: result.matchedCount > 0 ? "updated" : "shop_not_found",
+        });
       }
     }
 

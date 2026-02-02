@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 
@@ -14,12 +14,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const shopRows = await sql`
-      SELECT id, shop_id, settings FROM shops 
-      WHERE settings->>'autovitalsApiKey' = ${apiKey}
-      LIMIT 1
-    `;
-    const shop = shopRows[0];
+    const db = await getDb();
+    
+    const shop = await db.collection("shops").findOne({
+      autovitalsApiKey: apiKey
+    });
 
     if (!shop) {
       return NextResponse.json(
@@ -28,7 +27,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const shopId = shop.shop_id;
+    const shopId = shop.shopId;
     const body = await req.json();
     
     const { vehicle, inspection, source, extractedAt } = body;
@@ -44,23 +43,25 @@ export async function POST(req: NextRequest) {
     const now = new Date();
 
     if (vin) {
-      const vehicleYear = vehicle.vehicleYear ? parseInt(vehicle.vehicleYear) : null;
-      const vehicleMake = vehicle.vehicleMake || null;
-      const vehicleModel = vehicle.vehicleModel || null;
-      const vehicleLicense = vehicle.licensePlate || null;
-      const lastMileage = vehicle.mileage ? parseInt(String(vehicle.mileage).replace(/\D/g, '')) : null;
-
-      await sql`
-        INSERT INTO vehicles (shop_id, vin, year, make, model, license, last_mileage, updated_at, created_at)
-        VALUES (${shopId}, ${vin}, ${vehicleYear}, ${vehicleMake}, ${vehicleModel}, ${vehicleLicense}, ${lastMileage}, ${now}, ${now})
-        ON CONFLICT (shop_id, vin) DO UPDATE SET
-          year = COALESCE(EXCLUDED.year, vehicles.year),
-          make = COALESCE(EXCLUDED.make, vehicles.make),
-          model = COALESCE(EXCLUDED.model, vehicles.model),
-          license = COALESCE(EXCLUDED.license, vehicles.license),
-          last_mileage = COALESCE(EXCLUDED.last_mileage, vehicles.last_mileage),
-          updated_at = EXCLUDED.updated_at
-      `;
+      await db.collection("vehicles").updateOne(
+        { shopId, vin },
+        {
+          $set: {
+            year: vehicle.vehicleYear ? parseInt(vehicle.vehicleYear) : undefined,
+            make: vehicle.vehicleMake,
+            model: vehicle.vehicleModel,
+            license: vehicle.licensePlate,
+            lastMileage: vehicle.mileage ? parseInt(vehicle.mileage.replace(/\D/g, '')) : undefined,
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            shopId,
+            vin,
+            createdAt: now,
+          }
+        },
+        { upsert: true }
+      );
     }
 
     const inspectionDoc = {
@@ -81,49 +82,42 @@ export async function POST(req: NextRequest) {
       customerName: vehicle?.customerName || null,
     };
 
-    const insertRows = await sql`
-      INSERT INTO autovitals_inspections (shop_id, vin, source, inspection_date, source_url, results, extracted_at, synced_at, customer_name)
-      VALUES (${shopId}, ${inspectionDoc.vin}, ${inspectionDoc.source}, ${inspectionDoc.inspectionDate}, ${inspectionDoc.sourceUrl}, ${JSON.stringify(inspectionDoc.results)}::jsonb, ${inspectionDoc.extractedAt}, ${inspectionDoc.syncedAt}, ${inspectionDoc.customerName})
-      RETURNING id
-    `;
-    const insertedId = insertRows[0]?.id;
+    const insertResult = await db.collection("autovitals_inspections").insertOne(inspectionDoc);
 
     if (vin) {
-      await sql`
-        UPDATE vehicles SET
-          last_dvi_date = ${now},
-          last_dvi_source = 'autovitals',
-          last_dvi_id = ${String(insertedId)}
-        WHERE shop_id = ${shopId} AND vin = ${vin}
-      `;
+      await db.collection("vehicles").updateOne(
+        { shopId, vin },
+        {
+          $set: {
+            lastDviDate: now,
+            lastDviSource: "autovitals",
+            lastDviId: insertResult.insertedId,
+          }
+        }
+      );
     }
 
-    const countRows = await sql`
-      SELECT COUNT(*)::int as count FROM autovitals_inspections WHERE shop_id = ${shopId}
-    `;
-    const totalInspections = countRows[0]?.count || 0;
+    const totalInspections = await db.collection("autovitals_inspections").countDocuments({ shopId });
     const immediateCount = (inspection?.results || []).filter((r: any) => r.status === "immediate").length;
     const cautionCount = (inspection?.results || []).filter((r: any) => r.status === "caution").length;
 
-    await sql`
-      UPDATE shops SET
-        settings = jsonb_set(
-          jsonb_set(
-            COALESCE(settings, '{}'),
-            '{autovitals,lastSyncAt}', ${JSON.stringify(now.toISOString())}::jsonb
-          ),
-          '{autovitals,totalInspections}', ${JSON.stringify(totalInspections)}::jsonb
-        ),
-        updated_at = ${now}
-      WHERE id = ${shop.id}
-    `;
+    await db.collection("shops").updateOne(
+      { _id: shop._id },
+      {
+        $set: {
+          "autovitals.lastSyncAt": now,
+          "autovitals.totalInspections": totalInspections,
+          updatedAt: now,
+        }
+      }
+    );
 
     console.log(`[AutoVitals Extension] Synced inspection for VIN ${vin || 'unknown'}: ${inspection?.results?.length || 0} items`);
 
     return NextResponse.json({
       ok: true,
       message: "DVI data synced successfully",
-      inspectionId: String(insertedId),
+      inspectionId: insertResult.insertedId.toString(),
       itemsCount: inspection?.results?.length || 0,
       immediateCount,
       cautionCount,

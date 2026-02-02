@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -139,21 +139,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const shopRows = await sql`
-      SELECT id, name, phone, website_url, sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { stickerConfig: 1, phone: 1, websiteUrl: 1, name: 1 } }
+    );
 
-    if (shopRows.length === 0) {
+    if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const shop = shopRows[0];
-    const storedConfig = shop.sticker_config as StickerConfig | null;
-    
-    const config: StickerConfig = storedConfig || {
+    const config: StickerConfig = shop.stickerConfig || {
       enabled: false,
       phone: shop.phone || "",
-      appointmentUrl: shop.website_url || "",
+      appointmentUrl: shop.websiteUrl || "",
       colors: { 
         primary: "#1976d2", 
         text: "#ffffff",
@@ -237,22 +236,19 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
-    // Get existing config
-    const existingRows = await sql`
-      SELECT sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    
-    if (existingRows.length === 0) {
-      return NextResponse.json({ error: "Shop not found" }, { status: 404 });
-    }
-    
-    const existingConfig = (existingRows[0].sticker_config as StickerConfig) || {};
+    const db = await getDb();
     
     // Check if appointmentUrl is being updated - if so, update HoverCode destination
     if (body.appointmentUrl) {
-      const existingUrl = existingConfig.appointmentUrl;
-      const hovercodeId = existingConfig.hovercodeQRId;
+      const existingShop = await db.collection("shops").findOne(
+        { shopId },
+        { projection: { "stickerConfig.hovercodeQRId": 1, "stickerConfig.appointmentUrl": 1 } }
+      );
       
+      const existingUrl = existingShop?.stickerConfig?.appointmentUrl;
+      const hovercodeId = existingShop?.stickerConfig?.hovercodeQRId;
+      
+      // Only update HoverCode if the URL actually changed and we have a HoverCode ID
       if (hovercodeId && body.appointmentUrl !== existingUrl) {
         console.log(`[Sticker Settings] Appointment URL changed from "${existingUrl}" to "${body.appointmentUrl}"`);
         const updated = await updateHovercodeDestination(hovercodeId, body.appointmentUrl);
@@ -262,25 +258,29 @@ export async function PUT(req: NextRequest) {
       }
     }
     
-    // Merge new fields into existing config
-    const newConfig: Record<string, unknown> = { ...existingConfig };
-    for (const field of allowedFields) {
-      if (field in body) {
-        newConfig[field] = body[field as keyof StickerConfig];
+    const result = await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $set: {
+          ...updateFields,
+          "stickerConfig.updatedAt": new Date(),
+          "stickerConfig.updatedBy": session.email,
+        },
       }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
-    newConfig.updatedAt = new Date();
-    newConfig.updatedBy = session.email;
-    
-    await sql`
-      UPDATE shops 
-      SET sticker_config = ${JSON.stringify(newConfig)}::jsonb, updated_at = NOW()
-      WHERE shop_id = ${String(shopId)}
-    `;
+
+    const updatedShop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { stickerConfig: 1 } }
+    );
 
     return NextResponse.json({
       success: true,
-      config: newConfig,
+      config: updatedShop?.stickerConfig,
     });
   } catch (error) {
     console.error("[Sticker Settings PUT] Error:", error);
@@ -307,10 +307,13 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    await sql`
-      UPDATE shops SET sticker_config = NULL, updated_at = NOW()
-      WHERE shop_id = ${String(shopId)}
-    `;
+    const db = await getDb();
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $unset: { stickerConfig: "" },
+      }
+    );
 
     return NextResponse.json({ success: true, message: "Sticker config reset" });
   } catch (error) {

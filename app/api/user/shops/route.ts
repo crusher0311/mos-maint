@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 
@@ -11,19 +11,27 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get all shops this user has access to
-    const userShops = await sql`
-      SELECT DISTINCT u.shop_id, s.shop_id as numeric_shop_id, s.name, s.location_identifier
-      FROM users u
-      JOIN shops s ON u.shop_id = s.id::text
-      WHERE LOWER(u.email) = ${session.email.toLowerCase()}
-    `;
+    const db = await getDb();
+    
+    const userRecords = await db
+      .collection("users")
+      .find({ email: session.email.toLowerCase() })
+      .project({ shopId: 1 })
+      .toArray();
 
-    const shopList = userShops.map((s) => ({
-      shopId: Number(s.numeric_shop_id),
-      name: s.name || `Shop ${s.numeric_shop_id}`,
-      locationIdentifier: s.location_identifier || null,
-      displayName: s.location_identifier || s.name || `Shop ${s.numeric_shop_id}`,
+    const shopIds = [...new Set(userRecords.map((u) => Number(u.shopId)))];
+
+    const shops = await db
+      .collection("shops")
+      .find({ shopId: { $in: shopIds } })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+      .toArray();
+
+    const shopList = shops.map((s) => ({
+      shopId: Number(s.shopId),
+      name: s.name || `Shop ${s.shopId}`,
+      locationIdentifier: s.locationIdentifier || null,
+      displayName: s.locationIdentifier || s.name || `Shop ${s.shopId}`,
     }));
 
     shopList.sort((a, b) => a.displayName.localeCompare(b.displayName));

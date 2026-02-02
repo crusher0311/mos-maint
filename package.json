@@ -28,7 +28,6 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-react": "^5.18.0",
     "@types/unzipper": "^0.10.11",
-    "@types/uuid": "^10.0.0",
     "@uppy/aws-s3": "^5.1.0",
     "@uppy/core": "^5.2.0",
     "@uppy/dashboard": "^5.1.0",

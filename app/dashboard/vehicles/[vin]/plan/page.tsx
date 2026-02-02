@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
 import { 
   resolveAutoflowConfig, 
@@ -242,7 +242,7 @@ function fillCarfaxMileageGaps(
 }
 
 /* ---------------- Get latest miles from multiple sources ---------------- */
-async function getLatestMilesForVin(vinRaw: string): Promise<number | null> {
+async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | null> {
   const vin = String(vinRaw || "").toUpperCase();
   const toPos = (v: unknown) => {
     if (v == null) return null;
@@ -250,42 +250,48 @@ async function getLatestMilesForVin(vinRaw: string): Promise<number | null> {
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  // Latest RO mileage (join with vehicles to get by VIN)
-  const roResult = await sql`
-    SELECT w.odometer_in as mileage 
-    FROM work_orders w
-    JOIN vehicles v ON w.vehicle_id = v.id
-    WHERE v.vin = ${vin}
-    ORDER BY w.updated_at DESC NULLS LAST, w.created_at DESC NULLS LAST
-    LIMIT 1
-  `;
-  const mRO = toPos(roResult[0]?.mileage);
+  // Latest RO mileage
+  const ro = await db.collection("repair_orders").findOne(
+    { vin },
+    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1 } }
+  );
+  const mRO = toPos(ro?.mileage);
 
   // Latest event with mileage
-  const afResult = await sql`
-    SELECT 
-      COALESCE(
-        (payload->>'mileage')::numeric,
-        (payload->'ticket'->>'mileage')::numeric,
-        (payload->'vehicle'->>'mileage')::numeric,
-        (payload->'vehicle'->>'miles')::numeric,
-        (payload->'vehicle'->>'odometer')::numeric
-      ) as mileage
-    FROM events
-    WHERE UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
-    ORDER BY created_at DESC NULLS LAST
-    LIMIT 10
-  `;
-  const mAF = afResult.map((x: any) => toPos(x?.mileage)).find((x: any) => x != null) ?? null;
+  const af = await db.collection("events").aggregate([
+    {
+      $match: {
+        $expr: {
+          $eq: [
+            { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+            vin,
+          ],
+        },
+      },
+    },
+    { $sort: { createdAt: -1 } },
+    { $limit: 10 },
+    {
+      $project: {
+        mileage: {
+          $ifNull: [
+            "$payload.ticket.mileage",
+            {
+              $ifNull: [
+                "$payload.mileage",
+                { $ifNull: ["$payload.vehicle.mileage", { $ifNull: ["$payload.vehicle.miles", "$payload.vehicle.odometer"] }] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ]).toArray();
+  const mAF = af.map((x: any) => toPos(x?.mileage)).find((x: any) => x != null) ?? null;
 
-  // Vehicle-level odometer/lastMileage/mileage
-  const vehResult = await sql`
-    SELECT mileage, odometer, last_mileage FROM vehicles 
-    WHERE vin = ${vin}
-    LIMIT 1
-  `;
-  const veh = vehResult[0];
-  const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.last_mileage);
+  // Vehicle-level odometer/lastMileage/mileage (Tekmetric stores as mileage)
+  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1, mileage: 1 } });
+  const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
 
   // Return the highest valid mileage
   const candidates = [mRO, mAF, mVeh].filter((x): x is number => x != null);
@@ -859,23 +865,21 @@ export default function VehiclePlanPage({ params, searchParams }: PageProps) {
 
 async function PlanContent({ params, searchParams }: PageProps) {
   const session = await requireSession();
+  const db = await getDb();
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "1";
-  const shopId = String(session.shopId);
+  const shopId = Number(session.shopId);
 
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
 
-  const shopResult = await sql`
-    SELECT id, maintenance, protractor, preferences FROM shops
-    WHERE shop_id = ${shopId}
-    LIMIT 1
-  `;
-  const shop = shopResult[0] as any;
-  const shopUuid = shop?.id as string | undefined; // UUID for foreign key lookups
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { maintenance: 1, protractor: 1, preferences: 1 } }
+  );
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
-  const hasJobLookupFeature = await isFeatureEnabled(Number(shopId), "job_lookup");
+  const hasJobLookupFeature = await isFeatureEnabled(shopId, "job_lookup");
   const showInspectItems = shop?.preferences?.showInspectItems !== false; // default true
   const showRecalls = shop?.preferences?.showRecalls !== false; // default true
   const recallsExpanded = shop?.preferences?.recallsExpanded !== false; // default true
@@ -924,23 +928,15 @@ async function PlanContent({ params, searchParams }: PageProps) {
   console.log(`[CannedJobs] Shop ${shopId} mappings:`, Object.keys(cannedJobMappings));
   console.log(`[CannedJobs] Shop ${shopId} cannedJobsById count:`, Object.keys(cannedJobsById).length);
   
-  const vehicleResult = shopUuid ? await sql`
-    SELECT year, make, model, vin, last_mileage, customer_id, updated_at, declined_services
-    FROM vehicles
-    WHERE shop_id = ${shopUuid}::uuid AND vin = ${vin}
-    LIMIT 1
-  ` : [];
-  const vehicle = vehicleResult[0] ? {
-    ...vehicleResult[0],
-    lastMileage: vehicleResult[0].last_mileage,
-    customerId: vehicleResult[0].customer_id,
-    updatedAt: vehicleResult[0].updated_at,
-    declinedServices: vehicleResult[0].declined_services,
-  } : null;
+
+  const vehicle = await db.collection("vehicles").findOne(
+    { shopId, vin },
+    { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1 } }
+  );
 
   // Early mileage check and cache lookup (skip cache if force refresh)
-  const earlyMiles = await getLatestMilesForVin(vin);
-  const cachedPlan = forceRefresh ? null : await getCachedPlan(vin, Number(shopId), earlyMiles);
+  const earlyMiles = await getLatestMilesForVin(db, vin);
+  const cachedPlan = forceRefresh ? null : await getCachedPlan(db, vin, shopId, earlyMiles);
   const useCachedData = cachedPlan !== null;
   
   if (useCachedData) {
@@ -951,43 +947,49 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
   // This matches the detail page logic exactly
-  const eventRos = await sql`
-    WITH event_ros AS (
-      SELECT 
-        COALESCE(
-          payload->'ticket'->>'invoice',
-          payload->'ticket'->>'id'
-        ) as ro_number,
-        payload->'ticket'->>'status' as status,
-        COALESCE(
-          (payload->'ticket'->>'mileage')::numeric,
-          (payload->'vehicle'->>'mileage')::numeric
-        ) as mileage,
-        created_at
-      FROM events
-      WHERE shop_id = ${shopUuid}::uuid
-        AND provider = 'autoflow'
-        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
-    ),
-    grouped_ros AS (
-      SELECT DISTINCT ON (ro_number)
-        ro_number,
-        status,
-        mileage,
-        created_at as updated_at,
-        created_at
-      FROM event_ros
-      WHERE ro_number IS NOT NULL
-      ORDER BY ro_number, created_at DESC
-    )
-    SELECT * FROM grouped_ros
-    ORDER BY updated_at DESC
-    LIMIT 20
-  `;
+  const eventRos = await db.collection("events").aggregate([
+    {
+      $match: {
+        $and: [
+          { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+          { provider: "autoflow" },
+          {
+            $expr: {
+              $eq: [
+                { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+                vin.toUpperCase()
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      $addFields: {
+        roNumber: { $ifNull: ["$payload.ticket.invoice", { $ifNull: ["$payload.ticket.id", "$roNumber"] }] },
+        status: { $ifNull: ["$payload.ticket.status", "$status"] },
+        mileage: { $ifNull: ["$payload.ticket.mileage", { $ifNull: ["$payload.vehicle.mileage", null] }] }
+      }
+    },
+    { $match: { roNumber: { $ne: null } } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: "$roNumber",
+        roNumber: { $first: "$roNumber" },
+        status: { $first: "$status" },
+        mileage: { $first: "$mileage" },
+        updatedAt: { $first: "$createdAt" },
+        createdAt: { $first: "$createdAt" }
+      }
+    },
+    { $sort: { updatedAt: -1 } },
+    { $limit: 20 }
+  ]).toArray();
 
-  const ros = eventRos as any[];
+  const ros = eventRos;
   
-  let latestRoNumber = ros[0]?.ro_number ?? null;
+  let latestRoNumber = ros[0]?.roNumber ?? null;
   let latestWorkOrderId: string | null = null;
   let latestRepairOrderId: string | number | null = null;
   let activeIntegration: "protractor" | "tekmetric" | null = null;
@@ -1012,34 +1014,38 @@ async function PlanContent({ params, searchParams }: PageProps) {
   };
   
   // Query all connected work order sources in parallel
-  const [protractorWOResult, tekmetricWOResult, autoflowWOResult] = await Promise.all([
-    // Protractor work orders
-    shopUuid ? sql`
-      SELECT * FROM protractor_work_orders
-      WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vin}
-      ORDER BY synced_at DESC NULLS LAST, closed_date DESC NULLS LAST
-      LIMIT 1
-    ` : sql`SELECT NULL WHERE FALSE`,
-    // Tekmetric work orders
-    shopUuid ? sql`
-      SELECT * FROM tekmetric_work_orders
-      WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vin}
-      ORDER BY synced_at DESC NULLS LAST, closed_date DESC NULLS LAST
-      LIMIT 1
-    ` : sql`SELECT NULL WHERE FALSE`,
-    // AutoFlow work orders (via webhook events)
-    shopUuid ? sql`
-      SELECT * FROM events
-      WHERE shop_id = ${shopUuid}::uuid
-        AND UPPER(COALESCE(vin, payload->'vehicle'->>'vin')) = ${vin}
-      ORDER BY created_at DESC
-      LIMIT 1
-    ` : sql`SELECT NULL WHERE FALSE`
-  ]);
+  const vinRegex = new RegExp(`^${vin}$`, 'i');
   
-  const protractorWO = protractorWOResult[0] as any;
-  const tekmetricWO = tekmetricWOResult[0] as any;
-  const autoflowWO = autoflowWOResult[0] as any;
+  const [protractorWO, tekmetricWO, autoflowWO] = await Promise.all([
+    // Protractor work orders
+    db.collection("protractor_work_orders").findOne(
+      { 
+        shopId,
+        $or: [
+          { vin: { $regex: vinRegex } },
+          { "data.VIN": { $regex: vinRegex } }
+        ]
+      },
+      { sort: { fetchedAt: -1, createdAt: -1 } }
+    ),
+    // Tekmetric work orders
+    db.collection("tekmetric_work_orders").findOne(
+      { shopId: { $in: [String(shopId), Number(shopId)] }, vin: { $regex: vinRegex } },
+      { sort: { updatedAt: -1, createdAt: -1 } }
+    ),
+    // AutoFlow work orders (via webhook events)
+    db.collection("autoflow_events").findOne(
+      { 
+        shopId,
+        $or: [
+          { vehicleVin: { $regex: vinRegex } },
+          { vin: { $regex: vinRegex } },
+          { "payload.vehicle.vin": { $regex: vinRegex } }
+        ]
+      },
+      { sort: { createdAt: -1 } }
+    )
+  ]);
   
   // Pick the most recent work order from any connected source
   type WOCandidate = { source: string; roNumber: string; workOrderId: string | null; customerName: string | null; updatedAt: Date };
@@ -1135,78 +1141,78 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Also fetch Protractor vehicle info for deferred work (deferred work is dynamic, not cached)
   if (useCachedData) {
     console.log(`[Plan] Cache HIT - skipping expensive external API calls`);
-    const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg, localShopBrandingResult] = await Promise.all([
-      resolveAutoflowConfig(Number(shopId)),
-      resolveCarfaxConfig(Number(shopId)),
-      resolveProtractorConfig(Number(shopId)),
-      resolveAutoVitalsConfig(Number(shopId)),
-      sql`SELECT branding FROM shops WHERE shop_id = ${shopId} LIMIT 1`
+    const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg, localShopBranding] = await Promise.all([
+      resolveAutoflowConfig(shopId),
+      resolveCarfaxConfig(shopId),
+      resolveProtractorConfig(shopId),
+      resolveAutoVitalsConfig(shopId),
+      db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
     ]);
     autoCfg = localAutoCfg;
     carfaxCfg = localCarfaxCfg;
     protractorCfg = localProtractorCfg;
     autoVitalsCfg = localAutoVitalsCfg;
-    shopBranding = localShopBrandingResult[0];
+    shopBranding = localShopBranding;
     
     // Fetch Protractor vehicle info for deferred work (needed even on cache hit)
     if (protractorCfg.configured) {
-      protractorVehicleResult = await fetchProtractorVehicle(Number(shopId), vin, PROTRACTOR_CACHE_TTL);
+      protractorVehicleResult = await fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
     }
   } else {
     // CACHE MISS: Full parallel data fetching - external APIs + local queries
     console.log(`[Plan] Cache MISS - fetching all external data`);
     const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg] = await Promise.all([
-      resolveAutoflowConfig(Number(shopId)),
-      resolveCarfaxConfig(Number(shopId)),
-      resolveProtractorConfig(Number(shopId)),
-      resolveAutoVitalsConfig(Number(shopId))
+      resolveAutoflowConfig(shopId),
+      resolveCarfaxConfig(shopId),
+      resolveProtractorConfig(shopId),
+      resolveAutoVitalsConfig(shopId)
     ]);
     autoCfg = localAutoCfg;
     carfaxCfg = localCarfaxCfg;
     protractorCfg = localProtractorCfg;
     autoVitalsCfg = localAutoVitalsCfg;
 
-    const [localDvi, localCarfax, localProtractorVehicleResult, localAvInspectionResult, localProtractorCompletedWOs, localTekmetricCompletedWOs, localShopBrandingResult] = await Promise.all([
+    const [localDvi, localCarfax, localProtractorVehicleResult, localAvInspectionResult, localProtractorCompletedWOs, localTekmetricCompletedWOs, localShopBranding] = await Promise.all([
       latestRoNumber && autoCfg.configured
-        ? fetchDviWithCache(Number(shopId), String(latestRoNumber), DVI_CACHE_TTL)
+        ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
         : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
       carfaxCfg.configured
-        ? fetchCarfaxWithCache(Number(shopId), vin, CARFAX_CACHE_TTL)
+        ? fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL)
         : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
       protractorCfg.configured
-        ? fetchProtractorVehicle(Number(shopId), vin, PROTRACTOR_CACHE_TTL)
+        ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL)
         : Promise.resolve({ ok: false } as { ok: false }),
       autoVitalsCfg.configured
-        ? fetchAutoVitalsInspectionByVin(Number(shopId), vin, PROTRACTOR_CACHE_TTL)
+        ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL)
         : Promise.resolve({ ok: false } as { ok: false }),
-      shopUuid ? sql`
-        SELECT * FROM protractor_work_orders
-        WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vinUpper}
-        ORDER BY synced_at DESC NULLS LAST
-        LIMIT 20
-      ` : sql`SELECT NULL WHERE FALSE`,
-      shopUuid ? sql`
-        SELECT * FROM tekmetric_work_orders
-        WHERE shop_id = ${shopUuid}::uuid AND UPPER(vin) = ${vinUpper}
-        ORDER BY closed_date DESC NULLS LAST
-        LIMIT 50
-      ` : sql`SELECT NULL WHERE FALSE`,
-      sql`SELECT branding FROM shops WHERE shop_id = ${shopId} LIMIT 1`
+      db.collection("protractor_work_orders").find({
+        shopId,
+        $or: [
+          { vin: vinUpper },
+          { "data.VIN": vinUpper },
+          { "ServiceItem.VIN": vinUpper }
+        ]
+      }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
+      db.collection("tekmetric_work_orders").find({
+        shopId: Number(shopId),
+        vin: vinUpper
+      }).sort({ completedDate: -1 }).limit(50).toArray(),
+      db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
     ]);
     dvi = localDvi;
     carfax = localCarfax;
     protractorVehicleResult = localProtractorVehicleResult;
     avInspectionResult = localAvInspectionResult;
-    protractorCompletedWOs = localProtractorCompletedWOs as any[];
-    tekmetricCompletedWOs = localTekmetricCompletedWOs as any[];
-    shopBranding = localShopBrandingResult[0];
+    protractorCompletedWOs = localProtractorCompletedWOs;
+    tekmetricCompletedWOs = localTekmetricCompletedWOs;
+    shopBranding = localShopBranding;
   }
 
   // Protractor Deferred Work - always fetch fresh for Protractor shops (it's dynamic)
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
   if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
     const deferredResult = await fetchProtractorDeferredWork(
-      Number(shopId),
+      shopId,
       vin,
       (protractorVehicleResult as any).vehicle.ID,
       PROTRACTOR_CACHE_TTL
@@ -1301,7 +1307,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   } else {
     // On cache miss, fetch both current miles and OEM schedule
     const [fetchedMiles, fetchedOemData] = await Promise.all([
-      getLatestMilesForVin(vin),
+      getLatestMilesForVin(db, vin),
       getMaintenanceScheduleCached(vin)
     ]);
     currentMiles = fetchedMiles;
@@ -1405,7 +1411,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     : 0;
   const hasDeferredMismatch = protractorDeferredWork.length > 0 && cachedDeferredCount === 0;
   
-  if (useCachedData && cachedPlan && cachedPlan.plan?.buckets?.overdue) {
+  if (useCachedData && cachedPlan) {
     console.log(`[Plan] Using cached buckets for ${vin}`);
     const cached = cachedPlan.plan;
     
@@ -1421,9 +1427,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
     });
     
     buckets = {
-      overdue: (cached.buckets.overdue || []).map(convertCacheItem),
-      dueSoon: (cached.buckets.dueSoon || []).map(convertCacheItem),
-      upcoming: (cached.buckets.upcoming || []).map(convertCacheItem),
+      overdue: cached.buckets.overdue.map(convertCacheItem),
+      dueSoon: cached.buckets.dueSoon.map(convertCacheItem),
+      upcoming: cached.buckets.upcoming.map(convertCacheItem),
     };
     
     // If we have fresh deferred work that's not in cached buckets, add it now
@@ -1550,7 +1556,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       showInspectItems,
     };
     
-    setCachedPlan(vin, Number(shopId), currentMiles, planData).catch(err => {
+    setCachedPlan(db, vin, shopId, currentMiles, planData).catch(err => {
       console.error(`[Plan] Failed to cache plan for ${vin}:`, err);
     });
   }

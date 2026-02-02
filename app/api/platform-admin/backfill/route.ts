@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 
 export const runtime = "nodejs";
@@ -27,36 +27,41 @@ export async function POST(req: NextRequest) {
 
   try {
     const { shopId, action } = await req.json();
+    const db = await getDb();
 
     if (action === "resume_all_incomplete") {
       console.log("[Platform Admin] Finding all incomplete backfills...");
       
-      const protractorShops = await sql`
-        SELECT shop_id, name FROM shops WHERE protractor_configured = true
-      `;
+      const protractorShops = await db.collection("shops")
+        .find({ "protractor.configured": true })
+        .project({ shopId: 1, name: 1 })
+        .toArray();
       
-      const allBackfillProgress = await sql`SELECT * FROM backfill_progress`;
+      const allBackfillProgress = await db.collection("backfill_progress")
+        .find({})
+        .toArray();
       
       const fiveYearsAgo = new Date();
       fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
       fiveYearsAgo.setMonth(fiveYearsAgo.getMonth() + 1);
       
-      const actuallyCompleteShopIds = new Set<string>();
+      const actuallyCompleteShopIds = new Set<number>();
       for (const progress of allBackfillProgress) {
-        if ((progress as any).completed && (progress as any).current_chunk_end) {
-          const chunkEnd = new Date((progress as any).current_chunk_end);
+        if (progress.completed && progress.currentChunkEnd) {
+          const chunkEnd = new Date(progress.currentChunkEnd);
           if (chunkEnd <= fiveYearsAgo) {
-            actuallyCompleteShopIds.add((progress as any).shop_id);
+            actuallyCompleteShopIds.add(progress.shopId);
           } else {
-            console.log(`[Platform Admin] Shop ${(progress as any).shop_id} marked complete but only at ${chunkEnd.toISOString().split('T')[0]} - will resume`);
-            await sql`
-              UPDATE backfill_progress SET completed = false WHERE shop_id = ${(progress as any).shop_id}
-            `;
+            console.log(`[Platform Admin] Shop ${progress.shopId} marked complete but only at ${chunkEnd.toISOString().split('T')[0]} - will resume`);
+            await db.collection("backfill_progress").updateOne(
+              { shopId: progress.shopId },
+              { $set: { completed: false } }
+            );
           }
         }
       }
       
-      const incompleteShops = protractorShops.filter((s: any) => !actuallyCompleteShopIds.has(s.shop_id));
+      const incompleteShops = protractorShops.filter((s: any) => !actuallyCompleteShopIds.has(s.shopId));
       
       console.log(`[Platform Admin] Found ${incompleteShops.length} shops with incomplete backfills (${actuallyCompleteShopIds.size} truly complete)`);
       
@@ -64,15 +69,18 @@ export async function POST(req: NextRequest) {
       const resumedShopIds: number[] = [];
       
       await Promise.all(
-        incompleteShops.map((shop: any) => 
-          sql`UPDATE backfill_progress SET in_progress = false WHERE shop_id = ${shop.shop_id}`
+        incompleteShops.map(shop => 
+          db.collection("backfill_progress").updateOne(
+            { shopId: shop.shopId },
+            { $set: { inProgress: false } }
+          )
         )
       );
       
       for (const shop of incompleteShops) {
-        resumedShopIds.push(Number((shop as any).shop_id));
-        runProtractorBackfill(Number((shop as any).shop_id)).catch(err => {
-          console.error(`[Platform Admin] Backfill error for shop ${(shop as any).shop_id}:`, err.message);
+        resumedShopIds.push(shop.shopId);
+        runProtractorBackfill(shop.shopId).catch(err => {
+          console.error(`[Platform Admin] Backfill error for shop ${shop.shopId}:`, err.message);
         });
       }
       
@@ -93,13 +101,12 @@ export async function POST(req: NextRequest) {
     const numericShopId = Number(shopId);
 
     if (action === "resume") {
-      const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(numericShopId)}`;
-      const shop = shopRows[0] as any;
+      const shop = await db.collection("shops").findOne({ shopId: numericShopId });
       if (!shop) {
         return NextResponse.json({ error: "Shop not found" }, { status: 404 });
       }
 
-      const hasProtractor = !!shop.protractor_connection_id;
+      const hasProtractor = !!shop.protractor?.connectionId;
       
       if (!hasProtractor) {
         return NextResponse.json({ error: "Shop does not have Protractor configured" }, { status: 400 });
@@ -120,7 +127,7 @@ export async function POST(req: NextRequest) {
     if (action === "reset") {
       console.log(`[Platform Admin] Resetting backfill progress for shop ${numericShopId}`);
       
-      await sql`DELETE FROM backfill_progress WHERE shop_id = ${String(numericShopId)}`;
+      await db.collection("backfill_progress").deleteOne({ shopId: numericShopId });
       
       return NextResponse.json({ 
         ok: true, 

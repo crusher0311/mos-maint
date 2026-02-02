@@ -2,30 +2,8 @@
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
+import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
-import { 
-  upsertProtractorWorkOrderToPostgres, 
-  upsertProtractorVehicleToPostgres 
-} from "@/lib/postgres-ingestion";
-import { getShopByShopId } from "@/lib/db/shops-pg";
-import { 
-  upsertProtractorVehicle, 
-  getProtractorVehicleByVin 
-} from "@/lib/db/protractor-vehicles-pg";
-import { 
-  upsertProtractorWorkOrder,
-  getProtractorWorkOrdersByVin
-} from "@/lib/db/protractor-work-orders-pg";
-import { 
-  upsertProtractorDeferredWork,
-  getProtractorDeferredWorkByVin
-} from "@/lib/db/protractor-deferred-work-pg";
-import {
-  bulkUpsertProtractorCannedJobs,
-  getProtractorCannedJobs,
-  getProtractorCannedJobByCode
-} from "@/lib/db/protractor-canned-jobs-pg";
-import { findCachedJobPricing as findCachedJobPricingPg } from "@/lib/db/job-index-pg";
 
 const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
@@ -256,17 +234,27 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
 }
 
 export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
-  const shop = await getShopByShopId(shopId);
-  
-  const protractorConfig = (shop?.protractor || {}) as Record<string, unknown>;
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+    {
+      projection: {
+        protractor: 1,
+        protractorConnectionId: 1,
+        protractorApiKey: 1,
+      },
+    }
+  );
 
   const connectionId =
-    (protractorConfig.connectionId as string) ??
+    shop?.protractorConnectionId ??
+    shop?.protractor?.connectionId ??
     process.env.PROTRACTOR_CONNECTION_ID ??
     "";
 
   const apiKey =
-    (protractorConfig.apiKey as string) ??
+    shop?.protractorApiKey ??
+    shop?.protractor?.apiKey ??
     process.env.PROTRACTOR_API_KEY ??
     "";
 
@@ -732,13 +720,92 @@ export async function findCachedJobPricing(
   workOrderNumber?: number;
   performedAt?: Date;
 }> {
-  const shop = await getShopByShopId(shopId);
-  if (!shop) {
-    console.log(`[Protractor Cache] Shop not found for shopId: ${shopId}`);
+  const db = await getDb();
+  
+  const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const targetTitle = options.jobTitle ? normalize(options.jobTitle) : '';
+  const targetCode = options.jobCode ? normalize(options.jobCode) : '';
+  
+  // Build query - search by serviceItemId OR VIN
+  const orConditions: any[] = [];
+  if (options.serviceItemId) {
+    orConditions.push({ 'vehicle.serviceItemId': options.serviceItemId });
+  }
+  if (options.vin) {
+    orConditions.push({ 'vehicle.vin': options.vin.toUpperCase() });
+    orConditions.push({ 'vehicle.vin': options.vin.toLowerCase() });
+  }
+  
+  if (orConditions.length === 0) {
+    console.log(`[Protractor Cache] No serviceItemId or VIN provided for job lookup`);
     return { found: false };
   }
   
-  return findCachedJobPricingPg(shop.id, options);
+  // Query job_index for this vehicle's history
+  const jobs = await db.collection('job_index').find({
+    shopId,
+    $or: orConditions,
+  }).sort({ performedAt: -1 }).limit(100).toArray();
+  
+  console.log(`[Protractor Cache] Found ${jobs.length} cached jobs for vehicle (shopId: ${shopId}, serviceItemId: ${options.serviceItemId || 'N/A'}, vin: ${options.vin || 'N/A'})`);
+  
+  if (jobs.length === 0) {
+    return { found: false };
+  }
+  
+  // Search for matching job by code or title
+  for (const job of jobs) {
+    const jobTitle = job.job?.title || '';
+    const jobCode = job.job?.code || '';
+    const normalizedJobTitle = normalize(jobTitle);
+    const normalizedJobCode = normalize(jobCode);
+    
+    let matched = false;
+    let matchType = '';
+    
+    // Exact code match
+    if (targetCode && normalizedJobCode === targetCode) {
+      matched = true;
+      matchType = 'exact code';
+    }
+    // Exact title match
+    else if (targetTitle && normalizedJobTitle === targetTitle) {
+      matched = true;
+      matchType = 'exact title';
+    }
+    // Partial title match - only match when cached job title CONTAINS target title
+    // NOT the reverse (which caused "Air Filter" to match "Cabin Air Filter")
+    else if (targetTitle && targetTitle.length > 5 && normalizedJobTitle.includes(targetTitle)) {
+      matched = true;
+      matchType = 'partial title';
+    }
+    
+    if (matched && job.lines && job.lines.length > 0) {
+      console.log(`[Protractor Cache] Found matching job (${matchType}): "${jobTitle}" with ${job.lines.length} lines from WO#${job.workOrderNumber}`);
+      
+      // Convert cached lines to Protractor format
+      const protractorLines = job.lines.map((line: any) => ({
+        lineType: line.lineType === 'labor' ? 'Labor' : 'Material',
+        description: line.description,
+        partNumber: line.partNumber,
+        manufacturer: line.manufacturer,
+        quantity: line.quantity || 1,
+        unitPrice: line.unitPrice || 0,
+        extendedPrice: line.extendedPrice || 0,
+      }));
+      
+      return {
+        found: true,
+        lines: protractorLines,
+        source: `cached from WO#${job.workOrderNumber}`,
+        workOrderNumber: job.workOrderNumber,
+        performedAt: job.performedAt,
+      };
+    }
+  }
+  
+  console.log(`[Protractor Cache] No matching job found for "${options.jobTitle}" (code: ${options.jobCode})`);
+  return { found: false };
 }
 
 export async function fetchDeferredWork(
@@ -800,34 +867,40 @@ export async function upsertProtractorVehicleSnapshot(
   vin: string,
   vehicle: ProtractorVehicle
 ): Promise<void> {
-  const shop = await getShopByShopId(shopId);
+  const db = await getDb();
+  const now = new Date();
   
-  await upsertProtractorVehicle(shop?.id || null, shopId, {
-    vehicleId: vehicle.ID,
-    vin: vin.toUpperCase(),
-    year: vehicle.Year ?? null,
-    make: vehicle.Make ?? null,
-    model: vehicle.Model ?? null,
-    licensePlate: vehicle.LicensePlate ?? null,
-    customerId: vehicle.OwnerID ?? null,
-    rawData: vehicle as Record<string, unknown>
-  });
-  
-  await upsertProtractorVehicleToPostgres(shopId, vehicle.ID, {
-    vin: vin.toUpperCase(),
-    year: vehicle.Year ?? undefined,
-    make: vehicle.Make ?? undefined,
-    model: vehicle.Model ?? undefined,
-    licensePlate: vehicle.LicensePlate ?? undefined,
-    customerId: vehicle.OwnerID ?? undefined,
-    rawData: vehicle
-  });
+  await db.collection("protractor_vehicles").updateOne(
+    { shopId, vin: vin.toUpperCase() },
+    {
+      $set: {
+        shopId,
+        vin: vin.toUpperCase(),
+        protractorId: vehicle.ID,
+        year: vehicle.Year ?? null,
+        make: vehicle.Make ?? null,
+        model: vehicle.Model ?? null,
+        color: vehicle.Color ?? null,
+        engine: vehicle.Engine ?? null,
+        transmission: vehicle.Transmission ?? null,
+        odometer: vehicle.Usage ?? vehicle.Odometer ?? null,
+        odometerDate: vehicle.OdometerDate ?? null,
+        licensePlate: vehicle.LicensePlate ?? null,
+        ownerId: vehicle.OwnerID ?? null,
+        fetchedAt: now,
+        source: "protractor",
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
 }
 
 export async function upsertProtractorWorkOrderSnapshot(
   shopId: number,
   workOrder: ProtractorWorkOrder
 ): Promise<void> {
+  const db = await getDb();
   const now = new Date();
   const vin = workOrder.ServiceItem?.VIN?.toUpperCase() ?? null;
   
@@ -837,61 +910,138 @@ export async function upsertProtractorWorkOrderSnapshot(
         .join(" ") || workOrder.Contact.FileAs || null
     : null;
   
-  const shop = await getShopByShopId(shopId);
+  const companyName = workOrder.Contact?.Company || null;
   
-  await upsertProtractorWorkOrder(shop?.id || '', shopId, {
-    workOrderId: workOrder.ID,
-    workOrderNumber: workOrder.WorkOrderNumber ? String(workOrder.WorkOrderNumber) : null,
-    vin: vin,
-    status: workOrder.WorkflowStage ?? workOrder.Status ?? null,
-    customerId: workOrder.ContactID ?? null,
-    vehicleId: workOrder.ServiceItemID ?? null,
-    customerName: contactName,
-    vehicleYear: workOrder.ServiceItem?.Year ?? null,
-    vehicleMake: workOrder.ServiceItem?.Make ?? null,
-    vehicleModel: workOrder.ServiceItem?.Model ?? null,
-    mileage: workOrder.InUsage ?? workOrder.Odometer ?? null,
-    createdDate: workOrder.ScheduledTime ? new Date(workOrder.ScheduledTime) : null,
-    closedDate: workOrder.Completed ? now : null,
-    rawData: workOrder as Record<string, unknown>
-  });
+  const servicePackagesRaw = workOrder.ServicePackages ?? [];
+  const packages = Array.isArray(servicePackagesRaw) 
+    ? servicePackagesRaw 
+    : (servicePackagesRaw as any)?.ItemCollection || [];
   
-  await upsertProtractorWorkOrderToPostgres(shopId, workOrder.ID, {
-    workOrderNumber: workOrder.WorkOrderNumber ? String(workOrder.WorkOrderNumber) : undefined,
-    vin: vin ?? undefined,
-    status: workOrder.WorkflowStage ?? workOrder.Status ?? undefined,
-    customerId: workOrder.ContactID ?? undefined,
-    vehicleId: workOrder.ServiceItemID ?? undefined,
-    customerName: contactName ?? undefined,
-    vehicleYear: workOrder.ServiceItem?.Year ?? undefined,
-    vehicleMake: workOrder.ServiceItem?.Make ?? undefined,
-    vehicleModel: workOrder.ServiceItem?.Model ?? undefined,
-    mileage: workOrder.InUsage ?? workOrder.Odometer ?? undefined,
-    createdDate: workOrder.ScheduledTime ?? undefined,
-    closedDate: workOrder.Completed ? now.toISOString() : undefined,
-    rawData: workOrder
-  });
+  let totalLabor = 0;
+  let totalParts = 0;
+  let totalOther = 0;
+  const packageSummaries: Array<{
+    id: string;
+    templateId: string;
+    code: string;
+    title: string;
+    laborTotal: number;
+    partsTotal: number;
+    otherTotal: number;
+    total: number;
+  }> = [];
+  
+  for (const pkg of packages) {
+    const linesRaw = pkg.ServicePackageLines;
+    const lines = Array.isArray(linesRaw) 
+      ? linesRaw 
+      : (linesRaw?.ItemCollection || []);
+    
+    let pkgLabor = 0;
+    let pkgParts = 0;
+    let pkgOther = 0;
+    
+    for (const line of lines) {
+      const amount = line.ExtendedTotal ?? line.Total ?? line.ExtendedPrice ?? 
+        ((line.Quantity || 1) * (line.Price || line.UnitPrice || 0));
+      const lineType = (line.Type || line.LineType || "").toLowerCase();
+      
+      if (lineType.includes("labor")) {
+        pkgLabor += amount;
+        totalLabor += amount;
+      } else if (lineType.includes("part")) {
+        pkgParts += amount;
+        totalParts += amount;
+      } else {
+        pkgOther += amount;
+        totalOther += amount;
+      }
+    }
+    
+    const templateId = pkg.ServicePackageTemplateID || pkg.TemplateID || "";
+    const code = pkg.ServicePackageHeader?.Code || pkg.Code || templateId || "";
+    const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.Description || "";
+    
+    packageSummaries.push({
+      id: pkg.ID || "",
+      templateId,
+      code,
+      title,
+      laborTotal: pkgLabor,
+      partsTotal: pkgParts,
+      otherTotal: pkgOther,
+      total: pkgLabor + pkgParts + pkgOther,
+    });
+  }
+  
+  await db.collection("protractor_work_orders").updateOne(
+    { shopId, workOrderId: workOrder.ID },
+    {
+      $set: {
+        shopId,
+        workOrderId: workOrder.ID,
+        workOrderGuid: workOrder.ID,
+        workOrderNumber: workOrder.WorkOrderNumber ?? null,
+        type: workOrder.Type ?? null,
+        status: workOrder.Status ?? null,
+        vin,
+        serviceItemId: workOrder.ServiceItemID ?? null,
+        contactId: workOrder.ContactID ?? null,
+        contactName,
+        companyName,
+        odometer: workOrder.InUsage ?? workOrder.Odometer ?? null,
+        workflowStage: workOrder.WorkflowStage ?? null,
+        completed: workOrder.Completed ?? false,
+        scheduledTime: workOrder.ScheduledTime ?? null,
+        promisedTime: workOrder.PromisedTime ?? null,
+        servicePackages: workOrder.ServicePackages ?? [],
+        packageSummaries,
+        pricing: {
+          laborTotal: totalLabor,
+          partsTotal: totalParts,
+          otherTotal: totalOther,
+          grandTotal: totalLabor + totalParts + totalOther,
+        },
+        fetchedAt: now,
+        source: "protractor",
+        rawPayload: workOrder,
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
 }
 
 export async function upsertProtractorInvoiceSnapshot(
   shopId: number,
   invoice: ProtractorInvoice
 ): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
   const vin = invoice.ServiceItem?.VIN?.toUpperCase() ?? null;
-  const shop = await getShopByShopId(shopId);
   
-  await upsertProtractorWorkOrder(shop?.id || '', shopId, {
-    workOrderId: invoice.ID,
-    workOrderNumber: invoice.InvoiceNumber ? String(invoice.InvoiceNumber) : null,
-    vin: vin,
-    status: 'Invoiced',
-    customerId: invoice.ContactID ?? null,
-    vehicleId: invoice.ServiceItemID ?? null,
-    mileage: invoice.Odometer ?? null,
-    createdDate: invoice.InvoiceDate ? new Date(invoice.InvoiceDate) : null,
-    closedDate: invoice.InvoiceDate ? new Date(invoice.InvoiceDate) : null,
-    rawData: invoice as Record<string, unknown>
-  });
+  await db.collection("protractor_invoices").updateOne(
+    { shopId, invoiceId: invoice.ID },
+    {
+      $set: {
+        shopId,
+        invoiceId: invoice.ID,
+        invoiceNumber: invoice.InvoiceNumber ?? null,
+        invoiceDate: invoice.InvoiceDate ?? null,
+        vin,
+        serviceItemId: invoice.ServiceItemID ?? null,
+        contactId: invoice.ContactID ?? null,
+        odometer: invoice.Odometer ?? null,
+        total: invoice.Total ?? null,
+        servicePackages: invoice.ServicePackages ?? [],
+        fetchedAt: now,
+        source: "protractor",
+        rawPayload: invoice,
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
 }
 
 export async function upsertProtractorDeferredWorkSnapshot(
@@ -899,13 +1049,22 @@ export async function upsertProtractorDeferredWorkSnapshot(
   vin: string,
   deferredWork: ProtractorDeferredWork[]
 ): Promise<void> {
-  const shop = await getShopByShopId(shopId);
+  const db = await getDb();
+  const now = new Date();
   
-  await upsertProtractorDeferredWork(
-    shop?.id || null,
-    shopId,
-    vin.toUpperCase(),
-    deferredWork
+  await db.collection("protractor_deferred_work").updateOne(
+    { shopId, vin: vin.toUpperCase() },
+    {
+      $set: {
+        shopId,
+        vin: vin.toUpperCase(),
+        items: deferredWork,
+        fetchedAt: now,
+        source: "protractor",
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
   );
 }
 
@@ -916,35 +1075,33 @@ export async function fetchVehicleWithCache(
   vin: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
 ): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; source?: "cache" | "api" }> {
-  const shop = await getShopByShopId(shopId);
-  if (!shop) {
-    return fetchVehicleByVin(shopId, vin).then(r => ({ ...r, source: "api" as const }));
-  }
-  
-  const cached = await getProtractorVehicleByVin(shop.id, vin.toUpperCase());
+  const db = await getDb();
+  const cached = await db.collection("protractor_vehicles").findOne({
+    shopId,
+    vin: vin.toUpperCase(),
+  });
 
   const now = Date.now();
-  const fresh = cached?.synced_at
-    ? now - new Date(cached.synced_at).getTime() <= maxAgeMs
+  const fresh = cached?.fetchedAt
+    ? now - new Date(cached.fetchedAt).getTime() <= maxAgeMs
     : false;
 
   if (fresh && cached) {
-    const rawData = cached.raw_data as Record<string, unknown> | null;
     return {
       ok: true,
       vehicle: {
-        ID: cached.vehicle_id,
-        VIN: cached.vin || undefined,
-        Year: cached.year || undefined,
-        Make: cached.make || undefined,
-        Model: cached.model || undefined,
-        Color: (rawData?.Color as string) || undefined,
-        Engine: (rawData?.Engine as string) || undefined,
-        Transmission: (rawData?.Transmission as string) || undefined,
-        Odometer: (rawData?.Odometer as number) || undefined,
-        OdometerDate: (rawData?.OdometerDate as string) || undefined,
-        LicensePlate: cached.license_plate || undefined,
-        OwnerID: cached.customer_id || undefined,
+        ID: cached.protractorId,
+        VIN: cached.vin,
+        Year: cached.year,
+        Make: cached.make,
+        Model: cached.model,
+        Color: cached.color,
+        Engine: cached.engine,
+        Transmission: cached.transmission,
+        Odometer: cached.odometer,
+        OdometerDate: cached.odometerDate,
+        LicensePlate: cached.licensePlate,
+        OwnerID: cached.ownerId,
       },
       source: "cache",
     };
@@ -964,17 +1121,21 @@ export async function fetchDeferredWorkWithCache(
   serviceItemId: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
 ): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; source?: "cache" | "api" }> {
-  const cached = await getProtractorDeferredWorkByVin(shopId, vin.toUpperCase());
+  const db = await getDb();
+  const cached = await db.collection("protractor_deferred_work").findOne({
+    shopId,
+    vin: vin.toUpperCase(),
+  });
 
   const now = Date.now();
-  const fresh = cached?.created_at
-    ? now - new Date(cached.created_at).getTime() <= maxAgeMs
+  const fresh = cached?.fetchedAt
+    ? now - new Date(cached.fetchedAt).getTime() <= maxAgeMs
     : false;
 
   if (fresh && cached) {
     return {
       ok: true,
-      deferredWork: (cached.deferred_items || []) as ProtractorDeferredWork[],
+      deferredWork: cached.items || [],
       source: "cache",
     };
   }
@@ -1275,20 +1436,17 @@ export async function resolveWorkOrderGuid(
     }
   }
 
-  const shop = await getShopByShopId(shopId);
-  if (shop) {
-    const cachedOrders = await getProtractorWorkOrdersByVin(shop.id, '', 200);
-    const cached = cachedOrders.find(wo => 
-      wo.work_order_number === String(roNumber) ||
-      (wo.raw_data as any)?.WorkOrderNumber === roNumber
-    );
-    
-    if (cached?.work_order_id) {
-      console.log(`[Protractor] Found cached GUID ${cached.work_order_id} for RO ${roNumber}`);
-      const fullWO = await fetchWorkOrderById(shopId, cached.work_order_id);
-      if (fullWO.ok && fullWO.workOrder) {
-        return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
-      }
+  const db = await getDb();
+  const cached = await db.collection("protractor_work_orders").findOne({
+    shopId,
+    "data.WorkOrderNumber": roNumber
+  });
+  
+  if (cached?.data?.ID) {
+    console.log(`[Protractor] Found cached GUID ${cached.data.ID} for RO ${roNumber}`);
+    const fullWO = await fetchWorkOrderById(shopId, cached.data.ID);
+    if (fullWO.ok && fullWO.workOrder) {
+      return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
     }
   }
 
@@ -1308,11 +1466,11 @@ export async function applyCannedJobToWorkOrder(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const shop = await getShopByShopId(shopId);
-  const protractorSettings = (shop?.protractor || {}) as Record<string, unknown>;
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId });
   
-  const updatePackageEnabled = protractorSettings.updateWorkOrderPackage === true;
-  const updateLineEnabled = protractorSettings.updateWorkOrderLine === true;
+  const updatePackageEnabled = shop?.protractor?.updateWorkOrderPackage === true;
+  const updateLineEnabled = shop?.protractor?.updateWorkOrderLine === true;
   
   if (!updatePackageEnabled || !updateLineEnabled) {
     console.log(`[Protractor] Warning: Required parameters not enabled. UpdateWorkOrderPackage: ${updatePackageEnabled}, UpdateWorkOrderLine: ${updateLineEnabled}`);
@@ -1340,27 +1498,21 @@ export async function applyCannedJobToWorkOrder(
 
   let template: ProtractorServicePackageTemplate | undefined;
   
-  // First check PostgreSQL cache for synced templates (which should have lines)
-  const cachedJobs = await getProtractorCannedJobs(shopId);
+  // First check MongoDB cache for synced templates (which should have lines)
+  // Reuse db from earlier in function
+  const cannedJobsCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
+  const cachedTemplates = cannedJobsCache?.items || [];
   
-  if (cachedJobs.length > 0) {
-    console.log(`[Protractor] Checking ${cachedJobs.length} cached templates for "${cannedJobCode}"...`);
-    const cachedMatch = cachedJobs.find(
-      (t) => t.job_code === cannedJobCode || t.job_name === cannedJobTitle || t.id === templateId
+  if (cachedTemplates.length > 0) {
+    console.log(`[Protractor] Checking ${cachedTemplates.length} cached templates for "${cannedJobCode}"...`);
+    const cachedMatch = cachedTemplates.find(
+      (t: any) => t.Code === cannedJobCode || t.ServicePackageHeader?.Title === cannedJobTitle || t.ID === templateId
     );
     
     if (cachedMatch) {
-      template = {
-        ID: cachedMatch.id,
-        Code: cachedMatch.job_code,
-        ServicePackageHeader: {
-          Title: cachedMatch.job_name || '',
-          Description: cachedMatch.description || '',
-        },
-        ServicePackageLines: { ItemCollection: (cachedMatch.parts || []) as ProtractorServicePackageLine[] }
-      } as ProtractorServicePackageTemplate;
-      const linesCount = (cachedMatch.parts as unknown[])?.length || 0;
-      console.log(`[Protractor] Found cached template: ${cachedMatch.job_code}, ${linesCount} lines`);
+      template = cachedMatch;
+      const linesCount = template?.ServicePackageLines?.ItemCollection?.length || 0;
+      console.log(`[Protractor] Found cached template: ${template?.Code}, ${linesCount} lines`);
     }
   }
   
@@ -1772,41 +1924,37 @@ export async function fetchWorkOrdersForVehicle(
     return { ok: true, workOrders };
   }
 
-  // API not available, try cached work orders from PostgreSQL
+  // API not available, try cached work orders from MongoDB
   console.log(`[Protractor] API endpoint not available, checking cached work orders for serviceItemId: ${serviceItemId}`);
+  const db = await getDb();
   
-  const shop = await getShopByShopId(shopId);
-  if (!shop) {
-    return { ok: false, error: "WORK_ORDER_LOOKUP_NOT_AVAILABLE" };
-  }
-  
-  const allCached = await getProtractorWorkOrdersByVin(shop.id, '', 200);
-  let cached = allCached.filter(c => c.vehicle_id === serviceItemId);
-  
+  // Work orders are cached with flat structure from upsertProtractorWorkOrderSnapshot
+  const query: any = { shopId, serviceItemId };
   if (options?.includeOpen) {
-    cached = cached.filter(c => 
-      !c.status || !['Closed', 'Invoiced', 'Posted', 'Void'].includes(c.status)
-    );
+    query.completed = { $ne: true };
   }
+  
+  const cached = await db.collection("protractor_work_orders")
+    .find(query)
+    .sort({ fetchedAt: -1 })
+    .toArray();
 
   console.log(`[Protractor] Found ${cached.length} cached work orders`);
 
   if (cached.length > 0) {
-    const workOrders = cached.map(c => {
-      const rawData = c.raw_data as Record<string, unknown> | null;
-      return {
-        ID: c.work_order_id,
-        WorkOrderNumber: c.work_order_number ? parseInt(c.work_order_number, 10) : undefined,
-        Type: (rawData?.Type as string) || undefined,
-        Status: c.status || undefined,
-        ServiceItemID: c.vehicle_id || undefined,
-        ContactID: c.customer_id || undefined,
-        Completed: c.closed_date !== null,
-        ScheduledTime: (rawData?.ScheduledTime as string) || undefined,
-        PromisedTime: (rawData?.PromisedTime as string) || undefined,
-        ServicePackages: (rawData?.ServicePackages as any) || [],
-      } as ProtractorWorkOrder;
-    });
+    // Convert cached snapshots back to work order format
+    const workOrders = cached.map(c => ({
+      ID: c.workOrderId,
+      WorkOrderNumber: c.workOrderNumber,
+      Type: c.type,
+      Status: c.status,
+      ServiceItemID: c.serviceItemId,
+      ContactID: c.contactId,
+      Completed: c.completed,
+      ScheduledTime: c.scheduledTime,
+      PromisedTime: c.promisedTime,
+      ServicePackages: c.servicePackages,
+    } as ProtractorWorkOrder));
     return { ok: true, workOrders };
   }
 
@@ -1817,47 +1965,47 @@ export async function upsertCannedJobsCache(
   shopId: number,
   cannedJobs: ProtractorCannedJob[]
 ): Promise<void> {
-  const shop = await getShopByShopId(shopId);
+  const db = await getDb();
+  const now = new Date();
   
-  const jobsToSave = cannedJobs.map(job => ({
-    jobCode: job.Code || job.ID,
-    jobName: job.Title ?? null,
-    description: job.Description ?? null,
-    laborRate: job.LaborRate ?? null,
-    laborHours: job.LaborHours ?? null,
-    parts: job.ServicePackageLines ?? [],
-    category: job.Chapter ?? null,
-    rawData: job as Record<string, unknown>
-  }));
-  
-  await bulkUpsertProtractorCannedJobs(shop?.id || null, shopId, jobsToSave);
+  await db.collection("protractor_canned_jobs").updateOne(
+    { shopId },
+    {
+      $set: {
+        shopId,
+        items: cannedJobs.map(job => ({
+          id: job.ID,
+          title: job.Title ?? "",
+          description: job.Description ?? "",
+          chapter: job.Chapter ?? "",
+          code: job.Code ?? "",
+          laborHours: job.LaborHours ?? null,
+          laborRate: job.LaborRate ?? null,
+          fixedPrice: job.FixedPrice ?? null,
+          lineCount: job.ServicePackageLines?.length ?? 0,
+        })),
+        fetchedAt: now,
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
 }
 
 export async function getCannedJobsFromCache(
   shopId: number
 ): Promise<{ ok: boolean; cannedJobs?: any[]; fetchedAt?: Date }> {
-  const cached = await getProtractorCannedJobs(shopId);
+  const db = await getDb();
+  const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
   
-  if (cached.length === 0) {
+  if (!cached) {
     return { ok: false };
   }
   
-  const cannedJobs = cached.map(c => ({
-    id: c.id,
-    title: c.job_name || '',
-    description: c.description || '',
-    chapter: c.category || '',
-    code: c.job_code,
-    laborHours: c.labor_hours,
-    laborRate: c.labor_rate,
-    fixedPrice: null,
-    lineCount: (c.parts as unknown[])?.length || 0,
-  }));
-  
   return {
     ok: true,
-    cannedJobs,
-    fetchedAt: cached[0]?.synced_at,
+    cannedJobs: cached.items || [],
+    fetchedAt: cached.fetchedAt,
   };
 }
 
@@ -1955,58 +2103,82 @@ export async function fetchCannedJobsWithCache(
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000,
   options?: { forceRefresh?: boolean }
 ): Promise<{ ok: boolean; cannedJobs?: any[]; error?: string; source?: "cache" | "api" | "enriched" }> {
-  const cachedJobs = await getProtractorCannedJobs(shopId);
+  const db = await getDb();
+  const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
 
   // Normalize cached items to consistent format
-  const normalizeCachedItems = (items: typeof cachedJobs) => items.map(job => ({
-    id: job.id,
-    title: job.job_name || "",
-    description: job.description || "",
-    chapter: job.category || "",
-    code: job.job_code || "",
-    laborHours: job.labor_hours ?? null,
-    laborRate: job.labor_rate ?? null,
-    fixedPrice: null,
-    lineCount: (job.parts as unknown[])?.length ?? 0,
+  const normalizeCachedItems = (items: any[]) => items.map(job => ({
+    id: job.id || job.ID || job.code || "",
+    title: job.title || job.Title || "",
+    description: job.description || job.Description || "",
+    chapter: job.chapter || job.Chapter || "",
+    code: job.code || job.Code || "",
+    laborHours: job.laborHours ?? job.LaborHours ?? null,
+    laborRate: job.laborRate ?? job.LaborRate ?? null,
+    fixedPrice: job.fixedPrice ?? job.FixedPrice ?? null,
+    lineCount: job.lineCount ?? job.ServicePackageLines?.length ?? 0,
   }));
 
-  const hasItems = cachedJobs.length > 0;
-  const isFresh = hasItems && cachedJobs[0]?.synced_at && 
-    (Date.now() - new Date(cachedJobs[0].synced_at).getTime() <= maxAgeMs);
+  // Check if we have a valid enriched cache (not forcing refresh)
+  const isEnriched = cached?.source === "enriched";
+  const hasItems = cached?.items?.length > 0;
   
-  if (!options?.forceRefresh && hasItems && isFresh) {
-    console.log(`[Protractor] Using cached canned jobs with ${cachedJobs.length} items for shop ${shopId}`);
+  if (!options?.forceRefresh && isEnriched && hasItems) {
+    console.log(`[Protractor] Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
     return {
       ok: true,
-      cannedJobs: normalizeCachedItems(cachedJobs),
+      cannedJobs: normalizeCachedItems(cached.items),
       source: "enriched",
     };
   }
 
-  // If no cache exists or stale, fetch from API
-  if (!hasItems || options?.forceRefresh) {
-    console.log(`[Protractor] Fetching canned jobs from API for shop ${shopId}...`);
+  // If no enriched cache exists, return basic list immediately and run enrichment in background
+  if (!isEnriched || !hasItems) {
+    console.log(`[Protractor] No enriched cache found for shop ${shopId}, fetching basic list...`);
     
     const listResult = await fetchCannedJobs(shopId);
     if (!listResult.ok || !listResult.cannedJobs) {
-      if (hasItems) {
+      // Fall back to whatever cache exists
+      if (cached?.items?.length) {
         return {
           ok: true,
-          cannedJobs: normalizeCachedItems(cachedJobs),
+          cannedJobs: normalizeCachedItems(cached.items),
           source: "cache",
         };
       }
       return { ok: false, error: listResult.error };
     }
 
-    // Save to PostgreSQL
-    await upsertCannedJobsCache(shopId, listResult.cannedJobs);
+    // Save basic list immediately so page loads fast
+    const now = new Date();
+    await db.collection("protractor_canned_jobs").updateOne(
+      { shopId },
+      {
+        $set: {
+          items: listResult.cannedJobs,
+          fetchedAt: now,
+          source: "api",
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
 
-    // Run enrichment in background (fire and forget)
+    // Run enrichment in background (fire and forget) - don't block the response
     console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs...`);
     enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, { filterEmptyTitles: true })
       .then(async (enrichedJobs) => {
-        await upsertCannedJobsCache(shopId, enrichedJobs);
+        const enrichedNow = new Date();
+        await db.collection("protractor_canned_jobs").updateOne(
+          { shopId },
+          {
+            $set: {
+              items: enrichedJobs,
+              fetchedAt: enrichedNow,
+              source: "enriched",
+            },
+          }
+        );
         console.log(`[Protractor] Background enrichment complete: ${enrichedJobs.length} jobs saved`);
       })
       .catch((err) => {
@@ -2014,30 +2186,61 @@ export async function fetchCannedJobsWithCache(
       });
 
     // Return basic list immediately
-    const normalizedList = listResult.cannedJobs.map(job => ({
-      id: job.ID,
-      title: job.Title || "",
-      description: job.Description || "",
-      chapter: job.Chapter || "",
-      code: job.Code || "",
-      laborHours: job.LaborHours ?? null,
-      laborRate: job.LaborRate ?? null,
-      fixedPrice: job.FixedPrice ?? null,
-      lineCount: job.ServicePackageLines?.length ?? 0,
-    }));
-    
     return {
       ok: true,
-      cannedJobs: normalizedList,
+      cannedJobs: normalizeCachedItems(listResult.cannedJobs),
       source: "api",
     };
   }
-  
-  // Return cached data
+
+  // Force refresh requested - re-run deep sync
+  if (options?.forceRefresh) {
+    console.log(`[Protractor] Force refresh requested for shop ${shopId}, re-running deep sync...`);
+    
+    const listResult = await fetchCannedJobs(shopId);
+    if (!listResult.ok || !listResult.cannedJobs) {
+      if (cached?.items?.length) {
+        return {
+          ok: true,
+          cannedJobs: normalizeCachedItems(cached.items),
+          source: "enriched",
+        };
+      }
+      return { ok: false, error: listResult.error };
+    }
+
+    const enrichedJobs = await enrichCannedJobsWithDetails(
+      shopId,
+      listResult.cannedJobs,
+      { filterEmptyTitles: true }
+    );
+
+    const now = new Date();
+    await db.collection("protractor_canned_jobs").updateOne(
+      { shopId },
+      {
+        $set: {
+          items: enrichedJobs,
+          fetchedAt: now,
+          source: "enriched",
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
+
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(enrichedJobs),
+      source: "enriched",
+    };
+  }
+
+  // Return cached items
   return {
     ok: true,
-    cannedJobs: normalizeCachedItems(cachedJobs),
-    source: "cache",
+    cannedJobs: normalizeCachedItems(cached?.items || []),
+    source: "enriched",
   };
 }
 
@@ -2176,24 +2379,28 @@ export async function addDeferredWorkToWorkOrder(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  // Get deferred work from PostgreSQL cache
-  const deferredWorks = await getProtractorDeferredWorkByVin(shopId, vin.toUpperCase());
+  const db = await getDb();
+  const cachedDeferred = await db.collection("protractor_deferred_work").findOne({
+    shopId,
+    vin: vin.toUpperCase()
+  });
 
-  if (deferredWorks.length === 0) {
+  if (!cachedDeferred?.items) {
     return { ok: false, error: "Deferred work not found in cache" };
   }
 
-  const deferredItem = deferredWorks.find(
-    d => d.id === deferredId || d.service_item_id === deferredId
+  const deferredItem = (cachedDeferred.items as ProtractorDeferredWork[]).find(
+    d => d.ID === deferredId || d.ServiceItemID === deferredId
   );
 
   if (!deferredItem) {
     return { ok: false, error: `Deferred work item ${deferredId} not found` };
   }
 
-  const title = deferredItem.title 
-    || deferredItem.code 
-    || deferredItem.description 
+  const title = deferredItem.Title 
+    || deferredItem.ServicePackageHeader?.Title 
+    || deferredItem.Code 
+    || deferredItem.Description 
     || "Deferred Service";
 
   // Fetch the current work order (priority = user-initiated)

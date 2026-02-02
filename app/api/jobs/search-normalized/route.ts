@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+import { NORMALIZED_COLLECTIONS } from "@/lib/normalized-schema";
+import { getNormalizedCache, CACHE_KEYS, CACHE_TTL } from "@/lib/normalized-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -42,13 +45,13 @@ interface PaginatedResponse {
   };
 }
 
-function scoreJob(job: Record<string, unknown>, query: string, shopId: number): number {
+function scoreJob(job: any, query: string, shopId: number): number {
   const queryLower = query.toLowerCase();
   const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
   
   let score = 0;
-  const title = ((job.title as string) || '').toLowerCase();
-  const description = ((job.description as string) || '').toLowerCase();
+  const title = (job.title || '').toLowerCase();
+  const description = (job.description || '').toLowerCase();
   
   if (title === queryLower) {
     score += 100;
@@ -61,21 +64,146 @@ function scoreJob(job: Record<string, unknown>, query: string, shopId: number): 
     if (description.includes(word)) score += 5;
   }
   
-  if (Number(job.shopId) === shopId) {
+  if (job.shopId === shopId) {
     score += 20;
   }
   
   if (job.closedDate) {
-    const daysSinceClosed = (Date.now() - new Date(job.closedDate as string).getTime()) / (1000 * 60 * 60 * 24);
+    const daysSinceClosed = (Date.now() - new Date(job.closedDate).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceClosed < 30) score += 10;
     else if (daysSinceClosed < 90) score += 5;
     else if (daysSinceClosed < 365) score += 2;
   }
   
-  if (job.hours && Number(job.hours) > 0) score += 5;
-  if (job.total && Number(job.total) > 0) score += 5;
+  if (job.hours && job.hours > 0) score += 5;
+  if (job.total && job.total > 0) score += 5;
   
   return score;
+}
+
+function buildPipeline(
+  enterpriseShopIds: number[],
+  query: string,
+  vin: string,
+  year: string,
+  make: string,
+  model: string,
+  cursor?: string,
+  batchSize: number = BATCH_SIZE
+): any[] {
+  const pipeline: any[] = [];
+
+  const matchStage: any = {
+    shopId: { $in: enterpriseShopIds },
+    'softDelete.isDeleted': { $ne: true },
+  };
+
+  if (cursor) {
+    try {
+      matchStage._id = { $gt: new ObjectId(cursor) };
+    } catch {}
+  }
+
+  pipeline.push({ $match: matchStage });
+
+  if (query) {
+    const queryWords = query.split(/\s+/).filter(w => w.length > 2);
+    if (queryWords.length > 0) {
+      pipeline.push({
+        $match: {
+          $and: queryWords.map(word => ({
+            $or: [
+              { title: { $regex: word, $options: 'i' } },
+              { description: { $regex: word, $options: 'i' } },
+            ]
+          }))
+        }
+      });
+    }
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: NORMALIZED_COLLECTIONS.workOrders,
+        let: { workOrderId: '$workOrderId' },
+        pipeline: [
+          { $match: { $expr: { $eq: [{ $toString: '$_id' }, '$$workOrderId'] } } },
+          { $limit: 1 }
+        ],
+        as: 'workOrder'
+      }
+    },
+    { $unwind: { path: '$workOrder', preserveNullAndEmptyArrays: true } }
+  );
+
+  if (vin || year || make || model) {
+    const vehicleMatch: any = {};
+    if (vin) vehicleMatch.vin = vin;
+    if (year) vehicleMatch.year = parseInt(year);
+    if (make) vehicleMatch.make = { $regex: make, $options: 'i' };
+    if (model) vehicleMatch.model = { $regex: model, $options: 'i' };
+
+    pipeline.push(
+      {
+        $lookup: {
+          from: NORMALIZED_COLLECTIONS.vehicles,
+          let: { vehicleId: '$workOrder.vehicleId' },
+          pipeline: [
+            { $match: { $expr: { $eq: [{ $toString: '$_id' }, '$$vehicleId'] } } },
+            { $match: vehicleMatch },
+            { $limit: 1 }
+          ],
+          as: 'vehicle'
+        }
+      },
+      { $match: { vehicle: { $ne: [] } } },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } }
+    );
+  } else {
+    pipeline.push(
+      {
+        $lookup: {
+          from: NORMALIZED_COLLECTIONS.vehicles,
+          let: { vehicleId: '$workOrder.vehicleId' },
+          pipeline: [
+            { $match: { $expr: { $eq: [{ $toString: '$_id' }, '$$vehicleId'] } } },
+            { $limit: 1 }
+          ],
+          as: 'vehicle'
+        }
+      },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } }
+    );
+  }
+
+  pipeline.push(
+    { $sort: { _id: 1 } },
+    { $limit: batchSize + 1 },
+    {
+      $project: {
+        _id: 1,
+        workOrderId: 1,
+        workOrderNumber: '$workOrder.workOrderNumber',
+        title: 1,
+        description: 1,
+        hours: { $ifNull: ['$laborHoursBilled', '$laborHoursActual'] },
+        total: 1,
+        laborTotal: 1,
+        partsTotal: 1,
+        vin: '$vehicle.vin',
+        year: '$vehicle.year',
+        make: '$vehicle.make',
+        model: '$vehicle.model',
+        engine: '$vehicle.engineDescription',
+        closedDate: '$workOrder.closedDate',
+        sourceSystem: { $ifNull: ['$provenance.sourceSystem', 'unknown'] },
+        shopId: 1,
+      }
+    }
+  );
+
+  return pipeline;
 }
 
 export async function GET(req: NextRequest) {
@@ -95,117 +223,100 @@ export async function GET(req: NextRequest) {
   const model = url.searchParams.get("model") || "";
   const includeEnterprise = url.searchParams.get("enterprise") === "true";
   const limit = Math.min(Math.max(1, parseInt(url.searchParams.get("limit") || "50")), 100);
-  const cursorParam = url.searchParams.get("cursor") || undefined;
+  const cursor = url.searchParams.get("cursor") || undefined;
 
   if (!query && !vin) {
     return NextResponse.json({ error: "Missing query or VIN" }, { status: 400 });
   }
 
-  let enterpriseShopIds: string[] = [String(shopId)];
+  const db = await getDb();
+  const cache = getNormalizedCache();
+  
+  let enterpriseShopIds: number[] = [shopId];
   if (includeEnterprise) {
-    const shopResult = await sql`
-      SELECT enterprise_id FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    const enterpriseId = shopResult[0]?.enterprise_id;
+    const enterpriseCacheKey = { shopId };
+    let cachedEnterpriseShops = cache.get<number[]>(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey);
     
-    if (enterpriseId) {
-      const enterpriseShops = await sql`
-        SELECT shop_id FROM shops WHERE enterprise_id = ${enterpriseId}
-      `;
-      enterpriseShopIds = enterpriseShops.map((s: Record<string, unknown>) => String(s.shop_id));
+    if (!cachedEnterpriseShops) {
+      const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+      const enterpriseId = shop?.enterpriseId as string | undefined;
+      
+      if (enterpriseId) {
+        const enterpriseShops = await db.collection("shops")
+          .find({ enterpriseId })
+          .toArray();
+        cachedEnterpriseShops = enterpriseShops.map(s => Number(s.shopId));
+        cache.set(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey, cachedEnterpriseShops, CACHE_TTL.LONG);
+      } else {
+        cachedEnterpriseShops = [shopId];
+      }
     }
+    enterpriseShopIds = cachedEnterpriseShops;
   }
 
-  let results;
+  const batchCacheKey = { shopId, query, vin, year, make, model, includeEnterprise, cursor: cursor || 'start' };
+  const cached = cache.get<{ results: SearchResult[]; hasMore: boolean; nextCursor?: string }>(
+    CACHE_KEYS.SEARCH_RESULTS, 
+    batchCacheKey
+  );
   
-  if (vin) {
-    results = await sql`
-      SELECT 
-        sj.id as "_id",
-        sj.work_order_id as "workOrderId",
-        wo.work_order_number as "workOrderNumber",
-        sj.title,
-        sj.description,
-        COALESCE(sj.labor_hours_billed, sj.labor_hours_actual) as hours,
-        sj.total,
-        sj.labor_total as "laborTotal",
-        sj.parts_total as "partsTotal",
-        v.vin,
-        v.year,
-        v.make,
-        v.model,
-        v.engine_description as engine,
-        wo.closed_date as "closedDate",
-        COALESCE(sj.source_system, 'unknown') as "sourceSystem",
-        sj.shop_id as "shopId"
-      FROM normalized_service_jobs sj
-      LEFT JOIN normalized_work_orders wo ON sj.work_order_id = wo.id::text
-      LEFT JOIN normalized_vehicles v ON wo.vehicle_id = v.id::text
-      WHERE sj.shop_id = ANY(${enterpriseShopIds})
-        AND (sj.soft_delete IS NULL OR (sj.soft_delete->>'isDeleted')::boolean != TRUE)
-        AND v.vin = ${vin.toUpperCase()}
-      ORDER BY wo.closed_date DESC NULLS LAST
-      LIMIT ${BATCH_SIZE + 1}
-    `;
-  } else {
-    const searchPattern = `%${query}%`;
-    results = await sql`
-      SELECT 
-        sj.id as "_id",
-        sj.work_order_id as "workOrderId",
-        wo.work_order_number as "workOrderNumber",
-        sj.title,
-        sj.description,
-        COALESCE(sj.labor_hours_billed, sj.labor_hours_actual) as hours,
-        sj.total,
-        sj.labor_total as "laborTotal",
-        sj.parts_total as "partsTotal",
-        v.vin,
-        v.year,
-        v.make,
-        v.model,
-        v.engine_description as engine,
-        wo.closed_date as "closedDate",
-        COALESCE(sj.source_system, 'unknown') as "sourceSystem",
-        sj.shop_id as "shopId"
-      FROM normalized_service_jobs sj
-      LEFT JOIN normalized_work_orders wo ON sj.work_order_id = wo.id::text
-      LEFT JOIN normalized_vehicles v ON wo.vehicle_id = v.id::text
-      WHERE sj.shop_id = ANY(${enterpriseShopIds})
-        AND (sj.soft_delete IS NULL OR (sj.soft_delete->>'isDeleted')::boolean != TRUE)
-        AND (sj.title ILIKE ${searchPattern} OR sj.description ILIKE ${searchPattern})
-      ORDER BY wo.closed_date DESC NULLS LAST
-      LIMIT ${BATCH_SIZE + 1}
-    `;
+  if (cached) {
+    const paginatedResults = cached.results.slice(0, limit);
+    return NextResponse.json({
+      results: paginatedResults,
+      pagination: {
+        limit,
+        hasMore: cached.hasMore || cached.results.length > limit,
+        nextCursor: cached.results.length > limit 
+          ? cached.results[limit - 1]._id 
+          : cached.nextCursor,
+      },
+      source: 'normalized',
+      cached: true,
+      meta: { queryTimeMs: Date.now() - startTime },
+    } as PaginatedResponse);
   }
 
-  const hasMore = results.length > BATCH_SIZE;
-  const resultsToProcess = hasMore ? results.slice(0, BATCH_SIZE) : results;
+  const serviceJobsCollection = db.collection(NORMALIZED_COLLECTIONS.serviceJobs);
+  const pipeline = buildPipeline(enterpriseShopIds, query, vin, year, make, model, cursor, BATCH_SIZE);
   
-  const scoredResults: SearchResult[] = resultsToProcess.map((job: Record<string, unknown>) => ({
+  const rawResults = await serviceJobsCollection.aggregate(pipeline).toArray();
+  
+  const hasMore = rawResults.length > BATCH_SIZE;
+  const resultsToProcess = hasMore ? rawResults.slice(0, BATCH_SIZE) : rawResults;
+  
+  const scoredResults: SearchResult[] = resultsToProcess.map((job: any) => ({
     _id: String(job._id),
-    workOrderId: String(job.workOrderId || ''),
-    workOrderNumber: (job.workOrderNumber as string) || '',
-    title: (job.title as string) || '',
-    description: job.description as string | undefined,
-    hours: job.hours as number | undefined,
-    total: job.total as number | undefined,
-    laborTotal: job.laborTotal as number | undefined,
-    partsTotal: job.partsTotal as number | undefined,
-    vin: job.vin as string | undefined,
-    year: job.year as number | undefined,
-    make: job.make as string | undefined,
-    model: job.model as string | undefined,
-    engine: job.engine as string | undefined,
-    closedDate: job.closedDate as Date | undefined,
-    sourceSystem: (job.sourceSystem as string) || 'unknown',
-    shopId: Number(job.shopId),
+    workOrderId: String(job.workOrderId),
+    workOrderNumber: job.workOrderNumber || '',
+    title: job.title,
+    description: job.description,
+    hours: job.hours,
+    total: job.total,
+    laborTotal: job.laborTotal,
+    partsTotal: job.partsTotal,
+    vin: job.vin,
+    year: job.year,
+    make: job.make,
+    model: job.model,
+    engine: job.engine,
+    closedDate: job.closedDate,
+    sourceSystem: job.sourceSystem,
+    shopId: job.shopId,
     score: scoreJob(job, query, shopId),
   }));
 
   scoredResults.sort((a, b) => b.score - a.score);
 
-  const nextCursor = hasMore ? String(resultsToProcess[resultsToProcess.length - 1]._id) : undefined;
+  const nextCursor = hasMore ? resultsToProcess[resultsToProcess.length - 1]._id : undefined;
+  
+  cache.set(
+    CACHE_KEYS.SEARCH_RESULTS, 
+    batchCacheKey, 
+    { results: scoredResults, hasMore, nextCursor },
+    CACHE_TTL.MEDIUM
+  );
+
   const paginatedResults = scoredResults.slice(0, limit);
   
   return NextResponse.json({

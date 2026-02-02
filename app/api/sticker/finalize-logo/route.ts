@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { Storage } from "@google-cloud/storage";
 import { createCanvas, loadImage } from "canvas";
 
@@ -170,20 +170,17 @@ export async function POST(req: NextRequest) {
 
     const proxyUrl = `/api/sticker/logo/${shopId}/${objectName.split("/").pop()}`;
 
-    const shopRows = await sql`
-      SELECT sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    const existingConfig = (shopRows[0]?.sticker_config as any) || {};
-    const updatedConfig = { 
-      ...existingConfig, 
-      logo: proxyUrl,
-      logoObjectPath: objectPath
-    };
-    
-    await sql`
-      UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
-      WHERE shop_id = ${String(shopId)}
-    `;
+    const db = await getDb();
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $set: {
+          "stickerConfig.logo": proxyUrl,
+          "stickerConfig.logoObjectPath": objectPath,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     return NextResponse.json({
       success: true,

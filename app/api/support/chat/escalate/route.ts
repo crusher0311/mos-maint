@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getSessionById, linkSessionToTicket } from "@/lib/support-chat";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
@@ -31,31 +31,37 @@ export async function POST(req: NextRequest) {
   const ticketSubject = subject || "Escalated from AI Chat Support";
   const ticketDescription = `This ticket was escalated from AI chat support.\n\n--- Chat History ---\n\n${chatHistory}`;
 
+  const db = await getDb();
   const now = new Date();
   const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}`;
 
   let shopName = null;
   let locationIdentifier = null;
   if (session.shopId) {
-    const shopRows = await sql`SELECT * FROM shops WHERE shop_id = ${String(session.shopId)}`;
-    const shop = shopRows[0] as any;
+    const shop = await db.collection("shops").findOne({ shopId: session.shopId });
     shopName = shop?.name || null;
-    locationIdentifier = shop?.location_identifier || null;
+    locationIdentifier = shop?.locationIdentifier || null;
   }
 
-  const result = await sql`
-    INSERT INTO support_tickets (
-      ticket_number, user_email, user_name, shop_id, shop_name, location_identifier,
-      subject, description, status, priority, category, messages,
-      created_at, updated_at, escalated_from_chat
-    ) VALUES (
-      ${ticketNumber}, ${session.email}, ${session.email.split("@")[0]}, ${session.shopId ? String(session.shopId) : null},
-      ${shopName}, ${locationIdentifier}, ${ticketSubject}, ${ticketDescription},
-      'open', 'medium', 'general', '[]'::jsonb, ${now}, ${now}, ${sessionId}
-    ) RETURNING id
-  `;
+  const result = await db.collection("support_tickets").insertOne({
+    ticketNumber,
+    userEmail: session.email,
+    userName: session.email.split("@")[0],
+    shopId: session.shopId,
+    shopName,
+    locationIdentifier,
+    subject: ticketSubject,
+    description: ticketDescription,
+    status: "open",
+    priority: "medium",
+    category: "general",
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+    escalatedFromChat: sessionId
+  });
 
-  const ticketId = (result[0] as any).id;
+  const ticketId = result.insertedId.toString();
   await linkSessionToTicket(sessionId, ticketId);
 
   const ticketEmail = makeTicketCreatedEmail(ticketNumber, ticketSubject, "general");

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runIncrementalSyncCycle } from "@/lib/tekmetric-incremental-sync";
-import sql from "@/lib/db/postgres";
+import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/tekmetric-incremental-sync";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(req: NextRequest) {
+  // Check if sync is disabled for this deployment
   if (process.env.DISABLE_TEKMETRIC_SYNC === "true") {
     return NextResponse.json({
       ok: true,
@@ -22,6 +23,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    await ensureCacheIndexes();
+    
     const { results, duration } = await runIncrementalSyncCycle();
     
     const totalSynced = results.reduce((sum, r) => sum + r.synced, 0);
@@ -34,44 +37,53 @@ export async function GET(req: NextRequest) {
     
     console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms: ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped`);
 
+    // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
       try {
         const baseUrl = process.env.RENDER_EXTERNAL_URL 
           || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
           || `http://localhost:${process.env.PORT || 5000}`;
         
-        const tekmetricShops = await sql`
-          SELECT shop_id, tekmetric FROM shops
-          WHERE tekmetric->>'shopId' IS NOT NULL
-        `;
+        const db = await getDb();
+        
+        // Get all Tekmetric shops - use tekmetric.shopId as the shop identifier
+        const tekmetricShops = await db.collection("shops")
+          .find({ "tekmetric.shopId": { $exists: true, $ne: null } })
+          .project({ _id: 0, shopId: 1, tekmetric: 1 })
+          .toArray();
         
         console.log(`[Cron] Found ${tekmetricShops.length} Tekmetric shops for pregeneration`);
         
         let triggeredCount = 0;
-        for (const shop of tekmetricShops as any[]) {
-          const internalShopId = shop.shop_id;
+        for (const shop of tekmetricShops) {
+          // Use internal shop.shopId (NOT tekmetric.shopId) since work orders are stored with internal ID
+          const internalShopId = shop.shopId;
           const tekmetricShopId = shop.tekmetric?.shopId;
           if (!internalShopId) continue;
           
-          const woCountRows = await sql`
-            SELECT COUNT(*) as count FROM tekmetric_work_orders WHERE shop_id = ${String(internalShopId)}
-          `;
-          const woCount = parseInt((woCountRows[0] as any)?.count || '0', 10);
+          // Get top 50 vehicles by most recent work order (dashboard order)
+          // Tekmetric work orders are stored with internal shopId (not tekmetric shopId)
+          
+          // Debug: count work orders for this shop
+          const woCount = await db.collection("tekmetric_work_orders").countDocuments({
+            shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] }
+          });
           console.log(`[Cron] Shop ${internalShopId} (tek: ${tekmetricShopId}): Found ${woCount} work orders in tekmetric_work_orders`);
           
-          const recentVehicles = await sql`
-            SELECT vin, MAX(fetched_at) as last_updated
-            FROM tekmetric_work_orders
-            WHERE shop_id = ${String(internalShopId)}
-            GROUP BY vin
-            ORDER BY last_updated DESC NULLS LAST
-            LIMIT 50
-          `;
+          const recentVehicles = await db.collection("tekmetric_work_orders")
+            .aggregate([
+              { $match: { shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] } } },
+              { $sort: { fetchedAt: -1 } },
+              { $group: { _id: "$vin", lastUpdated: { $first: "$fetchedAt" } } },
+              { $sort: { lastUpdated: -1 } },
+              { $limit: 50 },
+            ])
+            .toArray();
           
           console.log(`[Cron] Shop ${internalShopId}: Aggregated ${recentVehicles.length} unique VINs`);
           
-          const vins = (recentVehicles as any[])
-            .map((v: any) => v.vin as string)
+          const vins = recentVehicles
+            .map((v: any) => v._id as string)
             .filter((v: string) => v && typeof v === 'string' && v.length === 17);
           
           console.log(`[Cron] Shop ${internalShopId}: ${vins.length} valid VINs after filter`);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,28 +13,28 @@ export async function GET(req: Request) {
   }
 
   try {
-    const shops = await sql`
-      SELECT shop_id, name, settings FROM shops 
-      WHERE settings->'protractor'->>'configured' = 'true'
-         OR settings->'protractor'->>'apiKey' IS NOT NULL
-         OR settings->'tekmetric'->>'configured' = 'true'
-         OR settings->'tekmetric'->>'shopId' IS NOT NULL
-    `;
+    const db = await getDb();
+    
+    // Match shops that have any integration configured
+    // Protractor: uses protractor.configured or protractor.apiKey
+    // Tekmetric: uses tekmetric.configured or tekmetric.shopId
+    const shops = await db.collection("shops").find({
+      $or: [
+        { "protractor.configured": true },
+        { "protractor.apiKey": { $exists: true, $ne: null } },
+        { "tekmetric.configured": true },
+        { "tekmetric.shopId": { $exists: true, $ne: null } }
+      ]
+    }).project({
+      shopId: 1,
+      name: 1,
+      "protractor.configured": 1,
+      "protractor.apiKey": 1,
+      "tekmetric.configured": 1,
+      "tekmetric.shopId": 1
+    }).toArray();
 
-    const formattedShops = shops.map((shop: any) => ({
-      shopId: shop.shop_id,
-      name: shop.name,
-      protractor: {
-        configured: shop.settings?.protractor?.configured,
-        apiKey: shop.settings?.protractor?.apiKey,
-      },
-      tekmetric: {
-        configured: shop.settings?.tekmetric?.configured,
-        shopId: shop.settings?.tekmetric?.shopId,
-      }
-    }));
-
-    return NextResponse.json({ shops: formattedShops });
+    return NextResponse.json({ shops });
   } catch (error: any) {
     console.error("[InternalAPI] Error fetching shops:", error.message);
     return NextResponse.json({ error: "Failed to fetch shops" }, { status: 500 });

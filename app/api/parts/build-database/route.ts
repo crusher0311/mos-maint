@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -24,22 +24,23 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = String(session.shopId);
+  const shopId = Number(session.shopId);
   
   try {
+    const db = await getDb();
     const partsMap = new Map<string, PartEntry>();
     
     let workOrdersScanned = 0;
     let invoicesScanned = 0;
     let linesProcessed = 0;
     
-    const vehicles = await sql`SELECT * FROM protractor_vehicles WHERE shop_id = ${shopId}`;
-    const vehicleByVin = new Map(vehicles.map((v: any) => [v.vin?.toUpperCase(), v]));
+    const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
+    const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
     
     console.log(`[Parts Build] Starting comprehensive parts extraction for shop ${shopId}`);
     console.log(`[Parts Build] Found ${vehicles.length} vehicles for reference`);
     
-    const workOrders = await sql`SELECT * FROM protractor_work_orders WHERE shop_id = ${shopId}`;
+    const workOrders = await db.collection("protractor_work_orders").find({ shopId }).toArray();
     console.log(`[Parts Build] Processing ${workOrders.length} work orders...`);
     
     for (const wo of workOrders) {
@@ -48,8 +49,7 @@ export async function POST() {
       const vehicle = vin ? vehicleByVin.get(vin) : null;
       const vehicleKey = vehicle ? `${vehicle.year}-${vehicle.make}-${vehicle.model}` : null;
       
-      const servicePackages = wo.service_packages || wo.data?.servicePackages;
-      const packages = servicePackages?.ItemCollection || servicePackages || [];
+      const packages = wo.servicePackages?.ItemCollection || wo.servicePackages || [];
       if (!Array.isArray(packages)) continue;
       
       for (const pkg of packages) {
@@ -81,13 +81,13 @@ export async function POST() {
           
           const entry = partsMap.get(normalized)!;
           entry.usageCount++;
-          if (wo.work_order_id) entry.workOrderIds.add(wo.work_order_id);
+          if (wo.workOrderId) entry.workOrderIds.add(wo.workOrderId);
           if (vehicleKey) entry.vehicles.add(vehicleKey);
         }
       }
     }
     
-    const invoices = await sql`SELECT * FROM protractor_invoices WHERE shop_id = ${shopId}`;
+    const invoices = await db.collection("protractor_invoices").find({ shopId }).toArray();
     console.log(`[Parts Build] Processing ${invoices.length} invoices...`);
     
     for (const inv of invoices) {
@@ -96,8 +96,7 @@ export async function POST() {
       const vehicle = vin ? vehicleByVin.get(vin) : null;
       const vehicleKey = vehicle ? `${vehicle.year}-${vehicle.make}-${vehicle.model}` : null;
       
-      const servicePackages = inv.service_packages || inv.data?.servicePackages;
-      const packages = servicePackages?.ItemCollection || servicePackages || [];
+      const packages = inv.servicePackages?.ItemCollection || inv.servicePackages || [];
       if (!Array.isArray(packages)) continue;
       
       for (const pkg of packages) {
@@ -129,7 +128,7 @@ export async function POST() {
           
           const entry = partsMap.get(normalized)!;
           entry.usageCount++;
-          if (inv.invoice_id) entry.workOrderIds.add(inv.invoice_id);
+          if (inv.invoiceId) entry.workOrderIds.add(inv.invoiceId);
           if (vehicleKey) entry.vehicles.add(vehicleKey);
         }
       }
@@ -148,6 +147,7 @@ export async function POST() {
       });
     }
     
+    const collection = db.collection("part_cross_ref");
     let created = 0;
     let updated = 0;
     
@@ -159,45 +159,33 @@ export async function POST() {
       
       const workOrderIds = Array.from(entry.workOrderIds);
       
-      const existing = await sql`
-        SELECT id, used_on, work_order_ids FROM part_cross_ref 
-        WHERE shop_id = ${shopId} AND normalized_part_number = ${normalized}
-      `;
+      const result = await collection.updateOne(
+        { shopId, normalizedPartNumber: normalized },
+        {
+          $set: {
+            shopId,
+            partNumber: entry.partNumber,
+            normalizedPartNumber: normalized,
+            description: entry.description,
+            manufacturer: entry.manufacturer,
+            usageCount: entry.usageCount,
+            updatedAt: new Date(),
+            lastUsedAt: new Date(),
+          },
+          $setOnInsert: {
+            crossReferences: [],
+            createdAt: new Date(),
+          },
+          $addToSet: {
+            usedOn: { $each: usedOn },
+            workOrderIds: { $each: workOrderIds },
+          },
+        },
+        { upsert: true }
+      );
       
-      if (existing.length === 0) {
-        await sql`
-          INSERT INTO part_cross_ref (
-            shop_id, part_number, normalized_part_number, description, manufacturer,
-            usage_count, used_on, work_order_ids, cross_references, created_at, updated_at, last_used_at
-          ) VALUES (
-            ${shopId}, ${entry.partNumber}, ${normalized}, ${entry.description}, ${entry.manufacturer || null},
-            ${entry.usageCount}, ${JSON.stringify(usedOn)}::jsonb, ${JSON.stringify(workOrderIds)}::jsonb, 
-            '[]'::jsonb, NOW(), NOW(), NOW()
-          )
-        `;
-        created++;
-      } else {
-        const existingUsedOn = existing[0].used_on || [];
-        const existingWoIds = existing[0].work_order_ids || [];
-        const mergedUsedOn = [...existingUsedOn, ...usedOn.filter((u: any) => 
-          !existingUsedOn.some((e: any) => e.year === u.year && e.make === u.make && e.model === u.model)
-        )];
-        const mergedWoIds = [...new Set([...existingWoIds, ...workOrderIds])];
-        
-        await sql`
-          UPDATE part_cross_ref SET
-            part_number = ${entry.partNumber},
-            description = ${entry.description},
-            manufacturer = ${entry.manufacturer || null},
-            usage_count = ${entry.usageCount},
-            used_on = ${JSON.stringify(mergedUsedOn)}::jsonb,
-            work_order_ids = ${JSON.stringify(mergedWoIds)}::jsonb,
-            updated_at = NOW(),
-            last_used_at = NOW()
-          WHERE shop_id = ${shopId} AND normalized_part_number = ${normalized}
-        `;
-        updated++;
-      }
+      if (result.upsertedCount > 0) created++;
+      else if (result.modifiedCount > 0) updated++;
     }
     
     console.log(`[Parts Build] Complete: ${created} created, ${updated} updated`);

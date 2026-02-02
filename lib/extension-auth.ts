@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export interface ExtensionAuthResult {
-  user: Record<string, unknown> | null;
+  user: any | null;
   authorized: boolean;
   error: string | null;
 }
@@ -21,55 +21,49 @@ export async function validateExtensionToken(
     return { user: null, authorized: false, error: "Invalid token format" };
   }
 
-  const rows = await sql`
-    SELECT id, email, role, shop_id, shop_ids, extension_token, extension_token_created_at
-    FROM users
-    WHERE extension_token = ${token}
-    LIMIT 1
-  `;
+  const db = await getDb();
+  const user = await db.collection("users").findOne({ extensionToken: token });
   
-  const user = rows[0];
   if (!user) {
     return { user: null, authorized: false, error: "Invalid token" };
   }
 
-  const tokenCreatedAt = user.extension_token_created_at as Date | null;
-  if (!tokenCreatedAt) {
-    return { user: null, authorized: false, error: "Token expired" };
-  }
-  
-  const tokenAge = Date.now() - new Date(tokenCreatedAt).getTime();
+  const tokenAge = Date.now() - new Date(user.extensionTokenCreatedAt).getTime();
   const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
   
   if (tokenAge > maxAge) {
     return { user: null, authorized: false, error: "Token expired" };
   }
 
+  // Validate shop access if shopId is provided
   if (requiredShopId) {
-    const userShopId = user.shop_id?.toString();
-    const userShopIds = ((user.shop_ids as string[]) || []).map((id) => id.toString());
+    const userShopId = user.shopId?.toString();
+    const userShopIds = (user.shopIds || []).map((id: any) => id.toString());
     
+    // Check if user has access to this shop
     const hasAccess = userShopId === requiredShopId || userShopIds.includes(requiredShopId);
+    
+    // Also check if user is a platform admin (can access all shops)
     const isPlatformAdmin = user.role === "platform_admin";
     
     if (!hasAccess && !isPlatformAdmin) {
       console.warn(`[Extension Auth] Unauthorized shop access: user ${user.email} (shop ${userShopId}) tried shop ${requiredShopId}`);
-      return { user: user as Record<string, unknown>, authorized: false, error: "Unauthorized shop access" };
+      return { user, authorized: false, error: "Unauthorized shop access" };
     }
   }
 
-  return { user: user as Record<string, unknown>, authorized: true, error: null };
+  return { user, authorized: true, error: null };
 }
 
-export function getUserShopIds(user: Record<string, unknown>): string[] {
+export function getUserShopIds(user: any): string[] {
   const shopIds: string[] = [];
   
-  if (user.shop_id) {
-    shopIds.push(user.shop_id.toString());
+  if (user.shopId) {
+    shopIds.push(user.shopId.toString());
   }
   
-  if (user.shop_ids && Array.isArray(user.shop_ids)) {
-    for (const id of user.shop_ids) {
+  if (user.shopIds && Array.isArray(user.shopIds)) {
+    for (const id of user.shopIds) {
       const strId = id.toString();
       if (!shopIds.includes(strId)) {
         shopIds.push(strId);

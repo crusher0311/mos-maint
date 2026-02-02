@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getShopByShopId, getShopById } from "@/lib/db/shops-pg";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getStripe } from "@/lib/stripe";
+import { ObjectId } from "mongodb";
 
 async function requireEnterpriseAccess() {
   const session = await getSession();
@@ -10,9 +10,10 @@ async function requireEnterpriseAccess() {
     return { error: "Unauthorized", status: 401 };
   }
 
-  const shop = await getShopByShopId(session.shopId);
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ id: session.shopId });
 
-  if (!shop?.enterprise_id) {
+  if (!shop?.enterpriseId) {
     return { error: "Not part of an enterprise", status: 403 };
   }
 
@@ -20,7 +21,7 @@ async function requireEnterpriseAccess() {
     return { error: "Enterprise admin access required", status: 403 };
   }
 
-  return { session, enterpriseId: shop.enterprise_id };
+  return { session, enterpriseId: shop.enterpriseId, db };
 }
 
 export async function POST(request: NextRequest) {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { enterpriseId } = auth;
+  const { db, enterpriseId } = auth;
 
   try {
     const { shopId, packSize } = await request.json();
@@ -38,30 +39,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const billingSettings = await sql<{packs: Array<{size: number, priceId: string}>}[]>`
-      SELECT value as packs FROM settings WHERE key = 'vinPacks' LIMIT 1
-    `;
-    const vinPack = billingSettings[0]?.packs?.find((p) => p.size === packSize);
+    const billingSettings = await db.collection("billing_settings").findOne({ key: "vinPacks" });
+    const vinPack = billingSettings?.packs?.find((p: any) => p.size === packSize);
     if (!vinPack || !vinPack.priceId) {
       return NextResponse.json({ error: "Invalid VIN pack" }, { status: 400 });
     }
 
     const priceId = vinPack.priceId;
 
-    const targetShop = typeof shopId === 'string' && shopId.includes('-') 
-      ? await getShopById(shopId) 
-      : await getShopByShopId(shopId);
+    const enterpriseIdStr = enterpriseId.toString();
+    let enterpriseObjId: ObjectId | null = null;
+    try {
+      enterpriseObjId = new ObjectId(enterpriseIdStr);
+    } catch (e) {}
 
-    if (!targetShop || targetShop.enterprise_id !== enterpriseId) {
+    const targetShop = await db.collection("shops").findOne({
+      id: shopId,
+      $or: [
+        ...(enterpriseObjId ? [{ enterpriseId: enterpriseObjId }] : []),
+        { enterpriseId: enterpriseIdStr }
+      ]
+    });
+
+    if (!targetShop) {
       return NextResponse.json({ error: "Shop not found in enterprise" }, { status: 404 });
     }
 
     const stripe = getStripe();
-    const billing = targetShop.billing as Record<string, unknown> | null;
-    const stripeCustomerId = billing?.stripeCustomerId as string | undefined;
 
     const checkoutSession = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId || undefined,
+      customer: targetShop.stripeCustomerId || undefined,
+      customer_email: targetShop.stripeCustomerId ? undefined : targetShop.email,
       payment_method_types: ["card"],
       allow_promotion_codes: true,
       line_items: [{ price: priceId, quantity: 1 }],
@@ -77,9 +85,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ checkoutUrl: checkoutSession.url });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Error purchasing VINs:", error);
-    const message = error instanceof Error ? error.message : "Failed to purchase VINs";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Failed to purchase VINs" }, { status: 500 });
   }
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { createArticle } from "@/lib/knowledge-base";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 
 export async function POST(req: NextRequest) {
   const admin = await requirePlatformAdmin();
@@ -16,16 +17,14 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const numTicketId = Number(ticketId);
-  if (isNaN(numTicketId)) {
+  if (!ObjectId.isValid(ticketId)) {
     return NextResponse.json({ ok: false, error: "Invalid ticket ID" }, { status: 400 });
   }
 
-  const ticketResult = await sql`
-    SELECT id FROM support_tickets WHERE id = ${numTicketId} LIMIT 1
-  `;
+  const db = await getDb();
+  const ticket = await db.collection("support_tickets").findOne({ _id: new ObjectId(ticketId) });
   
-  if (ticketResult.length === 0) {
+  if (!ticket) {
     return NextResponse.json({ ok: false, error: "Ticket not found" }, { status: 404 });
   }
 
@@ -39,11 +38,10 @@ export async function POST(req: NextRequest) {
     createdBy: admin.email
   });
 
-  await sql`
-    UPDATE support_tickets 
-    SET knowledge_article_id = ${articleId}
-    WHERE id = ${numTicketId}
-  `;
+  await db.collection("support_tickets").updateOne(
+    { _id: new ObjectId(ticketId) },
+    { $set: { knowledgeArticleId: articleId } }
+  );
 
   return NextResponse.json({ ok: true, articleId });
 }

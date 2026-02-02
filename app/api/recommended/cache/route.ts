@@ -1,11 +1,12 @@
 // app/api/recommended/cache/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Get cached analysis
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession();
@@ -20,14 +21,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "VIN required" }, { status: 400 });
     }
 
+    const db = await getDb();
+    
+    // Look for cached analysis (valid for 24 hours)
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const cachedRows = await sql`
-      SELECT * FROM ai_analysis_cache
-      WHERE shop_id = ${String(session.shopId)}
-        AND vin = ${vin.toUpperCase()}
-        AND created_at >= ${oneDayAgo}
-    `;
-    const cached = cachedRows[0] as any;
+    const cached = await db.collection("ai_analysis_cache").findOne({
+      shopId: Number(session.shopId),
+      vin: vin.toUpperCase(),
+      createdAt: { $gte: oneDayAgo }
+    });
 
     if (cached) {
       return NextResponse.json({
@@ -49,6 +51,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Save analysis to cache
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession();
@@ -62,11 +65,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "VIN and result required" }, { status: 400 });
     }
 
-    await sql`
-      INSERT INTO ai_analysis_cache (shop_id, vin, result, created_at, updated_at)
-      VALUES (${String(session.shopId)}, ${vin.toUpperCase()}, ${JSON.stringify(result)}::jsonb, NOW(), NOW())
-      ON CONFLICT (shop_id, vin) DO UPDATE SET result = ${JSON.stringify(result)}::jsonb, updated_at = NOW()
-    `;
+    const db = await getDb();
+    
+    // Save to cache
+    await db.collection("ai_analysis_cache").updateOne(
+      {
+        shopId: Number(session.shopId),
+        vin: vin.toUpperCase()
+      },
+      {
+        $set: {
+          shopId: Number(session.shopId),
+          vin: vin.toUpperCase(),
+          result,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
 
     return NextResponse.json({ ok: true, cached: true });
 

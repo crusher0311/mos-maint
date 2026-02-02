@@ -1,4 +1,4 @@
-import sql from "@/lib/db/postgres";
+import { Db } from "mongodb";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
@@ -38,73 +38,33 @@ export interface PlanCacheData {
   prefetched: boolean;
 }
 
-async function getShopUuid(shopId: number): Promise<string | null> {
-  const rows = await sql`SELECT id FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1`;
-  return rows[0]?.id as string | null;
+export async function getPlanCache(db: Db, vin: string, shopId: number): Promise<PlanCacheData | null> {
+  const cached = await db.collection("plan_prefetch_cache").findOne({
+    vin: vin.toUpperCase(),
+    shopId,
+    expiresAt: { $gt: new Date() },
+  });
+  return cached as PlanCacheData | null;
 }
 
-export async function getPlanCache(vin: string, shopId: number): Promise<PlanCacheData | null> {
-  const shopUuid = await getShopUuid(shopId);
-  if (!shopUuid) return null;
-  
-  const vinUpper = vin.toUpperCase();
-  const cacheKey = `plan:${vinUpper}`;
-  
-  const rows = await sql`
-    SELECT data, expires_at, created_at
-    FROM plan_prefetch_cache
-    WHERE shop_id = ${shopUuid}::uuid
-      AND vin = ${vinUpper}
-      AND expires_at > NOW()
-    ORDER BY created_at DESC
-    LIMIT 1
-  `;
-  
-  if (rows.length === 0) return null;
-  
-  const row = rows[0];
-  const data = row.data as any;
-  
-  return {
-    vin: data.vin || vinUpper,
-    shopId: data.shopId || shopId,
-    mileage: data.mileage,
-    vehicle: data.vehicle || { year: null, make: null, model: null, engine: null },
-    oemItemCount: data.oemItemCount || 0,
-    carfaxRecordCount: data.carfaxRecordCount || 0,
-    dviCount: data.dviCount || 0,
-    deferredWorkCount: data.deferredWorkCount || 0,
-    serviceHistoryCount: data.serviceHistoryCount || 0,
-    createdAt: new Date(row.created_at as string),
-    expiresAt: new Date(row.expires_at as string),
-    prefetched: data.prefetched || false,
-  };
-}
-
-export async function setPlanCache(data: Omit<PlanCacheData, 'createdAt' | 'expiresAt'>): Promise<void> {
-  const shopUuid = await getShopUuid(data.shopId);
-  if (!shopUuid) return;
-  
-  const vinUpper = data.vin.toUpperCase();
-  const cacheKey = `plan:${vinUpper}`;
-  const expiresAt = new Date(Date.now() + CACHE_TTL_MS);
-  
-  const jsonData = {
-    ...data,
-    vin: vinUpper,
-  };
-  
-  await sql`
-    INSERT INTO plan_prefetch_cache (id, cache_key, shop_id, vin, data, priority, expires_at, created_at)
-    VALUES (gen_random_uuid(), ${cacheKey}, ${shopUuid}::uuid, ${vinUpper}, ${jsonData as any}::jsonb, 1, ${expiresAt}, NOW())
-    ON CONFLICT (cache_key, shop_id) DO UPDATE SET
-      data = EXCLUDED.data,
-      expires_at = EXCLUDED.expires_at,
-      created_at = NOW()
-  `;
+export async function setPlanCache(db: Db, data: Omit<PlanCacheData, 'createdAt' | 'expiresAt'>): Promise<void> {
+  const now = new Date();
+  await db.collection("plan_prefetch_cache").updateOne(
+    { vin: data.vin.toUpperCase(), shopId: data.shopId },
+    {
+      $set: {
+        ...data,
+        vin: data.vin.toUpperCase(),
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
+      },
+    },
+    { upsert: true }
+  );
 }
 
 export async function prefetchPlanData(
+  db: Db,
   shopId: number,
   vin: string,
   mileage: number | null
@@ -118,6 +78,7 @@ export async function prefetchPlanData(
   const vinUpper = vin.toUpperCase();
 
   try {
+    // Fetch OEM data first (always needed)
     let oemData: any = { items: [], vehicle: null };
     try {
       oemData = await getMaintenanceScheduleCached(vinUpper);
@@ -126,8 +87,10 @@ export async function prefetchPlanData(
       results.dataone = `error: ${err.message}`;
     }
 
+    // Parallel fetch all other data sources
     const promises: Promise<void>[] = [];
 
+    // Carfax
     promises.push(
       (async () => {
         try {
@@ -144,27 +107,40 @@ export async function prefetchPlanData(
       })()
     );
 
+    // AutoFlow DVI
     promises.push(
       (async () => {
         try {
-          const shopUuid = await getShopUuid(shopId);
-          if (!shopUuid) {
-            results.autoflow = "shop_not_found";
-            return;
-          }
-          
-          const eventRows = await sql`
-            SELECT payload->>'ticket'->>'invoice' as ro_number
-            FROM events
-            WHERE shop_id = ${shopUuid}::uuid
-              AND provider = 'autoflow'
-              AND UPPER(vin) = ${vinUpper}
-              AND payload->>'ticket'->>'invoice' IS NOT NULL
-            ORDER BY created_at DESC
-            LIMIT 1
-          `;
+          // Find latest RO for this VIN from events
+          const eventRos = await db.collection("events").aggregate([
+            {
+              $match: {
+                $and: [
+                  { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+                  { provider: "autoflow" },
+                  {
+                    $expr: {
+                      $eq: [
+                        { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+                        vinUpper
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              $addFields: {
+                roNumber: { $ifNull: ["$payload.ticket.invoice", { $ifNull: ["$payload.ticket.id", "$roNumber"] }] }
+              }
+            },
+            { $match: { roNumber: { $ne: null } } },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            { $project: { roNumber: 1 } }
+          ]).toArray();
 
-          const latestRoNumber = eventRows[0]?.ro_number ?? null;
+          const latestRoNumber = eventRos[0]?.roNumber ?? null;
 
           if (latestRoNumber) {
             const autoCfg = await resolveAutoflowConfig(shopId);
@@ -183,6 +159,7 @@ export async function prefetchPlanData(
       })()
     );
 
+    // Protractor vehicle and deferred work
     promises.push(
       (async () => {
         try {
@@ -215,6 +192,7 @@ export async function prefetchPlanData(
       })()
     );
 
+    // AutoVitals DVI
     promises.push(
       (async () => {
         try {
@@ -233,6 +211,7 @@ export async function prefetchPlanData(
       })()
     );
 
+    // Canned jobs
     promises.push(
       (async () => {
         try {
@@ -248,7 +227,8 @@ export async function prefetchPlanData(
 
     await Promise.allSettled(promises);
 
-    await setPlanCache({
+    // Save to prefetch cache
+    await setPlanCache(db, {
       vin: vinUpper,
       shopId,
       mileage,
@@ -262,7 +242,7 @@ export async function prefetchPlanData(
       carfaxRecordCount: parseInt(results.carfax?.match(/\d+/)?.[0] || '0'),
       dviCount: parseInt(results.autoflow?.match(/\d+/)?.[0] || '0') + parseInt(results.autovitals?.match(/\d+/)?.[0] || '0'),
       deferredWorkCount: parseInt(results.protractor_deferred?.match(/\d+/)?.[0] || '0'),
-      serviceHistoryCount: 0,
+      serviceHistoryCount: 0, // Will be populated when plan is fully built
       prefetched: true,
     });
 
@@ -276,7 +256,7 @@ export async function prefetchPlanData(
   }
 }
 
-export async function isPlanPrefetched(vin: string, shopId: number): Promise<boolean> {
-  const cache = await getPlanCache(vin, shopId);
+export async function isPlanPrefetched(db: Db, vin: string, shopId: number): Promise<boolean> {
+  const cache = await getPlanCache(db, vin, shopId);
   return cache !== null && cache.prefetched === true;
 }

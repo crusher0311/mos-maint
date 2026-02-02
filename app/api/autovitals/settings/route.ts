@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { loginWithCodes, testAutoVitalsConnection } from "@/lib/integrations/autovitals";
 
@@ -9,20 +9,17 @@ export async function GET(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const shopId = String(session.shopId);
+    const shopId = Number(session.shopId);
 
-    const rows = await sql`
-      SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1
-    `;
-    const shop = rows[0];
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne({ shopId });
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const settings = shop.settings || {};
-    const autovitals = settings.autovitals || {};
-    const hasApiKey = !!settings.autovitalsApiKey;
+    const autovitals = shop.autovitals || {};
+    const hasApiKey = !!shop.autovitalsApiKey;
     const extensionConnected = autovitals.extensionConnected || false;
 
     return NextResponse.json({
@@ -45,10 +42,12 @@ export async function POST(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userShopId = String(session.shopId);
+    const userShopId = Number(session.shopId);
 
     const body = await request.json();
     const { welcomeCode, personalCode, sessionCookie, shopId: avShopId } = body;
+
+    const db = await getDb();
 
     if (sessionCookie && avShopId) {
       const testResult = await testAutoVitalsConnection({
@@ -62,22 +61,17 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      await sql`
-        UPDATE shops SET settings = jsonb_set(
-          jsonb_set(
-            jsonb_set(
-              jsonb_set(
-                COALESCE(settings, '{}'),
-                '{autovitals,shopId}', ${JSON.stringify(avShopId)}::jsonb
-              ),
-              '{autovitals,sessionCookie}', ${JSON.stringify(sessionCookie)}::jsonb
-            ),
-            '{autovitals,shopName}', ${JSON.stringify(testResult.shopName || "")}::jsonb
-          ),
-          '{autovitals,updatedAt}', ${JSON.stringify(new Date().toISOString())}::jsonb
-        )
-        WHERE shop_id = ${userShopId}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId: userShopId },
+        { 
+          $set: {
+            "autovitals.shopId": avShopId,
+            "autovitals.sessionCookie": sessionCookie,
+            "autovitals.shopName": testResult.shopName || "",
+            "autovitals.updatedAt": new Date(),
+          }
+        }
+      );
 
       return NextResponse.json({ 
         success: true,
@@ -89,21 +83,18 @@ export async function POST(request: NextRequest) {
       const loginResult = await loginWithCodes({ welcomeCode, personalCode });
 
       if (loginResult.ok) {
-        const autovitalsUpdate = {
-          shopId: loginResult.config.shopId,
-          userId: loginResult.config.userId,
-          sessionCookie: loginResult.config.sessionCookie,
-          shopName: loginResult.shopName || "",
-          updatedAt: new Date().toISOString(),
-        };
-
-        await sql`
-          UPDATE shops SET settings = jsonb_set(
-            COALESCE(settings, '{}'),
-            '{autovitals}', ${JSON.stringify(autovitalsUpdate)}::jsonb
-          )
-          WHERE shop_id = ${userShopId}
-        `;
+        await db.collection("shops").updateOne(
+          { shopId: userShopId },
+          { 
+            $set: {
+              "autovitals.shopId": loginResult.config.shopId,
+              "autovitals.userId": loginResult.config.userId,
+              "autovitals.sessionCookie": loginResult.config.sessionCookie,
+              "autovitals.shopName": loginResult.shopName || "",
+              "autovitals.updatedAt": new Date(),
+            }
+          }
+        );
 
         return NextResponse.json({ 
           success: true,
@@ -132,12 +123,18 @@ export async function DELETE(request: NextRequest) {
     if (!session || !session.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userShopId = String(session.shopId);
+    const userShopId = Number(session.shopId);
 
-    await sql`
-      UPDATE shops SET settings = settings - 'autovitals'
-      WHERE shop_id = ${userShopId}
-    `;
+    const db = await getDb();
+    
+    await db.collection("shops").updateOne(
+      { shopId: userShopId },
+      { 
+        $unset: {
+          autovitals: "",
+        }
+      }
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

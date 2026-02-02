@@ -1,38 +1,49 @@
 // app/admin/page.tsx
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const dynamic = "force-dynamic";
 
 async function getSystemStats() {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const db = await getDb();
   
   const [
-    shopsResult,
-    usersResult,
-    customersResult,
-    vehiclesResult,
-    recentEventsResult,
-    activeShopsResult
+    totalShops,
+    totalUsers,
+    totalCustomers,
+    totalVehicles,
+    recentEvents
   ] = await Promise.all([
-    sql`SELECT COUNT(*) as count FROM shops`,
-    sql`SELECT COUNT(*) as count FROM users`,
-    sql`SELECT COUNT(*) as count FROM customers`,
-    sql`SELECT COUNT(*) as count FROM vehicles`,
-    sql`SELECT * FROM events ORDER BY received_at DESC LIMIT 10`,
-    sql`SELECT COUNT(DISTINCT shop_id) as count FROM events WHERE received_at >= ${thirtyDaysAgo}`
+    db.collection("shops").countDocuments(),
+    db.collection("users").countDocuments(),
+    db.collection("customers").countDocuments(),
+    db.collection("vehicles").countDocuments(),
+    db.collection("events").find({}).sort({ receivedAt: -1 }).limit(10).toArray()
   ]);
 
+  // Active shops (shops with recent activity)
+  const activeShops = await db.collection("events").aggregate([
+    {
+      $match: {
+        receivedAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
+      }
+    },
+    {
+      $group: {
+        _id: "$shopId"
+      }
+    },
+    {
+      $count: "activeShops"
+    }
+  ]).toArray();
+
   return {
-    totalShops: Number(shopsResult[0]?.count || 0),
-    totalUsers: Number(usersResult[0]?.count || 0),
-    totalCustomers: Number(customersResult[0]?.count || 0),
-    totalVehicles: Number(vehiclesResult[0]?.count || 0),
-    activeShops: Number(activeShopsResult[0]?.count || 0),
-    recentEvents: recentEventsResult.map((e: any) => ({
-      ...e,
-      receivedAt: e.received_at,
-      shopId: e.shop_id
-    }))
+    totalShops,
+    totalUsers,
+    totalCustomers,
+    totalVehicles,
+    activeShops: activeShops[0]?.activeShops || 0,
+    recentEvents
   };
 }
 

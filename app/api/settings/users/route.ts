@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,39 +9,25 @@ export async function GET() {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const shopId = String(sess.shopId);
+  const db = await getDb();
 
-  const users = await sql`
-    SELECT id, email, role, shop_id, shop_ids, created_at, is_platform_admin 
-    FROM users 
-    WHERE shop_id = ${shopId}
-    ORDER BY created_at DESC NULLS LAST
-  `;
+  const users = await db.collection("users")
+    .find({ shopId: sess.shopId })
+    .project({ passwordHash: 0, password: 0 })
+    .sort({ createdAt: -1 })
+    .toArray();
 
-  const pendingInvites = await sql`
-    SELECT * FROM setup_tokens 
-    WHERE shop_id = ${shopId} AND expires_at > ${new Date()}
-    ORDER BY created_at DESC NULLS LAST
-  `;
+  const pendingInvites = await db.collection("setup_tokens")
+    .find({ 
+      shopId: sess.shopId,
+      expiresAt: { $gt: new Date() }
+    })
+    .sort({ createdAt: -1 })
+    .toArray();
 
   return NextResponse.json({
-    users: users.map(u => ({
-      _id: u.id,
-      email: u.email,
-      role: u.role,
-      shopId: u.shop_id,
-      shopIds: u.shop_ids,
-      createdAt: u.created_at,
-      isPlatformAdmin: u.is_platform_admin,
-    })),
-    pendingInvites: pendingInvites.map(i => ({
-      _id: i.id,
-      email: i.email,
-      role: i.role,
-      shopId: i.shop_id,
-      createdAt: i.created_at,
-      expiresAt: i.expires_at,
-    })),
+    users,
+    pendingInvites,
     currentUserRole: sess.role,
   });
 }

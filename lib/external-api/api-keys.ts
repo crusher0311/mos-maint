@@ -1,4 +1,4 @@
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { randomBytes, createHash } from "crypto";
 
 export type RateLimitTier = "standard" | "professional" | "enterprise";
@@ -28,7 +28,7 @@ export const RATE_LIMIT_TIERS: Record<RateLimitTier, RateLimitConfig> = {
 };
 
 export interface ApiKey {
-  id?: number;
+  _id?: any;
   shopId: number;
   keyHash: string;
   keyPrefix: string;
@@ -109,6 +109,8 @@ export async function generateApiKey(
     expiresAt?: Date;
   }
 ): Promise<{ key: string; keyPrefix: string; keyId: string }> {
+  const db = await getDb();
+  
   const permValidation = validatePermissions(permissions);
   if (!permValidation.valid) {
     throw new Error(`Invalid permissions: ${permValidation.invalid.join(", ")}`);
@@ -121,85 +123,67 @@ export async function generateApiKey(
   const tier = options?.rateLimitTier || "standard";
   const rateLimit = options?.rateLimit || getRateLimitFromTier(tier);
   
-  const rows = await sql`
-    INSERT INTO api_keys (shop_id, key_hash, key_prefix, name, permissions, rate_limit, is_active, usage_count, created_by, expires_at, created_at)
-    VALUES (
-      ${String(shopId)},
-      ${keyHash},
-      ${keyPrefix},
-      ${name},
-      ${JSON.stringify(permissions)}::jsonb,
-      ${rateLimit},
-      true,
-      0,
-      ${createdBy},
-      ${options?.expiresAt || null},
-      NOW()
-    )
-    RETURNING id
-  `;
+  const apiKey: ApiKey = {
+    shopId,
+    keyHash,
+    keyPrefix,
+    name,
+    permissions,
+    rateLimit,
+    rateLimitTier: tier,
+    isActive: true,
+    usageCount: 0,
+    createdAt: new Date(),
+    createdBy,
+    expiresAt: options?.expiresAt,
+  };
+  
+  const result = await db.collection("api_keys").insertOne(apiKey);
   
   return {
     key: rawKey,
     keyPrefix,
-    keyId: String(rows[0].id),
+    keyId: result.insertedId.toString(),
   };
 }
 
 export async function validateApiKey(
   rawKey: string
 ): Promise<{ valid: boolean; apiKey?: ApiKey; error?: string }> {
+  const db = await getDb();
+  
   if (!rawKey || !rawKey.startsWith("mos_")) {
     return { valid: false, error: "Invalid API key format" };
   }
   
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
   
-  const rows = await sql`
-    SELECT id, shop_id, key_hash, key_prefix, name, permissions, rate_limit, is_active, last_used_at, usage_count, created_by, expires_at, created_at
-    FROM api_keys
-    WHERE key_hash = ${keyHash}
-    LIMIT 1
-  `;
+  const apiKey = await db.collection("api_keys").findOne({ keyHash }) as ApiKey | null;
   
-  const row = rows[0];
-  if (!row) {
+  if (!apiKey) {
     return { valid: false, error: "API key not found" };
   }
   
-  if (!row.is_active) {
+  if (!apiKey.isActive) {
     return { valid: false, error: "API key is disabled" };
   }
   
-  if (row.expires_at && new Date() > new Date(row.expires_at as string)) {
+  if (apiKey.expiresAt && new Date() > new Date(apiKey.expiresAt)) {
     return { valid: false, error: "API key has expired" };
   }
-  
-  const apiKey: ApiKey = {
-    id: row.id as number,
-    shopId: parseInt(row.shop_id as string),
-    keyHash: row.key_hash as string,
-    keyPrefix: row.key_prefix as string,
-    name: row.name as string,
-    permissions: row.permissions as string[],
-    rateLimit: row.rate_limit as number,
-    isActive: row.is_active as boolean,
-    lastUsedAt: row.last_used_at ? new Date(row.last_used_at as string) : undefined,
-    usageCount: row.usage_count as number,
-    createdBy: row.created_by as string,
-    expiresAt: row.expires_at ? new Date(row.expires_at as string) : undefined,
-    createdAt: new Date(row.created_at as string),
-  };
   
   return { valid: true, apiKey };
 }
 
 export async function updateApiKeyUsage(keyHash: string): Promise<void> {
-  await sql`
-    UPDATE api_keys
-    SET last_used_at = NOW(), usage_count = usage_count + 1
-    WHERE key_hash = ${keyHash}
-  `;
+  const db = await getDb();
+  await db.collection("api_keys").updateOne(
+    { keyHash },
+    { 
+      $set: { lastUsedAt: new Date() },
+      $inc: { usageCount: 1 }
+    }
+  );
 }
 
 export async function checkPermission(
@@ -213,71 +197,46 @@ export async function checkPermission(
 }
 
 export async function revokeApiKey(keyId: string): Promise<boolean> {
-  const result = await sql`
-    UPDATE api_keys
-    SET is_active = false
-    WHERE id = ${parseInt(keyId)}
-  `;
+  const db = await getDb();
+  const { ObjectId } = await import("mongodb");
   
-  return result.count > 0;
+  const result = await db.collection("api_keys").updateOne(
+    { _id: new ObjectId(keyId) },
+    { $set: { isActive: false } }
+  );
+  
+  return result.modifiedCount > 0;
 }
 
 export async function getApiKeysForShop(shopId: number): Promise<ApiKey[]> {
-  const rows = await sql`
-    SELECT id, shop_id, key_hash, key_prefix, name, permissions, rate_limit, is_active, last_used_at, usage_count, created_by, expires_at, created_at
-    FROM api_keys
-    WHERE shop_id = ${String(shopId)}
-    ORDER BY created_at DESC
-  `;
+  const db = await getDb();
   
-  return rows.map(row => ({
-    id: row.id as number,
-    shopId: parseInt(row.shop_id as string),
-    keyHash: row.key_hash as string,
-    keyPrefix: row.key_prefix as string,
-    name: row.name as string,
-    permissions: row.permissions as string[],
-    rateLimit: row.rate_limit as number,
-    isActive: row.is_active as boolean,
-    lastUsedAt: row.last_used_at ? new Date(row.last_used_at as string) : undefined,
-    usageCount: row.usage_count as number,
-    createdBy: row.created_by as string,
-    expiresAt: row.expires_at ? new Date(row.expires_at as string) : undefined,
-    createdAt: new Date(row.created_at as string),
-  }));
+  const keys = await db.collection("api_keys")
+    .find({ shopId })
+    .sort({ createdAt: -1 })
+    .toArray();
+  
+  return keys as unknown as ApiKey[];
 }
 
 export async function logApiUsage(log: ApiKeyUsageLog): Promise<void> {
-  const shopIdStr = String(log.shopId);
-  
-  await sql`
-    INSERT INTO api_usage_logs (shop_id, endpoint, method, status_code, response_time_ms, ip_address, created_at)
-    VALUES (
-      (SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1),
-      ${log.endpoint},
-      ${log.method},
-      ${log.statusCode},
-      ${log.responseTime},
-      ${log.ip || null},
-      ${log.timestamp}
-    )
-  `;
+  const db = await getDb();
+  await db.collection("api_usage_logs").insertOne(log);
 }
 
 export async function checkRateLimit(
   keyHash: string,
   rateLimit: number
 ): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
+  const db = await getDb();
+  
   const windowStart = new Date();
   windowStart.setMinutes(windowStart.getMinutes() - 1);
   
-  const rows = await sql`
-    SELECT COUNT(*) as count
-    FROM api_usage_logs
-    WHERE created_at >= ${windowStart}
-  `;
-  
-  const count = Number(rows[0]?.count || 0);
+  const count = await db.collection("api_usage_logs").countDocuments({
+    keyHash,
+    timestamp: { $gte: windowStart }
+  });
   
   const resetAt = new Date();
   resetAt.setMinutes(resetAt.getMinutes() + 1);
@@ -290,59 +249,28 @@ export async function checkRateLimit(
 }
 
 export async function getApiKeyById(keyId: string): Promise<ApiKey | null> {
-  const rows = await sql`
-    SELECT id, shop_id, key_hash, key_prefix, name, permissions, rate_limit, is_active, last_used_at, usage_count, created_by, expires_at, created_at
-    FROM api_keys
-    WHERE id = ${parseInt(keyId)}
-    LIMIT 1
-  `;
+  const db = await getDb();
+  const { ObjectId } = await import("mongodb");
   
-  const row = rows[0];
-  if (!row) return null;
-  
-  return {
-    id: row.id as number,
-    shopId: parseInt(row.shop_id as string),
-    keyHash: row.key_hash as string,
-    keyPrefix: row.key_prefix as string,
-    name: row.name as string,
-    permissions: row.permissions as string[],
-    rateLimit: row.rate_limit as number,
-    isActive: row.is_active as boolean,
-    lastUsedAt: row.last_used_at ? new Date(row.last_used_at as string) : undefined,
-    usageCount: row.usage_count as number,
-    createdBy: row.created_by as string,
-    expiresAt: row.expires_at ? new Date(row.expires_at as string) : undefined,
-    createdAt: new Date(row.created_at as string),
-  };
+  const key = await db.collection("api_keys").findOne({ _id: new ObjectId(keyId) });
+  return key as ApiKey | null;
 }
 
 export async function updateApiKey(
   keyId: string,
   updates: Partial<Pick<ApiKey, "name" | "permissions" | "rateLimit" | "rateLimitTier" | "isActive" | "expiresAt">>
 ): Promise<boolean> {
+  const db = await getDb();
+  const { ObjectId } = await import("mongodb");
+  
   if (updates.rateLimitTier && !updates.rateLimit) {
     updates.rateLimit = getRateLimitFromTier(updates.rateLimitTier);
   }
   
-  const setClauses: string[] = [];
-  const values: unknown[] = [];
+  const result = await db.collection("api_keys").updateOne(
+    { _id: new ObjectId(keyId) },
+    { $set: updates }
+  );
   
-  if (updates.name !== undefined) {
-    await sql`UPDATE api_keys SET name = ${updates.name} WHERE id = ${parseInt(keyId)}`;
-  }
-  if (updates.permissions !== undefined) {
-    await sql`UPDATE api_keys SET permissions = ${JSON.stringify(updates.permissions)}::jsonb WHERE id = ${parseInt(keyId)}`;
-  }
-  if (updates.rateLimit !== undefined) {
-    await sql`UPDATE api_keys SET rate_limit = ${updates.rateLimit} WHERE id = ${parseInt(keyId)}`;
-  }
-  if (updates.isActive !== undefined) {
-    await sql`UPDATE api_keys SET is_active = ${updates.isActive} WHERE id = ${parseInt(keyId)}`;
-  }
-  if (updates.expiresAt !== undefined) {
-    await sql`UPDATE api_keys SET expires_at = ${updates.expiresAt} WHERE id = ${parseInt(keyId)}`;
-  }
-  
-  return true;
+  return result.modifiedCount > 0;
 }

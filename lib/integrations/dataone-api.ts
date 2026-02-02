@@ -1,10 +1,14 @@
-import sql from "@/lib/db/postgres";
+// lib/integrations/dataone-api.ts
+// Integration with external DataOne API for VIN decoding and maintenance schedules
+// Includes MongoDB Atlas caching to avoid repeated API calls
+
+import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { getMaintenanceScheduleLocal, decodeVinLocal } from "@/lib/integrations/dataone-local";
 
 const DATAONE_API_BASE = process.env.DATAONE_API_URL || "http://3.144.191.161:3000";
-const CACHE_TTL_HOURS = 24 * 7;
-const FETCH_TIMEOUT_MS = 5000;
+const CACHE_TTL_HOURS = 24 * 7; // Cache for 7 days (OEM data rarely changes)
+const FETCH_TIMEOUT_MS = 5000; // 5 second timeout for API calls
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
@@ -149,8 +153,8 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
       return { ok: false, vin, squish, count: 0, items: [], error: "No maintenance data found for this VIN" };
     }
 
-    const maintenanceIds = [...new Set(vinMaintenanceData.data.map((d: Record<string, unknown>) => d.maintenance_id))];
-    const vinMaintenanceIds = vinMaintenanceData.data.map((d: Record<string, unknown>) => d.vin_maintenance_id);
+    const maintenanceIds = [...new Set(vinMaintenanceData.data.map((d: any) => d.maintenance_id))];
+    const vinMaintenanceIds = vinMaintenanceData.data.map((d: any) => d.vin_maintenance_id);
 
     const [maintenanceDefsResponse, intervalsResponse] = await Promise.all([
       fetchWithTimeout(`${DATAONE_API_BASE}/api/data/DEF_MAINTENANCE?maintenance_id__in=${maintenanceIds.join(",")}&limit=500`),
@@ -160,19 +164,19 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
     const maintenanceDefs = await maintenanceDefsResponse.json();
     const intervals = await intervalsResponse.json();
 
-    const intervalIds = [...new Set(intervals.data.map((d: Record<string, unknown>) => d.maintenance_interval_id).filter((id: number) => id > 0))];
+    const intervalIds = [...new Set(intervals.data.map((d: any) => d.maintenance_interval_id).filter((id: number) => id > 0))];
     
-    let intervalDefs: Record<string, unknown>[] = [];
+    let intervalDefs: any[] = [];
     if (intervalIds.length > 0) {
       const intervalDefsResponse = await fetchWithTimeout(`${DATAONE_API_BASE}/api/data/DEF_MAINTENANCE_INTERVAL?maintenance_interval_id__in=${intervalIds.join(",")}&limit=500`);
       const intervalDefsData = await intervalDefsResponse.json();
       intervalDefs = intervalDefsData.data;
     }
 
-    const maintenanceDefMap = new Map<number, Record<string, unknown>>(maintenanceDefs.data.map((d: Record<string, unknown>) => [d.maintenance_id as number, d]));
-    const intervalDefMap = new Map<number, Record<string, unknown>>(intervalDefs.map((d) => [d.maintenance_interval_id as number, d]));
+    const maintenanceDefMap = new Map<number, any>(maintenanceDefs.data.map((d: any) => [d.maintenance_id, d]));
+    const intervalDefMap = new Map<number, any>(intervalDefs.map((d: any) => [d.maintenance_interval_id, d]));
     
-    const vinMaintenanceMap = new Map<number, Record<string, unknown>>();
+    const vinMaintenanceMap = new Map<number, any>();
     for (const vm of vinMaintenanceData.data) {
       vinMaintenanceMap.set(vm.vin_maintenance_id, vm);
     }
@@ -186,9 +190,9 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
       if (!itemsMap.has(vm.maintenance_id)) {
         itemsMap.set(vm.maintenance_id, {
           maintenance_id: vm.maintenance_id,
-          maintenance_category: (def.maintenance_category as string) || "General",
-          maintenance_name: (def.maintenance_name as string) || "Unknown",
-          maintenance_notes: def.maintenance_notes as string | null,
+          maintenance_category: def.maintenance_category || "General",
+          maintenance_name: def.maintenance_name || "Unknown",
+          maintenance_notes: def.maintenance_notes,
           intervals: [],
           miles: null,
           months: null,
@@ -200,24 +204,24 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
       const vm = vinMaintenanceMap.get(interval.vin_maintenance_id);
       if (!vm) continue;
 
-      const item = itemsMap.get(vm.maintenance_id as number);
+      const item = itemsMap.get(vm.maintenance_id);
       if (!item) continue;
 
       const intervalDef = intervalDefMap.get(interval.maintenance_interval_id);
       if (intervalDef) {
         item.intervals.push({
-          interval_id: intervalDef.maintenance_interval_id as number,
-          interval_type: intervalDef.interval_type as string,
-          value: intervalDef.value as number,
-          units: intervalDef.units as string,
-          initial_value: intervalDef.initial_value as number,
+          interval_id: intervalDef.maintenance_interval_id,
+          interval_type: intervalDef.interval_type,
+          value: intervalDef.value,
+          units: intervalDef.units,
+          initial_value: intervalDef.initial_value,
         });
 
-        if (intervalDef.units === "Miles" && (item.miles === null || (intervalDef.value as number) < item.miles)) {
-          item.miles = intervalDef.value as number;
+        if (intervalDef.units === "Miles" && (item.miles === null || intervalDef.value < item.miles)) {
+          item.miles = intervalDef.value;
         }
-        if (intervalDef.units === "Months" && (item.months === null || (intervalDef.value as number) < item.months)) {
-          item.months = intervalDef.value as number;
+        if (intervalDef.units === "Months" && (item.months === null || intervalDef.value < item.months)) {
+          item.months = intervalDef.value;
         }
       }
     }
@@ -254,8 +258,7 @@ export async function getEnhancedVehicleData(vin: string): Promise<{
   };
   error?: string;
 }> {
-  // Use local PostgreSQL lookup instead of external API
-  const decoded = await decodeVinLocal(vin);
+  const decoded = await decodeVin(vin);
   
   if (!decoded.ok || !decoded.decoded) {
     return { ok: false, vin, error: decoded.error };
@@ -282,6 +285,10 @@ export async function getEnhancedVehicleData(vin: string): Promise<{
     },
   };
 }
+
+// ============================================================================
+// CACHING LAYER - MongoDB Atlas cache for DataOne API responses
+// ============================================================================
 
 interface CachedMaintenanceData {
   squish: string;
@@ -323,13 +330,15 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
   const now = new Date();
   
   try {
-    const result = await sql`
-      SELECT * FROM dataone_cache WHERE squish = ${squish} LIMIT 1
-    `;
-    const cached = result[0] as CachedMaintenanceData | undefined;
+    const db = await getDb();
+    const cacheCollection = db.collection<CachedMaintenanceData>("dataone_cache");
     
-    if (cached && new Date(cached.expiresAt) > now && cached.vehicle) {
-      console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${new Date(cached.fetchedAt).toISOString()}`);
+    // Check for cached data
+    const cached = await cacheCollection.findOne({ squish });
+    
+    if (cached && cached.expiresAt > now && cached.vehicle) {
+      // Cache hit with vehicle info - return cached data
+      console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
       return {
         ok: cached.data.ok,
         vin,
@@ -339,21 +348,25 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
         vehicle: cached.vehicle,
         error: cached.data.error,
         source: "cache",
-        cachedAt: new Date(cached.fetchedAt),
+        cachedAt: cached.fetchedAt,
       };
     }
     
-    if (cached && new Date(cached.expiresAt) > now && !cached.vehicle) {
+    // If cache hit but missing vehicle info, mark for re-fetch
+    if (cached && cached.expiresAt > now && !cached.vehicle) {
       console.log(`[DataOne Cache] HIT but missing vehicle info for squish ${squish}, re-fetching...`);
     }
     
+    // Cache miss or expired - fetch from LOCAL PostgreSQL database (fast!)
     console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from local PostgreSQL...`);
     
+    // Fetch both maintenance schedule and vehicle decode from local database in parallel
     const [localResult, decoded] = await Promise.all([
       getMaintenanceScheduleLocal(vin),
       decodeVinLocal(vin)
     ]);
     
+    // Extract vehicle info from decode
     const vehicleInfo = decoded.ok && decoded.decoded ? {
       year: decoded.decoded.year,
       make: decoded.decoded.make,
@@ -361,29 +374,29 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       engine: decoded.decoded.engine_name,
     } : undefined;
     
+    // Store in cache (even if local query returned no data)
     const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
     
-    await sql`
-      INSERT INTO dataone_cache (squish, vin, data, vehicle, fetched_at, expires_at, source)
-      VALUES (${squish}, ${vin}, ${JSON.stringify({
-        ok: localResult.ok,
-        count: localResult.count,
-        items: localResult.items,
-        error: localResult.error,
-      })}::jsonb, ${JSON.stringify(vehicleInfo || null)}::jsonb, ${now}, ${expiresAt}, 'cache')
-      ON CONFLICT (squish) DO UPDATE SET
-        vin = ${vin},
-        data = ${JSON.stringify({
-          ok: localResult.ok,
-          count: localResult.count,
-          items: localResult.items,
-          error: localResult.error,
-        })}::jsonb,
-        vehicle = ${JSON.stringify(vehicleInfo || null)}::jsonb,
-        fetched_at = ${now},
-        expires_at = ${expiresAt},
-        source = 'cache'
-    `;
+    await cacheCollection.updateOne(
+      { squish },
+      {
+        $set: {
+          squish,
+          vin,
+          data: {
+            ok: localResult.ok,
+            count: localResult.count,
+            items: localResult.items,
+            error: localResult.error,
+          },
+          vehicle: vehicleInfo,
+          fetchedAt: now,
+          expiresAt,
+          source: "cache",
+        },
+      },
+      { upsert: true }
+    );
     
     console.log(`[DataOne Cache] Stored ${localResult.count} items for squish ${squish} from local DB, expires ${expiresAt.toISOString()}`);
     
@@ -399,10 +412,11 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     };
   } catch (error) {
     console.error("[DataOne Cache] Error:", error);
+    // Fallback to direct local database call if cache layer fails
     const localResult = await getMaintenanceScheduleLocal(vin);
     return {
       ...localResult,
-      source: "cache",
+      source: "local" as "api" | "cache",
     };
   }
 }
@@ -410,9 +424,10 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
 export async function invalidateMaintenanceCache(vin: string): Promise<boolean> {
   try {
     const squish = toSquish(vin);
-    const result = await sql`DELETE FROM dataone_cache WHERE squish = ${squish}`;
+    const db = await getDb();
+    const result = await db.collection("dataone_cache").deleteOne({ squish });
     console.log(`[DataOne Cache] Invalidated cache for squish ${squish}`);
-    return (result as unknown[]).length > 0;
+    return result.deletedCount > 0;
   } catch (error) {
     console.error("[DataOne Cache] Failed to invalidate:", error);
     return false;
@@ -425,18 +440,16 @@ export async function getCacheStats(): Promise<{
   recentHits: number;
 }> {
   try {
+    const db = await getDb();
+    const cacheCollection = db.collection("dataone_cache");
     const now = new Date();
     
-    const [totalResult, expiredResult] = await Promise.all([
-      sql`SELECT COUNT(*) as count FROM dataone_cache`,
-      sql`SELECT COUNT(*) as count FROM dataone_cache WHERE expires_at <= ${now}`,
+    const [totalCached, expiredCount] = await Promise.all([
+      cacheCollection.countDocuments(),
+      cacheCollection.countDocuments({ expiresAt: { $lte: now } }),
     ]);
     
-    return { 
-      totalCached: Number(totalResult[0]?.count) || 0, 
-      expiredCount: Number(expiredResult[0]?.count) || 0, 
-      recentHits: 0 
-    };
+    return { totalCached, expiredCount, recentHits: 0 };
   } catch (error) {
     console.error("[DataOne Cache] Stats error:", error);
     return { totalCached: 0, expiredCount: 0, recentHits: 0 };

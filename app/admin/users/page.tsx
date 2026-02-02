@@ -1,25 +1,37 @@
 // app/admin/users/page.tsx
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 async function getUsersWithShopInfo() {
-  const users = await sql`
-    SELECT 
-      u.id as _id,
-      u.id,
-      u.email,
-      u.name,
-      u.role,
-      u.shop_id as "shopId",
-      u.created_at as "createdAt",
-      u.last_login_at as "lastLoginAt",
-      s.name as "shopName"
-    FROM users u
-    LEFT JOIN shops s ON u.shop_id = s.shop_id
-    ORDER BY u.created_at DESC
-  `;
+  const db = await getDb();
+  
+  // Get all users with their shop information
+  const users = await db.collection("users").aggregate([
+    {
+      $lookup: {
+        from: "shops",
+        localField: "shopId",
+        foreignField: "shopId",
+        as: "shop"
+      }
+    },
+    {
+      $addFields: {
+        shopName: { $arrayElemAt: ["$shop.name", 0] }
+      }
+    },
+    {
+      $project: {
+        passwordHash: 0,
+        password: 0
+      }
+    },
+    {
+      $sort: { createdAt: -1 }
+    }
+  ]).toArray();
 
   return users;
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 import { 
   updateEnterpriseFeatures,
   type FeatureSettings
@@ -20,34 +21,30 @@ export async function GET(
 
   try {
     const enterpriseId = params.enterpriseId;
+    const db = await getDb();
     
-    const enterprises = await sql`
-      SELECT id, name, shop_ids as "shopIds", feature_settings as "featureSettings", created_at as "createdAt"
-      FROM enterprise_accounts
-      WHERE id = ${enterpriseId}
-      LIMIT 1
-    `;
+    let enterprise;
+    try {
+      enterprise = await db.collection("enterprise_accounts").findOne({ 
+        _id: new ObjectId(enterpriseId) 
+      });
+    } catch {
+      return NextResponse.json({ error: "Invalid enterprise ID" }, { status: 400 });
+    }
     
-    if (enterprises.length === 0) {
+    if (!enterprise) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
-    
-    const enterprise = enterprises[0];
-    const shopIds = enterprise.shopIds || [];
 
-    let shops: Record<string, unknown>[] = [];
-    if (shopIds.length > 0) {
-      shops = await sql`
-        SELECT shop_id as "shopId", name, location_identifier as "locationIdentifier"
-        FROM shops
-        WHERE shop_id = ANY(${shopIds.map(String)})
-      `;
-    }
+    const shops = await db.collection("shops")
+      .find({ shopId: { $in: enterprise.shopIds || [] } })
+      .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+      .toArray();
 
     return NextResponse.json({
       ok: true,
       enterprise: {
-        _id: enterprise.id,
+        _id: enterprise._id,
         name: enterprise.name,
         shopIds: enterprise.shopIds,
         shops,
@@ -55,9 +52,9 @@ export async function GET(
         createdAt: enterprise.createdAt,
       },
     });
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("Enterprise get error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
 
@@ -75,63 +72,57 @@ export async function PATCH(
     const { action, shopId, features } = body;
     const enterpriseId = params.enterpriseId;
 
-    const enterprises = await sql`
-      SELECT id, name, shop_ids as "shopIds", feature_settings as "featureSettings"
-      FROM enterprise_accounts
-      WHERE id = ${enterpriseId}
-      LIMIT 1
-    `;
+    const db = await getDb();
+    const enterprise = await db.collection("enterprise_accounts").findOne({ 
+      _id: new ObjectId(enterpriseId) 
+    });
 
-    if (enterprises.length === 0) {
+    if (!enterprise) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
-    
-    const enterprise = enterprises[0];
 
     if (action === "add_shop" && shopId) {
-      const currentShopIds = enterprise.shopIds || [];
-      const updatedShopIds = [...new Set([...currentShopIds, shopId])];
-      
-      await sql`
-        UPDATE enterprise_accounts
-        SET shop_ids = ${updatedShopIds}, updated_at = NOW()
-        WHERE id = ${enterpriseId}
-      `;
+      await db.collection("enterprise_accounts").updateOne(
+        { _id: new ObjectId(enterpriseId) },
+        { $addToSet: { shopIds: shopId }, $set: { updatedAt: new Date() } }
+      );
 
-      await sql`
-        UPDATE shops
-        SET enterprise_id = ${enterpriseId}, updated_at = NOW()
-        WHERE shop_id = ${String(shopId)}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $set: { enterpriseId: new ObjectId(enterpriseId), updatedAt: new Date() } }
+      );
 
-      await sql`
-        INSERT INTO audit_logs (type, enterprise_id, enterprise_name, shop_id, admin_email, created_at)
-        VALUES ('enterprise_shop_added', ${enterpriseId}, ${enterprise.name}, ${String(shopId)}, ${session.email}, NOW())
-      `;
+      await db.collection("audit_logs").insertOne({
+        type: "enterprise_shop_added",
+        enterpriseId: new ObjectId(enterpriseId),
+        enterpriseName: enterprise.name,
+        shopId,
+        adminEmail: session.email,
+        createdAt: new Date(),
+      });
 
       return NextResponse.json({ ok: true, message: "Shop added to enterprise" });
     }
 
     if (action === "remove_shop" && shopId) {
-      const currentShopIds = enterprise.shopIds || [];
-      const updatedShopIds = currentShopIds.filter((id: string) => String(id) !== String(shopId));
-      
-      await sql`
-        UPDATE enterprise_accounts
-        SET shop_ids = ${updatedShopIds}, updated_at = NOW()
-        WHERE id = ${enterpriseId}
-      `;
+      await db.collection("enterprise_accounts").updateOne(
+        { _id: new ObjectId(enterpriseId) },
+        { $pull: { shopIds: shopId }, $set: { updatedAt: new Date() } }
+      );
 
-      await sql`
-        UPDATE shops
-        SET enterprise_id = NULL, updated_at = NOW()
-        WHERE shop_id = ${String(shopId)}
-      `;
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $unset: { enterpriseId: "" }, $set: { updatedAt: new Date() } }
+      );
 
-      await sql`
-        INSERT INTO audit_logs (type, enterprise_id, enterprise_name, shop_id, admin_email, created_at)
-        VALUES ('enterprise_shop_removed', ${enterpriseId}, ${enterprise.name}, ${String(shopId)}, ${session.email}, NOW())
-      `;
+      await db.collection("audit_logs").insertOne({
+        type: "enterprise_shop_removed",
+        enterpriseId: new ObjectId(enterpriseId),
+        enterpriseName: enterprise.name,
+        shopId,
+        adminEmail: session.email,
+        createdAt: new Date(),
+      });
 
       return NextResponse.json({ ok: true, message: "Shop removed from enterprise" });
     }
@@ -139,11 +130,10 @@ export async function PATCH(
     if (action === "rename" && body.name) {
       const newName = body.name;
       if (newName?.trim()) {
-        await sql`
-          UPDATE enterprise_accounts
-          SET name = ${newName.trim()}, updated_at = NOW()
-          WHERE id = ${enterpriseId}
-        `;
+        await db.collection("enterprise_accounts").updateOne(
+          { _id: new ObjectId(enterpriseId) },
+          { $set: { name: newName.trim(), updatedAt: new Date() } }
+        );
         return NextResponse.json({ ok: true, message: "Enterprise renamed" });
       }
     }
@@ -160,33 +150,34 @@ export async function PATCH(
       
       await updateEnterpriseFeatures(enterpriseId, featureUpdate);
       
-      await sql`
-        INSERT INTO audit_logs (type, enterprise_id, enterprise_name, changes, admin_email, created_at)
-        VALUES ('enterprise_features_updated', ${enterpriseId}, ${enterprise.name}, ${JSON.stringify(featureUpdate)}, ${session.email}, NOW())
-      `;
+      await db.collection("audit_logs").insertOne({
+        type: "enterprise_features_updated",
+        enterpriseId: new ObjectId(enterpriseId),
+        enterpriseName: enterprise.name,
+        changes: featureUpdate,
+        adminEmail: session.email,
+        createdAt: new Date(),
+      });
 
-      const updatedEnterprise = await sql`
-        SELECT id, name, feature_settings as "featureSettings"
-        FROM enterprise_accounts
-        WHERE id = ${enterpriseId}
-        LIMIT 1
-      `;
+      const updatedEnterprise = await db.collection("enterprise_accounts").findOne({ 
+        _id: new ObjectId(enterpriseId) 
+      });
 
       return NextResponse.json({
         ok: true,
         message: "Enterprise features updated",
         enterprise: {
-          _id: updatedEnterprise[0]?.id,
-          name: updatedEnterprise[0]?.name,
-          featureSettings: updatedEnterprise[0]?.featureSettings || {},
+          _id: updatedEnterprise?._id,
+          name: updatedEnterprise?.name,
+          featureSettings: updatedEnterprise?.featureSettings || {},
         },
       });
     }
 
     return NextResponse.json({ error: "Invalid action or no changes provided" }, { status: 400 });
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("Enterprise action error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
 
@@ -201,35 +192,36 @@ export async function DELETE(
 
   try {
     const enterpriseId = params.enterpriseId;
+    const db = await getDb();
 
-    const enterprises = await sql`
-      SELECT id, name FROM enterprise_accounts WHERE id = ${enterpriseId} LIMIT 1
-    `;
+    const enterprise = await db.collection("enterprise_accounts").findOne({
+      _id: new ObjectId(enterpriseId)
+    });
 
-    if (enterprises.length === 0) {
+    if (!enterprise) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
-    
-    const enterprise = enterprises[0];
 
-    await sql`
-      UPDATE shops
-      SET enterprise_id = NULL, updated_at = NOW()
-      WHERE enterprise_id = ${enterpriseId}
-    `;
+    await db.collection("shops").updateMany(
+      { enterpriseId: new ObjectId(enterpriseId) },
+      { $unset: { enterpriseId: "" }, $set: { updatedAt: new Date() } }
+    );
 
-    await sql`
-      DELETE FROM enterprise_accounts WHERE id = ${enterpriseId}
-    `;
+    await db.collection("enterprise_accounts").deleteOne({
+      _id: new ObjectId(enterpriseId)
+    });
 
-    await sql`
-      INSERT INTO audit_logs (type, enterprise_id, enterprise_name, admin_email, created_at)
-      VALUES ('enterprise_deleted', ${enterpriseId}, ${enterprise.name}, ${session.email}, NOW())
-    `;
+    await db.collection("audit_logs").insertOne({
+      type: "enterprise_deleted",
+      enterpriseId: new ObjectId(enterpriseId),
+      enterpriseName: enterprise.name,
+      adminEmail: session.email,
+      createdAt: new Date(),
+    });
 
     return NextResponse.json({ ok: true, message: "Enterprise deleted" });
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("Delete enterprise error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }

@@ -1,9 +1,11 @@
+// lib/integrations/carfax.ts
 import "server-only";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 
 type Fetcher = typeof fetch;
 
+/** -------- Public types returned to the UI -------- */
 export type CarfaxServiceRecord = {
   date?: string | null;
   odometer?: number | null;
@@ -22,46 +24,53 @@ export type CarfaxResult = {
   serviceRecords?: CarfaxServiceRecord[] | null;
   titleIssues?: string[] | null;
   recalls?: string[] | null;
-  raw?: unknown;
+  raw?: any;
   error?: string;
 };
 
-export async function resolveCarfaxConfig(shopId: number | string) {
-  const shopIdStr = String(shopId);
-  const result = await sql`
-    SELECT carfax FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1
-  `;
+/** -------- Config (env + per-shop locationId) -------- */
+export async function resolveCarfaxConfig(shopId: number) {
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { carfax: 1, carfaxLocationId: 1 } }
+  );
 
-  const shop = result[0];
-  const carfax = shop?.carfax as Record<string, unknown> | undefined;
-  const locationId = carfax?.locationId ?? null;
+  // Per-shop location (preferred nested, fallback flat)
+  const locationId =
+    shop?.carfax?.locationId ??
+    shop?.carfaxLocationId ??
+    null;
 
+  // ENV (same for all shops) — use ONLY these two names
   const base = (process.env.CARFAX_POST_URL || "").replace(/\/+$/, "");
   const productDataId = process.env.CARFAX_PDI || "";
 
   return {
-    base,
-    productDataId,
-    locationId,
+    base,               // e.g. https://servicesocket.carfax.com/data/1
+    productDataId,      // provided by CARFAX; same for all shops
+    locationId,         // per-shop, user enters in Settings
     hasEnv: Boolean(base) && Boolean(productDataId),
     hasLocation: Boolean(locationId),
     configured: Boolean(base) && Boolean(productDataId) && Boolean(locationId),
   };
 }
 
-function toInt(val: unknown): number | null {
+function toInt(val: any): number | null {
   if (val == null) return null;
   const n = Number(String(val).replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
-
-function nonEmpty(s: unknown): string | null {
+function nonEmpty(s: any): string | null {
   const t = s == null ? "" : String(s).trim();
   return t ? t : null;
 }
 
+/** -------- Live fetch (CARFAX Service History Check) --------
+ * Per CARFAX guide, POST JSON with: { vin, productDataId, locationId }
+ */
 export async function fetchCarfaxLive(
-  shopId: number | string,
+  shopId: number,
   vin: string,
   doFetch: Fetcher = fetch
 ): Promise<CarfaxResult> {
@@ -84,8 +93,7 @@ export async function fetchCarfaxLive(
   });
 
   const latencyMs = Date.now() - startTime;
-  const shopIdNum = typeof shopId === "number" ? shopId : parseInt(shopId, 10);
-  trackApiRequest('carfax', '/data', 'POST', res.status, latencyMs, shopIdNum).catch(() => {});
+  trackApiRequest('carfax', '/data', 'POST', res.status, latencyMs, shopId).catch(() => {});
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -97,57 +105,61 @@ export async function fetchCarfaxLive(
     return { ok: false, error: "Invalid JSON from CARFAX." };
   }
 
-  const root = (json as Record<string, unknown>)?.report || (json as Record<string, unknown>)?.data || json;
-  const rootObj = root as Record<string, unknown>;
+  // ---- Normalize common shapes from CARFAX ----
+  // Some responses are { report: {...} }, some { data: {...} }, and some (like yours) root-level.
+  const root: any = json?.report || json?.data || json;
 
   const vinOut =
-    nonEmpty(rootObj?.vin) ||
-    nonEmpty((rootObj?.vehicle as Record<string, unknown>)?.vin) ||
-    nonEmpty(rootObj?.inputVin) ||
-    nonEmpty((rootObj?.serviceHistory as Record<string, unknown>)?.vin) ||
+    nonEmpty(root?.vin) ||
+    nonEmpty(root?.vehicle?.vin) ||
+    nonEmpty(root?.inputVin) ||
+    nonEmpty(root?.serviceHistory?.vin) ||
     vin;
 
   const reportDate =
-    nonEmpty(rootObj?.reportDate) ||
-    nonEmpty(rootObj?.generatedAt) ||
-    nonEmpty(rootObj?.createdAt) ||
+    nonEmpty(root?.reportDate) ||
+    nonEmpty(root?.generatedAt) ||
+    nonEmpty(root?.createdAt) ||
     null;
 
   const owners =
-    toInt(rootObj?.numberOfOwners) ??
-    toInt(rootObj?.ownersCount) ??
-    (Array.isArray(rootObj?.ownershipHistory) ? rootObj.ownershipHistory.length : null);
+    toInt(root?.numberOfOwners) ??
+    toInt(root?.ownersCount) ??
+    (Array.isArray(root?.ownershipHistory) ? root.ownershipHistory.length : null);
 
   const accidents =
-    toInt(rootObj?.accidentCount) ??
-    (Array.isArray(rootObj?.accidents) ? (rootObj.accidents as unknown[]).length : null) ??
+    toInt(root?.accidentCount) ??
+    (Array.isArray(root?.accidents) ? root.accidents.length : null) ??
     null;
 
   const damageReports =
-    toInt(rootObj?.damageCount) ??
-    (Array.isArray(rootObj?.damage) ? (rootObj.damage as unknown[]).length : null) ??
+    toInt(root?.damageCount) ??
+    (Array.isArray(root?.damage) ? root.damage.length : null) ??
     null;
 
+  // ---- Build service records from a few possible shapes ----
   let serviceRecords: CarfaxServiceRecord[] | null = null;
   let lastMiles: number | null =
-    toInt(rootObj?.lastReportedMileage) ??
-    toInt(rootObj?.odometerLastReported) ??
-    toInt((rootObj?.odometer as Record<string, unknown>)?.lastReported) ??
+    toInt(root?.lastReportedMileage) ??
+    toInt(root?.odometerLastReported) ??
+    toInt(root?.odometer?.lastReported) ??
     null;
 
+  // 1) Common shapes we already handled before
   const svcSrc =
-    (Array.isArray(rootObj?.serviceHistory) && rootObj.serviceHistory) ||
-    (Array.isArray(rootObj?.serviceRecords) && rootObj.serviceRecords) ||
-    (Array.isArray(rootObj?.services) && rootObj.services) ||
+    (Array.isArray(root?.serviceHistory) && root.serviceHistory) ||
+    (Array.isArray(root?.serviceRecords) && root.serviceRecords) ||
+    (Array.isArray(root?.services) && root.services) ||
     null;
 
   if (Array.isArray(svcSrc)) {
-    serviceRecords = svcSrc.map((s: Record<string, unknown>) => ({
+    serviceRecords = svcSrc.map((s: any) => ({
       date: nonEmpty(s?.date) || nonEmpty(s?.serviceDate) || nonEmpty(s?.reportedDate),
       odometer: toInt(s?.odometer) ?? toInt(s?.mileage),
       description: nonEmpty(s?.description) || nonEmpty(s?.details),
       location: nonEmpty(s?.location) || nonEmpty(s?.dealer) || nonEmpty(s?.source),
     }));
+    // If last miles still unknown, try from this list
     if (lastMiles == null) {
       const maxFromList = Math.max(
         ...serviceRecords
@@ -159,23 +171,26 @@ export async function fetchCarfaxLive(
     }
   }
 
-  const disp = (rootObj?.serviceHistory as Record<string, unknown>)?.displayRecords;
+  // 2) Your payload: serviceHistory.displayRecords[]
+  const disp = root?.serviceHistory?.displayRecords;
   if (Array.isArray(disp)) {
     const mapped: CarfaxServiceRecord[] = disp
-      .filter((r: Record<string, unknown>) => String(r?.type || "").toLowerCase() === "service")
-      .map((r: Record<string, unknown>) => ({
+      .filter((r: any) => String(r?.type || "").toLowerCase() === "service")
+      .map((r: any) => ({
         date: nonEmpty(r?.displayDate),
         odometer: toInt(r?.odometer),
-        description: Array.isArray(r?.text) ? (r.text as string[]).map((t) => String(t)).join("; ") : nonEmpty(r?.text),
-        location: null,
+        description: Array.isArray(r?.text) ? r.text.map((t: any) => String(t)).join("; ") : nonEmpty(r?.text),
+        location: null, // not present in this shape
       }));
 
+    // Merge or set
     serviceRecords = Array.isArray(serviceRecords) ? [...serviceRecords, ...mapped] : mapped;
 
+    // Derive last miles from displayRecords if we still don't have it
     if (lastMiles == null) {
       const maxFromDisplay = Math.max(
         ...disp
-          .map((r: Record<string, unknown>) => toInt(r?.odometer) ?? -1)
+          .map((r: any) => toInt(r?.odometer) ?? -1)
           .filter((n: number) => n >= 0),
         -1
       );
@@ -184,13 +199,13 @@ export async function fetchCarfaxLive(
   }
 
   const titleIssues: string[] | null =
-    Array.isArray(rootObj?.titleIssues)
-      ? (rootObj.titleIssues as unknown[]).map((x) => String(x)).filter(Boolean)
+    Array.isArray(root?.titleIssues)
+      ? root.titleIssues.map((x: any) => String(x)).filter(Boolean)
       : null;
 
   const recalls: string[] | null =
-    Array.isArray(rootObj?.recalls)
-      ? (rootObj.recalls as Record<string, unknown>[]).map((r) => nonEmpty(r?.title || r?.name)).filter(Boolean) as string[]
+    Array.isArray(root?.recalls)
+      ? root.recalls.map((r: any) => nonEmpty(r?.title || r?.name)).filter(Boolean) as string[]
       : null;
 
   return {
@@ -208,101 +223,71 @@ export async function fetchCarfaxLive(
   };
 }
 
+/** -------- Snapshot storage (cache) -------- */
 export async function upsertCarfaxSnapshot(
-  shopId: number | string,
+  shopId: number,
   vin: string,
   report: CarfaxResult
 ) {
-  const shopIdStr = String(shopId);
-  const vinUpper = vin.toUpperCase();
-
-  // Get shop UUID from text shop_id
-  const shopResult = await sql`SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1`;
-  const shopUuid = shopResult[0]?.id;
-  
-  if (!shopUuid) {
-    console.error(`[CARFAX] Cannot upsert snapshot: shop ${shopIdStr} not found`);
-    return;
-  }
-
-  // Store all report data in the report_data jsonb column
-  const reportData = {
-    ok: report.ok,
-    reportDate: report.reportDate,
-    numberOfOwners: report.numberOfOwners,
-    accidents: report.accidents,
-    damageReports: report.damageReports,
-    lastReportedMileage: report.lastReportedMileage,
-    serviceRecords: report.serviceRecords,
-    titleIssues: report.titleIssues,
-    recalls: report.recalls,
-    error: report.error,
-    raw: report.raw
-  };
-
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-  const jsonData = JSON.stringify(reportData);
-
-  await sql`
-    INSERT INTO carfax_reports (shop_id, vin, report_type, report_data, fetched_at, expires_at)
-    VALUES (${shopUuid}, ${vinUpper}, 'carfax', ${jsonData}::jsonb, NOW(), ${expiresAt})
-    ON CONFLICT (shop_id, vin) DO UPDATE SET
-      report_data = ${jsonData}::jsonb,
-      fetched_at = NOW(),
-      expires_at = ${expiresAt}
-  `;
+  const db = await getDb();
+  const now = new Date();
+  await db.collection("carfax_reports").updateOne(
+    { shopId, vin },
+    {
+      $set: {
+        shopId,
+        vin,
+        fetchedAt: now,
+        reportDate: report.reportDate ?? null,
+        numberOfOwners: report.numberOfOwners ?? null,
+        accidents: report.accidents ?? null,
+        damageReports: report.damageReports ?? null,
+        lastReportedMileage: report.lastReportedMileage ?? null,
+        serviceRecords: report.serviceRecords ?? null,
+        titleIssues: report.titleIssues ?? null,
+        recalls: report.recalls ?? null,
+        ok: report.ok,
+        error: report.error ?? null,
+        raw: report.raw ?? null,
+        source: "carfax",
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true }
+  );
 }
 
-function snapshotToResult(doc: Record<string, unknown>): CarfaxResult {
+function snapshotToResult(doc: any): CarfaxResult {
   if (!doc) return { ok: false, error: "No snapshot" };
-  
-  // Report data is stored as JSON in report_data column
-  // Handle both proper JSONB objects and legacy double-encoded strings
-  let data = (doc.report_data || {}) as Record<string, unknown>;
-  if (typeof data === 'string') {
-    try { data = JSON.parse(data); } catch { data = {}; }
-  }
-  
   return {
-    ok: !!data.ok,
-    vin: doc.vin as string ?? null,
-    reportDate: data.reportDate as string ?? null,
-    numberOfOwners: data.numberOfOwners as number ?? null,
-    accidents: data.accidents as number ?? null,
-    damageReports: data.damageReports as number ?? null,
-    lastReportedMileage: data.lastReportedMileage as number ?? null,
-    serviceRecords: data.serviceRecords as CarfaxServiceRecord[] ?? null,
-    titleIssues: data.titleIssues as string[] ?? null,
-    recalls: data.recalls as string[] ?? null,
-    raw: data.raw ?? null,
-    error: data.error as string ?? null,
+    ok: !!doc.ok,
+    vin: doc.vin ?? null,
+    reportDate: doc.reportDate ?? null,
+    numberOfOwners: doc.numberOfOwners ?? null,
+    accidents: doc.accidents ?? null,
+    damageReports: doc.damageReports ?? null,
+    lastReportedMileage: doc.lastReportedMileage ?? null,
+    serviceRecords: doc.serviceRecords ?? null,
+    titleIssues: doc.titleIssues ?? null,
+    recalls: doc.recalls ?? null,
+    raw: doc.raw ?? null,
+    error: doc.error ?? null,
   };
 }
 
+/** Cached fetch; defaults to 7 days freshness */
 export async function fetchCarfaxWithCache(
-  shopId: number | string,
+  shopId: number,
   vin: string,
   maxAgeMs = 7 * 24 * 60 * 60 * 1000,
   doFetch: Fetcher = fetch
 ): Promise<CarfaxResult> {
-  const shopIdStr = String(shopId);
-  const vinUpper = vin.toUpperCase();
-
-  // Get shop UUID from text shop_id
-  const shopResult = await sql`SELECT id FROM shops WHERE shop_id = ${shopIdStr} LIMIT 1`;
-  const shopUuid = shopResult[0]?.id;
-  
-  if (!shopUuid) {
-    return { ok: false, vin: vinUpper, error: 'Shop not found' };
-  }
-
-  const result = await sql`
-    SELECT * FROM carfax_reports WHERE shop_id = ${shopUuid} AND vin = ${vinUpper} LIMIT 1
-  `;
-  const doc = result[0];
+  const db = await getDb();
+  const key = { shopId, vin };
+  const doc = await db.collection("carfax_reports").findOne(key);
 
   const now = Date.now();
-  const fresh = doc?.fetched_at ? now - new Date(doc.fetched_at as string).getTime() <= maxAgeMs : false;
+  const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;
 
   if (fresh) return snapshotToResult(doc);
 

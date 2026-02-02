@@ -92,45 +92,10 @@ async function fetchDashboardData(page: number, search: string, archived: boolea
   return null;
 }
 
-const DASHBOARD_CACHE_KEY = 'mos_dashboard_cache';
-const DASHBOARD_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-
-function getCachedDashboardData(): DashboardData | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
-    if (!cached) return null;
-    const { data, timestamp } = JSON.parse(cached);
-    // Return cached data even if stale - we'll refresh in background
-    if (data?.rows?.length > 0) {
-      return data;
-    }
-  } catch (e) {
-    // Ignore parse errors
-  }
-  return null;
-}
-
-function setCachedDashboardData(data: DashboardData) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({
-      data,
-      timestamp: Date.now()
-    }));
-  } catch (e) {
-    // Ignore storage errors (quota exceeded, etc)
-  }
-}
-
 export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
-  // Always start with initialData to avoid hydration mismatch
-  // Cached data will be loaded in useEffect after hydration
   const [data, setData] = useState(initialData);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!initialData?.rows?.length);
-  const [hydrated, setHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
@@ -781,25 +746,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     if (newData) {
       setData(newData);
       setLastUpdated(new Date());
-      // Cache for instant display on next visit (only cache first page, no search/archive)
-      if (page === 1 && !search && !archived) {
-        setCachedDashboardData(newData);
-      }
     }
     setIsRefreshing(false);
-    setInitialLoading(false);
   };
 
   useEffect(() => {
-    // After hydration, check if we have cached data for instant display
-    setHydrated(true);
-    const cached = getCachedDashboardData();
-    if (cached?.rows?.length && !initialData?.rows?.length) {
-      // Show cached data immediately while we fetch fresh data
-      setData(cached);
-      setInitialLoading(false);
-    }
-    // Always fetch fresh data to ensure accuracy
+    // Always fetch fresh data on mount to ensure SSR and client are in sync
+    // This prevents stale data from showing after browser refresh
     loadData(1, "", false);
   }, []);
 
@@ -976,11 +929,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </div>
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">Total Vehicles</p>
-                {initialLoading ? (
-                  <div className="h-7 sm:h-8 w-12 bg-gray-200 rounded animate-pulse mt-1"></div>
-                ) : (
-                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
-                )}
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
               </div>
             </div>
           </div>
@@ -992,11 +941,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </div>
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">DVI Complete (this page)</p>
-                {initialLoading ? (
-                  <div className="h-7 sm:h-8 w-8 bg-gray-200 rounded animate-pulse mt-1"></div>
-                ) : (
-                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
-                )}
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.dviComplete}</p>
               </div>
             </div>
           </div>
@@ -1008,11 +953,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </div>
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">No DVI (this page)</p>
-                {initialLoading ? (
-                  <div className="h-7 sm:h-8 w-8 bg-gray-200 rounded animate-pulse mt-1"></div>
-                ) : (
-                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.inProgress}</p>
-                )}
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.inProgress}</p>
               </div>
             </div>
           </div>
@@ -1283,23 +1224,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                     </tr>
                   );
                 })}
-                {sortedRows.length === 0 && initialLoading && (
-                  <>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <tr key={i} className="animate-pulse">
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-36"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
-                        <td className="px-4 py-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
-                      </tr>
-                    ))}
-                  </>
-                )}
-                {sortedRows.length === 0 && !initialLoading && (
+                {sortedRows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
 import crypto from "crypto";
 
@@ -8,22 +8,26 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    const shopId = String(session.shopId);
+    const shopId = Number(session.shopId);
     
     const apiKey = `mos_av_${crypto.randomBytes(24).toString('hex')}`;
     
-    await sql`
-      UPDATE shops SET
-        settings = jsonb_set(
-          jsonb_set(
-            COALESCE(settings, '{}'),
-            '{autovitalsApiKey}', ${JSON.stringify(apiKey)}::jsonb
-          ),
-          '{autovitals,keyGeneratedAt}', ${JSON.stringify(new Date().toISOString())}::jsonb
-        ),
-        updated_at = NOW()
-      WHERE shop_id = ${shopId}
-    `;
+    const db = await getDb();
+    
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $set: {
+          autovitalsApiKey: apiKey,
+          "autovitals.keyGeneratedAt": new Date(),
+          updatedAt: new Date(),
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+        }
+      },
+      { upsert: true }
+    );
 
     return NextResponse.json({
       ok: true,
@@ -42,20 +46,23 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await requireSession();
-    const shopId = String(session.shopId);
+    const shopId = Number(session.shopId);
     
-    await sql`
-      UPDATE shops SET
-        settings = jsonb_set(
-          jsonb_set(
-            settings - 'autovitalsApiKey',
-            '{autovitals,keyRevokedAt}', ${JSON.stringify(new Date().toISOString())}::jsonb
-          ),
-          '{autovitals,extensionConnected}', 'false'::jsonb
-        ),
-        updated_at = NOW()
-      WHERE shop_id = ${shopId}
-    `;
+    const db = await getDb();
+    
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $unset: {
+          autovitalsApiKey: "",
+        },
+        $set: {
+          "autovitals.keyRevokedAt": new Date(),
+          "autovitals.extensionConnected": false,
+          updatedAt: new Date(),
+        }
+      }
+    );
 
     return NextResponse.json({
       ok: true,

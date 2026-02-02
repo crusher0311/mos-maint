@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate base64 data size
     const dataSize = (base64Data.length * 3) / 4;
     if (dataSize > MAX_LOGO_SIZE) {
       return NextResponse.json(
@@ -51,29 +52,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Create data URI
     const dataUri = `data:${contentType};base64,${base64Data}`;
-    
-    await sql`
-      INSERT INTO shop_media (shop_id, type, data_uri, content_type, updated_at, updated_by)
-      VALUES (${String(shopId)}, 'logo', ${dataUri}, ${contentType}, NOW(), ${session.email})
-      ON CONFLICT (shop_id, type) 
-      DO UPDATE SET data_uri = ${dataUri}, content_type = ${contentType}, updated_at = NOW(), updated_by = ${session.email}
-    `;
 
-    const shopRows = await sql`
-      SELECT sticker_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    const existingConfig = (shopRows[0]?.sticker_config as any) || {};
-    const updatedConfig = { 
-      ...existingConfig, 
-      logo: `/api/sticker/logo/${shopId}`,
-      logoUpdatedAt: new Date().toISOString()
-    };
+    const db = await getDb();
     
-    await sql`
-      UPDATE shops SET sticker_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = NOW()
-      WHERE shop_id = ${String(shopId)}
-    `;
+    // Store in shop_media collection
+    await db.collection("shop_media").updateOne(
+      { shopId, type: "logo" },
+      {
+        $set: {
+          shopId,
+          type: "logo",
+          dataUri,
+          contentType,
+          updatedAt: new Date(),
+          updatedBy: session.email,
+        },
+      },
+      { upsert: true }
+    );
+
+    // Also update the shop's stickerConfig.logo for backward compatibility
+    await db.collection("shops").updateOne(
+      { shopId },
+      {
+        $set: {
+          "stickerConfig.logo": `/api/sticker/logo/${shopId}`,
+          "stickerConfig.logoUpdatedAt": new Date(),
+        },
+      }
+    );
 
     return NextResponse.json({
       logoUrl: `/api/sticker/logo/${shopId}`,

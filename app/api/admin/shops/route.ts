@@ -1,71 +1,73 @@
+// app/api/admin/shops/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
-import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
+    // Check admin authorization
     const session = await getSession();
     if (!session || session.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const db = await getDb();
+    
+    // Get search and pagination params
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
-    const offset = (page - 1) * limit;
+    const skip = (page - 1) * limit;
 
-    let shops;
-    let totalResult;
-
+    // Build query
+    let query: any = {};
     if (search) {
-      const searchPattern = `%${search}%`;
-      shops = await sql`
-        SELECT * FROM shops 
-        WHERE name ILIKE ${searchPattern} OR shop_id ILIKE ${searchPattern}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-      totalResult = await sql`
-        SELECT COUNT(*) as count FROM shops 
-        WHERE name ILIKE ${searchPattern} OR shop_id ILIKE ${searchPattern}
-      `;
-    } else {
-      shops = await sql`
-        SELECT * FROM shops ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
-      `;
-      totalResult = await sql`SELECT COUNT(*) as count FROM shops`;
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { shopId: { $regex: search, $options: "i" } }
+        ]
+      };
     }
 
-    const total = Number(totalResult[0]?.count || 0);
+    // Get shops with pagination
+    const [shops, total] = await Promise.all([
+      db.collection("shops")
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db.collection("shops").countDocuments(query)
+    ]);
 
+    // Get stats for each shop
     const shopsWithStats = await Promise.all(
       shops.map(async (shop) => {
-        const shopId = shop.shop_id;
-        const [userCount, customerCount, vehicleCount, eventCount] = await Promise.all([
-          sql`SELECT COUNT(*) as count FROM users WHERE shop_id = ${shopId}`,
-          sql`SELECT COUNT(*) as count FROM customers WHERE shop_id = ${shopId}`,
-          sql`SELECT COUNT(*) as count FROM vehicles WHERE shop_id = ${shopId}`,
-          sql`SELECT COUNT(*) as count FROM events WHERE shop_id = ${shopId}`,
+        const [userCount, customerCount, vehicleCount, eventCount, lastActivity] = await Promise.all([
+          db.collection("users").countDocuments({ shopId: shop.shopId }),
+          db.collection("customers").countDocuments({ shopId: shop.shopId }),
+          db.collection("vehicles").countDocuments({ shopId: shop.shopId }),
+          db.collection("events").countDocuments({ shopId: shop.shopId }),
+          db.collection("events")
+            .findOne(
+              { shopId: shop.shopId },
+              { sort: { receivedAt: -1 } }
+            )
         ]);
-
-        const lastActivityResult = await sql`
-          SELECT received_at FROM events WHERE shop_id = ${shopId} ORDER BY received_at DESC LIMIT 1
-        `;
 
         return {
           ...shop,
-          shopId: shop.shop_id,
           stats: {
-            users: Number(userCount[0]?.count || 0),
-            customers: Number(customerCount[0]?.count || 0),
-            vehicles: Number(vehicleCount[0]?.count || 0),
-            events: Number(eventCount[0]?.count || 0),
-            lastActivity: lastActivityResult[0]?.received_at || null
+            users: userCount,
+            customers: customerCount,
+            vehicles: vehicleCount,
+            events: eventCount,
+            lastActivity: lastActivity?.receivedAt || null
           }
         };
       })
@@ -92,6 +94,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Check admin authorization
     const session = await getSession();
     if (!session || session.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -104,28 +107,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Shop name is required" }, { status: 400 });
     }
 
-    const counterResult = await sql`
-      INSERT INTO counters (id, seq) VALUES ('shopId', 10001)
-      ON CONFLICT (id) DO UPDATE SET seq = counters.seq + 1
-      RETURNING seq
-    `;
-    const shopId = String(counterResult[0]?.seq || 10001);
-
-    const webhookToken = crypto.randomBytes(12).toString("hex");
-    const now = new Date();
+    const db = await getDb();
     
-    const autoflowConfigJson = autoflowConfig ? JSON.stringify(autoflowConfig) : null;
+    // Get next shop ID
+    const counter = await db.collection("counters").findOneAndUpdate(
+      { _id: "shopId" },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: "after" }
+    );
 
-    const result = await sql`
-      INSERT INTO shops (shop_id, name, contact_email, webhook_token, status, autoflow_config, created_at, updated_at)
-      VALUES (${shopId}, ${name.trim()}, ${contactEmail?.trim() || null}, ${webhookToken}, 'active', ${autoflowConfigJson}::jsonb, ${now}, ${now})
-      RETURNING *
-    `;
+    const shopId = counter.seq || 10001;
+
+    // Create shop document
+    const shopDoc = {
+      shopId,
+      name: name.trim(),
+      contactEmail: contactEmail?.trim() || null,
+      webhookToken: require("crypto").randomBytes(12).toString("hex"),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: "active",
+      ...(autoflowConfig && {
+        credentials: {
+          autoflow: autoflowConfig
+        }
+      })
+    };
+
+    const result = await db.collection("shops").insertOne(shopDoc);
 
     return NextResponse.json({
       shop: {
-        ...result[0],
-        shopId: result[0].shop_id
+        _id: result.insertedId,
+        ...shopDoc
       }
     }, { status: 201 });
 

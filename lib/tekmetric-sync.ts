@@ -1,3 +1,4 @@
+import { getDb } from "@/lib/mongo";
 import { 
   getRepairOrders, 
   getVehicle, 
@@ -6,11 +7,6 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
-import {
-  upsertTekmetricWorkOrder,
-  getShopByShopId,
-  updateShopTekmetricSyncState
-} from "@/lib/db";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 
@@ -24,19 +20,11 @@ export async function syncSingleShop(
   shopId: number | string, 
   tekmetricShopId: number
 ): Promise<SyncResult> {
+  const db = await getDb();
   const numericShopId = Number(shopId);
   
   try {
     console.log(`[Tekmetric Sync] Starting initial sync for shop ${shopId} (Tekmetric: ${tekmetricShopId})`);
-    
-    const shop = await getShopByShopId(numericShopId);
-    if (!shop) {
-      return {
-        success: false,
-        synced: 0,
-        error: `Shop ${shopId} not found in PostgreSQL`
-      };
-    }
     
     const activeWOs: TekmetricRepairOrderFull[] = [];
     const vehicleCache = new Map<number, TekmetricVehicle>();
@@ -90,33 +78,46 @@ export async function syncSingleShop(
         const statusCode = ro.repairOrderStatus?.code || "";
         const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
         
-        await upsertTekmetricWorkOrder(shop.id, numericShopId, {
-          workOrderId: String(ro.id),
-          workOrderNumber: ro.repairOrderNumber ? String(ro.repairOrderNumber) : null,
-          vin,
-          status: statusName,
-          statusCode,
-          label,
-          labelColor: ro.color || "",
-          customerId: ro.customerId,
-          vehicleId: ro.vehicleId,
-          customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
-          vehicleYear: vehicle.year,
-          vehicleMake: vehicle.make,
-          vehicleModel: vehicle.model,
-          vehicleSubmodel: vehicle.subModel,
-          mileageIn: ro.milesIn || vehicle.mileageIn,
-          mileageOut: ro.milesOut || vehicle.mileageOut,
-          createdDate: ro.createdDate ? new Date(ro.createdDate) : null,
-          closedDate: ro.completedDate ? new Date(ro.completedDate) : null,
-          rawData: ro as unknown as Record<string, unknown>,
-        });
+        await db.collection("tekmetric_work_orders").updateOne(
+          { 
+            shopId: { $in: [String(numericShopId), numericShopId] },
+            workOrderId: String(ro.id)
+          },
+          { 
+            $set: {
+              shopId: numericShopId,
+              workOrderId: String(ro.id),
+              workOrderNumber: ro.repairOrderNumber,
+              vin,
+              status: statusName,
+              statusCode,
+              label,
+              labelColor: ro.color || "",
+              customerId: ro.customerId,
+              vehicleId: ro.vehicleId,
+              customerName: customer ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim() : undefined,
+              vehicleYear: vehicle.year,
+              vehicleMake: vehicle.make,
+              vehicleModel: vehicle.model,
+              vehicleEngine: vehicle.engine,
+              odometer: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
+              createdDate: ro.createdDate,
+              updatedDate: ro.updatedDate,
+              completedDate: ro.completedDate,
+              fetchedAt: new Date(),
+              data: ro,
+            },
+            $setOnInsert: { dviDone: false, dviCompletedAt: null, lastInspection: null }
+          },
+          { upsert: true }
+        );
       }
     }
 
-    await updateShopTekmetricSyncState(numericShopId, {
-      lastSync: new Date()
-    });
+    await db.collection("shops").updateOne(
+      { shopId: { $in: [String(numericShopId), numericShopId] } },
+      { $set: { "tekmetric.lastSync": new Date() } }
+    );
 
     console.log(`[Tekmetric Sync] Completed initial sync for shop ${shopId}: ${activeWOs.length} ROs synced`);
     

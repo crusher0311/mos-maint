@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { getShopByShopId } from "@/lib/db/shops-pg";
-import { getEnterpriseById } from "@/lib/enterprise-pg";
-import sql from "@/lib/db/postgres";
+import { ObjectId } from "mongodb";
+import { getViewedVinCount } from "@/lib/plan-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,13 +16,14 @@ async function requireEnterpriseAccess() {
     return { error: "Forbidden - admin access required", status: 403 };
   }
   
-  const shop = await getShopByShopId(session.shopId);
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId: Number(session.shopId) });
   
-  if (!shop?.enterprise_id) {
+  if (!shop?.enterpriseId) {
     return { error: "Not part of an enterprise", status: 403 };
   }
   
-  return { session, enterpriseId: shop.enterprise_id };
+  return { session, enterpriseId: shop.enterpriseId, db };
 }
 
 export async function GET() {
@@ -31,77 +32,80 @@ export async function GET() {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { enterpriseId } = auth;
+  const { db, enterpriseId } = auth;
 
   try {
-    const enterprise = await getEnterpriseById(enterpriseId);
+    const enterpriseIdStr = enterpriseId.toString();
+    let enterpriseObjId: ObjectId | null = null;
+    try {
+      enterpriseObjId = new ObjectId(enterpriseIdStr);
+    } catch (e) {
+      // Not a valid ObjectId format
+    }
+
+    const enterprise = await db.collection("enterprise_accounts").findOne({ 
+      _id: enterpriseObjId || enterpriseIdStr 
+    });
     
     if (!enterprise) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
 
-    const shops = enterprise.shop_ids.length > 0 ? await sql`
-      SELECT * FROM shops WHERE shop_id::int = ANY(${enterprise.shop_ids})
-    ` : [];
+    // Query shops with both ObjectId and string to handle mixed storage
+    const shops = await db.collection("shops").find({
+      $or: [
+        ...(enterpriseObjId ? [{ enterpriseId: enterpriseObjId }] : []),
+        { enterpriseId: enterpriseIdStr }
+      ]
+    }).toArray();
 
     const locationBilling = await Promise.all(shops.map(async (shop) => {
-      const billing = (shop.billing as Record<string, unknown>) || {};
-      const isPaid = ["professional", "enterprise", "starter", "plus", "elite"].includes(billing.plan as string || "");
+      const billing = shop.billing || {};
+      const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || 
+                     billing.plan === "starter" || billing.plan === "plus" || billing.plan === "elite";
       
       let vehicleCount = 0;
       if (isPaid) {
-        const countResult = await sql<{count: string}[]>`
-          SELECT COUNT(*) as count FROM vehicles 
-          WHERE shop_id = ${shop.id}
-        `;
-        vehicleCount = parseInt(countResult[0]?.count || "0", 10);
+        vehicleCount = await db.collection("vehicles").countDocuments({ 
+          shopId: String(shop.shopId),
+          "status.active": true,
+        });
       } else {
-        const countResult = await sql<{count: string}[]>`
-          SELECT COUNT(DISTINCT vin) as count FROM plan_cache 
-          WHERE shop_id = ${shop.id}
-        `;
-        vehicleCount = parseInt(countResult[0]?.count || "0", 10);
+        vehicleCount = await getViewedVinCount(db, shop.shopId);
       }
-      
-      const settings = shop.settings as Record<string, unknown> | null;
 
       return {
-        shopId: shop.shop_id ? parseInt(shop.shop_id, 10) : null,
+        shopId: shop.shopId || shop.id,
         name: shop.name,
-        locationIdentifier: shop.location_identifier || null,
-        plan: billing.plan || "trial",
-        planDisplay: billing.plan ? (String(billing.plan).charAt(0).toUpperCase() + String(billing.plan).slice(1)) : "Free Trial",
+        locationIdentifier: shop.locationIdentifier || null,
+        plan: billing.plan || shop.plan || "trial",
+        planDisplay: (billing.plan || shop.plan) ? ((billing.plan || shop.plan).charAt(0).toUpperCase() + (billing.plan || shop.plan).slice(1)) : "Free Trial",
         status: billing.status || "trial",
         vehicleCount,
-        vinLimit: billing.vinLimit || null,
+        vinLimit: shop.trialVinLimit || billing.vinLimit || shop.vinLimit || null,
         nextBillingDate: billing.nextBillingDate || null,
-        stripeCustomerId: billing.stripeCustomerId || null,
-        stripeSubscriptionId: billing.stripeSubscriptionId || null,
-        enabledFeatures: (shop.settings as Record<string, unknown>)?.enabledFeatures || [],
+        stripeCustomerId: shop.stripeCustomerId || null,
+        stripeSubscriptionId: billing.stripeSubscriptionId || shop.stripeSubscriptionId || null,
+        enabledFeatures: shop.enabledFeatures || [],
       };
     }));
 
     const totalVehicles = locationBilling.reduce((sum, loc) => sum + loc.vehicleCount, 0);
     const activeLocations = locationBilling.filter(loc => loc.status === "active" || loc.status === "trial").length;
     
-    const enterpriseBillingResult = await sql<{billing: Record<string, unknown> | null}[]>`
-      SELECT billing FROM enterprise_accounts WHERE id = ${enterpriseId} LIMIT 1
-    `;
-    const enterpriseBilling = enterpriseBillingResult[0]?.billing || {};
-    
-    const hasEnterpriseBilling = enterpriseBilling.enabled === true;
-    const enterprisePlan = enterpriseBilling.plan || null;
-    const enterpriseStatus = enterpriseBilling.status || null;
+    const hasEnterpriseBilling = enterprise.billing?.enabled === true;
+    const enterprisePlan = enterprise.billing?.plan || null;
+    const enterpriseStatus = enterprise.billing?.status || null;
 
     return NextResponse.json({
       enterprise: {
-        id: enterprise.id,
+        id: enterprise._id.toString(),
         name: enterprise.name,
         hasEnterpriseBilling,
         plan: enterprisePlan,
         status: enterpriseStatus,
-        stripeCustomerId: enterpriseBilling.stripeCustomerId || null,
-        nextBillingDate: enterpriseBilling.nextBillingDate || null,
+        stripeCustomerId: enterprise.billing?.stripeCustomerId || null,
+        nextBillingDate: enterprise.billing?.nextBillingDate || null,
       },
       summary: {
         totalLocations: shops.length,
@@ -110,7 +114,7 @@ export async function GET() {
       },
       locations: locationBilling,
     });
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("Error fetching enterprise billing:", err);
     return NextResponse.json({ error: "Failed to fetch billing data" }, { status: 500 });
   }
@@ -122,34 +126,51 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const { enterpriseId } = auth;
+  const { db, enterpriseId } = auth;
 
   try {
     const body = await req.json();
     const { action } = body;
 
+    const enterpriseIdStr = enterpriseId.toString();
+    let enterpriseObjId: ObjectId | null = null;
+    try {
+      enterpriseObjId = new ObjectId(enterpriseIdStr);
+    } catch (e) {
+      // Not a valid ObjectId format
+    }
+
+    const filter = enterpriseObjId ? { _id: enterpriseObjId } : { _id: enterpriseIdStr };
+
     if (action === "enable_enterprise_billing") {
-      await sql`
-        UPDATE enterprise_accounts 
-        SET billing = COALESCE(billing, '{}'::jsonb) || '{"enabled": true}'::jsonb,
-            updated_at = NOW()
-        WHERE id = ${enterpriseId}
-      `;
+      await db.collection("enterprise_accounts").updateOne(
+        filter,
+        { 
+          $set: { 
+            "billing.enabled": true,
+            "billing.enabledAt": new Date(),
+            updatedAt: new Date() 
+          } 
+        }
+      );
       return NextResponse.json({ ok: true, message: "Enterprise billing enabled" });
     }
 
     if (action === "disable_enterprise_billing") {
-      await sql`
-        UPDATE enterprise_accounts 
-        SET billing = COALESCE(billing, '{}'::jsonb) || '{"enabled": false}'::jsonb,
-            updated_at = NOW()
-        WHERE id = ${enterpriseId}
-      `;
+      await db.collection("enterprise_accounts").updateOne(
+        filter,
+        { 
+          $set: { 
+            "billing.enabled": false,
+            updatedAt: new Date() 
+          } 
+        }
+      );
       return NextResponse.json({ ok: true, message: "Enterprise billing disabled" });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("Error updating enterprise billing:", err);
     return NextResponse.json({ error: "Failed to update billing" }, { status: 500 });
   }

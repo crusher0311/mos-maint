@@ -1,4 +1,5 @@
-import sql from "@/lib/db/postgres";
+// lib/rate.ts
+import { getDb } from "@/lib/mongo";
 
 export type RateResult = {
   allowed: boolean;
@@ -8,30 +9,44 @@ export type RateResult = {
   bucketKey: string;
 };
 
+/**
+ * Mongo rate limiter using time-bucket documents.
+ * - Keyed by a stable id (e.g., route + IP + emailLower).
+ * - One document per window bucket, TTL-managed by an index.
+ */
 export async function rateLimit(opts: {
-  id: string;
-  limit: number;
+  id: string;          // e.g. "login:1.2.3.4:email@x.com:shop7"
+  limit: number;       // max requests per window
   windowSeconds: number;
 }): Promise<RateResult> {
   const { id, limit, windowSeconds } = opts;
+  const db = await getDb();
+  const col = db.collection("ratelimits");
 
   const nowMs = Date.now();
   const bucket = Math.floor(nowMs / (windowSeconds * 1000));
   const bucketKey = `${id}:${bucket}`;
   const resetAt = new Date((bucket + 1) * windowSeconds * 1000);
+  // small buffer so the doc disappears shortly after the window ends
   const expiresAt = new Date(resetAt.getTime() + 5000);
 
-  await sql`DELETE FROM ratelimits WHERE expires_at < NOW()`;
+  // IMPORTANT: do NOT $setOnInsert `count`. Let $inc create it as 1.
+  const result = await col.findOneAndUpdate(
+    { bucketKey },
+    {
+      $inc: { count: 1 },
+      $setOnInsert: {
+        bucketKey,
+        windowSeconds,
+        createdAt: new Date(),
+        expiresAt,
+      },
+    },
+    { upsert: true, returnDocument: "after" }
+  );
 
-  const result = await sql`
-    INSERT INTO ratelimits (bucket_key, count, window_seconds, expires_at)
-    VALUES (${bucketKey}, 1, ${windowSeconds}, ${expiresAt})
-    ON CONFLICT (bucket_key) DO UPDATE SET
-      count = ratelimits.count + 1
-    RETURNING count
-  `;
-
-  const count = result[0]?.count ?? 1;
+  const doc: any = (result as any)?.value ?? (result as any);
+  const count = typeof doc?.count === "number" ? doc.count : 1;
 
   return {
     allowed: count <= limit,
@@ -42,7 +57,9 @@ export async function rateLimit(opts: {
   };
 }
 
+// Best-effort client IP extraction behind proxies
 export function clientIp(req: Request): string {
   const xff = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
   return xff || "unknown";
 }
+

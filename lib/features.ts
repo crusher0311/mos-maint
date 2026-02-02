@@ -1,14 +1,17 @@
-import sql from "@/lib/db/postgres";
+// lib/features.ts
+// Modular feature toggle system for à la carte feature management
+
+import { getDb } from "@/lib/mongo";
 import "@/lib/sms-adapters/protractor-adapter";
 
 export type FeatureId = 
-  | "maintenance"
-  | "job_lookup"
-  | "common_failures"
-  | "oil_sticker"
-  | "keytags"
-  | "auto_booking"
-  | "part_xref";
+  | "maintenance"      // OEM schedules, recommendations, DVI insights
+  | "job_lookup"       // Historical job search, parts intelligence, smart autocomplete
+  | "common_failures"  // Common Failures Advisor - predictive repairs
+  | "oil_sticker"      // Oil change sticker platform
+  | "keytags"          // Key identification tags for vehicles in shop
+  | "auto_booking"     // Auto booking for oil change appointments
+  | "part_xref";       // Part cross-reference tool
 
 export type FeatureConfig = {
   id: FeatureId;
@@ -82,9 +85,9 @@ export const FEATURES: FeatureConfig[] = [
 ];
 
 export type ShopFeatures = {
-  shopId: string;
+  shopId: number;
   enabledFeatures: FeatureId[];
-  featureSettings: Partial<Record<FeatureId, Record<string, unknown>>>;
+  featureSettings: Partial<Record<FeatureId, Record<string, any>>>;
   subscriptions: {
     featureId: FeatureId;
     stripeSubscriptionId?: string;
@@ -105,30 +108,12 @@ export function getAllFeatureIds(): FeatureId[] {
   return FEATURES.map(f => f.id);
 }
 
-export async function getShopFeatures(shopId: number | string): Promise<ShopFeatures | null> {
-  const shopIdStr = String(shopId);
-  const result = await sql`
-    SELECT shop_id, enabled_features, feature_settings, subscriptions, 
-           created_at, updated_at
-    FROM shop_features
-    WHERE shop_id = ${shopIdStr}
-    LIMIT 1
-  `;
-  
-  if (result.length === 0) return null;
-  
-  const row = result[0];
-  return {
-    shopId: row.shop_id,
-    enabledFeatures: row.enabled_features || [],
-    featureSettings: row.feature_settings || {},
-    subscriptions: row.subscriptions || [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+export async function getShopFeatures(shopId: number): Promise<ShopFeatures | null> {
+  const db = await getDb();
+  return db.collection<ShopFeatures>("shop_features").findOne({ shopId });
 }
 
-export async function isFeatureEnabled(shopId: number | string, featureId: FeatureId): Promise<boolean> {
+export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Promise<boolean> {
   if (isDevEnvironment()) {
     return true;
   }
@@ -139,7 +124,7 @@ export async function isFeatureEnabled(shopId: number | string, featureId: Featu
   return features.enabledFeatures.includes(featureId);
 }
 
-export async function getEnabledFeatures(shopId: number | string): Promise<FeatureId[]> {
+export async function getEnabledFeatures(shopId: number): Promise<FeatureId[]> {
   if (isDevEnvironment()) {
     return getAllFeatureIds();
   }
@@ -150,45 +135,57 @@ export async function getEnabledFeatures(shopId: number | string): Promise<Featu
   return features.enabledFeatures;
 }
 
-export async function enableFeature(shopId: number | string, featureId: FeatureId): Promise<void> {
-  const shopIdStr = String(shopId);
-  
-  await sql`
-    INSERT INTO shop_features (shop_id, enabled_features, feature_settings, subscriptions)
-    VALUES (${shopIdStr}, ARRAY[${featureId}]::text[], '{}'::jsonb, '[]'::jsonb)
-    ON CONFLICT (shop_id) DO UPDATE SET
-      enabled_features = CASE 
-        WHEN ${featureId} = ANY(shop_features.enabled_features) THEN shop_features.enabled_features
-        ELSE array_append(shop_features.enabled_features, ${featureId})
-      END,
-      updated_at = NOW()
-  `;
+export async function enableFeature(shopId: number, featureId: FeatureId): Promise<void> {
+  const db = await getDb();
+  await db.collection<ShopFeatures>("shop_features").updateOne(
+    { shopId },
+    {
+      $addToSet: { enabledFeatures: featureId },
+      $set: { updatedAt: new Date() },
+      $setOnInsert: {
+        shopId,
+        featureSettings: {},
+        subscriptions: [],
+        createdAt: new Date(),
+      },
+    },
+    { upsert: true }
+  );
 }
 
-export async function disableFeature(shopId: number | string, featureId: FeatureId): Promise<void> {
-  const shopIdStr = String(shopId);
-  
-  await sql`
-    UPDATE shop_features 
-    SET enabled_features = array_remove(enabled_features, ${featureId}), updated_at = NOW()
-    WHERE shop_id = ${shopIdStr}
-  `;
+export async function disableFeature(shopId: number, featureId: FeatureId): Promise<void> {
+  const db = await getDb();
+  await db.collection<ShopFeatures>("shop_features").updateOne(
+    { shopId },
+    {
+      $pull: { enabledFeatures: featureId },
+      $set: { updatedAt: new Date() },
+    }
+  );
 }
 
-export async function setShopFeatures(shopId: number | string, featureIds: FeatureId[]): Promise<void> {
-  const shopIdStr = String(shopId);
-  
-  await sql`
-    INSERT INTO shop_features (shop_id, enabled_features, feature_settings, subscriptions)
-    VALUES (${shopIdStr}, ${featureIds}::text[], '{}'::jsonb, '[]'::jsonb)
-    ON CONFLICT (shop_id) DO UPDATE SET
-      enabled_features = ${featureIds}::text[],
-      updated_at = NOW()
-  `;
+export async function setShopFeatures(shopId: number, featureIds: FeatureId[]): Promise<void> {
+  const db = await getDb();
+  await db.collection<ShopFeatures>("shop_features").updateOne(
+    { shopId },
+    {
+      $set: { 
+        enabledFeatures: featureIds,
+        updatedAt: new Date(),
+      },
+      $setOnInsert: {
+        shopId,
+        featureSettings: {},
+        subscriptions: [],
+        createdAt: new Date(),
+      },
+    },
+    { upsert: true }
+  );
 }
 
-export async function getFeatureSettings<T = Record<string, unknown>>(
-  shopId: number | string, 
+export async function getFeatureSettings<T = Record<string, any>>(
+  shopId: number, 
   featureId: FeatureId
 ): Promise<T | null> {
   const features = await getShopFeatures(shopId);
@@ -197,20 +194,29 @@ export async function getFeatureSettings<T = Record<string, unknown>>(
 }
 
 export async function setFeatureSettings(
-  shopId: number | string, 
+  shopId: number, 
   featureId: FeatureId, 
-  settings: Record<string, unknown>
+  settings: Record<string, any>
 ): Promise<void> {
-  const shopIdStr = String(shopId);
-  
-  await sql`
-    UPDATE shop_features 
-    SET feature_settings = jsonb_set(COALESCE(feature_settings, '{}'::jsonb), ${[featureId]}::text[], ${JSON.stringify(settings)}::jsonb),
-        updated_at = NOW()
-    WHERE shop_id = ${shopIdStr}
-  `;
+  const db = await getDb();
+  await db.collection<ShopFeatures>("shop_features").updateOne(
+    { shopId },
+    {
+      $set: { 
+        [`featureSettings.${featureId}`]: settings,
+        updatedAt: new Date(),
+      },
+    }
+  );
 }
 
 export function getFeatureConfig(featureId: FeatureId): FeatureConfig | undefined {
   return FEATURES.find(f => f.id === featureId);
+}
+
+export async function ensureFeatureIndexes(): Promise<void> {
+  const db = await getDb();
+  const collection = db.collection("shop_features");
+  await collection.createIndex({ shopId: 1 }, { unique: true });
+  console.log("[Features] Database indexes created");
 }

@@ -1,26 +1,28 @@
+// app/api/admin/shops/[shopId]/autoflow/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }) {
   const sess = await requireSession();
-  const shopId = ctx.params.shopId;
-  if (!shopId || shopId !== String(sess.shopId)) {
+  const shopId = Number(ctx.params.shopId);
+  if (!shopId || shopId !== Number(sess.shopId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const shopResult = await sql`
-    SELECT autoflow_config FROM shops WHERE shop_id = ${shopId} LIMIT 1
-  `;
-  const shop = shopResult[0];
-  const autoflowConfig = (shop?.autoflow_config as Record<string, unknown>) || {};
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { autoflow: 1 } }
+  );
 
   const autoflow = {
-    subdomain: autoflowConfig.subdomain || "",
-    apiKey: autoflowConfig.apiKey || "",
+    subdomain: shop?.autoflow?.subdomain || "",
+    apiKey: shop?.autoflow?.apiKey || "",
+    // do NOT return password; client will re-enter if changing
   };
 
   return NextResponse.json({ ok: true, autoflow });
@@ -28,34 +30,32 @@ export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }
 
 export async function PUT(req: NextRequest, ctx: { params: { shopId: string } }) {
   const sess = await requireSession();
-  const shopId = ctx.params.shopId;
-  if (!shopId || shopId !== String(sess.shopId)) {
+  const shopId = Number(ctx.params.shopId);
+  if (!shopId || shopId !== Number(sess.shopId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));
   const subdomain = String(body.subdomain || "").trim();
   const apiKey = String(body.apiKey || "").trim();
-  const apiPassword = String(body.apiPassword || "").trim();
+  const apiPassword = String(body.apiPassword || "").trim(); // may be empty when not changing
 
-  const shopResult = await sql`SELECT autoflow_config FROM shops WHERE shop_id = ${shopId} LIMIT 1`;
-  const existingConfig = (shopResult[0]?.autoflow_config as Record<string, unknown>) || {};
+  const db = await getDb();
 
-  const updatedConfig: Record<string, unknown> = {
-    ...existingConfig,
-    subdomain: subdomain || null,
-    apiKey: apiKey || null,
+  const set: any = {
+    "autoflow.subdomain": subdomain || null,
+    "autoflow.apiKey": apiKey || null,
+    updatedAt: new Date(),
   };
-  
   if (apiPassword) {
-    updatedConfig.apiPassword = apiPassword;
+    set["autoflow.apiPassword"] = apiPassword;
   }
 
-  await sql`
-    UPDATE shops 
-    SET autoflow_config = ${JSON.stringify(updatedConfig)}::jsonb, updated_at = ${new Date()}
-    WHERE shop_id = ${shopId}
-  `;
+  await db.collection("shops").updateOne(
+    { shopId },
+    { $set: set },
+    { upsert: true }
+  );
 
   return NextResponse.json({ ok: true });
 }

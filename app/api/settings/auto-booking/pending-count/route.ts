@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
-import sql from "@/lib/db/postgres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,25 +13,25 @@ export async function GET() {
       return NextResponse.json({ count: 0, showBadge: false });
     }
 
-    const shopId = String(session.shopId);
-    const numericShopId = Number(session.shopId);
+    const shopId = Number(session.shopId);
+    const db = await getDb();
     
-    const entitlements = await getFeatureEntitlements(numericShopId);
+    const entitlements = await getFeatureEntitlements(shopId);
     const hasAutoBooking = entitlements.canUseFeature("auto_booking");
     
     if (!hasAutoBooking) {
       return NextResponse.json({ count: 0, showBadge: false, available: false });
     }
     
-    const shopResult = await sql`
-      SELECT settings FROM shops WHERE shop_id = ${shopId} LIMIT 1
-    `;
-    const settings = (shopResult[0]?.settings as Record<string, unknown>) || {};
-    const autoBooking = (settings.autoBooking as Record<string, unknown>) || {};
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { autoBooking: 1 } }
+    );
     
-    const confirmationMode = autoBooking.confirmationMode || "review";
+    const confirmationMode = shop?.autoBooking?.confirmationMode || "review";
     const isReviewMode = confirmationMode === "review";
     
+    // Only query pending count when in review mode to avoid unnecessary DB work
     if (!isReviewMode) {
       return NextResponse.json({
         count: 0,
@@ -41,11 +41,10 @@ export async function GET() {
       });
     }
     
-    const pendingResult = await sql`
-      SELECT COUNT(*) as count FROM auto_booking_queue
-      WHERE shop_id = ${shopId} AND status = 'pending'
-    `;
-    const pendingCount = Number(pendingResult[0]?.count) || 0;
+    const pendingCount = await db.collection("auto_booking_queue").countDocuments({
+      shopId,
+      status: "pending"
+    });
     
     return NextResponse.json({
       count: pendingCount,
@@ -53,7 +52,7 @@ export async function GET() {
       confirmationMode,
       available: true
     });
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error("[Booking Pending Count] Error:", err);
     return NextResponse.json({ count: 0, showBadge: false });
   }

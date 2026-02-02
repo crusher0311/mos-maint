@@ -1,17 +1,10 @@
 // app/api/customers/[customerId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerById } from "@/lib/db/customers-pg";
-import { getVehiclesByCustomerId } from "@/lib/db/vehicles-pg";
-import { getWorkOrdersForCustomer } from "@/lib/db/work-orders-pg";
-import sql from "@/lib/db/postgres";
+import { ObjectId } from "mongodb";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function isValidUUID(str: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
-}
 
 export async function GET(
   _req: NextRequest,
@@ -21,54 +14,124 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: "missing customerId" }, { status: 400 });
   }
-  if (!isValidUUID(id)) {
+  if (!ObjectId.isValid(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
-  const customer = await getCustomerById(id);
+  const _id = new ObjectId(id);
+  const db = await getDb();
+
+  // -- Customer ------------------------------------------------------------
+  const customer = await db.collection("customers").findOne(
+    { _id },
+    {
+      // project commonly-used fields; include others as needed
+      projection: {
+        _id: 1,
+        shopId: 1,
+        name: 1,
+        firstName: 1,
+        lastName: 1,
+        email: 1,
+        phone: 1,
+        externalId: 1,
+        lastVin: 1,
+        lastRo: 1,
+        lastMileage: 1,
+        status: 1,
+        openedAt: 1,
+        updatedAt: 1,
+        createdAt: 1,
+      },
+    }
+  );
 
   if (!customer) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const vehicles = await getVehiclesByCustomerId(id);
-  const repairOrders = await getWorkOrdersForCustomer(id);
+  // -- Vehicles (latest first) --------------------------------------------
+  const vehicles = await db
+    .collection("vehicles")
+    .find({ customerId: _id })
+    .project({
+      _id: 1,
+      vin: 1,
+      year: 1,
+      make: 1,
+      model: 1,
+      lastMileage: 1,
+      updatedAt: 1,
+    })
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .toArray();
 
-  const recentAutoflowEvents = customer.shop_id ? await sql<{payload: Record<string, unknown>, received_at: Date}[]>`
-    SELECT payload, received_at FROM events
-    WHERE shop_id = ${customer.shop_id}
-      AND provider = 'autoflow'
-      AND (
-        payload->'customer'->>'id' = ${customer.external_id || ''}
-        OR payload->'customer'->>'email' = ${customer.email || ''}
-        OR payload->'customer'->>'phone' = ${customer.phone || ''}
-      )
-    ORDER BY received_at DESC
-    LIMIT 25
-  ` : [];
+  // -- Repair Orders (latest first) ---------------------------------------
+  const repairOrders = await db
+    .collection("repair_orders")
+    .find({ customerId: _id })
+    .project({
+      _id: 1,
+      roNumber: 1,
+      vin: 1,
+      mileage: 1,
+      status: 1,
+      updatedAt: 1,
+    })
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .toArray();
 
-  const suggestions: Record<string, unknown> = {};
+  // -- Recent AutoFlow events (best-effort match) -------------------------
+  const afOrs: any[] = [];
+  const shopFilter =
+    customer.shopId != null ? { shopId: customer.shopId } : {};
+
+  if (customer.externalId) {
+    afOrs.push({ "payload.customer.id": customer.externalId });
+    afOrs.push({ "payload.customer.remote_id": customer.externalId });
+  }
+  if (customer.email) {
+    afOrs.push({ "payload.customer.email": customer.email });
+  }
+  if (customer.phone) {
+    afOrs.push({ "payload.customer.phone": customer.phone });
+    afOrs.push({ "payload.customer.phone_numbers.phonenumber": customer.phone });
+  }
+  if (customer.firstName) {
+    afOrs.push({ "payload.customer.firstname": customer.firstName });
+  }
+  if (customer.lastName) {
+    afOrs.push({ "payload.customer.lastname": customer.lastName });
+  }
+
+  // If we have nothing to key on, show newest shop events instead to aid inspection.
+  const afQuery =
+    afOrs.length > 0
+      ? { provider: "autoflow", ...shopFilter, $or: afOrs }
+      : { provider: "autoflow", ...shopFilter };
+
+  const recentAutoflowEvents = await db
+    .collection("events")
+    .find(afQuery)
+    .project({ payload: 1, receivedAt: 1 })
+    .sort({ receivedAt: -1 })
+    .limit(25)
+    .toArray();
+
+  // -- Suggestions (fill obvious gaps) ------------------------------------
+  const suggestions: Record<string, any> = {};
 
   if (!customer.phone) {
     const withPhone = recentAutoflowEvents.find(
-      (e) => {
-        const payload = e.payload as Record<string, unknown>;
-        const cust = payload?.customer as Record<string, unknown> | undefined;
-        const phoneNumbers = cust?.phone_numbers as Array<{phonenumber?: string}> | undefined;
-        return phoneNumbers && phoneNumbers.length > 0;
-      }
+      (e: any) => e?.payload?.customer?.phone_numbers?.length
     );
-    if (withPhone) {
-      const payload = withPhone.payload as Record<string, unknown>;
-      const cust = payload?.customer as Record<string, unknown>;
-      const phoneNumbers = cust?.phone_numbers as Array<{phonenumber?: string}>;
-      const phone = phoneNumbers?.[0]?.phonenumber ?? null;
-      if (phone) suggestions.phone = phone;
-    }
+    const phone =
+      withPhone?.payload?.customer?.phone_numbers?.[0]?.phonenumber ?? null;
+    if (phone) suggestions.phone = phone;
   }
 
-  if (!customer.name && (customer.first_name || customer.last_name)) {
-    const joined = [customer.first_name ?? "", customer.last_name ?? ""]
+  if (!customer.name && (customer.firstName || customer.lastName)) {
+    const joined = [customer.firstName ?? "", customer.lastName ?? ""]
       .filter(Boolean)
       .join(" ")
       .trim();
@@ -77,43 +140,10 @@ export async function GET(
 
   return NextResponse.json({
     ok: true,
-    customer: {
-      id: customer.id,
-      shopId: customer.shop_id,
-      name: customer.name,
-      firstName: customer.first_name,
-      lastName: customer.last_name,
-      email: customer.email,
-      phone: customer.phone,
-      externalId: customer.external_id,
-      lastVin: customer.last_vin,
-      lastRo: customer.last_ro,
-      lastMileage: customer.last_mileage,
-      status: customer.status,
-      updatedAt: customer.updated_at,
-      createdAt: customer.created_at,
-    },
-    vehicles: vehicles.map(v => ({
-      id: v.id,
-      vin: v.vin,
-      year: v.year,
-      make: v.make,
-      model: v.model,
-      lastMileage: v.last_mileage,
-      updatedAt: v.updated_at,
-    })),
-    repairOrders: repairOrders.map(wo => ({
-      id: wo.id,
-      roNumber: wo.order_number,
-      vin: null,
-      mileage: wo.odometer_in,
-      status: wo.status,
-      updatedAt: wo.updated_at,
-    })),
-    recentAutoflowEvents: recentAutoflowEvents.map(e => ({
-      payload: e.payload,
-      receivedAt: e.received_at,
-    })),
+    customer,
+    vehicles,
+    repairOrders,
+    recentAutoflowEvents,
     suggestions,
   });
 }

@@ -1,46 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
 import { createNotificationsForUsers } from "@/lib/notifications";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
-import { v4 as uuidv4 } from "uuid";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const tickets = await sql`
-      SELECT * FROM support_tickets 
-      WHERE user_email = ${session.email}
-      ORDER BY created_at DESC NULLS LAST
-    `;
+    const db = await getDb();
+
+    const tickets = await db.collection("support_tickets")
+      .find({ userEmail: session.email })
+      .sort({ createdAt: -1 })
+      .toArray();
 
     return NextResponse.json({
       ok: true,
-      tickets: tickets.map(t => ({
-        _id: t.id,
-        ticketNumber: t.ticket_number,
-        subject: t.subject,
-        description: t.description,
-        category: t.category,
-        priority: t.priority,
-        status: t.status,
-        userEmail: t.user_email,
-        userName: t.user_name,
-        shopId: t.shop_id,
-        shopName: t.shop_name,
-        messages: t.messages,
-        createdAt: t.created_at,
-        updatedAt: t.updated_at,
-        resolvedAt: t.resolved_at,
-        closedAt: t.closed_at,
-      }))
+      tickets
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Error fetching user tickets:", error);
     return NextResponse.json({ error: "Failed to fetch tickets" }, { status: 500 });
   }
@@ -60,67 +44,80 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Subject and description are required" }, { status: 400 });
     }
 
+    const db = await getDb();
+
     let shopId = session.shopId || null;
-    let shopName: string | null = null;
-    let locationIdentifier: string | null = null;
+    let shopName = null;
+    let locationIdentifier = null;
     
     if (shopId) {
-      const shopResult = await sql`SELECT name, location_identifier FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1`;
-      const shop = shopResult[0];
+      // Use the session's current shop
+      const shop = await db.collection("shops").findOne({ shopId });
       shopName = shop?.name || null;
-      locationIdentifier = shop?.location_identifier || null;
+      locationIdentifier = shop?.locationIdentifier || null;
     } else {
-      const userRecords = await sql`
-        SELECT shop_id FROM users WHERE email = ${session.email.toLowerCase()}
-      `;
+      // Fallback: look up user's shop associations (same logic as /api/user/shops)
+      const userRecords = await db
+        .collection("users")
+        .find({ email: session.email.toLowerCase() })
+        .project({ shopId: 1 })
+        .toArray();
       
-      const shopIds = [...new Set(userRecords.map(u => u.shop_id))];
+      const shopIds = [...new Set(userRecords.map((u) => Number(u.shopId)))];
       
       if (shopIds.length === 1) {
+        // User has exactly one shop - use it
         shopId = shopIds[0];
-        const shopResult = await sql`SELECT name, location_identifier FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1`;
-        const shop = shopResult[0];
+        const shop = await db.collection("shops").findOne({ shopId });
         shopName = shop?.name || null;
-        locationIdentifier = shop?.location_identifier || null;
+        locationIdentifier = shop?.locationIdentifier || null;
       } else if (shopIds.length > 1) {
-        const shops = await sql`
-          SELECT shop_id, name, location_identifier FROM shops WHERE shop_id = ANY(${shopIds.map(String)})
-        `;
-        const shopDisplayNames = shops.map(s => s.location_identifier || s.name || `Shop ${s.shop_id}`);
+        // User has multiple shops - get all shop names for context
+        const shops = await db
+          .collection("shops")
+          .find({ shopId: { $in: shopIds } })
+          .project({ shopId: 1, name: 1, locationIdentifier: 1 })
+          .toArray();
+        
+        // Store all shop names in locationIdentifier for admin visibility
+        const shopDisplayNames = shops.map(s => 
+          s.locationIdentifier || s.name || `Shop ${s.shopId}`
+        );
         locationIdentifier = `Multiple: ${shopDisplayNames.join(", ")}`;
       }
     }
 
-    const countResult = await sql<{count: string}[]>`SELECT COUNT(*) as count FROM support_tickets`;
-    const ticketCount = parseInt(countResult[0]?.count || "0", 10);
+    const ticketCount = await db.collection("support_tickets").countDocuments();
     const ticketNumber = `TKT-${String(ticketCount + 1).padStart(5, "0")}`;
 
-    const now = new Date();
-    const messageId = uuidv4();
-    const messages = [{
-      id: messageId,
-      from: "user",
-      fromEmail: session.email,
-      fromName: session.email.split("@")[0],
-      message: description,
-      createdAt: now.toISOString()
-    }];
+    const ticket = {
+      ticketNumber,
+      subject,
+      description,
+      category: category || "general",
+      priority: priority || "medium",
+      status: "open",
+      userEmail: session.email,
+      userName: session.email.split("@")[0],
+      shopId,
+      shopName,
+      locationIdentifier,
+      assignedTo: null,
+      messages: [{
+        id: new ObjectId().toString(),
+        from: "user",
+        fromEmail: session.email,
+        fromName: session.email.split("@")[0],
+        message: description,
+        createdAt: new Date()
+      }],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      resolvedAt: null,
+      closedAt: null
+    };
 
-    const result = await sql`
-      INSERT INTO support_tickets (
-        ticket_number, subject, description, category, priority, status,
-        user_email, user_name, shop_id, shop_name, location_identifier,
-        assigned_to, messages, created_at, updated_at, resolved_at, closed_at
-      )
-      VALUES (
-        ${ticketNumber}, ${subject}, ${description}, ${category || "general"}, ${priority || "medium"}, 'open',
-        ${session.email}, ${session.email.split("@")[0]}, ${shopId}, ${shopName}, ${locationIdentifier},
-        NULL, ${JSON.stringify(messages)}::jsonb, ${now}, ${now}, NULL, NULL
-      )
-      RETURNING id
-    `;
-
-    const ticketId = result[0].id;
+    const result = await db.collection("support_tickets").insertOne(ticket);
 
     const categoryLabels: Record<string, string> = {
       general: "General",
@@ -130,7 +127,7 @@ export async function POST(request: NextRequest) {
       bug: "Bug Report",
       account: "Account"
     };
-    const categoryLabel = categoryLabels[category || "general"] || category;
+    const categoryLabel = categoryLabels[ticket.category] || ticket.category;
 
     const priorityLabels: Record<string, string> = {
       low: "Low",
@@ -138,7 +135,7 @@ export async function POST(request: NextRequest) {
       high: "High",
       urgent: "Urgent"
     };
-    const priorityLabel = priorityLabels[priority || "medium"] || priority;
+    const priorityLabel = priorityLabels[ticket.priority] || ticket.priority;
 
     try {
       const userEmailContent = makeTicketCreatedEmail(ticketNumber, subject, categoryLabel);
@@ -159,8 +156,8 @@ export async function POST(request: NextRequest) {
         type: "ticket_created",
         title: `New Ticket: ${ticketNumber}`,
         message: `${shopName || session.email} submitted: ${subject}`,
-        link: `/platform-admin/tickets?id=${ticketId}`,
-        metadata: { ticketId, ticketNumber }
+        link: `/platform-admin/tickets?id=${result.insertedId}`,
+        metadata: { ticketId: result.insertedId.toString(), ticketNumber }
       });
       
       for (let i = 0; i < platformAdminEmails.length; i++) {
@@ -192,25 +189,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      ticket: { 
-        _id: ticketId, 
-        ticketNumber, 
-        subject, 
-        description, 
-        category: category || "general",
-        priority: priority || "medium",
-        status: "open",
-        userEmail: session.email,
-        userName: session.email.split("@")[0],
-        shopId,
-        shopName,
-        messages,
-        createdAt: now,
-        updatedAt: now,
-      },
+      ticket: { ...ticket, _id: result.insertedId },
       ticketNumber
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Error creating ticket:", error);
     return NextResponse.json({ error: "Failed to create ticket" }, { status: 500 });
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,138 +17,157 @@ export async function GET() {
   }
 
   try {
-    const [shops, platformSettingsResult, enterprises] = await Promise.all([
-      sql`SELECT * FROM shops`,
-      sql`SELECT * FROM platform_settings WHERE key = 'trial' LIMIT 1`,
-      sql`SELECT * FROM enterprise_accounts`
+    const db = await getDb();
+    
+    const [shops, platformSettings, enterprises] = await Promise.all([
+      db.collection("shops").find().toArray(),
+      db.collection("platform_settings").findOne({ key: "trial" }),
+      db.collection("enterprise_accounts").find().toArray()
     ]);
     
-    const enterpriseMap = new Map(enterprises.map(e => [e.id, e]));
-    const platformSettings = platformSettingsResult[0];
-    const settingsValue = platformSettings?.value as Record<string, unknown> | null;
-    const defaultVinLimit = (settingsValue?.vinLimit as number) ?? DEFAULT_TRIAL_VIN_LIMIT;
+    // Build enterprise lookup map
+    const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
     
-    const shopIds = shops.map(s => s.shop_id).filter(Boolean);
+    const defaultVinLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
+    const shopIds = shops.map(s => s.shopId);
+    
+    const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
+    
+    // Get first day of current month for monthly sticker counts
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     
-    const shopUuids = shops.map(s => s.id).filter(Boolean);
-    
-    const allShopIdentifiers = [...shopIds, ...shopUuids];
-    
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
-      allShopIdentifiers.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM users WHERE shop_id = ANY(${allShopIdentifiers}) GROUP BY shop_id` : Promise.resolve([]),
-      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM vehicles WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
-      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM viewed_vins WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
-      shopIds.length > 0 ? sql`SELECT * FROM backfill_progress WHERE shop_id::text = ANY(${shopIds})` : Promise.resolve([]),
-      shopIds.length > 0 ? sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id::text = ANY(${shopIds})` : Promise.resolve([]),
-      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM job_index WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
-      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) GROUP BY shop_id` : Promise.resolve([]),
-      shopUuids.length > 0 ? sql`SELECT shop_id, COUNT(*) as count FROM sticker_generations WHERE shop_id = ANY(${shopUuids}) AND created_at >= ${monthStart} GROUP BY shop_id` : Promise.resolve([])
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
+      db.collection("users").aggregate([
+        { $match: { shopId: { $in: shopIds } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("vehicles").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("viewed_vins").aggregate([
+        { $match: { shopId: { $in: shopIds } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
+      db.collection("tekmetric_backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
+      db.collection("job_history").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("job_index").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("sticker_generations").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray(),
+      db.collection("sticker_generations").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants }, generatedAt: { $gte: monthStart } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ]).toArray()
     ]);
     
-    const userCountMap = new Map<string, number>();
-    for (const u of userCounts) {
-      userCountMap.set(String(u.shop_id), parseInt(u.count as string, 10));
-    }
-    const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v.shop_id), parseInt(v.count as string, 10)]));
-    const backfillMap = new Map(backfillProgress.map(b => [String(b.shop_id), b]));
-    const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shop_id), b]));
+    const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
+    const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
+    const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
+    const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shopId), b]));
     
-    const vehicleCountMap = new Map<string, number>();
-    for (const v of vehicleCounts) {
-      vehicleCountMap.set(String(v.shop_id), parseInt(v.count as string, 10));
+    const jobHistoryCountMap = new Map<string, number>();
+    for (const j of jobHistoryCounts) {
+      const key = String(j._id);
+      jobHistoryCountMap.set(key, (jobHistoryCountMap.get(key) || 0) + j.count);
     }
     
     const jobIndexCountMap = new Map<string, number>();
     for (const j of jobIndexCounts) {
-      jobIndexCountMap.set(String(j.shop_id), parseInt(j.count as string, 10));
+      const key = String(j._id);
+      jobIndexCountMap.set(key, (jobIndexCountMap.get(key) || 0) + j.count);
     }
     
     const stickerCountMap = new Map<string, number>();
     for (const s of stickerCounts) {
-      stickerCountMap.set(String(s.shop_id), parseInt(s.count as string, 10));
+      const key = String(s._id);
+      stickerCountMap.set(key, (stickerCountMap.get(key) || 0) + s.count);
     }
     
     const stickerCountThisMonthMap = new Map<string, number>();
     for (const s of stickerCountsThisMonth) {
-      stickerCountThisMonthMap.set(String(s.shop_id), parseInt(s.count as string, 10));
+      const key = String(s._id);
+      stickerCountThisMonthMap.set(key, (stickerCountThisMonthMap.get(key) || 0) + s.count);
+    }
+    
+    const vehicleCountMap = new Map<string, number>();
+    for (const v of vehicleCounts) {
+      const key = String(v._id);
+      vehicleCountMap.set(key, (vehicleCountMap.get(key) || 0) + v.count);
     }
     
     const enrichedShops = shops.map(shop => {
-      const settings = shop.settings as Record<string, unknown> | null;
-      const billing = shop.billing as Record<string, unknown> | null;
-      const tekmetricConfig = shop.tekmetric as Record<string, unknown> | null;
-      const protractorConfig = shop.protractor as Record<string, unknown> | null;
-      const carfaxConfig = shop.carfax as Record<string, unknown> | null;
-      const autoflowConfig = shop.autoflow as Record<string, unknown> | null;
-      const autovitalsConfig = shop.autovitals as Record<string, unknown> | null;
-      const enabledFeatures = settings?.enabledFeatures as Record<string, boolean> | null;
-      const stickerConfig = shop.sticker_config as Record<string, unknown> | null;
-      
       const integrations: string[] = [];
-      if (protractorConfig?.configured || protractorConfig?.apiKey) integrations.push("Protractor");
-      if (tekmetricConfig?.shopId) integrations.push("Tekmetric");
-      if (autoflowConfig?.apiKey || autoflowConfig?.configured) integrations.push("AutoFlow");
-      if (carfaxConfig?.locationId || carfaxConfig?.serviceId) integrations.push("CARFAX");
-      if (autovitalsConfig?.apiKey || autovitalsConfig?.configured) integrations.push("AutoVitals");
+      if (shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId) integrations.push("Protractor");
+      if (shop.tekmetric?.shopId || shop.tekmetricShopId) integrations.push("Tekmetric");
+      if (shop.autoflow?.apiKey || shop.autoflow?.configured || shop.autoflowApiKey) integrations.push("AutoFlow");
+      if (shop.carfax?.locationId || shop.carfax?.serviceId || shop.carfaxLocationId) integrations.push("CARFAX");
+      if (shop.autovitals?.apiKey || shop.autovitals?.configured || shop.autovitalsApiKey) integrations.push("AutoVitals");
       
-      const isPaid = ["professional", "enterprise", "pro", "demo", "starter", "plus", "elite"].includes(billing?.plan as string || "");
-      const vinLimit = (billing?.vinLimit as number) ?? (settings?.trialVinLimit as number) ?? defaultVinLimit;
-      const vinViewCount = vinViewCountMap.get(String(shop.shop_id)) || 0;
-      const hasProtractor = !!(protractorConfig?.configured || protractorConfig?.apiKey);
-      const hasTekmetric = !!tekmetricConfig?.shopId;
-      const backfill = backfillMap.get(String(shop.shop_id));
-      const tekmetricBackfill = tekmetricBackfillMap.get(String(shop.shop_id));
-      const jobIndexCount = jobIndexCountMap.get(shop.id) || 0;
+      const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro" || shop.billing?.plan === "demo";
+      const vinLimit = shop.billing?.vinLimit ?? shop.trialVinLimit ?? defaultVinLimit;
+      const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
+      const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
+      const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
+      const backfill = backfillMap.get(String(shop.shopId));
+      const tekmetricBackfill = tekmetricBackfillMap.get(String(shop.shopId));
+      const jobHistoryCount = jobHistoryCountMap.get(String(shop.shopId)) || 0;
+      const jobIndexCount = jobIndexCountMap.get(String(shop.shopId)) || 0;
       
-      const protractorLocations = protractorConfig?.locations as Array<Record<string, unknown>> | null;
-      const protractorLocation = protractorLocations?.[0];
+      const protractorLocation = shop.protractor?.locations?.[0];
       
-      const enterprise = shop.enterprise_id ? enterpriseMap.get(shop.enterprise_id) : null;
+      // Get enterprise info if this shop belongs to one
+      const enterprise = shop.enterpriseId ? enterpriseMap.get(shop.enterpriseId.toString()) : null;
       
       return {
-        _id: shop.id,
-        shopId: shop.shop_id ? parseInt(shop.shop_id, 10) : null,
-        name: shop.name || `Shop ${shop.shop_id}`,
-        locationIdentifier: shop.location_identifier || null,
-        enterpriseId: shop.enterprise_id || null,
+        _id: shop._id,
+        shopId: shop.shopId,
+        name: shop.name || `Shop ${shop.shopId}`,
+        locationIdentifier: shop.locationIdentifier || null,
+        enterpriseId: shop.enterpriseId?.toString() || null,
         enterpriseName: enterprise?.name || null,
-        createdAt: shop.created_at || new Date(),
-        userCount: userCountMap.get(String(shop.shop_id)) || userCountMap.get(shop.id) || 0,
-        vehicleCount: vehicleCountMap.get(shop.id) || 0,
+        createdAt: shop.createdAt || shop._id.getTimestamp?.() || new Date(),
+        userCount: userCountMap.get(String(shop.shopId)) || 0,
+        vehicleCount: vehicleCountMap.get(String(shop.shopId)) || 0,
         integrations,
-        isLocked: shop.is_locked || false,
+        isLocked: shop.isLocked || false,
         billing: {
-          plan: billing?.plan || "trial",
-          status: billing?.status || "trial",
+          plan: shop.billing?.plan || "trial",
+          status: shop.billing?.status || "trial",
           isPaid,
           vinLimit,
           vinViewCount,
         },
-        stickerCount: stickerCountMap.get(shop.id) || 0,
-        stickerCountThisMonth: stickerCountThisMonthMap.get(shop.id) || 0,
-        stickerConfig: stickerConfig || {},
-        enabledFeatures: enabledFeatures || {},
+        stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
+        stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
+        stickerConfig: shop.stickerConfig || {},
+        enabledFeatures: shop.enabledFeatures || {},
         backfill: (hasProtractor || hasTekmetric) ? (() => {
           const bf = hasProtractor ? backfill : tekmetricBackfill;
-          if (!bf) return null;
-          
-          const bfStatus = bf?.status as string;
-          const completed = bfStatus === 'completed';
-          const inProgress = bfStatus === 'in_progress' || bfStatus === 'running';
-          const lastActivityAt = bf?.updated_at || bf?.completed_at || null;
-          const lastError = bf?.error || (bf?.metadata as Record<string, unknown>)?.lastError || null;
+          const completed = bf?.completed || false;
+          const inProgress = bf?.inProgress === true;
+          const lastActivityAt = bf?.lastActivityAt || bf?.lastAttemptedAt || null;
+          const lastError = bf?.lastError || null;
+          const lastErrorAt = bf?.lastErrorAt || null;
           
           const STALE_THRESHOLD_MS = 5 * 60 * 1000;
           const isStale = inProgress && lastActivityAt && 
-            (Date.now() - new Date(lastActivityAt as string).getTime() > STALE_THRESHOLD_MS);
+            (Date.now() - new Date(lastActivityAt).getTime() > STALE_THRESHOLD_MS);
           
           let status: "completed" | "active" | "stale" | "error" | "pending" = "pending";
           if (completed) {
             status = "completed";
-          } else if (lastError) {
+          } else if (lastError && lastErrorAt) {
             status = "error";
           } else if (isStale) {
             status = "stale";
@@ -156,42 +175,36 @@ export async function GET() {
             status = "active";
           }
           
-          const totalRecords = (bf?.total_records as number) || 0;
-          const processedRecords = (bf?.processed_records as number) || 0;
-          
           return {
             completed,
             inProgress,
             status,
             isStale,
-            totalJobsIndexed: jobIndexCount || totalRecords || 0,
-            currentChunkDate: bf?.last_cursor || bf?.last_page || null,
+            totalJobsIndexed: jobIndexCount || bf?.totalJobsIndexed || 0,
+            currentChunkDate: bf?.currentChunkEnd || bf?.currentChunkStart || null,
             source: hasProtractor ? "protractor" : "tekmetric",
-            lastAttemptedAt: bf?.started_at || bf?.created_at || null,
+            lastAttemptedAt: bf?.lastAttemptedAt || bf?.lastRunAt || null,
             lastActivityAt,
             lastError,
-            lastErrorAt: lastError ? lastActivityAt : null,
-            processedCount: processedRecords || 0,
-            phase: bf?.phase || null,
+            lastErrorAt,
+            processedCount: bf?.processedCount || 0,
           };
         })() : null,
         integrationDetails: {
-          protractor: protractorConfig?.configured ? {
-            configuredAt: protractorConfig.configuredAt,
-            locationName: (protractorLocation?.Name as string) || null,
-            shortName: (protractorLocation?.ShortName as string) || null,
-            address: protractorLocation?.Address ? (() => {
-              const addr = protractorLocation.Address as Record<string, string>;
-              return `${addr.Street}, ${addr.City}, ${addr.Province} ${addr.PostalCode}`;
-            })() : null,
-            phone: (protractorLocation?.PhoneNumber as string) || null,
-            timeZone: (protractorLocation?.TimeZone as string) || null,
+          protractor: shop.protractor?.configured ? {
+            configuredAt: shop.protractor.configuredAt,
+            locationName: protractorLocation?.Name || null,
+            shortName: protractorLocation?.ShortName || null,
+            address: protractorLocation?.Address ? 
+              `${protractorLocation.Address.Street}, ${protractorLocation.Address.City}, ${protractorLocation.Address.Province} ${protractorLocation.Address.PostalCode}` : null,
+            phone: protractorLocation?.PhoneNumber || null,
+            timeZone: protractorLocation?.TimeZone || null,
           } : null,
-          carfax: carfaxConfig?.locationId ? {
-            locationId: carfaxConfig.locationId,
+          carfax: shop.carfax?.locationId ? {
+            locationId: shop.carfax.locationId,
           } : null,
-          tekmetric: tekmetricConfig?.shopId ? {
-            shopId: tekmetricConfig.shopId,
+          tekmetric: shop.tekmetric?.shopId ? {
+            shopId: shop.tekmetric.shopId,
           } : null,
         },
       };
@@ -204,9 +217,8 @@ export async function GET() {
       ),
       defaultVinLimit,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  } catch (err: any) {
     console.error("Platform shops error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }

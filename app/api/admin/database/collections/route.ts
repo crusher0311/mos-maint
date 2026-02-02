@@ -1,29 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.isPlatformAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const tables = await sql`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-      ORDER BY table_name
-    `;
-
-    const collections = tables.map(t => ({
-      name: t.table_name,
+    const db = await getDb();
+    const collectionsCursor = await db.listCollections().toArray();
+    
+    const userCollections = collectionsCursor.filter(
+      coll => !coll.name.startsWith("system.")
+    );
+    
+    const collections = userCollections.map(coll => ({
+      name: coll.name,
       count: null
     }));
 
+    collections.sort((a, b) => a.name.localeCompare(b.name));
+
     return NextResponse.json({ collections });
   } catch (error) {
-    console.error("Failed to list tables:", error);
-    return NextResponse.json({ error: "Failed to list tables" }, { status: 500 });
+    console.error("Failed to list collections:", error);
+    return NextResponse.json({ error: "Failed to list collections" }, { status: 500 });
   }
 }

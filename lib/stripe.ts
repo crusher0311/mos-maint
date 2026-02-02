@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 let stripeInstance: Stripe | null = null;
 
@@ -47,6 +47,7 @@ export type VinPackConfig = {
 };
 
 export type BillingSettings = {
+  // Tier-specific pricing (Starter, Plus, Elite)
   starterProductId: string;
   starterPriceId: string;
   starterPrice: number;
@@ -59,10 +60,12 @@ export type BillingSettings = {
   elitePriceId: string;
   elitePrice: number;
   eliteIncludedVins: number;
+  // Legacy mosPro fields (for backward compatibility)
   mosProProductId: string;
   mosProPriceId: string;
   mosProPrice: number;
   mosProIncludedVins: number;
+  // VIN packs
   vinPack100ProductId: string;
   vinPack100PriceId: string;
   vinPack100Price: number;
@@ -72,9 +75,11 @@ export type BillingSettings = {
   vinPack500ProductId: string;
   vinPack500PriceId: string;
   vinPack500Price: number;
+  // Onboarding
   onboardingProductId: string;
   onboardingPriceId: string;
   onboardingPrice: number;
+  // Trial settings
   trialDays: number;
   trialVinLimit: number;
   defaultVinLimit: number;
@@ -83,6 +88,7 @@ export type BillingSettings = {
 };
 
 const DEFAULT_BILLING_SETTINGS: BillingSettings = {
+  // Tier-specific pricing
   starterProductId: "",
   starterPriceId: "",
   starterPrice: 199.95,
@@ -95,10 +101,12 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   elitePriceId: "",
   elitePrice: 279.95,
   eliteIncludedVins: 300,
+  // Legacy mosPro fields
   mosProProductId: "",
   mosProPriceId: "",
   mosProPrice: 199,
   mosProIncludedVins: 300,
+  // VIN packs
   vinPack100ProductId: "",
   vinPack100PriceId: "",
   vinPack100Price: 39,
@@ -108,9 +116,11 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   vinPack500ProductId: "",
   vinPack500PriceId: "",
   vinPack500Price: 149,
+  // Onboarding
   onboardingProductId: "",
   onboardingPriceId: "",
   onboardingPrice: 495,
+  // Trial settings
   trialDays: 14,
   trialVinLimit: 10,
   defaultVinLimit: 300,
@@ -120,16 +130,15 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
 
 export async function getBillingSettings(): Promise<BillingSettings> {
   try {
-    const result = await sql`
-      SELECT value FROM platform_settings WHERE key = 'billing' LIMIT 1
-    `;
+    const db = await getDb();
+    const settings = await db.collection("platform_settings").findOne({ type: "billing" });
     
-    if (result.length === 0) {
+    if (!settings) {
       return DEFAULT_BILLING_SETTINGS;
     }
 
-    const settings = result[0].value || {};
     return {
+      // Tier-specific pricing
       starterProductId: settings.starterProductId || "",
       starterPriceId: settings.starterPriceId || "",
       starterPrice: settings.starterPrice ?? 199.95,
@@ -142,10 +151,12 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       elitePriceId: settings.elitePriceId || "",
       elitePrice: settings.elitePrice ?? 279.95,
       eliteIncludedVins: settings.eliteIncludedVins ?? 300,
+      // Legacy mosPro fields
       mosProProductId: settings.mosProProductId || "",
       mosProPriceId: settings.mosProPriceId || "",
       mosProPrice: settings.mosProPrice ?? 199,
       mosProIncludedVins: settings.mosProIncludedVins ?? 300,
+      // VIN packs
       vinPack100ProductId: settings.vinPack100ProductId || "",
       vinPack100PriceId: settings.vinPack100PriceId || "",
       vinPack100Price: settings.vinPack100Price ?? 39,
@@ -155,9 +166,11 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       vinPack500ProductId: settings.vinPack500ProductId || "",
       vinPack500PriceId: settings.vinPack500PriceId || "",
       vinPack500Price: settings.vinPack500Price ?? 149,
+      // Onboarding
       onboardingProductId: settings.onboardingProductId || "",
       onboardingPriceId: settings.onboardingPriceId || "",
       onboardingPrice: settings.onboardingPrice ?? 495,
+      // Trial settings
       trialDays: settings.trialDays ?? 14,
       trialVinLimit: settings.trialVinLimit ?? 10,
       defaultVinLimit: settings.defaultVinLimit ?? 300,
@@ -171,20 +184,12 @@ export async function getBillingSettings(): Promise<BillingSettings> {
 }
 
 export async function saveBillingSettings(settings: Partial<BillingSettings>): Promise<void> {
-  const existingResult = await sql`
-    SELECT value FROM platform_settings WHERE key = 'billing' LIMIT 1
-  `;
-  
-  const existingValue = existingResult.length > 0 ? existingResult[0].value || {} : {};
-  const mergedSettings = { ...existingValue, ...settings };
-  
-  await sql`
-    INSERT INTO platform_settings (key, value)
-    VALUES ('billing', ${JSON.stringify(mergedSettings)}::jsonb)
-    ON CONFLICT (key) DO UPDATE SET
-      value = ${JSON.stringify(mergedSettings)}::jsonb,
-      updated_at = NOW()
-  `;
+  const db = await getDb();
+  await db.collection("platform_settings").updateOne(
+    { type: "billing" },
+    { $set: { ...settings, type: "billing", updatedAt: new Date() } },
+    { upsert: true }
+  );
 }
 
 export function getBaseUrl() {
@@ -197,3 +202,39 @@ export function getBaseUrl() {
   }
   return "http://localhost:5000";
 }
+
+export async function fetchStripeProducts() {
+  const stripeClient = getStripe();
+  
+  const [products, prices] = await Promise.all([
+    stripeClient.products.list({ active: true, limit: 100 }),
+    stripeClient.prices.list({ active: true, limit: 100, expand: ["data.product"] }),
+  ]);
+
+  return {
+    products: products.data.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      metadata: p.metadata,
+      active: p.active,
+    })),
+    prices: prices.data.map(p => ({
+      id: p.id,
+      productId: typeof p.product === "string" ? p.product : p.product.id,
+      productName: typeof p.product === "object" && "name" in p.product ? p.product.name : null,
+      unitAmount: p.unit_amount,
+      currency: p.currency,
+      type: p.type,
+      recurring: p.recurring ? {
+        interval: p.recurring.interval,
+        intervalCount: p.recurring.interval_count,
+      } : null,
+      metadata: p.metadata,
+    })),
+  };
+}
+
+export const STRIPE_PRODUCTS = {
+  professional: "prod_TgrceDug91whUy",
+};

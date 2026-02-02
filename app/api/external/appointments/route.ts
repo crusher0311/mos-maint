@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,21 +42,20 @@ export const POST = createExternalEndpoint(
       );
     }
     
-    const shopRows = await sql`
-      SELECT id, settings FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
-    const shop = shopRows[0];
+    const db = await getDb();
+    
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { integrations: 1, tekmetric: 1, protractor: 1, protractorConnectionId: 1, timezone: 1, autoBooking: 1 } }
+    );
     
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
     
-    const settings = shop.settings || {};
-    const integrations = settings.integrations || [];
-    const tekmetricConfig = settings.tekmetric || {};
-    const protractorConfig = settings.protractor || {};
-    const hasTekmetric = (integrations.includes("tekmetric") || tekmetricConfig?.shopId) && tekmetricConfig?.shopId;
-    const hasProtractor = (integrations.includes("protractor") || protractorConfig?.connectionId || settings.protractorConnectionId);
+    const integrations = shop.integrations || [];
+    const hasTekmetric = (integrations.includes("tekmetric") || shop.tekmetric?.shopId) && shop.tekmetric?.shopId;
+    const hasProtractor = (integrations.includes("protractor") || shop.protractor?.connectionId || shop.protractorConnectionId);
     
     if (!hasTekmetric && !hasProtractor) {
       return NextResponse.json(
@@ -65,8 +64,8 @@ export const POST = createExternalEndpoint(
       );
     }
     
-    const shopTimezone = settings.timezone || "America/Chicago";
-    const appointmentDuration = settings.autoBooking?.appointmentDuration || 60;
+    const shopTimezone = shop.timezone || "America/Chicago";
+    const appointmentDuration = shop.autoBooking?.appointmentDuration || 60;
     
     const { getTimezoneOffset } = await import("@/lib/auto-booking/scheduler");
     const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}:00`);
@@ -84,7 +83,7 @@ export const POST = createExternalEndpoint(
         const { createAppointment } = await import("@/lib/tekmetric");
         const { findTekmetricCustomerAndVehicle } = await import("@/lib/auto-booking/scheduler");
         
-        const tekmetricShopId = Number(tekmetricConfig.shopId);
+        const tekmetricShopId = Number(shop.tekmetric.shopId);
         
         const { customerId: tekmetricCustomerId, vehicleId: tekmetricVehicleId } = 
           await findTekmetricCustomerAndVehicle(
@@ -130,10 +129,22 @@ export const POST = createExternalEndpoint(
         
         const appointment = await createAppointment(appointmentParams);
         
-        await sql`
-          INSERT INTO external_api_appointments (shop_id, external_id, provider, customer_id, customer_name, vehicle_id, vin, scheduled_date, scheduled_time, service_type, is_drop_off, ride_option, source, created_at)
-          VALUES (${String(shopId)}, ${String(appointment.id)}, 'tekmetric', ${customerId || null}, ${customerName || null}, ${vehicleId || null}, ${vin || null}, ${scheduledDate}, ${scheduledTime}, ${serviceType || null}, ${isDropOff}, ${rideOption}, 'external_api', NOW())
-        `;
+        await db.collection("external_api_appointments").insertOne({
+          shopId,
+          externalId: String(appointment.id),
+          provider: "tekmetric",
+          customerId,
+          customerName,
+          vehicleId,
+          vin,
+          scheduledDate,
+          scheduledTime,
+          serviceType,
+          isDropOff,
+          rideOption,
+          createdAt: new Date(),
+          source: "external_api",
+        });
         
         return NextResponse.json({
           success: true,
@@ -172,10 +183,21 @@ export const POST = createExternalEndpoint(
         });
         
         if (result.ok && result.appointmentId) {
-          await sql`
-            INSERT INTO external_api_appointments (shop_id, external_id, provider, customer_id, customer_name, vehicle_id, vin, scheduled_date, scheduled_time, service_type, is_drop_off, source, created_at)
-            VALUES (${String(shopId)}, ${result.appointmentId}, 'protractor', ${customerId || null}, ${customerName || null}, ${vehicleId || null}, ${vin || null}, ${scheduledDate}, ${scheduledTime}, ${serviceType || null}, ${isDropOff}, 'external_api', NOW())
-          `;
+          await db.collection("external_api_appointments").insertOne({
+            shopId,
+            externalId: result.appointmentId,
+            provider: "protractor",
+            customerId,
+            customerName,
+            vehicleId,
+            vin,
+            scheduledDate,
+            scheduledTime,
+            serviceType,
+            isDropOff,
+            createdAt: new Date(),
+            source: "external_api",
+          });
           
           return NextResponse.json({
             success: true,
@@ -209,16 +231,17 @@ export const POST = createExternalEndpoint(
 export const GET = createExternalEndpoint(
   "appointments:read",
   async (req: NextRequest, { shopId }) => {
+    const db = await getDb();
+    
     const limit = Number(req.nextUrl.searchParams.get("limit")) || 50;
     const skip = Number(req.nextUrl.searchParams.get("skip")) || 0;
     
-    const appointments = await sql`
-      SELECT * FROM external_api_appointments 
-      WHERE shop_id = ${String(shopId)}
-      ORDER BY created_at DESC
-      OFFSET ${skip}
-      LIMIT ${limit}
-    `;
+    const appointments = await db.collection("external_api_appointments")
+      .find({ shopId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
     
     return NextResponse.json({ appointments });
   }

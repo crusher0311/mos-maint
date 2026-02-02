@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,16 +13,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ shops: {} });
     }
     
-    const shopIdStrs = shopIds.map(String);
-    const shops = await sql`
-      SELECT shop_id, name, location_identifier FROM shops WHERE shop_id = ANY(${shopIdStrs})
-    `;
+    const db = await getDb();
+    const shops = await db.collection("shops").find(
+      { shopId: { $in: shopIds } },
+      { projection: { shopId: 1, name: 1, locationIdentifier: 1 } }
+    ).toArray();
     
     const lookup: Record<number, { name: string; location?: string }> = {};
     for (const shop of shops) {
-      lookup[Number((shop as any).shop_id)] = {
-        name: (shop as any).name || `Shop ${(shop as any).shop_id}`,
-        location: (shop as any).location_identifier || undefined,
+      lookup[shop.shopId] = {
+        name: shop.name || `Shop ${shop.shopId}`,
+        location: shop.locationIdentifier || undefined,
       };
     }
     

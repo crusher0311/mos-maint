@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
@@ -8,7 +8,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
-import { NormalizedIngestionServicePg } from "@/lib/normalized-ingestion-pg";
+import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(req: NextRequest) {
+  // Check if Protractor sync is disabled (e.g., on Render where IP isn't whitelisted)
   if (process.env.DISABLE_PROTRACTOR_SYNC === "true") {
     return NextResponse.json({ 
       ok: true, 
@@ -30,22 +31,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const db = await getDb();
   const startTime = Date.now();
 
   try {
-    const shops = await sql`
-      SELECT * FROM shops 
-      WHERE (protractor->>'apiKey' IS NOT NULL AND protractor->>'apiKey' != '')
-         OR (protractor_api_key IS NOT NULL AND protractor_api_key != '')
-         OR (protractor->>'connectionId' IS NOT NULL AND protractor->>'connectionId' != '')
-         OR (protractor_connection_id IS NOT NULL AND protractor_connection_id != '')
-    `;
+    const shops = await db.collection("shops").find({
+      $or: [
+        { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
+        { "protractorApiKey": { $exists: true, $nin: [null, ""] } },
+        { "protractor.connectionId": { $exists: true, $nin: [null, ""] } },
+        { "protractorConnectionId": { $exists: true, $nin: [null, ""] } }
+      ]
+    }).toArray();
 
     const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
     const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
 
-    for (const shop of shops as any[]) {
-      const shopId = Number(shop.shop_id);
+    for (const shop of shops) {
+      const shopId = Number(shop.shopId);
       const config = await resolveProtractorConfig(shopId);
       
       if (!config.configured) continue;
@@ -94,6 +97,7 @@ export async function GET(req: NextRequest) {
           let vin = wo.ServiceItem?.VIN?.toUpperCase() || (wo as any).VIN?.toUpperCase();
           let vehicle = wo.ServiceItem;
           
+          // Fallback: If VIN is missing but ServiceItemID exists, fetch vehicle details separately
           if (!vin && wo.ServiceItemID) {
             try {
               const vehicleResult = await fetchVehicleById(shopId, wo.ServiceItemID);
@@ -120,13 +124,13 @@ export async function GET(req: NextRequest) {
                 workOrderId: String(wo.ID),
                 workOrderNumber: wo.WorkOrderNumber,
                 status: stage || "Open",
-                addedAt: new Date().toISOString(),
+                addedAt: new Date(),
               };
 
-              const existingVehicleRows = await sql`
-                SELECT * FROM vehicles WHERE shop_id = ${String(shopId)} AND vin = ${vin}
-              `;
-              const existingVehicle = existingVehicleRows[0] as any;
+              const existingVehicle = await db.collection("vehicles").findOne({
+                $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+                vin,
+              });
 
               if (existingVehicle) {
                 const existingSources = existingVehicle.status?.sources || [];
@@ -142,77 +146,89 @@ export async function GET(req: NextRequest) {
                   updatedSources = [...existingSources, workOrderSource];
                 }
 
-                const statusData = {
-                  active: true,
-                  sources: updatedSources,
-                  updatedAt: new Date().toISOString(),
-                };
-
-                await sql`
-                  UPDATE vehicles SET
-                    year = COALESCE(${vehicle.Year ?? null}, year),
-                    make = COALESCE(${vehicle.Make ?? null}, make),
-                    model = COALESCE(${vehicle.Model ?? null}, model),
-                    license_plate = COALESCE(${vehicle.LicensePlate ?? null}, license_plate),
-                    last_mileage = COALESCE(${currentOdometer ?? null}, last_mileage),
-                    protractor_id = COALESCE(${vehicle.ID ?? null}, protractor_id),
-                    status = ${JSON.stringify(statusData)}::jsonb,
-                    updated_at = NOW()
-                  WHERE id = ${existingVehicle.id}
-                `;
+                await db.collection("vehicles").updateOne(
+                  { _id: existingVehicle._id },
+                  {
+                    $set: {
+                      year: vehicle.Year,
+                      make: vehicle.Make,
+                      model: vehicle.Model,
+                      license: vehicle.LicensePlate,
+                      lastMileage: currentOdometer,
+                      updatedAt: new Date(),
+                      protractorId: vehicle.ID,
+                      "status.active": true,
+                      "status.sources": updatedSources,
+                      "status.updatedAt": new Date(),
+                    },
+                  }
+                );
               } else {
-                const statusData = {
-                  active: true,
-                  sources: [workOrderSource],
-                  updatedAt: new Date().toISOString(),
-                };
-
-                await sql`
-                  INSERT INTO vehicles (
-                    shop_id, vin, year, make, model, license_plate, last_mileage, protractor_id, status,
-                    created_at, updated_at
-                  ) VALUES (
-                    ${String(shopId)}, ${vin}, ${vehicle.Year ?? null}, ${vehicle.Make ?? null}, ${vehicle.Model ?? null},
-                    ${vehicle.LicensePlate ?? null}, ${currentOdometer ?? null}, ${vehicle.ID ?? null},
-                    ${JSON.stringify(statusData)}::jsonb, NOW(), NOW()
-                  )
-                `;
+                await db.collection("vehicles").insertOne({
+                  shopId: String(shopId),
+                  vin,
+                  year: vehicle.Year,
+                  make: vehicle.Make,
+                  model: vehicle.Model,
+                  license: vehicle.LicensePlate,
+                  lastMileage: currentOdometer,
+                  protractorId: vehicle.ID,
+                  status: {
+                    active: true,
+                    sources: [workOrderSource],
+                    updatedAt: new Date(),
+                  },
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                });
               }
               vehiclesUpdated++;
               shopSyncedVins.push(vin);
             }
             
             if (INVOICED_STAGES.some(s => stage.toLowerCase().includes(s.toLowerCase()))) {
-              await sql`
-                UPDATE protractor_work_orders SET
-                  workflow_stage = 'Invoiced',
-                  status = 'Invoiced',
-                  closed_at = NOW(),
-                  updated_at = NOW()
-                WHERE shop_id = ${String(shopId)} AND (work_order_guid = ${wo.ID} OR data->>'ID' = ${wo.ID})
-              `;
+              await db.collection("protractor_work_orders").updateMany(
+                {
+                  shopId: { $in: [String(shopId), Number(shopId)] },
+                  $or: [{ workOrderGuid: wo.ID }, { "data.ID": wo.ID }]
+                },
+                {
+                  $set: {
+                    workflowStage: "Invoiced",
+                    status: "Invoiced",
+                    closedAt: new Date(),
+                    updatedAt: new Date()
+                  }
+                }
+              );
             }
           }
         }
 
-        const cachedWOs = await sql`
-          SELECT * FROM protractor_work_orders
-          WHERE shop_id = ${String(shopId)}
-            AND (workflow_stage IS NULL OR workflow_stage = '' OR workflow_stage NOT IN ('Invoiced', 'Invoice', 'Void', 'Closed', 'Complete', 'Completed'))
-        `;
+        const cachedWOs = await db.collection("protractor_work_orders").find({
+          shopId: { $in: [String(shopId), Number(shopId)] },
+          $or: [
+            { workflowStage: { $nin: INVOICED_STAGES } },
+            { workflowStage: null },
+            { workflowStage: "" }
+          ]
+        }).toArray();
 
         let removedCount = 0;
-        for (const cached of cachedWOs as any[]) {
-          const guid = cached.work_order_guid || cached.work_order_id || cached.data?.ID;
+        for (const cached of cachedWOs) {
+          const guid = cached.workOrderGuid || cached.workOrderId || cached.data?.ID;
           if (guid && !activeGuids.has(guid)) {
-            await sql`
-              UPDATE protractor_work_orders SET
-                workflow_stage = 'Invoiced',
-                status = 'Invoiced',
-                closed_at = NOW(),
-                updated_at = NOW()
-              WHERE id = ${cached.id}
-            `;
+            await db.collection("protractor_work_orders").updateOne(
+              { _id: cached._id },
+              {
+                $set: {
+                  workflowStage: "Invoiced",
+                  status: "Invoiced",
+                  closedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              }
+            );
             removedCount++;
           }
         }
@@ -223,14 +239,16 @@ export async function GET(req: NextRequest) {
           syncedVinsPerShop.push({ shopId, vins: shopSyncedVins });
         }
         
+        // Dual-write to normalized collections (pass full work order payloads)
         try {
           const workOrdersForNormalized = detailedWOs.filter(wo => wo.ServiceItem?.VIN);
           
           if (workOrdersForNormalized.length > 0) {
-            const shopData = await sql`SELECT enterprise_id FROM shops WHERE shop_id = ${String(shopId)}`;
-            const enterpriseId = (shopData[0] as any)?.enterprise_id as string | undefined;
+            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+            const enterpriseId = shop?.enterpriseId as string | undefined;
             
-            const ingestionService = new NormalizedIngestionServicePg(
+            const ingestionService = new NormalizedIngestionService(
+              db,
               'protractor',
               shopId,
               enterpriseId,
@@ -251,6 +269,7 @@ export async function GET(req: NextRequest) {
     const duration = Date.now() - startTime;
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
 
+    // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     console.log(`[Cron] Starting Protractor pregeneration, CRON_SECRET set: ${!!CRON_SECRET}`);
     if (CRON_SECRET) {
       try {
@@ -260,24 +279,33 @@ export async function GET(req: NextRequest) {
         
         console.log(`[Cron] Protractor pregeneration baseUrl: ${baseUrl}`);
         
-        const protractorShops = await sql`
-          SELECT shop_id, protractor, protractor_api_key, protractor_connection_id FROM shops
-          WHERE (protractor->>'apiKey' IS NOT NULL AND protractor->>'apiKey' != '')
-             OR (protractor_api_key IS NOT NULL AND protractor_api_key != '')
-             OR (protractor->>'connectionId' IS NOT NULL AND protractor->>'connectionId' != '')
-             OR (protractor_connection_id IS NOT NULL AND protractor_connection_id != '')
-        `;
+        // Get fresh db connection for pregeneration (original may be stale after 8+ min sync)
+        const freshDb = await getDb();
+        
+        // Get all Protractor shops - use same query as sync to include legacy field names
+        const protractorShops = await freshDb.collection("shops")
+          .find({ 
+            $or: [
+              { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
+              { "protractorApiKey": { $exists: true, $nin: [null, ""] } },
+              { "protractor.connectionId": { $exists: true, $nin: [null, ""] } },
+              { "protractorConnectionId": { $exists: true, $nin: [null, ""] } }
+            ]
+          })
+          .project({ _id: 0, shopId: 1, protractor: 1, protractorApiKey: 1, protractorConnectionId: 1 })
+          .toArray();
         
         console.log(`[Cron] Found ${protractorShops.length} Protractor shops for pregeneration`);
         
         const INTERNAL_SECRET = process.env.INTERNAL_WORKER_SECRET || "mos-prefetch-worker-2024";
         
         let triggeredCount = 0;
-        for (const shop of protractorShops as any[]) {
-          const shopId = shop.shop_id;
+        for (const shop of protractorShops) {
+          const shopId = shop.shopId;
           if (!shopId) continue;
           
           try {
+            // Use the internal prefetch-vehicles endpoint (handles vehicle priority + mileage filtering)
             const vehiclesRes = await fetch(`${baseUrl}/api/internal/prefetch-vehicles?shopId=${shopId}&limit=50`, {
               headers: { 'x-internal-secret': INTERNAL_SECRET }
             });

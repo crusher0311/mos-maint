@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db/postgres";
+import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
 import { getBrowser } from "@/lib/browser-pool";
 import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
@@ -321,12 +321,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const shopRows = await sql`
-      SELECT keytag_config, name FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { keytagConfig: 1, name: 1 } }
+    );
 
-    const shop = shopRows[0];
-    const config: KeytagConfig = (shop?.keytag_config as any) || {
+    const config: KeytagConfig = shop?.keytagConfig || {
       enabled: true,
       fontStyles: {
         customerName: { bold: true, size: 14 },
@@ -384,11 +385,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const shopRows = await sql`
-      SELECT keytag_config FROM shops WHERE shop_id = ${String(shopId)} LIMIT 1
-    `;
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { keytagConfig: 1 } }
+    );
 
-    const config: KeytagConfig = (shopRows[0]?.keytag_config as any) || {
+    const config: KeytagConfig = shop?.keytagConfig || {
       fontStyles: {
         customerName: { bold: true, size: 14 },
         vehicleInfo: { bold: false, size: 12 },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import sql from "@/lib/db/postgres";
 import crypto from "node:crypto";
 import { sendEmail, makeInviteEmail } from "@/lib/email";
 
@@ -28,22 +28,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
 
-  const shopId = String(sess.shopId);
-  const shopResult = await sql`
-    SELECT name, location_identifier FROM shops WHERE shop_id = ${shopId} LIMIT 1
-  `;
-  const shop = shopResult[0];
+  const db = await getDb();
+  const setup = db.collection("setup_tokens");
+
+  const shop = await db.collection("shops").findOne({ shopId: sess.shopId });
   const shopName = shop?.name || `Shop #${sess.shopId}`;
-  const locationIdentifier = shop?.location_identifier || null;
+  const locationIdentifier = shop?.locationIdentifier || null;
 
   const token = crypto.randomBytes(16).toString("hex");
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-  await sql`
-    INSERT INTO setup_tokens (token, shop_id, email_lower, role, created_at, expires_at)
-    VALUES (${token}, ${shopId}, ${emailInput}, ${inviteRole}, ${now}, ${expiresAt})
-  `;
+  await setup.insertOne({
+    token,
+    shopId: sess.shopId,
+    emailLower: emailInput,
+    role: inviteRole,
+    createdAt: now,
+    expiresAt,
+  });
 
   const base =
     process.env.NEXT_PUBLIC_BASE_URL ||
@@ -69,3 +72,4 @@ async function safeJson(req: NextRequest) {
     return null;
   }
 }
+
