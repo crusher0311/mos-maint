@@ -6,7 +6,7 @@ import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/aut
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
-import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices } from "@/lib/integrations/protractor";
+import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices, fetchWorkOrdersForVehicle as fetchProtractorWorkOrders } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -321,7 +321,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     { $limit: 20 }
   ]).toArray();
 
-  // Also fetch Protractor invoices if shop uses Protractor
+  // Also fetch Protractor invoices/work orders if shop uses Protractor
   let protractorRos: typeof eventRos = [];
   const protractorVehicle = await db.collection("protractor_vehicles").findOne({
     $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
@@ -329,22 +329,63 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   });
   
   if (protractorVehicle?.protractorId) {
+    const serviceItemId = String(protractorVehicle.protractorId);
+    
     try {
-      const invoiceResult = await fetchProtractorInvoices(shopId, String(protractorVehicle.protractorId));
-      if (invoiceResult.ok && invoiceResult.invoices) {
+      // Try invoices first (completed work orders)
+      const invoiceResult = await fetchProtractorInvoices(shopId, serviceItemId);
+      if (invoiceResult.ok && invoiceResult.invoices && invoiceResult.invoices.length > 0) {
         protractorRos = invoiceResult.invoices.map((inv: any) => ({
           _id: inv.ID || inv.InvoiceNumber,
-          roNumber: inv.InvoiceNumber || inv.ID,
-          status: inv.Posted ? "Posted" : "Open",
-          mileage: inv.Usage || inv.Mileage || null,
-          updatedAt: inv.InvoiceDate ? new Date(inv.InvoiceDate) : new Date(),
-          createdAt: inv.InvoiceDate ? new Date(inv.InvoiceDate) : new Date(),
+          roNumber: inv.InvoiceNumber || inv.WorkOrderNumber || inv.ID,
+          status: inv.Completed ? "Completed" : (inv.Posted ? "Posted" : "Open"),
+          mileage: inv.OutUsage || inv.InUsage || inv.Usage || null,
+          updatedAt: inv.InvoiceTime ? new Date(inv.InvoiceTime) : (inv.LastModifiedTime ? new Date(inv.LastModifiedTime) : new Date()),
+          createdAt: inv.ScheduledTime ? new Date(inv.ScheduledTime) : new Date(),
           source: "protractor"
         }));
         console.log(`[Protractor] Found ${protractorRos.length} invoices for vehicle ${vin}`);
       }
+      
+      // Also try work orders API if no invoices found
+      if (protractorRos.length === 0) {
+        const woResult = await fetchProtractorWorkOrders(shopId, serviceItemId);
+        if (woResult.ok && woResult.workOrders && woResult.workOrders.length > 0) {
+          protractorRos = woResult.workOrders.map((wo: any) => ({
+            _id: wo.ID || wo.WorkOrderNumber,
+            roNumber: wo.InvoiceNumber || wo.WorkOrderNumber || wo.ID,
+            status: wo.Completed ? "Completed" : (wo.WorkflowStage || wo.Status || "Open"),
+            mileage: wo.OutUsage || wo.InUsage || null,
+            updatedAt: wo.InvoiceTime ? new Date(wo.InvoiceTime) : (wo.LastModifiedTime ? new Date(wo.LastModifiedTime) : new Date()),
+            createdAt: wo.ScheduledTime ? new Date(wo.ScheduledTime) : new Date(),
+            source: "protractor"
+          }));
+          console.log(`[Protractor] Found ${protractorRos.length} work orders for vehicle ${vin}`);
+        }
+      }
+      
+      // Fallback: check cached work orders in MongoDB
+      if (protractorRos.length === 0) {
+        const cachedWOs = await db.collection("protractor_work_orders").find({
+          $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+          serviceItemId: serviceItemId
+        }).sort({ fetchedAt: -1 }).limit(20).toArray();
+        
+        if (cachedWOs.length > 0) {
+          protractorRos = cachedWOs.map((wo: any) => ({
+            _id: wo.workOrderId || wo._id,
+            roNumber: wo.invoiceNumber || wo.workOrderNumber || wo.workOrderId,
+            status: wo.completed ? "Completed" : (wo.workflowStage || wo.status || "Open"),
+            mileage: wo.outUsage || wo.inUsage || null,
+            updatedAt: wo.fetchedAt || new Date(),
+            createdAt: wo.scheduledTime ? new Date(wo.scheduledTime) : new Date(),
+            source: "protractor-cache"
+          }));
+          console.log(`[Protractor] Found ${protractorRos.length} cached work orders for vehicle ${vin}`);
+        }
+      }
     } catch (error) {
-      console.log(`[Protractor] Invoice fetch error for ${vin}:`, error);
+      console.log(`[Protractor] RO fetch error for ${vin}:`, error);
     }
   }
 
