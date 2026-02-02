@@ -176,8 +176,9 @@ async function getShopsNeedingBackfill(): Promise<{ shopId: number; name: string
 
 async function backfillShopChunk(
   shopId: number, 
-  tekmetricShopId: number
-): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
+  tekmetricShopId: number,
+  isHotStart: boolean = false
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number; phase: string }> {
   const progressRows = await sql`SELECT * FROM tekmetric_backfill_progress WHERE shop_id = ${String(shopId)}`;
   let progress = progressRows[0] as any;
   
@@ -200,40 +201,53 @@ async function backfillShopChunk(
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
+  // For hot-start: only go back 30 days, then we're done with hot-start phase
+  // For historical: go back YEARS_TO_BACKFILL years
   const oldestDate = new Date();
-  oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+  if (isHotStart) {
+    oldestDate.setDate(oldestDate.getDate() - HOT_START_DAYS);
+  } else {
+    oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+  }
   oldestDate.setHours(0, 0, 0, 0);
   
   let chunkEnd: Date;
+  const phase = isHotStart ? 'hot_start' : 'historical';
   
-  if (progress?.current_chunk_end && progress?.logic_version === 2) {
+  if (progress?.current_chunk_end && progress?.logic_version === 2 && progress?.phase === phase) {
     chunkEnd = new Date(progress.current_chunk_end);
   } else {
     chunkEnd = new Date(today);
     await sql`
-      INSERT INTO tekmetric_backfill_progress (shop_id, started_at, current_chunk_end, completed, logic_version, updated_at)
-      VALUES (${String(shopId)}, NOW(), ${chunkEnd.toISOString()}, FALSE, 2, NOW())
+      INSERT INTO tekmetric_backfill_progress (shop_id, started_at, current_chunk_end, completed, logic_version, phase, updated_at)
+      VALUES (${String(shopId)}, NOW(), ${chunkEnd.toISOString()}, FALSE, 2, ${phase}, NOW())
       ON CONFLICT (shop_id) DO UPDATE SET
         started_at = NOW(),
         current_chunk_end = EXCLUDED.current_chunk_end,
         completed = FALSE,
         logic_version = 2,
+        phase = EXCLUDED.phase,
         updated_at = NOW()
     `;
   }
 
+  // For hot-start, use larger chunk (entire 30 days in one go)
   const chunkStart = new Date(chunkEnd);
-  chunkStart.setMonth(chunkStart.getMonth() - MONTHS_PER_RUN);
+  if (isHotStart) {
+    chunkStart.setDate(chunkStart.getDate() - HOT_START_DAYS);
+  } else {
+    chunkStart.setMonth(chunkStart.getMonth() - MONTHS_PER_RUN);
+  }
   if (chunkStart < oldestDate) {
     chunkStart.setTime(oldestDate.getTime());
   }
 
   if (chunkEnd <= oldestDate) {
     await sql`
-      UPDATE tekmetric_backfill_progress SET completed = TRUE, completed_at = NOW(), updated_at = NOW()
+      UPDATE tekmetric_backfill_progress SET completed = TRUE, completed_at = NOW(), phase = ${phase}, updated_at = NOW()
       WHERE shop_id = ${String(shopId)}
     `;
-    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0 };
+    return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0, phase };
   }
 
   const startStr = chunkStart.toISOString();
@@ -491,7 +505,8 @@ async function backfillShopChunk(
     skipped: skippedUnchanged,
     complete: isComplete,
     message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged, ${normalizedCount} normalized`,
-    normalizedCount
+    normalizedCount,
+    phase,
   };
 }
 
@@ -539,7 +554,7 @@ export async function GET(req: NextRequest) {
         const phase = shop.needsHotStart ? 'hot_start' : 'historical';
         console.log(`[Tekmetric Backfill] Processing: ${shop.name} (Shop ${shop.shopId}) [${phase}]`);
         
-        const result = await backfillShopChunk(shop.shopId, shop.tekmetricShopId);
+        const result = await backfillShopChunk(shop.shopId, shop.tekmetricShopId, shop.needsHotStart);
         
         // If this was a hot-start shop and we've processed at least some data, mark it complete
         if (shop.needsHotStart && result.jobsIndexed > 0) {
