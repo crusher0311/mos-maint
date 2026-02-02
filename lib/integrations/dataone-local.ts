@@ -299,15 +299,24 @@ export async function getVehicleRecallsLocal(vin: string): Promise<{
     const vehicleId = decoded.decoded.vehicle_id;
     
     const recalls = await sql<VehicleRecall[]>`
-      SELECT DISTINCT r.nhtsa_recall_id, r.nhtsa_campaign_number, r.report_manufacturer,
-             r.component_description, r.defect_summary, r.consequence_summary,
-             r.corrective_action_summary, r.potential_units_affected,
-             r.report_received_date, r.record_creation_date,
-             r.regulation_part_number, r.fmvvs_number
+      SELECT 
+             MIN(r.nhtsa_recall_id) as nhtsa_recall_id,
+             r.nhtsa_campaign_number, 
+             r.report_manufacturer,
+             STRING_AGG(DISTINCT r.component_description, ' | ' ORDER BY r.component_description) as component_description,
+             MAX(r.defect_summary) as defect_summary, 
+             MAX(r.consequence_summary) as consequence_summary,
+             MAX(r.corrective_action_summary) as corrective_action_summary, 
+             MAX(r.potential_units_affected) as potential_units_affected,
+             MAX(r.report_received_date) as report_received_date, 
+             MAX(r.record_creation_date) as record_creation_date,
+             MAX(r.regulation_part_number) as regulation_part_number, 
+             MAX(r.fmvvs_number) as fmvvs_number
       FROM dataone_def_nhtsa_recall r
       JOIN dataone_lkp_veh_nhtsa_recall vr ON r.nhtsa_recall_id = vr.nhtsa_recall_id
       WHERE vr.vehicle_id = ${vehicleId}
-      ORDER BY r.record_creation_date DESC
+      GROUP BY r.nhtsa_campaign_number, r.report_manufacturer
+      ORDER BY MAX(r.record_creation_date) DESC
     `;
     
     // Mark safety-critical recalls

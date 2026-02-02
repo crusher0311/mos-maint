@@ -1,0 +1,61 @@
+⚠️ SAFETY
+21V264000
+ENGINE AND ENGINE COOLING:EXHAUST SYSTEM:MANIFOLD/HEADER/MUFFLER/TAIL PIPE
+Risk: A short circuit in the ignition coils may cause a stall, increasing the risk of a crash.
+View fix details
+Fix: Subaru will notify owners, and dealers will update the ECM software, replace the ignition coils and, if necessary, the front exhaust pipe, free of charge. Owner notification letters were mailed beginning June 1, 2021. Owners can contact Subaru customer service at 1-844-373-6614. Subaru's number for this recall is WRE-21. Note: This recall includes all vehicles previously repaired under Recall 19V743.
+466,205 vehicles affected • Issued 4/15/2021
+⚠️ SAFETY
+21V264000
+ELECTRICAL SYSTEM:IGNITION
+Risk: A short circuit in the ignition coils may cause a stall, increasing the risk of a crash.
+View fix details
+466,205 vehicles affected • Issued 4/15/2021
+⚠️ SAFETY
+21V264000
+ELECTRICAL SYSTEM:SOFTWARE
+Risk: A short circuit in the ignition coils may cause a stall, increasing the risk of a crash.
+View fix details
+466,205 vehicles affected • Issued 4/15/2021
+⚠️ SAFETY
+21V264000
+ENGINE AND ENGINE COOLING:ENGINE:ENGINE CONTROL MODULE (ECU/ECM):SOFTWARE
+Risk: A short circuit in the ignition coils may cause a stall, increasing the risk of a crash.
+View fix details
+466,205 vehicles affected • Issued 4/15/2021
+⚠️ SAFETY
+21V263000
+SUSPENSION:REAR
+Risk: Missing bolts may allow the rear stabilizer bracket to shift, increasing the risk of a crash.
+View fix details
+408,271 vehicles affected • Issued 4/15/2021
+⚠️ SAFETY
+19V744000
+ENGINE AND ENGINE COOLING:EXHAUST SYSTEM:EMISSION CONTROL:CRANKCASE (PCV)
+Risk: An unexpected loss of power while driving can increase the risk of a crash.
+View fix details
+205,000 vehicles affected • Issued 10/18/2019
+⚠️ SAFETY
+19V743000
+ELECTRICAL SYSTEM:IGNITION
+Risk: If a short circuit occurs while driving, the vehicle may stall, increasing the risk of a crash.
+View fix details
+466,205 vehicles affected • Issued 10/18/2019
+⚠️ SAFETY
+19V743000
+ELECTRICAL SYSTEM:SOFTWARE
+Risk: If a short circuit occurs while driving, the vehicle may stall, increasing the risk of a crash.
+View fix details
+466,205 vehicles affected • Issued 10/18/2019
+⚠️ SAFETY
+17V701000
+VEHICLE SPEED CONTROL:ACCELERATOR PEDAL
+Risk: If the floor mat moves out of position and interferes with the accelerator or brake pedal operation, it can increase the risk of a crash.
+View fix details
+2,367 vehicles affected • Issued 11/8/2017
+⚠️ SAFETY
+17V701000
+SERVICE BRAKES
+Risk: If the floor mat moves out of position and interferes with the accelerator or brake pedal operation, it can increase the risk of a crash.
+View fix details
+2,367 vehicles affected • Issued 11/8/2017
