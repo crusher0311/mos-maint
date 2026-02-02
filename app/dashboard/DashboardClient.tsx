@@ -124,14 +124,13 @@ function setCachedDashboardData(data: DashboardData) {
 }
 
 export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
-  // Try to use cached data first for instant display
-  const cachedData = getCachedDashboardData();
-  const startingData = cachedData?.rows?.length ? cachedData : initialData;
-  
-  const [data, setData] = useState(startingData);
+  // Always start with initialData to avoid hydration mismatch
+  // Cached data will be loaded in useEffect after hydration
+  const [data, setData] = useState(initialData);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!startingData?.rows?.length);
+  const [initialLoading, setInitialLoading] = useState(!initialData?.rows?.length);
+  const [hydrated, setHydrated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
@@ -792,8 +791,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   useEffect(() => {
-    // Always fetch fresh data on mount to ensure SSR and client are in sync
-    // This prevents stale data from showing after browser refresh
+    // After hydration, check if we have cached data for instant display
+    setHydrated(true);
+    const cached = getCachedDashboardData();
+    if (cached?.rows?.length && !initialData?.rows?.length) {
+      // Show cached data immediately while we fetch fresh data
+      setData(cached);
+      setInitialLoading(false);
+    }
+    // Always fetch fresh data to ensure accuracy
     loadData(1, "", false);
   }, []);
 
