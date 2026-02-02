@@ -6,7 +6,7 @@ import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/aut
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
-import { resolveProtractorConfig, fetchAllActiveInspections } from "@/lib/integrations/protractor";
+import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 
 export const runtime = "nodejs";
@@ -321,7 +321,45 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     { $limit: 20 }
   ]).toArray();
 
-  const ros = eventRos;
+  // Also fetch Protractor invoices if shop uses Protractor
+  let protractorRos: typeof eventRos = [];
+  const protractorVehicle = await db.collection("protractor_vehicles").findOne({
+    $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+    vin: vin.toUpperCase()
+  });
+  
+  if (protractorVehicle?.protractorId) {
+    try {
+      const invoiceResult = await fetchProtractorInvoices(shopId, String(protractorVehicle.protractorId));
+      if (invoiceResult.ok && invoiceResult.invoices) {
+        protractorRos = invoiceResult.invoices.map((inv: any) => ({
+          _id: inv.ID || inv.InvoiceNumber,
+          roNumber: inv.InvoiceNumber || inv.ID,
+          status: inv.Posted ? "Posted" : "Open",
+          mileage: inv.Usage || inv.Mileage || null,
+          updatedAt: inv.InvoiceDate ? new Date(inv.InvoiceDate) : new Date(),
+          createdAt: inv.InvoiceDate ? new Date(inv.InvoiceDate) : new Date(),
+          source: "protractor"
+        }));
+        console.log(`[Protractor] Found ${protractorRos.length} invoices for vehicle ${vin}`);
+      }
+    } catch (error) {
+      console.log(`[Protractor] Invoice fetch error for ${vin}:`, error);
+    }
+  }
+
+  // Merge AutoFlow and Protractor ROs, dedupe by roNumber, sort by date
+  const allRos = [...eventRos, ...protractorRos];
+  const rosMap = new Map<string, typeof allRos[0]>();
+  for (const ro of allRos) {
+    const key = String(ro.roNumber);
+    if (!rosMap.has(key) || (ro.updatedAt > rosMap.get(key)!.updatedAt)) {
+      rosMap.set(key, ro);
+    }
+  }
+  const ros = Array.from(rosMap.values()).sort((a, b) => 
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  ).slice(0, 20);
 
   const latestRoNumber = ros[0]?.roNumber ?? null;
 
