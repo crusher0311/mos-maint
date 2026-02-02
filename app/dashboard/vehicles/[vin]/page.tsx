@@ -48,7 +48,7 @@ function StatusChip({ value }: { value: unknown }) {
   return <>{s || ""}</>;
 }
 
-/* ---------- resolve current miles: RO → AutoFlow → vehicle ---------- */
+/* ---------- resolve current miles: RO → AutoFlow → vehicle → CARFAX ---------- */
 async function getLatestMilesForVin(vin: string): Promise<number | null> {
   const vinUpper = String(vin || "").toUpperCase();
   const toPos = (v: unknown) => {
@@ -95,7 +95,16 @@ async function getLatestMilesForVin(vin: string): Promise<number | null> {
   const veh = vehResult[0];
   const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.last_mileage);
 
-  return mRO ?? mAF ?? mVeh ?? null;
+  // Fallback to CARFAX lastReportedMileage
+  const carfaxResult = await sql`
+    SELECT (report_data->>'lastReportedMileage')::numeric as mileage
+    FROM carfax_reports
+    WHERE vin = ${vinUpper}
+    LIMIT 1
+  `;
+  const mCarfax = toPos(carfaxResult[0]?.mileage);
+
+  return mRO ?? mAF ?? mVeh ?? mCarfax ?? null;
 }
 
 /* ---------- page ---------- */
