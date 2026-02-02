@@ -48,7 +48,7 @@ function StatusChip({ value }: { value: unknown }) {
   return <>{s || ""}</>;
 }
 
-/* ---------- resolve current miles: RO → AutoFlow → vehicle → CARFAX ---------- */
+/* ---------- resolve current miles: RO → Protractor → AutoFlow → vehicle → CARFAX ---------- */
 async function getLatestMilesForVin(vin: string): Promise<number | null> {
   const vinUpper = String(vin || "").toUpperCase();
   const toPos = (v: unknown) => {
@@ -57,7 +57,7 @@ async function getLatestMilesForVin(vin: string): Promise<number | null> {
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  // Latest RO mileage (join with vehicles to get by VIN)
+  // Latest RO mileage from normalized work_orders (join with vehicles to get by VIN)
   const roResult = await sql`
     SELECT w.odometer_in as mileage 
     FROM work_orders w
@@ -67,6 +67,16 @@ async function getLatestMilesForVin(vin: string): Promise<number | null> {
     LIMIT 1
   `;
   const mRO = toPos(roResult[0]?.mileage);
+
+  // Latest Protractor work order mileage
+  const protResult = await sql`
+    SELECT mileage
+    FROM protractor_work_orders
+    WHERE vin = ${vinUpper}
+    ORDER BY created_date DESC NULLS LAST
+    LIMIT 1
+  `;
+  const mProt = toPos(protResult[0]?.mileage);
 
   // Latest AF or manual close event with mileage
   const afResult = await sql`
@@ -104,7 +114,7 @@ async function getLatestMilesForVin(vin: string): Promise<number | null> {
   `;
   const mCarfax = toPos(carfaxResult[0]?.mileage);
 
-  return mRO ?? mAF ?? mVeh ?? mCarfax ?? null;
+  return mRO ?? mProt ?? mAF ?? mVeh ?? mCarfax ?? null;
 }
 
 /* ---------- page ---------- */
