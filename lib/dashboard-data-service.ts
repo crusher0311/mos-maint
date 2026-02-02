@@ -207,7 +207,7 @@ async function fetchProtractorRows(shopUuid: string, settings: any): Promise<Das
            COALESCE(v.make, wo.vehicle_make) as v_make,
            COALESCE(v.model, wo.vehicle_model) as v_model,
            COALESCE(v.mileage, wo.mileage) as v_mileage,
-           c.name as c_name, c.first_name as c_first, c.last_name as c_last
+           c.first_name as c_first, c.last_name as c_last
     FROM protractor_work_orders wo
     LEFT JOIN vehicles v ON UPPER(wo.vin) = UPPER(v.vin) AND v.shop_id = wo.shop_id
     LEFT JOIN customers c ON v.customer_id = c.id
@@ -223,7 +223,7 @@ async function fetchProtractorRows(shopUuid: string, settings: any): Promise<Das
     const vModel = wo.v_model || '';
     const displayVehicle = [vYear, vMake, vModel].filter(Boolean).join(' ').trim();
     const mileage = wo.v_mileage || wo.mileage || null;
-    const fullName = wo.c_name || (wo.c_first && wo.c_last ? `${wo.c_first} ${wo.c_last}`.trim() : null) || wo.customer_name || 'Unknown Customer';
+    const fullName = (wo.c_first || wo.c_last ? `${wo.c_first || ''} ${wo.c_last || ''}`.trim() : null) || wo.customer_name || 'Unknown Customer';
 
     return {
       updatedAt: wo.synced_at || new Date(),
@@ -366,7 +366,7 @@ export async function getArchivedVehicles(shopId: string | number, search?: stri
   let archivedVehicles;
   if (search) {
     archivedVehicles = await sql`
-      SELECT v.*, c.first_name, c.last_name, c.name as customer_name
+      SELECT v.*, c.first_name, c.last_name
       FROM vehicles v
       LEFT JOIN customers c ON v.customer_id = c.id
       WHERE v.shop_id = ${shopConfig.shopId}
@@ -375,7 +375,6 @@ export async function getArchivedVehicles(shopId: string | number, search?: stri
           LOWER(v.vin) LIKE ${`%${search.toLowerCase()}%`}
           OR LOWER(v.make) LIKE ${`%${search.toLowerCase()}%`}
           OR LOWER(v.model) LIKE ${`%${search.toLowerCase()}%`}
-          OR LOWER(c.name) LIKE ${`%${search.toLowerCase()}%`}
           OR LOWER(c.first_name) LIKE ${`%${search.toLowerCase()}%`}
           OR LOWER(c.last_name) LIKE ${`%${search.toLowerCase()}%`}
         )
@@ -384,7 +383,7 @@ export async function getArchivedVehicles(shopId: string | number, search?: stri
     `;
   } else {
     archivedVehicles = await sql`
-      SELECT v.*, c.first_name, c.last_name, c.name as customer_name
+      SELECT v.*, c.first_name, c.last_name
       FROM vehicles v
       LEFT JOIN customers c ON v.customer_id = c.id
       WHERE v.shop_id = ${shopConfig.shopId}
@@ -396,7 +395,7 @@ export async function getArchivedVehicles(shopId: string | number, search?: stri
 
   return archivedVehicles.map((v: any) => ({
     updatedAt: v.status?.lastClosedAt || v.updated_at || new Date(),
-    displayName: v.customer_name || v.first_name ? 
+    displayName: (v.first_name || v.last_name) ? 
       `${v.first_name || ''} ${v.last_name || ''}`.trim() : 
       'Unknown Customer',
     displayVehicle: [v.year, v.make, v.model].filter(Boolean).join(' '),
