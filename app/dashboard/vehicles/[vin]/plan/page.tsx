@@ -953,6 +953,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
   const hasJobLookupFeature = await isFeatureEnabled(shopId, "job_lookup");
+  console.log(`[Plan Debug] Shop ${shopId} hasJobLookupFeature: ${hasJobLookupFeature}, REPLIT_DEV_DOMAIN: ${process.env.REPLIT_DEV_DOMAIN}, NODE_ENV: ${process.env.NODE_ENV}`);
   const showInspectItems = shop?.preferences?.showInspectItems !== false; // default true
   const showRecalls = shop?.preferences?.showRecalls !== false; // default true
   const recallsExpanded = shop?.preferences?.recallsExpanded !== false; // default true
