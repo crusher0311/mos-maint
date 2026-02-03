@@ -28,6 +28,7 @@ import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
+import { CarfaxMatchBadge } from "@/components/ui/CarfaxMatchBadge";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
 import { isFeatureEnabled } from "@/lib/features";
 import PlanLoading from "./loading";
@@ -419,6 +420,63 @@ function toKeyFromFreeText(desc: string): string[] {
   return Array.from(new Set(hits));
 }
 
+// Find CARFAX records that may have addressed deferred work
+// Returns the best matching CARFAX record if found, considering date (must be after deferral)
+// Only returns HIGH confidence matches (service key match) to minimize false positives
+function findCarfaxMatchForDeferred(
+  deferredTitle: string,
+  deferredDate: Date | null,
+  carfaxRecords: Array<{ date?: string; odometer?: number; description?: string; location?: string }>
+): CarfaxMatch | undefined {
+  if (!carfaxRecords || carfaxRecords.length === 0) return undefined;
+  
+  const deferredKeys = toKeyFromFreeText(deferredTitle);
+  
+  // Only proceed if we can extract meaningful service keys from the deferred work
+  if (deferredKeys.length === 0) return undefined;
+  
+  // If no deferral date, only consider records from the last 6 months to be conservative
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const minDate = deferredDate || sixMonthsAgo;
+  
+  // Find matching CARFAX records after the deferral date
+  const matches: Array<{ record: typeof carfaxRecords[0]; confidence: "high" | "medium"; date: Date }> = [];
+  
+  for (const record of carfaxRecords) {
+    if (!record.description || !record.date) continue;
+    
+    const recordDate = parseCarfaxDate(record.date);
+    if (!recordDate) continue;
+    
+    // Only consider records AFTER the deferred date (service done elsewhere after deferral)
+    if (recordDate <= minDate) continue;
+    
+    const recordKeys = toKeyFromFreeText(record.description);
+    
+    // Only high confidence: exact service key match required
+    // This ensures we only match specific services (oil change, brake pads, etc.)
+    const keyMatch = deferredKeys.some(k => recordKeys.includes(k));
+    if (keyMatch) {
+      matches.push({ record, confidence: "high", date: recordDate });
+    }
+  }
+  
+  if (matches.length === 0) return undefined;
+  
+  // Sort by date (most recent first)
+  matches.sort((a, b) => b.date.getTime() - a.date.getTime());
+  
+  const best = matches[0];
+  return {
+    date: best.record.date!,
+    odometer: best.record.odometer ?? null,
+    description: best.record.description!,
+    location: best.record.location ?? null,
+    confidence: best.confidence,
+  };
+}
+
 type DeclinedServiceEntry = {
   serviceKey: string;
   serviceName: string;
@@ -430,6 +488,14 @@ type DeclinedServiceEntry = {
 type MatchedDeferred = {
   id: string;
   title: string;
+};
+
+type CarfaxMatch = {
+  date: string;
+  odometer: number | null;
+  description: string;
+  location: string | null;
+  confidence: "high" | "medium";
 };
 
 type TriagedItem = {
@@ -452,6 +518,7 @@ type TriagedItem = {
   usingShopInterval?: boolean;
   protractorDeferredId?: string;
   matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
+  carfaxMatch?: CarfaxMatch; // Possible CARFAX record that may have addressed this deferred work
 };
 
 type ShopIntervalOverride = {
@@ -503,7 +570,7 @@ function triage({
   vehicleYear = null,
 }: {
   oemItems: OEMItem[];
-  carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
+  carfaxRecords: Array<{ date?: string; odometer?: number; description?: string; location?: string }>;
   shopServiceHistory?: ShopServiceHistory[];
   currentMiles: number | null;
   today?: Date;
@@ -772,6 +839,11 @@ function triage({
       continue;
     }
     
+    // Check if CARFAX has a record that may have addressed this deferred work
+    const deferredDate = dw.CreatedDate ? new Date(dw.CreatedDate) : 
+                         dw.Header?.CreationTime ? new Date(dw.Header.CreationTime) : null;
+    const carfaxMatch = findCarfaxMatchForDeferred(title, deferredDate, carfaxRecords);
+    
     triaged.push({
       key: `protractor_${dw.ID}`,
       serviceKey: protractorServiceKey,
@@ -788,6 +860,7 @@ function triage({
       source: "protractor",
       reason: dw.Reason || undefined,
       protractorDeferredId: dw.ID || dw.ServiceItemID,
+      carfaxMatch,
     });
   }
 
@@ -1225,6 +1298,25 @@ async function PlanContent({ params, searchParams }: PageProps) {
     protractorDeferredWork = cachedPlan.plan.deferredWork as ProtractorDeferredWork[];
   }
 
+  // Load remedied deferred items to exclude from display
+  const remediedItems = await db.collection("remedied_deferred_work").find({
+    shopId,
+    vin: vin.toUpperCase(),
+  }).toArray();
+  const remediedIds = new Set(remediedItems.map(r => r.deferredId));
+  
+  // Filter out remedied items from deferred work
+  if (remediedIds.size > 0) {
+    const beforeCount = protractorDeferredWork.length;
+    protractorDeferredWork = protractorDeferredWork.filter(dw => {
+      const deferredId = dw.ID || dw.ServiceItemID;
+      return !remediedIds.has(deferredId);
+    });
+    if (protractorDeferredWork.length !== beforeCount) {
+      console.log(`[Plan] Filtered out ${beforeCount - protractorDeferredWork.length} remedied deferred items`);
+    }
+  }
+
   // Extract service history from completed work orders - only on cache miss
   const shopServiceHistory: ShopServiceHistory[] = [];
   if (!useCachedData) {
@@ -1326,12 +1418,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Build normalized inputs
 
-  const carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }> =
+  const carfaxRecords: Array<{ date?: string; odometer?: number; description?: string; location?: string }> =
     (carfax as any).ok && Array.isArray((carfax as any).serviceRecords)
       ? (carfax as any).serviceRecords.map((r: any) => ({
           date: r.date,
           odometer: r.odometer,
           description: String(r.description || ""),
+          location: r.location || null,
         }))
       : [];
 
@@ -1967,6 +2060,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           <img src={shopLogo || "/protractor-icon.png"} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
                           <span className="text-blue-700">Deferred</span>
                         </span>
+                        {t.carfaxMatch && (
+                          <CarfaxMatchBadge
+                            match={t.carfaxMatch}
+                            deferredId={t.protractorDeferredId || t.key}
+                            vin={vin}
+                            serviceTitle={t.title}
+                          />
+                        )}
                       </div>
                     </div>
                     {(() => {
