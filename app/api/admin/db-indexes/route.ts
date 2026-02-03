@@ -102,6 +102,11 @@ export async function POST(req: NextRequest) {
     const protractorVehicles = db.collection("protractor_vehicles");
     await ensure(protractorVehicles, { shopId: 1, vin: 1 }, { name: "protractor_vehicles_shop_vin" });
 
+    const protractorTemplateCache = db.collection("protractor_template_cache");
+    await ensure(protractorTemplateCache, { cacheKey: 1 }, { unique: true, name: "protractor_template_cache_key" });
+    await ensure(protractorTemplateCache, { expiresAt: 1 }, { expireAfterSeconds: 0, name: "protractor_template_cache_ttl" });
+    await ensure(protractorTemplateCache, { shopId: 1 }, { name: "protractor_template_cache_shop" });
+
     const counterNow = await counters.findOne({ _id: "shopId" });
 
     return NextResponse.json({
@@ -127,6 +132,9 @@ export async function POST(req: NextRequest) {
         "vehicles.tekmetric.shopId (sparse)",
         "protractor_work_orders {shopId,vin,fetchedAt}",
         "protractor_vehicles {shopId,vin}",
+        "protractor_template_cache.cacheKey (unique)",
+        "protractor_template_cache.expiresAt (TTL)",
+        "protractor_template_cache.shopId",
       ],
       counter: counterNow,
       maxExisting,
