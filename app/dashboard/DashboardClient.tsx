@@ -1070,7 +1070,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                             <Link
                               href={VEHICLE_HREF(vin)}
                               className="p-1.5 text-sky-500 hover:text-sky-700 hover:bg-sky-50 rounded transition-colors"
-                              title="View Vehicle Health Intelligence"
+                              title="View Vehicle Health Indicator"
                             >
                               <HeartPulse className="w-4 h-4" />
                             </Link>

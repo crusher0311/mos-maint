@@ -324,7 +324,10 @@ export default function VehicleDetailClient({
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
             >
               <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-5 h-5" />
-              Vehicle Health Intelligence
+              <span className="flex flex-col leading-tight">
+                <span>Vehicle Health Indicator</span>
+                <span className="text-[10px] italic font-normal opacity-90">authentically intelligent</span>
+              </span>
             </Link>
           </div>
         </div>

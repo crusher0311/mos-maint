@@ -464,7 +464,7 @@ export default function PreferencesPage() {
               <div>
                 <p className="font-medium text-gray-900">Show NHTSA Recalls</p>
                 <p className="text-sm text-gray-500">
-                  Display NHTSA safety recalls at the top of the Vehicle Health Intelligence page.
+                  Display NHTSA safety recalls at the top of the Vehicle Health Indicator page.
                   When off, the recalls section is hidden from the maintenance plan.
                 </p>
               </div>
