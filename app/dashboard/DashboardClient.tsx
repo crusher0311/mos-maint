@@ -99,24 +99,20 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showArchived, setShowArchived] = useState(false);
-  const [sortColumn, setSortColumn] = useState<SortColumn>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('dashboard_sort_column');
-      if (saved && ['customer', 'vehicle', 'vin', 'ro', 'status', 'dvi', 'mileage'].includes(saved)) {
-        return saved as SortColumn;
-      }
+  const [sortColumn, setSortColumn] = useState<SortColumn>('mileage');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  
+  // Load saved sort preferences after hydration to avoid SSR mismatch
+  useEffect(() => {
+    const savedColumn = localStorage.getItem('dashboard_sort_column');
+    if (savedColumn && ['customer', 'vehicle', 'vin', 'ro', 'status', 'dvi', 'mileage'].includes(savedColumn)) {
+      setSortColumn(savedColumn as SortColumn);
     }
-    return 'mileage';
-  });
-  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('dashboard_sort_direction');
-      if (saved === 'asc' || saved === 'desc') {
-        return saved;
-      }
+    const savedDirection = localStorage.getItem('dashboard_sort_direction');
+    if (savedDirection === 'asc' || savedDirection === 'desc') {
+      setSortDirection(savedDirection);
     }
-    return 'desc';
-  });
+  }, []);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
