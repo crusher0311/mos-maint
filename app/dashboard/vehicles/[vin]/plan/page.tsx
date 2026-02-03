@@ -30,7 +30,7 @@ import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { CarfaxMatchBadge } from "@/components/ui/CarfaxMatchBadge";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
-import { isFeatureEnabled } from "@/lib/features";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
@@ -952,8 +952,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
   );
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
-  const hasJobLookupFeature = await isFeatureEnabled(shopId, "job_lookup");
-  console.log(`[Plan Debug] Shop ${shopId} hasJobLookupFeature: ${hasJobLookupFeature}, REPLIT_DEV_DOMAIN: ${process.env.REPLIT_DEV_DOMAIN}, NODE_ENV: ${process.env.NODE_ENV}`);
+  const featureEntitlements = await getFeatureEntitlements(shopId);
+  const hasJobLookupFeature = featureEntitlements.effectiveFeatures.job_lookup;
   const showInspectItems = shop?.preferences?.showInspectItems !== false; // default true
   const showRecalls = shop?.preferences?.showRecalls !== false; // default true
   const recallsExpanded = shop?.preferences?.recallsExpanded !== false; // default true
