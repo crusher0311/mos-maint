@@ -1601,7 +1601,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
             {/* Health Intelligence branding - moved to right */}
             <div className="hidden sm:flex items-center gap-3">
               <img src="/icons/vehicle-health-intelligence.png?v=4" alt="" className="w-14 h-14" />
-              <div className="flex flex-col">
+              <div className="flex flex-col items-center">
                 <div className="text-lg font-semibold text-blue-800">Vehicle Health Indicator<sup className="text-xs">™</sup></div>
                 <div className="text-xs italic text-blue-600">authentically intelligent</div>
               </div>
@@ -1654,7 +1654,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-lg border border-blue-100">
               <img src="/icons/vehicle-health-intelligence.png?v=3" alt="" className="w-6 h-6" />
-              <div className="flex flex-col">
+              <div className="flex flex-col items-center">
                 <span className="text-sm font-semibold text-blue-800">Vehicle Health Indicator</span>
                 <span className="text-[10px] italic text-blue-600">authentically intelligent</span>
               </div>
