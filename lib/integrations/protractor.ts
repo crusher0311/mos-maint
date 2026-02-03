@@ -1353,49 +1353,89 @@ export async function fetchServicePackageTemplates(
   };
 }
 
+const TEMPLATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TEMPLATE_404_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for 404s
+
 export async function fetchServicePackageTemplateDetail(
   shopId: number,
   templateId: string
-): Promise<{ ok: boolean; template?: ProtractorServicePackageTemplate; error?: string }> {
+): Promise<{ ok: boolean; template?: ProtractorServicePackageTemplate; error?: string; cached?: boolean }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  // Try GET endpoints to fetch template detail with lines
-  const getEndpoints = [
+  const db = await getDb();
+  const cacheKey = `protractor_template_${shopId}_${templateId}`;
+  
+  // Check cache first
+  const cached = await db.collection("protractor_template_cache").findOne({ 
+    cacheKey,
+    expiresAt: { $gt: new Date() }
+  });
+  
+  if (cached) {
+    if (cached.is404) {
+      return { ok: false, error: "Template not found (cached 404)", cached: true };
+    }
+    if (cached.template) {
+      return { ok: true, template: cached.template, cached: true };
+    }
+  }
+
+  // Try the most reliable endpoint first (skip noisy fallbacks)
+  const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
     `/ServicePackageTemplate/Read/${templateId}`,
-    `/ServicePackageTemplate/${templateId}`,
-    `/ServicePackageTemplate/Read?id=${templateId}`,
-    `/ServicePackageTemplate?id=${templateId}`,
-  ];
+    config,
+    {},
+    0,
+    shopId
+  );
 
-  for (const endpoint of getEndpoints) {
-    console.log(`[Protractor] Trying GET ${endpoint}...`);
-    const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
-      endpoint,
-      config,
-      {},
-      0,
-      shopId
+  if (result.ok && result.data) {
+    const template = (result.data as any).ServicePackageTemplate || result.data;
+    
+    if (template.ID) {
+      // Cache successful response
+      await db.collection("protractor_template_cache").updateOne(
+        { cacheKey },
+        { 
+          $set: { 
+            cacheKey,
+            template,
+            is404: false,
+            shopId,
+            templateId,
+            fetchedAt: new Date(),
+            expiresAt: new Date(Date.now() + TEMPLATE_CACHE_TTL_MS)
+          }
+        },
+        { upsert: true }
+      );
+      return { ok: true, template };
+    }
+  }
+  
+  // Check if this is a 404 response
+  const is404 = result.error?.includes("404") || result.error?.includes("not found");
+  
+  if (is404) {
+    // Cache 404 to avoid repeated requests
+    await db.collection("protractor_template_cache").updateOne(
+      { cacheKey },
+      { 
+        $set: { 
+          cacheKey,
+          is404: true,
+          template: null,
+          shopId,
+          templateId,
+          fetchedAt: new Date(),
+          expiresAt: new Date(Date.now() + TEMPLATE_404_TTL_MS)
+        }
+      },
+      { upsert: true }
     );
-
-    console.log(`[Protractor] GET ${endpoint}: ok=${result.ok}`);
-    
-    if (result.ok && result.data) {
-      const template = (result.data as any).ServicePackageTemplate || result.data;
-      const linesCount = template.ServicePackageLines?.ItemCollection?.length || 0;
-      console.log(`[Protractor] Got template detail with ${linesCount} lines`);
-      
-      if (template.ID) {
-        return { ok: true, template };
-      }
-    }
-    
-    // Log raw response for debugging
-    if (result.error) {
-      console.log(`[Protractor] GET ${endpoint} error:`, result.error);
-    }
   }
 
   return { ok: false, error: `Template detail not found for ID ${templateId}` };
