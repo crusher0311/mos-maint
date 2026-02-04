@@ -82,11 +82,11 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   try {
     const shopId = Number(shop.shopId);
 
-    if (objectType === "ServiceItem" && objectId && operation === "Update") {
+    if (objectType === "ServiceItem" && objectId && (operation === "Update" || operation === "Create")) {
       const result = await fetchVehicleById(shopId, objectId);
       if (result.ok && result.vehicle?.VIN) {
         await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
-        console.log(`[Protractor Webhook] Updated vehicle snapshot for ${result.vehicle.VIN}`);
+        console.log(`[Protractor Webhook] ${operation} vehicle snapshot for ${result.vehicle.VIN}`);
       }
     }
 

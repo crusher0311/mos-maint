@@ -18,9 +18,8 @@ export async function GET(req: NextRequest) {
     }
 
     const refresh = req.nextUrl.searchParams.get("refresh") === "true";
-    const maxAge = refresh ? 0 : undefined;
 
-    const result = await fetchCannedJobsWithCache(shopId, maxAge);
+    const result = await fetchCannedJobsWithCache(shopId, undefined, { forceRefresh: refresh });
 
     if (!result.ok) {
       if (result.error?.includes("not configured")) {
