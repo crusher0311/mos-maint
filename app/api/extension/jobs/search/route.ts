@@ -37,13 +37,26 @@ export async function GET(request: NextRequest) {
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
-    // Use user's session shop if available (most reliable)
-    let mosShopId: number | null = auth.user.shopId ? parseInt(auth.user.shopId) : null;
+    // For extension requests, always prefer the SMS shop ID from the URL
+    // This ensures we search the shop the user is viewing in Tekmetric/Protractor,
+    // not their MOS session shop (which might be different when impersonating)
+    let mosShopId: number | null = null;
     let provider: string = 'tekmetric';
     
-    // Look up shop to get the correct integration provider
-    if (mosShopId) {
-      // User has a session shop - look up its integration provider
+    if (smsShopId) {
+      // Look up shop from SMS shop ID (Tekmetric/Protractor shop ID)
+      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
+      if (shopResult) {
+        mosShopId = shopResult.mosShopId;
+        provider = shopResult.provider;
+        console.log(`[Jobs Search] Resolved shop from SMS ID ${smsShopId} -> MOS shop ${mosShopId}`);
+      }
+    }
+    
+    // Fall back to session shop if no SMS shop found
+    if (!mosShopId && auth.user.shopId) {
+      mosShopId = parseInt(auth.user.shopId);
+      // Look up integration provider for session shop
       const shopDoc = await db.collection("shops").findOne(
         { shopId: { $in: [mosShopId, String(mosShopId)] } },
         { projection: { integrationProvider: 1, tekmetric: 1, protractor: 1, autoflow: 1 } }
@@ -54,13 +67,6 @@ export async function GET(request: NextRequest) {
             : shopDoc.protractor?.connectionId ? 'protractor' 
             : shopDoc.autoflow?.domain ? 'autoflow' 
             : 'tekmetric');
-      }
-    } else if (smsShopId) {
-      // Fall back to SMS shop ID lookup
-      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
-      if (shopResult) {
-        mosShopId = shopResult.mosShopId;
-        provider = shopResult.provider;
       }
     }
 

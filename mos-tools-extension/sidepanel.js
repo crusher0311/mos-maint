@@ -673,6 +673,46 @@ function createServiceItemHTML(item, type) {
 
 // ==================== COMMON FAILURES ====================
 async function loadCommonFailures() {
+  // If no vehicle data but we have RO context, try to fetch from Plan API
+  if (currentContext && currentContext.roId && !currentContext.vehicle) {
+    elements.failuresLoading.classList.remove('hidden');
+    elements.failuresEmpty.classList.add('hidden');
+    elements.failuresContent.classList.add('hidden');
+    
+    try {
+      const params = new URLSearchParams({
+        shopId: currentContext.shopId,
+        roId: currentContext.roId,
+        provider: currentContext.provider || 'tekmetric'
+      });
+      if (currentContext.vin) params.set('vin', currentContext.vin);
+      
+      const result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/plan?${params}`
+      });
+      
+      // Update context with vehicle data from Plan API
+      if (result.vehicle) {
+        const v = result.vehicle;
+        if (v.year && v.make && v.model) {
+          currentContext.vehicle = {
+            year: v.year,
+            make: v.make,
+            model: v.model,
+            engine: v.engine || null
+          };
+          console.log('[MOS] Updated context with vehicle from Plan API for failures:', currentContext.vehicle);
+        }
+      }
+      if (result.mileage && !currentContext.mileage) {
+        currentContext.mileage = result.mileage;
+      }
+    } catch (err) {
+      console.error('[MOS] Error fetching vehicle for failures:', err);
+    }
+  }
+  
   if (!currentContext || !currentContext.vehicle) {
     elements.failuresLoading.classList.add('hidden');
     elements.failuresEmpty.classList.remove('hidden');
