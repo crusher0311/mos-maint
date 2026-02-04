@@ -911,6 +911,56 @@ psql $QA_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
 
 ---
 
+## AI Sales Script Generator
+
+**Priority:** Medium  
+**Status:** Planned
+
+### Overview
+Add a 5th icon to the vehicle dashboard row that generates AI-powered sales scripts for service advisors. When clicked, it fetches the active work order from Protractor and uses AI to create personalized talking points to help advisors present and sell recommended services.
+
+### Data Available from Protractor Work Order
+- **Customer Info:** First name, last name
+- **Vehicle Info:** Year, make, model, VIN, current mileage
+- **Services on Ticket:** Job titles, descriptions, prices, parts/labor breakdown
+- **Inspection Results:** Findings, pass/fail status, notes, photos
+
+### Feature Requirements
+
+#### User Flow
+1. Advisor clicks "Sales Script" icon on vehicle row in dashboard
+2. System prompts for RO number (or auto-detects if active work order exists)
+3. Fetches full work order details from Protractor API
+4. Passes data through custom AI prompt
+5. Displays generated sales script with talking points
+
+#### AI Prompt Considerations
+- Personalize with customer name and vehicle details
+- Prioritize safety-critical items first
+- Include price context and value propositions
+- Suggest urgency levels (immediate vs. can wait)
+- Keep language conversational and non-pushy
+
+#### UI/UX
+- New icon in vehicle row action buttons (5th icon)
+- Modal or slide-out panel showing the script
+- Option to regenerate with different tone/approach
+- Copy to clipboard functionality
+
+### Technical Implementation
+- New API endpoint: `/api/protractor/sales-script`
+- Calls `fetchWorkOrderById()` to get full work order data
+- Uses OpenAI integration with custom prompt template
+- Prompt template stored in shop settings (customizable per shop)
+
+### Future Enhancements
+- Save generated scripts to work order history
+- Track conversion rates (script generated → service sold)
+- A/B test different prompt styles
+- Add shop-specific terminology/branding
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
@@ -919,4 +969,4 @@ psql $QA_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
 
 ---
 
-*Last Updated: January 31, 2026*
+*Last Updated: February 4, 2026*
