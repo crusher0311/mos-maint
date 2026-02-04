@@ -1214,14 +1214,18 @@ async function handleAddCannedJob(job) {
   console.log('[MOS] Adding canned job:', { name: job.name, tekmetricId, source: job.source, roId: currentContext.roId });
   
   if (job.source === 'tekmetric' && tekmetricId) {
-    // Use Tekmetric's canned job API
+    // Use MOS backend to add canned job via Tekmetric API
     try {
       const result = await sendMessage({
-        action: 'TEKMETRIC_API_REQUEST',
-        endpoint: `/api/repair-order/${currentContext.roId}/canned-job`,
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/tekmetric/apply-canned-job?shopId=${currentContext.shopId}&provider=tekmetric`,
         options: {
           method: 'POST',
-          body: JSON.stringify({ cannedJobIds: [parseInt(tekmetricId)] })
+          body: JSON.stringify({ 
+            repairOrderId: currentContext.roId,
+            cannedJobId: String(tekmetricId),
+            cannedJobTitle: job.name
+          })
         }
       });
       
