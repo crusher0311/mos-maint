@@ -13,6 +13,7 @@ function detectContext() {
     provider: "tekmetric",
     shopId: null,
     roId: null,
+    roNumber: null, // User-friendly RO number displayed on page
     vin: null,
     vehicle: null,
     customer: null,
@@ -25,6 +26,18 @@ function detectContext() {
   if (urlMatch) {
     context.shopId = urlMatch[1];
     context.roId = urlMatch[2];
+  }
+  
+  // Try to extract display RO number from page header
+  // Look for "RO #4261:" pattern in page
+  try {
+    const pageText = document.body?.innerText || '';
+    const roNumMatch = pageText.match(/RO\s*#(\d+)/i);
+    if (roNumMatch) {
+      context.roNumber = roNumMatch[1];
+    }
+  } catch (e) {
+    // Ignore extraction errors
   }
 
   // Try to extract vehicle info from the page

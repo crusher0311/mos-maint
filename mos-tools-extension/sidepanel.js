@@ -238,7 +238,8 @@ function updateContext(context) {
       elements.vehicleDisplay.textContent = 'Vehicle';
     }
     
-    elements.roDisplay.textContent = `RO #${context.roId}`;
+    // Display user-friendly RO number if available, otherwise fall back to internal ID
+    elements.roDisplay.textContent = `RO #${context.roNumber || context.roId}`;
     
     if (context.mileage) {
       elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} mi`;
