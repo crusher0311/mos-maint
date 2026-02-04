@@ -20,6 +20,7 @@ export default function ProtractorSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [refreshingCannedJobs, setRefreshingCannedJobs] = useState(false);
   const [status, setStatus] = useState<{
     configured: boolean;
     connectionId?: string;
@@ -110,6 +111,34 @@ export default function ProtractorSettingsPage() {
       setMessage({ type: "error", text: err.message || "Sync failed" });
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleRefreshCannedJobs() {
+    setRefreshingCannedJobs(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/protractor/canned-jobs?refresh=true", {
+        credentials: "include",
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.cannedJobs) {
+        setCannedJobs(data.cannedJobs);
+        setSyncStats(prev => prev ? { ...prev, cannedJobs: data.cannedJobs.length } : null);
+        setMessage({ 
+          type: "success", 
+          text: `Refreshed ${data.cannedJobs.length} service packages from Protractor` 
+        });
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to refresh service packages" });
+      }
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message || "Refresh failed" });
+    } finally {
+      setRefreshingCannedJobs(false);
     }
   }
 
@@ -384,12 +413,31 @@ export default function ProtractorSettingsPage() {
               )}
             </div>
 
-            {cannedJobs.length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-medium text-gray-900 mb-3">Available Service Packages</h3>
-                <p className="text-sm text-gray-500 mb-3">
-                  These service packages can be added to work orders from the vehicle plan page.
-                </p>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-gray-900">Available Service Packages</h3>
+                <button
+                  onClick={handleRefreshCannedJobs}
+                  disabled={refreshingCannedJobs}
+                  className="px-3 py-1.5 bg-white text-gray-700 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {refreshingCannedJobs ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Refresh
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-3">
+                These service packages can be added to work orders from the vehicle plan page.
+              </p>
+              {cannedJobs.length > 0 ? (
                 <div className="max-h-64 overflow-y-auto border border-gray-200 rounded bg-white">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-100 sticky top-0">
@@ -410,8 +458,10 @@ export default function ProtractorSettingsPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-gray-400 italic">No service packages loaded. Click Refresh to load from Protractor.</p>
+              )}
+            </div>
 
             {message && (
               <div
