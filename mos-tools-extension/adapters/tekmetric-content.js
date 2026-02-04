@@ -269,7 +269,7 @@ function injectPrintButton() {
   // Create the MOS Print button using the custom image
   const button = document.createElement('button');
   button.id = 'mos-print-button';
-  button.title = 'MOS Oil Sticker\nLeft-click: Print | Right-click: Customize';
+  button.title = 'MOS Oil Sticker\nLeft-click: Print | Right-click: Intervals';
   button.type = 'button';
   
   const imgUrl = chrome.runtime.getURL('icons/mos-print-button.png');
@@ -303,11 +303,11 @@ function injectPrintButton() {
     handleImmediatePrint();
   });
   
-  // Right-click: Open side panel to sticker tab
+  // Right-click: Show interval selection dropdown
   button.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openStickerPanel();
+    showIntervalDropdown(e, button);
   });
   
   // Insert after the print button if found, otherwise append to container
@@ -340,6 +340,110 @@ function handleImmediatePrint() {
   }, (response) => {
     if (response && response.success) {
       // Print via iframe
+      printStickerFromContentScript(response.sticker);
+    } else {
+      showToast(response?.error || 'Failed to generate sticker', 'error');
+    }
+  });
+}
+
+function showIntervalDropdown(event, buttonElement) {
+  // Remove existing dropdown if any
+  const existingDropdown = document.getElementById('mos-interval-dropdown');
+  if (existingDropdown) {
+    existingDropdown.remove();
+    return;
+  }
+  
+  const intervals = [
+    { label: '3,000 mi / 3 mo', miles: 3000, months: 3 },
+    { label: '5,000 mi / 6 mo', miles: 5000, months: 6 },
+    { label: '7,500 mi / 6 mo', miles: 7500, months: 6 },
+    { label: '10,000 mi / 12 mo', miles: 10000, months: 12 },
+    { label: '15,000 mi / 12 mo', miles: 15000, months: 12 },
+    { label: 'Customize...', action: 'customize' }
+  ];
+  
+  const dropdown = document.createElement('div');
+  dropdown.id = 'mos-interval-dropdown';
+  Object.assign(dropdown.style, {
+    position: 'fixed',
+    backgroundColor: '#fff',
+    border: '1px solid #e0e0e0',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    zIndex: '999999',
+    minWidth: '180px',
+    padding: '4px 0',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  });
+  
+  // Position dropdown below the button
+  const rect = buttonElement.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + 4}px`;
+  dropdown.style.left = `${rect.left}px`;
+  
+  intervals.forEach(interval => {
+    const item = document.createElement('div');
+    item.textContent = interval.label;
+    Object.assign(item.style, {
+      padding: '8px 16px',
+      cursor: 'pointer',
+      fontSize: '13px',
+      color: '#333',
+      transition: 'background-color 0.15s'
+    });
+    
+    item.addEventListener('mouseenter', () => {
+      item.style.backgroundColor = '#f5f5f5';
+    });
+    item.addEventListener('mouseleave', () => {
+      item.style.backgroundColor = 'transparent';
+    });
+    
+    item.addEventListener('click', () => {
+      dropdown.remove();
+      if (interval.action === 'customize') {
+        openStickerPanel();
+      } else {
+        handleImmediatePrintWithInterval(interval.miles, interval.months);
+      }
+    });
+    
+    dropdown.appendChild(item);
+  });
+  
+  document.body.appendChild(dropdown);
+  
+  // Close dropdown when clicking outside
+  const closeDropdown = (e) => {
+    if (!dropdown.contains(e.target) && e.target !== buttonElement) {
+      dropdown.remove();
+      document.removeEventListener('click', closeDropdown);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+}
+
+function handleImmediatePrintWithInterval(miles, months) {
+  const context = detectContext();
+  if (!context.roId || !context.shopId) {
+    showToast('No repair order detected', 'error');
+    return;
+  }
+  
+  showToast(`Generating sticker (${miles.toLocaleString()} mi)...`, 'info');
+  
+  // Send message to background to generate and print sticker with custom interval
+  chrome.runtime.sendMessage({
+    action: 'PRINT_STICKER_IMMEDIATE',
+    context: {
+      ...context,
+      vehicle: getVehicleDetails()
+    },
+    overrideInterval: { miles, months }
+  }, (response) => {
+    if (response && response.success) {
       printStickerFromContentScript(response.sticker);
     } else {
       showToast(response?.error || 'Failed to generate sticker', 'error');

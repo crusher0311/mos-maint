@@ -608,6 +608,7 @@ export async function POST(request: NextRequest) {
       currentMileage,
       intervalType = "synthetic",
       customMileage,
+      customMiles,
       customMonths,
       unit = "mi",
       smsShopId,
@@ -625,6 +626,9 @@ export async function POST(request: NextRequest) {
       vehicleModel,
       roNumber,
     } = body;
+    
+    // Accept either customMileage or customMiles
+    const effectiveCustomMileage = customMileage || customMiles;
 
     if (!currentMileage || currentMileage <= 0) {
       return NextResponse.json(
@@ -654,8 +658,9 @@ export async function POST(request: NextRequest) {
     let intervalMileage: number;
     let intervalMonths: number;
 
-    if (intervalType === "custom") {
-      intervalMileage = customMileage || 5000;
+    // If custom miles/months provided, treat as custom interval
+    if (effectiveCustomMileage || intervalType === "custom") {
+      intervalMileage = effectiveCustomMileage || 5000;
       intervalMonths = customMonths || 6;
     } else {
       const interval = intervals[intervalType as keyof typeof intervals] || intervals.synthetic;

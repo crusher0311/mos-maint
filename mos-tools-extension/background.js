@@ -184,7 +184,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // -------------------- Sticker Printing --------------------
   if (message.action === "PRINT_STICKER_IMMEDIATE") {
-    handleImmediateStickerPrint(message.context, sender.tab?.id)
+    handleImmediateStickerPrint(message.context, sender.tab?.id, message.overrideInterval)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
@@ -467,7 +467,7 @@ function detectOilType(vehicle) {
   return 'synthetic';
 }
 
-async function handleImmediateStickerPrint(context, tabId) {
+async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS. Please login first.");
   }
@@ -481,9 +481,23 @@ async function handleImmediateStickerPrint(context, tabId) {
     throw new Error("Could not detect vehicle mileage. Use right-click to customize.");
   }
   
-  // Auto-detect oil type
-  const intervalType = detectOilType(context.vehicle);
-  console.log(`[MOS] Auto-detected oil type: ${intervalType} for ${context.vehicle?.make || 'unknown'}`);
+  // Build request body
+  const requestBody = {
+    currentMileage: mileage,
+    unit: 'mi',
+    smsShopId: context.shopId,
+    provider: context.provider || 'tekmetric'
+  };
+  
+  // If override interval provided, use custom miles/months; otherwise auto-detect
+  if (overrideInterval && overrideInterval.miles && overrideInterval.months) {
+    requestBody.customMiles = overrideInterval.miles;
+    requestBody.customMonths = overrideInterval.months;
+    console.log(`[MOS] Using custom interval: ${overrideInterval.miles} mi / ${overrideInterval.months} mo`);
+  } else {
+    requestBody.intervalType = detectOilType(context.vehicle);
+    console.log(`[MOS] Auto-detected oil type: ${requestBody.intervalType} for ${context.vehicle?.make || 'unknown'}`);
+  }
   
   // Call the sticker API
   const response = await fetch(`${mosApiUrl}/api/extension/sticker`, {
@@ -492,13 +506,7 @@ async function handleImmediateStickerPrint(context, tabId) {
       'Authorization': `Bearer ${mosApiToken}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      currentMileage: mileage,
-      intervalType,
-      unit: 'mi',
-      smsShopId: context.shopId,
-      provider: context.provider || 'tekmetric'
-    })
+    body: JSON.stringify(requestBody)
   });
   
   if (!response.ok) {
@@ -515,7 +523,7 @@ async function handleImmediateStickerPrint(context, tabId) {
   return {
     success: true,
     sticker: data.sticker,
-    oilType: intervalType
+    oilType: overrideInterval ? 'custom' : requestBody.intervalType
   };
 }
 
