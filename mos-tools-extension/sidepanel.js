@@ -805,29 +805,38 @@ function renderCommonFailures(data) {
 }
 
 function createFailureItemHTML(failure, failureId) {
-  const confidenceClass = failure.confidence === 'high' ? 'confidence-high' : 
-                          failure.confidence === 'medium' ? 'confidence-medium' : 'confidence-low';
-  const confidenceText = failure.confidence === 'high' ? 'High Confidence' : 
-                         failure.confidence === 'medium' ? 'Medium' : 'Low';
+  // Get title from various possible field names (API returns 'repair', shopMatch has 'title')
+  const title = failure.repair || failure.jobTitle || failure.title || failure.shopMatch?.title || 'Unknown Repair';
   
-  const occurrences = failure.occurrences || 0;
-  const avgTotal = failure.avgTotal || 0;
-  const avgHours = failure.avgHours || 0;
-  const mileageBucket = failure.mileageBucket ? `${failure.mileageBucket}k-${failure.mileageBucket + 5}k mi` : '';
+  // Get confidence from matchConfidence or urgency
+  const urgency = failure.urgency || 'low';
+  const confidenceClass = urgency === 'high' ? 'confidence-high' : 
+                          urgency === 'medium' ? 'confidence-medium' : 'confidence-low';
+  const confidenceText = urgency === 'high' ? 'High Priority' : 
+                         urgency === 'medium' ? 'Medium' : 'Low';
+  
+  // Get shop match data if available
+  const shopMatch = failure.shopMatch || {};
+  const occurrences = shopMatch.occurrences || failure.occurrences || 0;
+  const avgTotal = shopMatch.avgTotal || failure.avgTotal || 0;
+  const avgHours = shopMatch.avgHours || failure.avgHours || 0;
+  const description = failure.description || '';
+  const mileageRange = failure.typicalMileageRange || '';
   
   return `
     <li class="failure-item">
       <div class="failure-header">
-        <div class="failure-title">${escapeHtml(failure.jobTitle || failure.title)}</div>
+        <div class="failure-title">${escapeHtml(title)}</div>
         <button class="btn-add btn-add-failure" data-failure-id="${failureId}">
           + Add
         </button>
       </div>
       <div class="failure-badges">
         <span class="confidence-badge ${confidenceClass}">${confidenceText}</span>
-        ${occurrences > 0 ? `<span class="occurrence-badge">${occurrences} times</span>` : ''}
-        ${mileageBucket ? `<span class="mileage-badge">${mileageBucket}</span>` : ''}
+        ${occurrences > 0 ? `<span class="occurrence-badge">${occurrences} repairs</span>` : ''}
+        ${mileageRange ? `<span class="mileage-badge">${mileageRange}</span>` : ''}
       </div>
+      ${description ? `<div class="failure-description">${escapeHtml(description)}</div>` : ''}
       <div class="failure-details">
         ${avgTotal > 0 ? `<div class="failure-stat"><span class="failure-stat-label">Avg Cost:</span> <span class="failure-stat-value">$${avgTotal.toFixed(0)}</span></div>` : ''}
         ${avgHours > 0 ? `<div class="failure-stat"><span class="failure-stat-label">Avg Hours:</span> <span class="failure-stat-value">${avgHours.toFixed(1)}h</span></div>` : ''}
@@ -846,9 +855,10 @@ function setupFailureHandlers() {
         console.error('[MOS] Failure not found:', failureId);
         return;
       }
-      // Search for this job in history
+      // Search for this job in history using the correct field
+      const jobTitle = failure.repair || failure.jobTitle || failure.title || failure.shopMatch?.title || '';
       switchTab('lookup');
-      elements.jobSearch.value = failure.jobTitle || failure.title;
+      elements.jobSearch.value = jobTitle;
       await handleJobSearch();
     });
   });
