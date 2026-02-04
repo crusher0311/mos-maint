@@ -911,6 +911,85 @@ psql $QA_DATABASE_URL -c "SELECT COUNT(*) FROM shops;"
 
 ---
 
+## Mobile Work Order Intake with Symptom Questionnaire
+
+**Priority:** Medium  
+**Status:** Planned
+
+### Overview
+Enable service advisors to start a Protractor work order directly from MOS Tools on a phone or tablet. The system guides them through a customizable set of symptom-based questions to capture detailed information about the customer's concerns, providing technicians with comprehensive diagnostic context before they even see the vehicle.
+
+### Core Features
+
+#### Mobile-First Work Order Creation
+- Responsive UI optimized for phone/tablet use
+- Quick customer lookup (by phone, name, or license plate)
+- Quick vehicle lookup (by VIN, license plate, or customer history)
+- Create new customer/vehicle if not found
+- Push work order directly to Protractor via API
+
+#### Symptom-Based Questionnaire System
+- **Dynamic question flow** - Next question depends on previous answers
+- **Category-based symptoms:**
+  - Engine/Performance (check engine light, stalling, rough idle, etc.)
+  - Brakes (noise, pedal feel, pulling, warning light)
+  - Steering/Suspension (vibration, pulling, noise, handling)
+  - HVAC (A/C, heat, blower, odors)
+  - Electrical (battery, lights, accessories)
+  - Noise/Vibration (when does it occur, speed, conditions)
+  - Fluid Leaks (color, location, frequency)
+  
+#### Smart Follow-Up Questions
+Example flow for "Brake Noise":
+1. Where is the noise? (Front / Rear / Both / Unsure)
+2. What type of noise? (Squealing / Grinding / Clicking / Thumping)
+3. When does it occur? (Braking / Coasting / Both)
+4. How long has this been happening? (Just started / Few days / Weeks / Months)
+5. Any other symptoms? (Vibration / Pulling / Warning light)
+
+#### Customizable Question Templates
+- Shop admins can create/edit question templates
+- Templates can be shared across enterprise locations
+- Questions tagged by symptom category
+- Support for:
+  - Multiple choice
+  - Yes/No
+  - Text input
+  - Photo upload (customer can show damage/leak)
+  - Voice memo transcription
+
+### Technical Implementation
+
+#### API Integration
+- `POST /api/protractor/work-orders` - Create new work order
+- Attach symptom questionnaire results to work order notes
+- Link photos/voice memos to work order
+
+#### Data Storage
+- Questionnaire templates stored in MongoDB
+- Completed questionnaires linked to work order ID
+- Analytics on common symptoms by vehicle type
+
+#### Mobile UI
+- Progressive Web App (PWA) for offline capability
+- Large touch targets for easy tablet use
+- Auto-save progress (don't lose data if interrupted)
+
+### Benefits for Technicians
+- Know what to look for before the vehicle arrives
+- Customer's own words captured accurately
+- Photos of issues taken at intake
+- Reduces back-and-forth with advisor
+
+### Future Enhancements
+- AI-suggested diagnostic codes based on symptoms
+- Historical symptom patterns for vehicle (recurring issues)
+- Customer self-service intake (pre-arrival questionnaire via text/email)
+- Voice-to-text for hands-free symptom capture
+- Integration with DVI tools (AutoVitals)
+
+---
+
 ## AI Sales Script Generator
 
 **Priority:** Medium  
