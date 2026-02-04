@@ -104,24 +104,31 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
   const matchDetails: string[] = [];
   let gatePass = true;
   let gateReason = "";
+  let enginePenalty = 0;
   
-  // Hard gates - fuel type, cylinders, aspiration mismatches
+  // ONLY fuel type is a hard gate - diesel vs gas is truly incompatible
   if (targetEngine.fuelType && jobEngine.fuelType && 
       targetEngine.fuelType !== jobEngine.fuelType) {
-    gatePass = false;
-    gateReason = `Fuel mismatch (${targetEngine.fuelType} vs ${jobEngine.fuelType})`;
+    // Diesel/gas mismatch is a hard gate
+    if ((targetEngine.fuelType === "diesel" || jobEngine.fuelType === "diesel") &&
+        targetEngine.fuelType !== jobEngine.fuelType) {
+      gatePass = false;
+      gateReason = `Fuel mismatch (${targetEngine.fuelType} vs ${jobEngine.fuelType})`;
+    }
   }
   
+  // Cylinder and aspiration mismatches are soft penalties, not hard gates
+  // Many jobs (oil change, brakes, filters) work across different engine configs
   if (gatePass && targetEngine.cylinders && jobEngine.cylinders && 
       targetEngine.cylinders !== jobEngine.cylinders) {
-    gatePass = false;
-    gateReason = `Cylinder mismatch (${targetEngine.cylinders} vs ${jobEngine.cylinders})`;
+    enginePenalty += 15;
+    matchDetails.push(`Different cylinder count (${jobEngine.cylinders}-cyl)`);
   }
   
   if (gatePass && targetEngine.aspiration && jobEngine.aspiration &&
       targetEngine.aspiration !== jobEngine.aspiration) {
-    gatePass = false;
-    gateReason = `Aspiration mismatch (${targetEngine.aspiration} vs ${jobEngine.aspiration})`;
+    enginePenalty += 10;
+    matchDetails.push(`Different aspiration`);
   }
   
   if (!gatePass) {
@@ -232,7 +239,7 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
     }
   }
   
-  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore;
+  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore - enginePenalty;
   const normalizedScore = Math.max(0, Math.min(100, totalScore));
   
   // Calculate year difference for band determination

@@ -240,8 +240,20 @@ export async function GET(request: NextRequest) {
     const targetVehicle = { year, make, model, engine };
     const scoredJobs: ScoredJob[] = jobs.map(job => scoreJob(job, targetVehicle));
     
-    // Filter by gate pass and minimum score threshold
-    const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
+    // Log scoring results for debugging
+    if (scoredJobs.length > 0) {
+      console.log(`[Jobs Search] Scoring results:`, scoredJobs.slice(0, 5).map(j => ({
+        title: j.job?.title || j.title,
+        score: j.matchScore,
+        gatePass: j.gatePass,
+        reason: j.matchReason,
+        vehicle: j.vehicle
+      })));
+    }
+    
+    // Filter by gate pass only - lower threshold to 20 for extension searches
+    // We want to show more potential matches even if they're not perfect
+    const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 20);
     
     // Sort by score
     eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
