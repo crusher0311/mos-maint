@@ -196,16 +196,15 @@
 
         <!-- Canned Jobs tab -->
         <div id="tab-canned" class="tab-panel hidden">
-          <div class="canned-tabs">
-            <button class="canned-tab-btn active" data-source="sms">SMS Library</button>
-            <button class="canned-tab-btn" data-source="mos">MOS Enriched</button>
+          <div class="canned-search-container">
+            <input type="text" id="canned-search" class="search-input" placeholder="Search canned jobs...">
           </div>
           <div id="canned-loading" class="panel-loading">
             <div class="spinner-small"></div>
             <span>Loading canned jobs...</span>
           </div>
           <div id="canned-empty" class="panel-empty hidden">
-            <p>No canned jobs available.</p>
+            <p>No canned jobs found.</p>
           </div>
           <ul id="canned-list" class="job-list hidden"></ul>
         </div>

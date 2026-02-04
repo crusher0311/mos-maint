@@ -4,7 +4,7 @@
 let isAuthenticated = false;
 let currentContext = null;
 let currentTab = 'plan';
-let cannedJobSource = 'sms';
+// Removed SMS toggle - now using MOS Enriched only
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
 let lookupJobsDataMap = new Map(); // Store lookup job objects by ID to avoid JSON in HTML
@@ -65,7 +65,7 @@ const elements = {
   lookupResults: document.getElementById('lookup-results'),
   
   // Canned Jobs
-  cannedTabBtns: document.querySelectorAll('.canned-tab-btn'),
+  cannedSearch: document.getElementById('canned-search'),
   cannedLoading: document.getElementById('canned-loading'),
   cannedEmpty: document.getElementById('canned-empty'),
   cannedList: document.getElementById('canned-list'),
@@ -128,14 +128,9 @@ function setupEventListeners() {
     });
   });
   
-  // Canned job source tabs
-  elements.cannedTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      cannedJobSource = btn.dataset.source;
-      elements.cannedTabBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      loadCannedJobs();
-    });
+  // Canned job search
+  elements.cannedSearch.addEventListener('input', () => {
+    filterCannedJobs(elements.cannedSearch.value);
   });
   
   // Job search
@@ -1033,11 +1028,15 @@ function setupJobItemHandlers() {
   });
 }
 
+// Store loaded canned jobs for filtering
+let allCannedJobs = [];
+
 // ==================== CANNED JOBS ====================
 async function loadCannedJobs() {
   if (!currentContext || !currentContext.roId) {
     elements.cannedLoading.classList.add('hidden');
     elements.cannedEmpty.classList.remove('hidden');
+    elements.cannedEmpty.querySelector('p').textContent = 'Navigate to a repair order to view canned jobs.';
     elements.cannedList.classList.add('hidden');
     return;
   }
@@ -1045,64 +1044,23 @@ async function loadCannedJobs() {
   elements.cannedLoading.classList.remove('hidden');
   elements.cannedEmpty.classList.add('hidden');
   elements.cannedList.classList.add('hidden');
+  elements.cannedSearch.value = '';
   
   try {
-    let jobs = [];
+    // Fetch from MOS enriched library (always)
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
+    });
     
-    if (cannedJobSource === 'sms') {
-      // Fetch from Tekmetric via captured session
-      const tekState = await sendMessage({ action: 'GET_TEKMETRIC_STATE' });
-      
-      if (!tekState.hasToken) {
-        throw new Error('No Tekmetric session. Please navigate to a repair order.');
-      }
-      
-      try {
-        const result = await sendMessage({
-          action: 'TEKMETRIC_API_REQUEST',
-          endpoint: `/api/shop/${tekState.shopId}/canned-job?size=100`
-        });
-        
-        // Handle error responses from Tekmetric API
-        if (result.error || result.success === false) {
-          // Check for 405 error - this API may not be available
-          if (result.error && result.error.includes('405')) {
-            throw new Error('SMS Library not available for this shop. Please use MOS Enriched tab instead.');
-          }
-          throw new Error(result.error || 'Failed to load canned jobs from Tekmetric');
-        }
-        
-        const jobsArray = Array.isArray(result.content) ? result.content : (Array.isArray(result) ? result : []);
-        jobs = jobsArray.map(job => ({
-          id: job.id,
-          name: job.name,
-          description: job.description,
-          amount: job.totalAmount || 0,
-          source: 'tekmetric'
-        }));
-      } catch (err) {
-        // Handle 405 errors more gracefully
-        if (err.message && err.message.includes('405')) {
-          throw new Error('SMS Library not available for this shop. Please use MOS Enriched tab instead.');
-        }
-        throw err;
-      }
-    } else {
-      // Fetch from MOS enriched library
-      const result = await sendMessage({
-        action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
-      });
-      
-      // Handle error responses from MOS API
-      if (result.error || result.success === false) {
-        throw new Error(result.error || 'Failed to load canned jobs from MOS');
-      }
-      
-      jobs = result.jobs || [];
+    // Handle error responses from MOS API
+    if (result.error || result.success === false) {
+      throw new Error(result.error || 'Failed to load canned jobs');
     }
     
-    renderCannedJobs(jobs);
+    allCannedJobs = result.jobs || [];
+    
+    renderCannedJobs(allCannedJobs);
   } catch (err) {
     console.error('[MOS] Error loading canned jobs:', err);
     elements.cannedLoading.classList.add('hidden');
@@ -1150,6 +1108,32 @@ function renderCannedJobs(jobs) {
       }
     });
   });
+}
+
+function filterCannedJobs(searchTerm) {
+  const term = searchTerm.toLowerCase().trim();
+  
+  if (!term) {
+    // Show all jobs if no search term
+    renderCannedJobs(allCannedJobs);
+    return;
+  }
+  
+  // Filter jobs by name or description
+  const filtered = allCannedJobs.filter(job => {
+    const name = (job.name || '').toLowerCase();
+    const description = (job.description || '').toLowerCase();
+    return name.includes(term) || description.includes(term);
+  });
+  
+  if (filtered.length === 0) {
+    elements.cannedList.classList.add('hidden');
+    elements.cannedEmpty.classList.remove('hidden');
+    elements.cannedEmpty.querySelector('p').textContent = `No canned jobs matching "${searchTerm}".`;
+  } else {
+    elements.cannedEmpty.classList.add('hidden');
+    renderCannedJobs(filtered);
+  }
 }
 
 // ==================== JOB ACTIONS ====================
