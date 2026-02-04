@@ -1,0 +1,117 @@
+Toggle
+
+protractor
+Clear search
+
+
+
+Settings
+Time
+Source
+Message
+Add a column
+2026-02-04 11:28:17.952 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 54: Found 0 Protractor, 0 Tekmetric, 4 cached, returning 4
+2026-02-04 11:28:20.205 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 57: Found 0 Protractor, 0 Tekmetric, 4 cached, returning 4
+2026-02-04 11:28:22.478 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 63: Found 0 Protractor, 0 Tekmetric, 6 cached, returning 6
+2026-02-04 11:28:25.757 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 66: Found 0 Protractor, 0 Tekmetric, 3 cached, returning 3
+2026-02-04 11:28:28.229 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 67: Found 0 Protractor, 0 Tekmetric, 2 cached, returning 2
+2026-02-04 11:28:30.143 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 68: Found 0 Protractor, 0 Tekmetric, 2 cached, returning 2
+2026-02-04 11:28:32.038 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 69: Found 0 Protractor, 0 Tekmetric, 18 cached, returning 18
+2026-02-04 11:28:40.323 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 70: Found 0 Protractor, 0 Tekmetric, 1 cached, returning 1
+2026-02-04 11:28:41.785 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 71: Found 0 Protractor, 0 Tekmetric, 2 cached, returning 2
+2026-02-04 11:28:43.938 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [InternalAPI] Shop 72: Found 0 Protractor, 0 Tekmetric, 7 cached, returning 7
+2026-02-04 11:28:45.554 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Callback GET] Update WorkOrder b08b8578-8353-4a8c-a741-871063487a8a for shop 28
+2026-02-04 11:28:46.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"162.212.202.163","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor?connectionId=177cef53f37641c5a37513debf006051&apiKey=d9df30d7a9774a079c575bcba5c9f755&type=WorkOrder&id=b08b8578-8353-4a8c-a741-871063487a8a&operation=Update","requestId":"c76959b9-64ee-46ca","responseBytes":326,"responseTimeMS":921,"statusCode":200,"time":"2026-02-04T17:28:46Z","userAgent":""}1 result found
+2026-02-04 11:28:46.242 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Callback GET] Update work order snapshot b08b8578-8353-4a8c-a741-871063487a8a
+2026-02-04 11:31:58.547 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Callback GET] Update WorkOrder a5527b01-361d-4df5-ad9e-8ad9befcb1ae for shop 29
+2026-02-04 11:31:59.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"162.212.202.163","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor?connectionId=8f223ccd57e24eb8ad975422855f6860&apiKey=3c72f9e6adbc401596dc3afbbb60da95&type=WorkOrder&id=a5527b01-361d-4df5-ad9e-8ad9befcb1ae&operation=Update","requestId":"9e7297aa-2a4e-41ed","responseBytes":325,"responseTimeMS":963,"statusCode":200,"time":"2026-02-04T17:31:59Z","userAgent":""}1 result found
+2026-02-04 11:31:59.270 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Callback GET] Update work order snapshot a5527b01-361d-4df5-ad9e-8ad9befcb1ae
+2026-02-04 11:35:46.000 CST
+MOS Production
+syslog.host:mos-tools-qa syslog.appname:http-request syslog.procid:1 {"clientIP":"72.198.61.82","host":"www.qa.mos.tools","method":"GET","path":"/api/settings/protractor","requestId":"e4070412-a3ff-424a","responseBytes":375,"responseTimeMS":562,"statusCode":200,"time":"2026-02-04T17:35:46Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}1 result found
+
+
+2026-02-04 11:36:26.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"72.198.61.82","host":"mos.tools","method":"GET","path":"/api/settings/protractor","requestId":"7a06c2b0-d0ea-4ba9","responseBytes":348,"responseTimeMS":236,"statusCode":200,"time":"2026-02-04T17:36:26Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}1 result found
+2026-02-04 11:36:42.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"72.198.61.82","host":"mos.tools","method":"POST","path":"/api/settings/protractor","requestId":"98510e1a-9afa-4b78","responseBytes":649,"responseTimeMS":458,"statusCode":200,"time":"2026-02-04T17:36:42Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}1 result found
+2026-02-04 11:36:42.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"72.198.61.82","host":"mos.tools","method":"GET","path":"/api/settings/protractor","requestId":"87100e61-26f7-4056","responseBytes":374,"responseTimeMS":242,"statusCode":200,"time":"2026-02-04T17:36:42Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}1 result found
+2026-02-04 11:36:43.137 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Sync] Backfill not complete for shop 50, triggering in background
+2026-02-04 11:36:43.199 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Sync] Backfill failed for shop 50: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.backfill_progress index: shopId dup key: { shopId: 50 }
+2026-02-04 11:36:44.592 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=0, got 161, total so far: 161
+2026-02-04 11:36:45.245 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=100, got 161, total so far: 322
+2026-02-04 11:36:47.714 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=200, got 161, total so far: 483
+2026-02-04 11:36:48.912 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=300, got 161, total so far: 644
+2026-02-04 11:36:49.985 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=400, got 161, total so far: 805
+2026-02-04 11:36:51.135 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=500, got 161, total so far: 966
+2026-02-04 11:36:52.314 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=600, got 161, total so far: 1127
+2026-02-04 11:36:53.512 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=700, got 161, total so far: 1288
+2026-02-04 11:36:54.747 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=800, got 161, total so far: 1449
+2026-02-04 11:36:55.920 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=900, got 161, total so far: 1610
+2026-02-04 11:36:57.101 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1000, got 161, total so far: 1771
+2026-02-04 11:36:58.340 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1100, got 161, total so far: 1932
+
