@@ -185,11 +185,12 @@ export async function GET(request: NextRequest) {
     }
     
     // Optional make/model filtering for pre-filtering (same as web app)
+    // Use string pattern instead of RegExp objects to ensure MongoDB compatibility
     if (make) {
-      matchStage["vehicle.make"] = { $regex: new RegExp(make, "i") };
+      matchStage["vehicle.make"] = { $regex: make, $options: "i" };
     }
     if (model) {
-      matchStage["vehicle.model"] = { $regex: new RegExp(model, "i") };
+      matchStage["vehicle.model"] = { $regex: model, $options: "i" };
     }
 
     // Fetch candidates
