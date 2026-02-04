@@ -496,16 +496,20 @@ function setupAddDropdowns() {
       // Close dropdown
       item.closest('.add-dropdown-menu').classList.add('hidden');
       
+      // Get the service name from various possible field names
+      const serviceName = service.service || service.name || service.title || service.repair || service.jobTitle || 'Unknown Service';
+      
       if (action === 'search-history') {
         // Switch to Job Lookup tab and search for this service
         switchTab('lookup');
-        elements.jobSearch.value = service.name;
+        elements.jobSearch.value = serviceName;
         await handleJobSearch();
       } else if (action === 'search-canned') {
         // Switch to Canned Jobs tab and search
         switchTab('canned');
-        // Highlight matching canned job with retry
-        highlightCannedJob(service.name);
+        // Filter canned jobs list by the service name
+        elements.cannedSearch.value = serviceName;
+        filterCannedJobs(serviceName);
       } else if (action === 'add-generic') {
         // Add as generic job
         await handleAddService(service);
