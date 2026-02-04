@@ -53,11 +53,15 @@ export async function GET(request: NextRequest) {
       }, { headers: corsHeaders });
     }
 
-    const features = await getFeatureEntitlements(mosShopId);
+    const entitlements = await getFeatureEntitlements(mosShopId);
 
     return NextResponse.json({ 
-      features,
-      shopId: mosShopId
+      features: entitlements.effectiveFeatures,
+      shopId: mosShopId,
+      billing: {
+        plan: entitlements.billing.plan,
+        status: entitlements.billing.status
+      }
     }, { headers: corsHeaders });
 
   } catch (error: any) {
