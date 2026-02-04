@@ -92,15 +92,11 @@ async function main() {
     console.error('[Tekmetric Worker] Failed to start:', err);
   });
 
-  console.log('[3/4] Starting Protractor Sync Worker...');
-  const protractorWorker = spawn('npx', ['tsx', 'scripts/protractor-sync-worker.ts'], {
-    stdio: 'inherit',
-    env: workerEnv
-  });
-
-  protractorWorker.on('error', (err) => {
-    console.error('[Protractor Worker] Failed to start:', err);
-  });
+  // Protractor Sync Worker DISABLED - using webhooks + daily scheduled cron instead
+  // The frequent polling was causing excessive API requests to Protractor
+  // Daily sync runs via external scheduler (Render cron) at 2am EST
+  // See: /api/cron/protractor-sync
+  console.log('[3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)');
 
   console.log('[4/4] Starting Plan Prefetch Worker...');
   const planPrefetchWorker = spawn('npx', ['tsx', 'scripts/plan-prefetch-worker.ts'], {
@@ -123,7 +119,7 @@ async function main() {
   console.log('All services started!');
   console.log('- Next.js server on port ' + PORT);
   console.log('- Tekmetric Sync Worker (every 60s)');
-  console.log('- Protractor Sync Worker (every 60s)');
+  console.log('- Protractor Sync Worker DISABLED (daily cron + webhooks)');
   console.log('- Plan Prefetch Worker (every 30m)');
   console.log('='.repeat(60));
 
@@ -131,7 +127,6 @@ async function main() {
     console.log('[Shutdown] Received SIGTERM, stopping all processes...');
     nextServer.kill('SIGTERM');
     tekmetricWorker.kill('SIGTERM');
-    protractorWorker.kill('SIGTERM');
     planPrefetchWorker.kill('SIGTERM');
     process.exit(0);
   });
@@ -140,7 +135,6 @@ async function main() {
     console.log('[Shutdown] Received SIGINT, stopping all processes...');
     nextServer.kill('SIGINT');
     tekmetricWorker.kill('SIGINT');
-    protractorWorker.kill('SIGINT');
     planPrefetchWorker.kill('SIGINT');
     process.exit(0);
   });
