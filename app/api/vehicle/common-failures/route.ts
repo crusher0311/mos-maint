@@ -3,16 +3,39 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getCommonFailures } from "@/lib/common-failures";
 import { getNormalizedCache, CACHE_KEYS, CACHE_TTL } from "@/lib/normalized-cache";
+import { validateExtensionToken } from "@/lib/extension-auth";
 
 export const dynamic = "force-dynamic";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function GET(req: NextRequest) {
+  // Try session auth first, then token auth for extension
+  let shopId: number | null = null;
+  
   const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session) {
+    shopId = Number(session.shopId);
+  } else {
+    // Try extension token auth
+    const auth = await validateExtensionToken(req);
+    if (auth.authorized && auth.user) {
+      shopId = Number(auth.user.shopId);
+    }
+  }
+  
+  if (!shopId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
 
-  const shopId = Number(session.shopId);
   const url = new URL(req.url);
   
   const year = url.searchParams.get("year");
@@ -25,7 +48,7 @@ export async function GET(req: NextRequest) {
   if (!year || !make || !model || !mileage) {
     return NextResponse.json(
       { error: "Missing required parameters: year, make, model, mileage" },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
@@ -33,11 +56,11 @@ export async function GET(req: NextRequest) {
   const mileageNum = parseInt(mileage);
 
   if (isNaN(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 2) {
-    return NextResponse.json({ error: "Invalid year" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid year" }, { status: 400, headers: corsHeaders });
   }
 
   if (isNaN(mileageNum) || mileageNum < 0 || mileageNum > 1000000) {
-    return NextResponse.json({ error: "Invalid mileage" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid mileage" }, { status: 400, headers: corsHeaders });
   }
 
   const db = await getDb();
@@ -75,12 +98,12 @@ export async function GET(req: NextRequest) {
       engine
     );
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: corsHeaders });
   } catch (error) {
     console.error("Common failures error:", error);
     return NextResponse.json(
       { error: "Failed to get common failures" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
