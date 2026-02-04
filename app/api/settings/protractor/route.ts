@@ -35,7 +35,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       configured: config.configured,
-      connectionId: config.connectionId ? `${config.connectionId.slice(0, 8)}...` : null,
+      connectionId: config.connectionId || null,
+      connectionIdShort: config.connectionId ? `${config.connectionId.slice(0, 8)}...` : null,
+      apiKey: config.apiKey || null,
+      apiKeyShort: config.apiKey ? `${config.apiKey.slice(0, 8)}...` : null,
       hasApiKey: Boolean(config.apiKey),
       updateWorkOrderPackage: shop?.protractor?.updateWorkOrderPackage ?? false,
       updateWorkOrderLine: shop?.protractor?.updateWorkOrderLine ?? false,

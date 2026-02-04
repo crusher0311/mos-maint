@@ -24,9 +24,13 @@ export default function ProtractorSettingsPage() {
   const [status, setStatus] = useState<{
     configured: boolean;
     connectionId?: string;
+    connectionIdShort?: string;
+    apiKey?: string;
+    apiKeyShort?: string;
     hasApiKey?: boolean;
     updateWorkOrderPackage?: boolean;
     updateWorkOrderLine?: boolean;
+    webhookToken?: string;
   } | null>(null);
   const [syncStats, setSyncStats] = useState<{
     vehicles: number;
@@ -281,9 +285,6 @@ export default function ProtractorSettingsPage() {
               <>
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
                 <span className="text-green-700 font-medium">Connected</span>
-                <span className="text-gray-500 text-sm">
-                  (ID: {status.connectionId})
-                </span>
               </>
             ) : (
               <>
@@ -292,6 +293,31 @@ export default function ProtractorSettingsPage() {
               </>
             )}
           </div>
+          
+          {status?.configured && (
+            <div className="mt-4 bg-gray-50 rounded-lg p-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Connection ID</label>
+                <div className="mt-1 font-mono text-sm text-gray-800 bg-white border border-gray-200 rounded px-3 py-2 select-all">
+                  {status.connectionId}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">API Key</label>
+                <div className="mt-1 font-mono text-sm text-gray-800 bg-white border border-gray-200 rounded px-3 py-2 select-all">
+                  {status.apiKey}
+                </div>
+              </div>
+              {status.webhookToken && (
+                <div>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Webhook Token</label>
+                  <div className="mt-1 font-mono text-sm text-gray-800 bg-white border border-gray-200 rounded px-3 py-2 select-all">
+                    {status.webhookToken}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {status?.configured ? (
