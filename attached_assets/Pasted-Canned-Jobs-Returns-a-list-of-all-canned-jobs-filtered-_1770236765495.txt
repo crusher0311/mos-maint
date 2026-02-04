@@ -1,0 +1,184 @@
+Canned Jobs
+Returns a list of all canned jobs filtered by the provided search parameters.
+Request Headers
+Authorization	Bearer access_token
+Request Parameters
+shop
+Integer	Filter by shop ID
+search
+String	Filter by job name
+categories
+Array<String>	Filter results by job category codes
+Permitted Values: [ Unassigned - (Filter jobs with no categories), Category Code - (Filter with job category code) ]
+rates
+Array<String>	Filter results by labor rates
+Permitted Values: [ None - (Filter jobs with no labor), Labor rate in cents, i.e. 7250 - (Filter with labor rate) ]
+sort
+String	Specify the property you'd like to sort on
+Permitted Values: [ jobCategory ]
+sortDirection
+String	Determine the direction you want to sort your results
+Permitted Values: [ ASC, DESC ]
+size
+Integer	Specify the number of results you would like returned. The maximum page size is 100. For values greater than this value, the API overrides and returns 100 records. You can use pagination to access the next records.
+page
+Integer	Specify the page of results you would like returned
+Response Attributes
+id
+Canned job id
+name
+Canned job name
+note
+Notes on canned job
+jobTemplateType
+Canned job template type
+jobCategoryCode
+Canned job category code
+totalCost
+Total cost of job in cents
+laborRates
+List of unique labor rates for job
+labor
+List of labor
+parts
+List of parts
+discounts
+List of discounts
+fees
+List of fees
+GET
+/api/v1/canned-jobs
+Example Request
+curl -X GET 'https://sandbox.tekmetric.com/api/v1/canned-jobs?shop=1' \
+-H "Authorization: Bearer dd824dda-c02c-478a-aa84-cd9fdb217c15"
+Example Response
+{
+  "content": [
+    {
+      "id": 609280,
+      "name": "TIRE PATCH",
+      "note": null,
+      "totalCost": 3577,
+      "jobTemplateType": null,
+      "jobCategoryCode": null,
+      "laborRates": [
+        7331,
+        12715
+      ],
+      "labor": [
+        {
+          "id": 1482155,
+          "name": "PATCH",
+          "rate": 7331,
+          "hours": 0.3,
+          "complete": false
+        },
+        {
+          "id": 1482157,
+          "name": "MOUNT AND BALANCE",
+          "rate": 12715,
+          "hours": 0,
+          "complete": false
+        }
+      ],
+      "parts": [
+        {
+          "id": 1484852,
+          "quantity": 1,
+          "brand": null,
+          "name": "PATCH PLUG KIT",
+          "partNumber": "TIRE PPL 710",
+          "description": null,
+          "cost": 100,
+          "retail": 1300,
+          "model": null,
+          "width": null,
+          "ratio": null,
+          "diameter": null,
+          "constructionType": null,
+          "loadIndex": null,
+          "speedRating": null,
+          "partType": {
+            "id": 1,
+            "code": "PART",
+            "name": "Part"
+          },
+          "partStatus": null
+        }
+      ],
+      "discounts": [
+        {
+          "id": 125748,
+          "name": "Fixed Job Discount",
+          "total": 1000
+        }
+      ],
+      "fees": [
+        {
+          "id": 685612,
+          "name": "Fixed Job Fee",
+          "total": 1000
+        }
+      ],
+      "packagePrice": false
+    }
+  ],
+  "pageable": {
+    "sort": {
+      "sorted": false,
+      "unsorted": true,
+      "empty": true
+    },
+    "pageNumber": 0,
+    "offset": 0,
+    "pageSize": 10,
+    "paged": true,
+    "unpaged": false
+  },
+  "totalElements": 1,
+  "totalPages": 1,
+  "last": true,
+  "first": true,
+  "size": 10,
+  "number": 0,
+  "sort": {
+    "sorted": false,
+    "unsorted": true,
+    "empty": true
+  },
+  "numberOfElements": 1,
+  "empty": false
+}
+Add Canned Jobs To Repair Order
+Adds given canned jobs to repair order
+Request Headers
+Content-Type	application/json
+Authorization	Bearer access_token
+Request Parameters
+id
+Integer	repairOrderId
+Request Attributes
+
+
+required	List of canned job ids
+
+Response Attributes
+data
+List of created job ids
+POST
+/api/v1/repair-orders/{id}/canned-jobs
+Example Request
+curl -X POST 'https://sandbox.tekmetric.com/api/v1/repair-orders/1/canned-jobs' \
+-H "Authorization: Bearer dd824dda-c02c-478a-aa84-cd9fdb217c15" \
+-H "Content-Type: application/json" \
+--data-raw '[609801]'
+Example Response
+{
+  "type": "SUCCESS",
+  "message": "Job(s) saved",
+  "data": {
+    "jobs": [
+      1089313
+    ]
+  }
+}

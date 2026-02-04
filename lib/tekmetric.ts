@@ -399,9 +399,10 @@ export async function addCannedJobsToRepairOrder(
   repairOrderId: number,
   cannedJobIds: number[]
 ): Promise<any> {
+  // Tekmetric API expects an array of canned job IDs directly, not an object
   return tekmetricRequest(`/repair-orders/${repairOrderId}/canned-jobs`, {
     method: 'POST',
-    body: JSON.stringify({ cannedJobIds }),
+    body: JSON.stringify(cannedJobIds),
   });
 }
 
