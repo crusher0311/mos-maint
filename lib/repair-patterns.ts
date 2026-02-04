@@ -42,6 +42,54 @@ export interface PatternMatch {
 
 const COLLECTION_NAME = "shop_repair_patterns";
 
+// Model variants that share platforms/components and should cross-reference failures
+const MODEL_VARIANTS: Record<string, string[]> = {
+  // Ford SUVs - shared platforms
+  "EXPEDITION": ["EXPEDITION", "EXPEDITION MAX"],
+  "EXPEDITION MAX": ["EXPEDITION", "EXPEDITION MAX"],
+  "EXPLORER": ["EXPLORER", "EXPLORER SPORT", "EXPLORER SPORT TRAC"],
+  "EXPLORER SPORT": ["EXPLORER", "EXPLORER SPORT"],
+  "EXPLORER SPORT TRAC": ["EXPLORER", "EXPLORER SPORT TRAC"],
+  // Ford F-Series
+  "F-150": ["F-150", "F-150 LIGHTNING"],
+  "F-150 LIGHTNING": ["F-150", "F-150 LIGHTNING"],
+  // Chevy SUVs
+  "TAHOE": ["TAHOE", "SUBURBAN"],
+  "SUBURBAN": ["TAHOE", "SUBURBAN"],
+  "TRAVERSE": ["TRAVERSE", "ACADIA"],
+  // GMC
+  "YUKON": ["YUKON", "YUKON XL", "TAHOE", "SUBURBAN"],
+  "YUKON XL": ["YUKON", "YUKON XL", "SUBURBAN"],
+  "ACADIA": ["ACADIA", "TRAVERSE"],
+  // Jeep
+  "GRAND CHEROKEE": ["GRAND CHEROKEE", "GRAND CHEROKEE L"],
+  "GRAND CHEROKEE L": ["GRAND CHEROKEE", "GRAND CHEROKEE L"],
+  "WRANGLER": ["WRANGLER", "WRANGLER UNLIMITED"],
+  "WRANGLER UNLIMITED": ["WRANGLER", "WRANGLER UNLIMITED"],
+  // Toyota
+  "4RUNNER": ["4RUNNER", "GX460", "GX"],
+  "TACOMA": ["TACOMA"],
+  "TUNDRA": ["TUNDRA", "SEQUOIA"],
+  "SEQUOIA": ["SEQUOIA", "TUNDRA"],
+  // Lexus (Toyota platform)
+  "GX460": ["GX460", "GX", "4RUNNER"],
+  "GX": ["GX", "GX460", "4RUNNER"],
+  "LX570": ["LX570", "LX", "LAND CRUISER"],
+  "LX": ["LX", "LX570", "LAND CRUISER"],
+  "LAND CRUISER": ["LAND CRUISER", "LX570", "LX"],
+  // Honda/Acura
+  "PILOT": ["PILOT", "MDX"],
+  "MDX": ["MDX", "PILOT"],
+  "ODYSSEY": ["ODYSSEY"],
+  "CR-V": ["CR-V", "RDX"],
+  "RDX": ["RDX", "CR-V"],
+};
+
+function getModelVariants(model: string): string[] {
+  const normalized = model.toUpperCase().trim();
+  return MODEL_VARIANTS[normalized] || [normalized];
+}
+
 function getMileageBucket(mileage: number): number {
   return Math.floor(mileage / 5000) * 5000;
 }
@@ -236,11 +284,14 @@ export async function getShopPatterns(params: {
     ? { enterpriseId: toObjectId(params.enterpriseId) }
     : { shopId: params.shopId };
 
+  // Include related model variants (e.g., Expedition + Expedition Max)
+  const modelVariants = getModelVariants(params.model);
+  
   const patterns = await collection.find({
     ...shopFilter,
     year: params.year,
     make: params.make.toUpperCase(),
-    model: params.model.toUpperCase(),
+    model: { $in: modelVariants },
     mileageBucket: { $in: buckets },
     occurrences: { $gte: 2 }, // At least 2 occurrences to be a pattern
   })
@@ -274,6 +325,9 @@ export async function getEnterprisePatterns(params: {
   const mileageBucket = getMileageBucket(params.mileage);
   const buckets = [mileageBucket - 5000, mileageBucket, mileageBucket + 5000].filter(b => b >= 0);
 
+  // Include related model variants (e.g., Expedition + Expedition Max)
+  const modelVariants = getModelVariants(params.model);
+  
   // Aggregate across all enterprise shops
   const pipeline = [
     {
@@ -281,7 +335,7 @@ export async function getEnterprisePatterns(params: {
         enterpriseId: toObjectId(params.enterpriseId),
         year: params.year,
         make: params.make.toUpperCase(),
-        model: params.model.toUpperCase(),
+        model: { $in: modelVariants },
         mileageBucket: { $in: buckets },
       },
     },
