@@ -1,0 +1,134 @@
+Time
+Source
+Message
+Add a column
+2026-02-04 11:36:43.137 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Sync] Backfill not complete for shop 50, triggering in background
+2026-02-04 11:36:43.199 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor Sync] Backfill failed for shop 50: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.backfill_progress index: shopId dup key: { shopId: 50 }
+2026-02-04 11:36:44.592 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=0, got 161, total so far: 161
+2026-02-04 11:36:45.245 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=100, got 161, total so far: 322
+2026-02-04 11:36:47.714 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=200, got 161, total so far: 483
+2026-02-04 11:36:48.912 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=300, got 161, total so far: 644
+2026-02-04 11:36:49.985 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=400, got 161, total so far: 805
+2026-02-04 11:36:51.135 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=500, got 161, total so far: 966
+2026-02-04 11:36:52.314 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=600, got 161, total so far: 1127
+2026-02-04 11:36:53.512 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=700, got 161, total so far: 1288
+2026-02-04 11:36:54.747 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=800, got 161, total so far: 1449
+2026-02-04 11:36:55.920 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=900, got 161, total so far: 1610
+2026-02-04 11:36:57.101 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1000, got 161, total so far: 1771
+2026-02-04 11:36:58.340 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1100, got 161, total so far: 1932
+2026-02-04 11:36:59.521 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1200, got 161, total so far: 2093
+2026-02-04 11:37:00.714 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1300, got 161, total so far: 2254
+2026-02-04 11:37:01.915 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1400, got 161, total so far: 2415
+2026-02-04 11:37:03.130 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1500, got 161, total so far: 2576
+2026-02-04 11:37:04.355 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1600, got 161, total so far: 2737
+2026-02-04 11:37:05.593 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1700, got 161, total so far: 2898
+2026-02-04 11:37:06.775 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1800, got 161, total so far: 3059
+2026-02-04 11:37:07.990 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=1900, got 161, total so far: 3220
+2026-02-04 11:37:09.183 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2000, got 161, total so far: 3381
+2026-02-04 11:37:10.402 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2100, got 161, total so far: 3542
+2026-02-04 11:37:11.591 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2200, got 161, total so far: 3703
+2026-02-04 11:37:12.786 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2300, got 161, total so far: 3864
+2026-02-04 11:37:13.999 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2400, got 161, total so far: 4025
+2026-02-04 11:37:15.188 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2500, got 161, total so far: 4186
+2026-02-04 11:37:16.389 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2600, got 161, total so far: 4347
+2026-02-04 11:37:17.588 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2700, got 161, total so far: 4508
+2026-02-04 11:37:18.800 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2800, got 161, total so far: 4669
+2026-02-04 11:37:19.996 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=2900, got 161, total so far: 4830
+2026-02-04 11:37:21.209 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3000, got 161, total so far: 4991
+2026-02-04 11:37:22.411 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3100, got 161, total so far: 5152
+2026-02-04 11:37:23.588 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3200, got 161, total so far: 5313
+2026-02-04 11:37:24.787 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3300, got 161, total so far: 5474
+2026-02-04 11:37:26.012 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3400, got 161, total so far: 5635
+2026-02-04 11:37:27.196 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3500, got 161, total so far: 5796
+2026-02-04 11:37:28.403 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3600, got 161, total so far: 5957
+2026-02-04 11:37:29.597 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3700, got 161, total so far: 6118
+2026-02-04 11:37:30.809 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3800, got 161, total so far: 6279
+2026-02-04 11:37:32.008 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=3900, got 161, total so far: 6440
+2026-02-04 11:37:33.208 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-khqfw syslog.procid:1 [Protractor] Fetched work orders page: skip=4000, got 161, total so far: 6601
+
