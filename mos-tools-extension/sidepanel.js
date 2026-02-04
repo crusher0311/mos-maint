@@ -591,6 +591,10 @@ function getOverdueText(item, type) {
 function createServiceItemHTML(item, type) {
   const itemId = `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
+  // Get service name from various possible field names
+  // API sends 'service', some places use 'name' or 'title'
+  const serviceName = item.service || item.name || item.title || item.serviceKey || 'Unknown Service';
+  
   // Status badge color based on type (recommended = upcoming in display)
   const badgeClass = type === 'overdue' ? 'badge-overdue' : 
                      type === 'due-soon' ? 'badge-due-soon' : 'badge-upcoming';
@@ -604,7 +608,7 @@ function createServiceItemHTML(item, type) {
   // Interval info (OEM or Shop)
   const intervalText = item.intervalText || 
     (item.interval ? `OEM: ${item.interval.toLocaleString()} mi` : '');
-  const isShopInterval = item.intervalSource === 'shop';
+  const isShopInterval = item.intervalSource === 'shop' || item.usingShopInterval;
   
   // Due at and overdue info
   const dueAtText = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : '';
@@ -625,7 +629,7 @@ function createServiceItemHTML(item, type) {
   return `
     <li class="service-item ${type}">
       <div class="service-header">
-        <div class="service-name">${escapeHtml(item.name)}</div>
+        <div class="service-name">${escapeHtml(serviceName)}</div>
         <div class="add-dropdown">
           <button class="btn-add btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
             + Add
