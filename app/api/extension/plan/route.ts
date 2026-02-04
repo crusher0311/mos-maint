@@ -563,7 +563,12 @@ export async function GET(request: NextRequest) {
         source: item.source || 'oem',
         serviceKey: item.serviceKey,
         bump: item.bump,
-        usingShopInterval: item.usingShopInterval
+        usingShopInterval: item.usingShopInterval,
+        // Include Protractor deferred work matching
+        matchedDeferred: item.matchedDeferred || null,
+        protractorDeferredId: item.protractorDeferredId || null,
+        // Include declined service info
+        declined: item.declined || null
       });
       
       for (const item of (cachedPlan.plan.buckets.overdue || [])) {
@@ -583,6 +588,8 @@ export async function GET(request: NextRequest) {
         vehicle: cachedPlan.plan.vehicle || vehicle || { vin: vin.toUpperCase() },
         mileage: cachedPlan.plan.currentMiles || mileage,
         ...plan,
+        // Include Protractor deferred work list if available
+        deferredWork: cachedPlan.plan.deferredWork || [],
         vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
         fromDashboardCache: true
       }, { headers: corsHeaders });
