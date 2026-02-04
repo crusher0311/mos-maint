@@ -78,8 +78,9 @@ export async function POST(request: NextRequest) {
     });
     
     const latencyMs = Date.now() - startTime;
-    await trackApiRequest('render', '/log-stream', 'POST', 200, latencyMs, logs.length, {
-      sourceWorker: environment
+    await trackApiRequest('render', '/log-stream', 'POST', 200, latencyMs, undefined, {
+      sourceWorker: environment,
+      requestId: `log-batch-${logs.length}`
     });
     
     return NextResponse.json({ ok: true, stored: logs.length });
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[LogStream] Error processing logs:', error);
     const latencyMs = Date.now() - startTime;
-    await trackApiRequest('render', '/log-stream', 'POST', 500, latencyMs, 0, {
+    await trackApiRequest('render', '/log-stream', 'POST', 500, latencyMs, undefined, {
       errorMessage: error instanceof Error ? error.message : 'Unknown error'
     });
     return NextResponse.json({ 
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
       .toArray();
     
     const stats = await collection.aggregate([
-      { $match: { timestamp: { $gte: startTime, $lte: now } } },
+      { $match: query },
       {
         $group: {
           _id: null,

@@ -90,7 +90,7 @@ export default function ObservabilityPage() {
   const fetchApiUsage = useCallback(async () => {
     setApiLoading(true);
     try {
-      const response = await fetch(`/api/admin/api-usage/summary?hours=${hoursBack}`);
+      const response = await fetch(`/api/platform-admin/api-usage/summary?hours=${hoursBack}`);
       if (response.ok) {
         const data = await response.json();
         setApiUsage(data.providers || []);
