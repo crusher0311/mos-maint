@@ -6,6 +6,31 @@ import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getValidToken } from "@/lib/tekmetric-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
+// Model variants that share platforms and should cross-reference
+const MODEL_VARIANTS: Record<string, string[]> = {
+  "EXPEDITION": ["EXPEDITION", "EXPEDITION MAX"],
+  "EXPEDITION MAX": ["EXPEDITION", "EXPEDITION MAX"],
+  "EXPLORER": ["EXPLORER", "EXPLORER SPORT", "EXPLORER SPORT TRAC"],
+  "TAHOE": ["TAHOE", "SUBURBAN"],
+  "SUBURBAN": ["TAHOE", "SUBURBAN"],
+  "YUKON": ["YUKON", "YUKON XL", "TAHOE", "SUBURBAN"],
+  "YUKON XL": ["YUKON", "YUKON XL", "SUBURBAN"],
+  "GRAND CHEROKEE": ["GRAND CHEROKEE", "GRAND CHEROKEE L"],
+  "GRAND CHEROKEE L": ["GRAND CHEROKEE", "GRAND CHEROKEE L"],
+  "WRANGLER": ["WRANGLER", "WRANGLER UNLIMITED"],
+  "WRANGLER UNLIMITED": ["WRANGLER", "WRANGLER UNLIMITED"],
+  "4RUNNER": ["4RUNNER", "GX460", "GX"],
+  "TUNDRA": ["TUNDRA", "SEQUOIA"],
+  "SEQUOIA": ["SEQUOIA", "TUNDRA"],
+  "PILOT": ["PILOT", "MDX"],
+  "MDX": ["MDX", "PILOT"],
+};
+
+function getModelVariants(model: string): string[] {
+  const normalized = model.toUpperCase().trim();
+  return MODEL_VARIANTS[normalized] || [normalized];
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -190,7 +215,14 @@ export async function GET(request: NextRequest) {
       matchStage["vehicle.make"] = { $regex: make, $options: "i" };
     }
     if (model) {
-      matchStage["vehicle.model"] = { $regex: model, $options: "i" };
+      // Include model variants (e.g., Expedition MAX also matches Expedition)
+      const variants = getModelVariants(model);
+      if (variants.length > 1) {
+        // Build OR condition for model variants
+        matchStage["vehicle.model"] = { $regex: variants.join("|"), $options: "i" };
+      } else {
+        matchStage["vehicle.model"] = { $regex: model, $options: "i" };
+      }
     }
 
     // Fetch candidates

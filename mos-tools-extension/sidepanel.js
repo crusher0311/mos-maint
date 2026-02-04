@@ -1201,12 +1201,19 @@ async function handleAddJob(job) {
 }
 
 async function handleAddCannedJob(job) {
+  console.log('[MOS] handleAddCannedJob called:', job);
+  
   if (!currentContext) {
     alert('No repair order context. Please navigate to a repair order.');
     return;
   }
   
-  if (job.source === 'tekmetric') {
+  // Get the tekmetric ID - could be in different fields
+  const tekmetricId = job.tekmetricId || job.id;
+  
+  console.log('[MOS] Adding canned job:', { name: job.name, tekmetricId, source: job.source, roId: currentContext.roId });
+  
+  if (job.source === 'tekmetric' && tekmetricId) {
     // Use Tekmetric's canned job API
     try {
       const result = await sendMessage({
@@ -1214,9 +1221,15 @@ async function handleAddCannedJob(job) {
         endpoint: `/api/repair-order/${currentContext.roId}/canned-job`,
         options: {
           method: 'POST',
-          body: JSON.stringify({ cannedJobIds: [job.id] })
+          body: JSON.stringify({ cannedJobIds: [parseInt(tekmetricId)] })
         }
       });
+      
+      console.log('[MOS] Tekmetric canned job add result:', result);
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
       
       showNotification(`Added: ${job.name}`, 'success');
       
@@ -1228,10 +1241,11 @@ async function handleAddCannedJob(job) {
       });
     } catch (err) {
       console.error('[MOS] Error adding canned job:', err);
-      showNotification(err.message, 'error');
+      showNotification(err.message || 'Failed to add canned job', 'error');
     }
   } else {
     // MOS enriched job - convert to custom job
+    console.log('[MOS] Adding as generic job (no tekmetricId)');
     await handleAddJob(job);
   }
 }
