@@ -347,7 +347,7 @@ function handleImmediatePrint() {
   });
 }
 
-function showIntervalDropdown(event, buttonElement) {
+async function showIntervalDropdown(event, buttonElement) {
   // Remove existing dropdown if any
   const existingDropdown = document.getElementById('mos-interval-dropdown');
   if (existingDropdown) {
@@ -355,15 +355,9 @@ function showIntervalDropdown(event, buttonElement) {
     return;
   }
   
-  const intervals = [
-    { label: '3,000 mi / 3 mo', miles: 3000, months: 3 },
-    { label: '5,000 mi / 6 mo', miles: 5000, months: 6 },
-    { label: '7,500 mi / 6 mo', miles: 7500, months: 6 },
-    { label: '10,000 mi / 12 mo', miles: 10000, months: 12 },
-    { label: '15,000 mi / 12 mo', miles: 15000, months: 12 },
-    { label: 'Customize...', action: 'customize' }
-  ];
+  const context = detectContext();
   
+  // Create dropdown container
   const dropdown = document.createElement('div');
   dropdown.id = 'mos-interval-dropdown';
   Object.assign(dropdown.style, {
@@ -382,6 +376,76 @@ function showIntervalDropdown(event, buttonElement) {
   const rect = buttonElement.getBoundingClientRect();
   dropdown.style.top = `${rect.bottom + 4}px`;
   dropdown.style.left = `${rect.left}px`;
+  
+  // Show loading state
+  dropdown.innerHTML = '<div style="padding: 12px 16px; color: #666; font-size: 13px;">Loading intervals...</div>';
+  document.body.appendChild(dropdown);
+  
+  // Fetch shop's configured intervals
+  let intervals = [];
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/sticker?shopId=${context.shopId}&provider=${context.provider || 'tekmetric'}`
+      }, resolve);
+    });
+    
+    if (result && result.config && result.config.intervals) {
+      const cfg = result.config.intervals;
+      // Build intervals from shop config
+      if (cfg.conventional) {
+        intervals.push({ 
+          label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} mi / ${cfg.conventional.months} mo`, 
+          miles: cfg.conventional.mileage, 
+          months: cfg.conventional.months,
+          type: 'conventional'
+        });
+      }
+      if (cfg.synthetic) {
+        intervals.push({ 
+          label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} mi / ${cfg.synthetic.months} mo`, 
+          miles: cfg.synthetic.mileage, 
+          months: cfg.synthetic.months,
+          type: 'synthetic'
+        });
+      }
+      if (cfg.euro) {
+        intervals.push({ 
+          label: `Euro: ${cfg.euro.mileage.toLocaleString()} mi / ${cfg.euro.months} mo`, 
+          miles: cfg.euro.mileage, 
+          months: cfg.euro.months,
+          type: 'euro'
+        });
+      }
+      if (cfg.diesel) {
+        intervals.push({ 
+          label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} mi / ${cfg.diesel.months} mo`, 
+          miles: cfg.diesel.mileage, 
+          months: cfg.diesel.months,
+          type: 'diesel'
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to fetch sticker config:', err);
+  }
+  
+  // Fallback to defaults if no intervals fetched
+  if (intervals.length === 0) {
+    intervals = [
+      { label: 'Conventional: 3,000 mi / 3 mo', miles: 3000, months: 3, type: 'conventional' },
+      { label: 'Synthetic: 5,000 mi / 6 mo', miles: 5000, months: 6, type: 'synthetic' },
+      { label: 'Euro: 10,000 mi / 12 mo', miles: 10000, months: 12, type: 'euro' },
+      { label: 'Diesel: 7,500 mi / 6 mo', miles: 7500, months: 6, type: 'diesel' }
+    ];
+  }
+  
+  // Add customize option
+  intervals.push({ label: 'Customize...', action: 'customize' });
+  
+  // Clear loading and render intervals
+  dropdown.innerHTML = '';
   
   intervals.forEach(interval => {
     const item = document.createElement('div');
@@ -412,8 +476,6 @@ function showIntervalDropdown(event, buttonElement) {
     
     dropdown.appendChild(item);
   });
-  
-  document.body.appendChild(dropdown);
   
   // Close dropdown when clicking outside
   const closeDropdown = (e) => {
