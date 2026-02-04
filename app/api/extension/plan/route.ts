@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
-import { checkAndTrackVin } from "@/lib/plan-cache";
+import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
 import { getValidToken } from "@/lib/tekmetric-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
@@ -533,6 +533,64 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // First try to use the dashboard's cached plan for consistency
+    const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
+    
+    if (cachedPlan && cachedPlan.plan?.buckets) {
+      console.log(`[Extension] Using dashboard cached plan: overdue=${cachedPlan.plan.buckets.overdue?.length || 0}, dueSoon=${cachedPlan.plan.buckets.dueSoon?.length || 0}, upcoming=${cachedPlan.plan.buckets.upcoming?.length || 0}`);
+      
+      // Convert cached plan buckets to extension format
+      const plan = {
+        overdue: [] as any[],
+        dueSoon: [] as any[],
+        recommended: [] as any[]
+      };
+      
+      // Helper to convert cached item to extension format
+      const convertItem = (item: any) => ({
+        service: item.title || item.key,
+        category: item.category || 'General',
+        intervalMiles: item.intervalMiles,
+        intervalMonths: item.intervalMonths,
+        intervalText: formatIntervalText(item.intervalMiles, item.intervalMonths),
+        dueMileage: item.dueAtMiles,
+        dueDate: item.dueAtDate,
+        lastPerformed: item.last ? {
+          mileage: item.last.miles,
+          date: item.last.date,
+          source: item.last.source
+        } : null,
+        source: item.source || 'oem',
+        serviceKey: item.serviceKey,
+        bump: item.bump,
+        usingShopInterval: item.usingShopInterval
+      });
+      
+      for (const item of (cachedPlan.plan.buckets.overdue || [])) {
+        if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+        plan.overdue.push(convertItem(item));
+      }
+      for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
+        if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+        plan.dueSoon.push(convertItem(item));
+      }
+      for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
+        if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+        plan.recommended.push(convertItem(item));
+      }
+      
+      return NextResponse.json({
+        vehicle: cachedPlan.plan.vehicle || vehicle || { vin: vin.toUpperCase() },
+        mileage: cachedPlan.plan.currentMiles || mileage,
+        ...plan,
+        vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
+        fromDashboardCache: true
+      }, { headers: corsHeaders });
+    }
+    
+    // Fall back to running our own analysis if no cached plan
+    console.log(`[Extension] No dashboard cache, running on-demand analysis`);
+    
     let analysisData: any = await db.collection("maintenance_analysis_cache").findOne({
       vin: vin.toUpperCase(),
       shopId: mosShopId
