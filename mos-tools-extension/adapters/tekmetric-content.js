@@ -29,15 +29,40 @@ function detectContext() {
   }
   
   // Try to extract display RO number from page header
-  // Look for "RO #4261:" pattern in page
+  // Look for "RO #4261:" pattern in specific elements first, then fallback to full page
   try {
-    const pageText = document.body?.innerText || '';
-    const roNumMatch = pageText.match(/RO\s*#(\d+)/i);
-    if (roNumMatch) {
-      context.roNumber = roNumMatch[1];
+    // Strategy 1: Look for RO number in h1/h2/h3 headers (most reliable)
+    const headers = document.querySelectorAll('h1, h2, h3, [class*="Header"], [class*="Title"], [data-testid*="header"]');
+    for (const header of headers) {
+      const roNumMatch = header.textContent.match(/RO\s*#\s*(\d+)/i);
+      if (roNumMatch) {
+        context.roNumber = roNumMatch[1];
+        break;
+      }
+    }
+    
+    // Strategy 2: Look for breadcrumb or page title area
+    if (!context.roNumber) {
+      const breadcrumbs = document.querySelectorAll('[class*="breadcrumb"], [class*="Breadcrumb"], nav');
+      for (const bc of breadcrumbs) {
+        const roNumMatch = bc.textContent.match(/RO\s*#\s*(\d+)/i);
+        if (roNumMatch) {
+          context.roNumber = roNumMatch[1];
+          break;
+        }
+      }
+    }
+    
+    // Strategy 3: Fallback to full page text search
+    if (!context.roNumber) {
+      const pageText = document.body?.innerText || '';
+      const roNumMatch = pageText.match(/RO\s*#\s*(\d+)/i);
+      if (roNumMatch) {
+        context.roNumber = roNumMatch[1];
+      }
     }
   } catch (e) {
-    // Ignore extraction errors
+    console.warn('[MOS Tools] Error extracting RO number:', e);
   }
 
   // Try to extract vehicle info from the page
