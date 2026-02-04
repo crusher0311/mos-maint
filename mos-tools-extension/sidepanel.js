@@ -79,6 +79,7 @@ const elements = {
   
   // Sticker
   stickerLoading: document.getElementById('sticker-loading'),
+  stickerSection: document.getElementById('sticker-section'),
   stickerForm: document.getElementById('sticker-form'),
   stickerDisabled: document.getElementById('sticker-disabled'),
   stickerMileage: document.getElementById('sticker-mileage'),
@@ -89,7 +90,17 @@ const elements = {
   customMileage: document.getElementById('custom-mileage'),
   stickerTagline: document.getElementById('sticker-tagline'),
   stickerPrintBtn: document.getElementById('sticker-print-btn'),
-  stickerError: document.getElementById('sticker-error')
+  stickerError: document.getElementById('sticker-error'),
+  
+  // Keytag
+  keytagSection: document.getElementById('keytag-section'),
+  keytagForm: document.getElementById('keytag-form'),
+  keytagCustomer: document.getElementById('keytag-customer'),
+  keytagVehicle: document.getElementById('keytag-vehicle'),
+  keytagRo: document.getElementById('keytag-ro'),
+  keytagMileage: document.getElementById('keytag-mileage'),
+  keytagPrintBtn: document.getElementById('keytag-print-btn'),
+  keytagError: document.getElementById('keytag-error')
 };
 
 // ==================== INITIALIZATION ====================
@@ -154,6 +165,11 @@ function setupEventListeners() {
   });
   
   elements.stickerPrintBtn.addEventListener('click', handleStickerPrint);
+  
+  // Keytag print button
+  if (elements.keytagPrintBtn) {
+    elements.keytagPrintBtn.addEventListener('click', handleKeytagPrint);
+  }
   
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
@@ -1254,8 +1270,9 @@ async function handleAddCannedJob(job) {
   }
 }
 
-// ==================== STICKER ====================
+// ==================== STICKER & KEYTAG ====================
 let stickerConfig = null;
+let keytagEnabled = false;
 
 async function loadStickerConfig() {
   try {
@@ -1273,7 +1290,7 @@ async function loadStickerConfig() {
     
     if (result.error) {
       console.error('[MOS] Sticker config error:', result.error);
-      elements.stickerForm.classList.add('hidden');
+      if (elements.stickerSection) elements.stickerSection.classList.add('hidden');
       elements.stickerDisabled.classList.remove('hidden');
       return;
     }
@@ -1281,12 +1298,13 @@ async function loadStickerConfig() {
     stickerConfig = result.config;
     
     if (!result.enabled) {
-      elements.stickerForm.classList.add('hidden');
+      if (elements.stickerSection) elements.stickerSection.classList.add('hidden');
       elements.stickerDisabled.classList.remove('hidden');
       return;
     }
     
-    elements.stickerForm.classList.remove('hidden');
+    // Show sticker section
+    if (elements.stickerSection) elements.stickerSection.classList.remove('hidden');
     elements.stickerDisabled.classList.add('hidden');
     
     // Set default unit based on config
@@ -1298,9 +1316,160 @@ async function loadStickerConfig() {
     if (currentContext && currentContext.mileage) {
       elements.stickerMileage.value = currentContext.mileage.toLocaleString();
     }
+    
+    // Check if keytags feature is enabled and load keytag section
+    await loadKeytagSection();
+    
   } catch (err) {
     console.error('[MOS] Failed to load sticker config:', err);
   }
+}
+
+async function loadKeytagSection() {
+  // Check if keytags feature is enabled for this shop
+  keytagEnabled = shopFeatures.keytags === true;
+  
+  if (!keytagEnabled || !elements.keytagSection) {
+    if (elements.keytagSection) elements.keytagSection.classList.add('hidden');
+    return;
+  }
+  
+  // Show keytag section
+  elements.keytagSection.classList.remove('hidden');
+  
+  // Pre-fill keytag fields from current context
+  if (currentContext) {
+    if (elements.keytagVehicle && currentContext.vehicleDisplay) {
+      elements.keytagVehicle.value = currentContext.vehicleDisplay;
+    }
+    if (elements.keytagRo && currentContext.roNumber) {
+      elements.keytagRo.value = currentContext.roNumber;
+    }
+    if (elements.keytagMileage && currentContext.mileage) {
+      elements.keytagMileage.value = currentContext.mileage.toLocaleString();
+    }
+    if (elements.keytagCustomer && currentContext.customerName) {
+      elements.keytagCustomer.value = currentContext.customerName;
+    }
+  }
+}
+
+async function handleKeytagPrint() {
+  const customerName = elements.keytagCustomer?.value?.trim() || '';
+  const vehicleInfo = elements.keytagVehicle?.value?.trim() || '';
+  const roNumber = elements.keytagRo?.value?.trim() || '';
+  const mileage = elements.keytagMileage?.value?.replace(/,/g, '') || '';
+  
+  if (!customerName) {
+    if (elements.keytagError) {
+      elements.keytagError.textContent = 'Please enter a customer name';
+      elements.keytagError.classList.remove('hidden');
+    }
+    return;
+  }
+  
+  if (elements.keytagError) elements.keytagError.classList.add('hidden');
+  elements.stickerLoading.classList.remove('hidden');
+  if (elements.keytagPrintBtn) elements.keytagPrintBtn.disabled = true;
+  
+  try {
+    const body = {
+      customerName,
+      vehicleInfo,
+      roNumber,
+      mileage: parseInt(mileage, 10) || 0,
+      vin: currentContext?.vin || ''
+    };
+    
+    // Add shop context
+    if (currentContext && currentContext.shopId) {
+      body.smsShopId = currentContext.shopId;
+      body.provider = currentContext.provider || 'tekmetric';
+    }
+    
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/keytag',
+      method: 'POST',
+      body
+    });
+    
+    if (!result.success || !result.keytag) {
+      throw new Error(result.error || 'Failed to generate keytag');
+    }
+    
+    // Print the keytag using same mechanism as sticker
+    printKeytagImage(result.keytag);
+    showNotification('Keytag generated!', 'success');
+    
+  } catch (err) {
+    console.error('[MOS] Keytag print error:', err);
+    if (elements.keytagError) {
+      elements.keytagError.textContent = err.message || 'Failed to generate keytag';
+      elements.keytagError.classList.remove('hidden');
+    }
+  } finally {
+    elements.stickerLoading.classList.add('hidden');
+    if (elements.keytagPrintBtn) elements.keytagPrintBtn.disabled = false;
+  }
+}
+
+function printKeytagImage(keytag) {
+  console.log('[MOS] Sending keytag to content script for printing');
+  
+  // Try to print via content script first
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]?.id) {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        action: 'PRINT_STICKER',
+        sticker: keytag
+      }, (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          printKeytagViaWindow(keytag);
+        }
+      });
+    } else {
+      printKeytagViaWindow(keytag);
+    }
+  });
+}
+
+function printKeytagViaWindow(keytag) {
+  const printWindow = window.open('', '_blank', 'width=600,height=400');
+  if (!printWindow) {
+    showNotification('Please allow popups to print', 'error');
+    return;
+  }
+  
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Print Keytag</title>
+      <style>
+        @page { size: ${keytag.widthInches || '3.5in'} ${keytag.heightInches || '1.125in'}; margin: 0; }
+        body { margin: 0; padding: 0; }
+        img {
+          width: ${keytag.widthInches || '3.5in'};
+          height: ${keytag.heightInches || '1.125in'};
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <img id="keytag" src="${keytag.dataUrl}" />
+    </body>
+    </html>
+  `);
+  
+  const img = printWindow.document.getElementById('keytag');
+  img.onload = () => {
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 100);
+  };
+  printWindow.document.close();
 }
 
 async function handleStickerPrint() {

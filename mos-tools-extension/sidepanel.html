@@ -209,60 +209,129 @@
           <ul id="canned-list" class="job-list hidden"></ul>
         </div>
 
-        <!-- Sticker tab -->
+        <!-- Sticker tab (renamed to Print) -->
         <div id="tab-sticker" class="tab-panel hidden">
           <div id="sticker-loading" class="panel-loading hidden">
             <div class="spinner-small"></div>
-            <span>Generating sticker...</span>
+            <span>Generating...</span>
           </div>
-          <div id="sticker-form" class="sticker-form">
-            <div class="form-group">
-              <label for="sticker-mileage">Current Reading</label>
-              <div class="input-with-unit">
-                <input type="text" id="sticker-mileage" placeholder="e.g. 125,000">
-                <select id="sticker-unit">
-                  <option value="mi">Miles</option>
-                  <option value="km">Kilometers</option>
-                  <option value="hrs">Hours</option>
-                </select>
+          
+          <!-- Oil Sticker Section -->
+          <div id="sticker-section" class="print-section">
+            <div class="print-section-header">
+              <div class="print-section-icon sticker-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+                  <circle cx="12" cy="12" r="9"/>
+                </svg>
               </div>
+              <h3 class="print-section-title">Oil Change Sticker</h3>
             </div>
-            <div class="form-group">
-              <label for="sticker-interval">Service Interval</label>
-              <select id="sticker-interval">
-                <option value="conventional">Conventional</option>
-                <option value="synthetic" selected>Synthetic</option>
-                <option value="euro">European</option>
-                <option value="diesel">Diesel</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
-            <div id="custom-interval-fields" class="custom-interval hidden">
-              <div class="form-group">
-                <label for="custom-months">Months</label>
-                <input type="number" id="custom-months" value="6" min="1" max="24">
+            
+            <div id="sticker-form" class="print-form">
+              <div class="print-form-row">
+                <div class="print-field">
+                  <label for="sticker-mileage">Current Reading</label>
+                  <div class="input-group">
+                    <input type="text" id="sticker-mileage" class="input-modern" placeholder="125,000">
+                    <select id="sticker-unit" class="select-modern select-unit">
+                      <option value="mi">mi</option>
+                      <option value="km">km</option>
+                      <option value="hrs">hrs</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="print-field">
+                  <label for="sticker-interval">Oil Type</label>
+                  <select id="sticker-interval" class="select-modern">
+                    <option value="conventional">Conventional</option>
+                    <option value="synthetic" selected>Synthetic</option>
+                    <option value="euro">European</option>
+                    <option value="diesel">Diesel</option>
+                    <option value="custom">Custom...</option>
+                  </select>
+                </div>
               </div>
-              <div class="form-group">
-                <label for="custom-mileage">Distance/Hours</label>
-                <input type="text" id="custom-mileage" value="5,000" placeholder="e.g. 5,000">
+              
+              <div id="custom-interval-fields" class="custom-fields hidden">
+                <div class="print-form-row">
+                  <div class="print-field">
+                    <label for="custom-mileage">Interval Distance</label>
+                    <input type="text" id="custom-mileage" class="input-modern" value="5,000" placeholder="5,000">
+                  </div>
+                  <div class="print-field">
+                    <label for="custom-months">Months</label>
+                    <input type="number" id="custom-months" class="input-modern" value="6" min="1" max="24">
+                  </div>
+                </div>
               </div>
+              
+              <div class="print-field">
+                <label for="sticker-tagline">Tagline <span class="label-hint">(optional)</span></label>
+                <input type="text" id="sticker-tagline" class="input-modern" placeholder="Thanks for your business!">
+              </div>
+              
+              <button id="sticker-print-btn" class="btn-print-modern">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 6 2 18 2 18 9"/>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Print Sticker
+              </button>
+              <p id="sticker-error" class="error-text hidden"></p>
             </div>
-            <div class="form-group">
-              <label for="sticker-tagline">Tagline (optional)</label>
-              <input type="text" id="sticker-tagline" placeholder="e.g. Thanks for your business!">
-            </div>
-            <button id="sticker-print-btn" class="btn-primary btn-print">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 6 2 18 2 18 9"/>
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                <rect x="6" y="14" width="12" height="8"/>
-              </svg>
-              Print Sticker
-            </button>
-            <p id="sticker-error" class="error-text hidden"></p>
           </div>
+          
+          <!-- Keytag Section (shown only if feature enabled) -->
+          <div id="keytag-section" class="print-section hidden">
+            <div class="print-section-divider"></div>
+            <div class="print-section-header">
+              <div class="print-section-icon keytag-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                </svg>
+              </div>
+              <h3 class="print-section-title">Service Keytag</h3>
+            </div>
+            
+            <div id="keytag-form" class="print-form">
+              <div class="print-field">
+                <label for="keytag-customer">Customer Name</label>
+                <input type="text" id="keytag-customer" class="input-modern" placeholder="John Smith">
+              </div>
+              
+              <div class="print-field">
+                <label for="keytag-vehicle">Vehicle</label>
+                <input type="text" id="keytag-vehicle" class="input-modern" placeholder="2020 Honda Accord" readonly>
+              </div>
+              
+              <div class="print-form-row">
+                <div class="print-field">
+                  <label for="keytag-ro">RO #</label>
+                  <input type="text" id="keytag-ro" class="input-modern" placeholder="12345" readonly>
+                </div>
+                <div class="print-field">
+                  <label for="keytag-mileage">Mileage</label>
+                  <input type="text" id="keytag-mileage" class="input-modern" placeholder="125,000" readonly>
+                </div>
+              </div>
+              
+              <button id="keytag-print-btn" class="btn-print-modern btn-keytag">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 6 2 18 2 18 9"/>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Print Keytag
+              </button>
+              <p id="keytag-error" class="error-text hidden"></p>
+            </div>
+          </div>
+          
           <div id="sticker-disabled" class="panel-empty hidden">
-            <p>Oil Sticker feature is not enabled for your shop. Contact your administrator to enable it.</p>
+            <p>Printing features are not enabled for your shop. Contact your administrator to enable them.</p>
           </div>
         </div>
       </main>
