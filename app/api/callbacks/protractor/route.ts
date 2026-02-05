@@ -100,17 +100,19 @@ async function processWithRetries(
   shopId: number,
   objectType: string,
   objectId: string,
-  operation: string
+  operation: string,
+  remainingAttempts: number = MAX_IMMEDIATE_RETRIES
 ): Promise<void> {
-  for (let attempt = 1; attempt <= MAX_IMMEDIATE_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= remainingAttempts; attempt++) {
+    await sleep(RETRY_DELAY_MS);
+    
     const success = await processCallbackEvent(db, eventId, shopId, objectType, objectId, operation);
     
     if (success) {
-      console.log(`[Protractor Callback] Success on attempt ${attempt}`);
+      console.log(`[Protractor Callback] Background retry succeeded on attempt ${attempt}`);
       return;
     }
     
-    // Update attempt count
     await db.collection("protractor_callback_events").updateOne(
       { _id: eventId },
       { 
@@ -119,11 +121,10 @@ async function processWithRetries(
       }
     );
     
-    if (attempt < MAX_IMMEDIATE_RETRIES) {
-      console.log(`[Protractor Callback] Attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS}ms...`);
-      await sleep(RETRY_DELAY_MS);
+    if (attempt < remainingAttempts) {
+      console.log(`[Protractor Callback] Retry ${attempt}/${remainingAttempts} failed, trying again...`);
     } else {
-      console.log(`[Protractor Callback] All ${MAX_IMMEDIATE_RETRIES} attempts failed, will retry in daily cron`);
+      console.log(`[Protractor Callback] All retries exhausted, leaving for daily cron`);
     }
   }
 }
@@ -382,11 +383,34 @@ export async function GET(request: NextRequest) {
     const eventId = insertResult.insertedId;
     console.log(`[Protractor Callback GET] Logged ${objectType} ${objectId} for shop ${shopId}`);
 
-    // Fire-and-forget: Process with up to 3 retries in the background
-    // Don't await - respond immediately to avoid timeouts
+    // Try to process immediately — if it works, return real success
     if (objectId) {
-      processWithRetries(db, eventId, shopId, objectType, objectId, operation || "Unknown")
-        .catch(err => console.error(`[Protractor Callback] Background processing error:`, err.message));
+      const success = await processCallbackEvent(db, eventId, shopId, objectType, objectId, operation || "Unknown");
+      
+      if (success) {
+        return NextResponse.json({ 
+          ok: true, 
+          status: "processed",
+          type: objectType,
+          operation
+        });
+      }
+
+      // First attempt failed — queue remaining retries in background, respond as queued
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: eventId },
+        { $set: { lastAttemptAt: new Date() }, $inc: { attempts: 1 } }
+      );
+
+      processWithRetries(db, eventId, shopId, objectType, objectId, operation || "Unknown", 2)
+        .catch(err => console.error(`[Protractor Callback] Background retry error:`, err.message));
+
+      return NextResponse.json({ 
+        received: true, 
+        status: "queued",
+        type: objectType,
+        operation
+      });
     }
 
     return NextResponse.json({ 
