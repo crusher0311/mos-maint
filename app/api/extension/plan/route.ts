@@ -541,6 +541,28 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch RO details from Tekmetric if we have an roId but no customer/RO number yet
+    if (provider === "tekmetric" && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {
+      try {
+        const tekApiToken = await getValidToken();
+        const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
+          headers: { Authorization: `Bearer ${tekApiToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            repairOrderNumber = data.repairOrderNumber || null;
+            customerName = data.customer?.firstName && data.customer?.lastName 
+              ? `${data.customer.firstName} ${data.customer.lastName}` 
+              : data.customer?.name || null;
+            console.log(`[Extension] Fetched RO details: roNumber=${repairOrderNumber}, customer=${customerName}`);
+          }
+        }
+      } catch (e) {
+        console.error(`[Extension] Failed to fetch RO details:`, e);
+      }
+    }
+
     // First try to use the dashboard's cached plan for consistency
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
     
