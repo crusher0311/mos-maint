@@ -31,55 +31,71 @@ function detectContext() {
   
   // ============ EXTRACT RO NUMBER ============
   try {
-    // Strategy 1: Look for RO # pattern in the page title/header area
-    // Tekmetric typically shows "RO #1234:" in a prominent header
     const pageText = document.body?.innerText || '';
     
-    // Try multiple RO patterns
-    const roPatterns = [
-      /RO\s*#\s*(\d+)\s*:/i,      // "RO #1234:"
-      /RO\s*#\s*(\d+)/i,          // "RO #1234"
-      /Repair Order\s*#?\s*(\d+)/i // "Repair Order 1234"
+    // Strategy 1: Look for Tekmetric-specific RO header elements first
+    // Tekmetric shows RO number in a header like "RO #12345:"
+    const roHeaderSelectors = [
+      '[data-testid*="ro-number"]',
+      '[data-testid*="repair-order-number"]',
+      '[class*="RepairOrderHeader"]',
+      '[class*="repair-order-header"]',
+      '[class*="ro-header"]',
+      '[class*="RoHeader"]',
+      'h1', 'h2'
     ];
     
-    for (const pattern of roPatterns) {
-      const match = pageText.match(pattern);
-      if (match && match[1]) {
-        // Make sure it's a reasonable RO number (not the internal Tekmetric ID)
-        const num = parseInt(match[1]);
-        if (num > 0 && num < 1000000) {
+    for (const sel of roHeaderSelectors) {
+      const elements = document.querySelectorAll(sel);
+      for (const el of elements) {
+        const text = el.textContent || '';
+        // Look for "RO #1234:" pattern - the colon helps distinguish from other numbers
+        const match = text.match(/RO\s*#\s*(\d+)\s*:/i);
+        if (match && match[1]) {
           context.roNumber = match[1];
+          console.log('[MOS Tools] RO# extracted via selector:', sel, context.roNumber);
           break;
         }
       }
+      if (context.roNumber) break;
     }
     
-    // Strategy 2: Look in specific header elements
+    // Strategy 2: Search all text for RO # pattern with colon (most specific)
     if (!context.roNumber) {
-      const headerSelectors = [
-        'h1', 'h2', 'h3',
-        '[class*="header"] span',
-        '[class*="Header"] span',
-        '[class*="title"]',
-        '[class*="Title"]'
-      ];
-      
-      for (const sel of headerSelectors) {
-        const elements = document.querySelectorAll(sel);
-        for (const el of elements) {
-          const text = el.textContent || '';
-          const match = text.match(/RO\s*#\s*(\d+)/i);
-          if (match && match[1]) {
-            const num = parseInt(match[1]);
-            if (num > 0 && num < 1000000) {
-              context.roNumber = match[1];
-              break;
-            }
-          }
-        }
-        if (context.roNumber) break;
+      const match = pageText.match(/RO\s*#\s*(\d+)\s*:/i);
+      if (match && match[1]) {
+        context.roNumber = match[1];
+        console.log('[MOS Tools] RO# extracted via page text (with colon):', context.roNumber);
       }
     }
+    
+    // Strategy 3: Search for RO # without colon but limit to reasonable size
+    // Note: Tekmetric internal IDs are often 9+ digits, user-facing RO numbers are shorter
+    if (!context.roNumber) {
+      const allMatches = pageText.match(/RO\s*#\s*(\d+)/gi) || [];
+      for (const m of allMatches) {
+        const numMatch = m.match(/(\d+)/);
+        if (numMatch) {
+          const num = parseInt(numMatch[1]);
+          // User-facing RO numbers are typically < 100000, internal IDs are 9+ digits
+          if (num > 0 && num < 100000) {
+            context.roNumber = numMatch[1];
+            console.log('[MOS Tools] RO# extracted via pattern (reasonable size):', context.roNumber);
+            break;
+          }
+        }
+      }
+    }
+    
+    // Strategy 4: Look for "Repair Order" followed by number
+    if (!context.roNumber) {
+      const match = pageText.match(/Repair Order[:\s#]*(\d{1,6})/i);
+      if (match && match[1]) {
+        context.roNumber = match[1];
+        console.log('[MOS Tools] RO# extracted via "Repair Order" pattern:', context.roNumber);
+      }
+    }
+    
   } catch (e) {
     console.warn('[MOS Tools] Error extracting RO number:', e);
   }
@@ -224,41 +240,63 @@ function detectContext() {
     }
 
     // ============ EXTRACT CUSTOMER NAME ============
-    // Look for customer name patterns
-    const customerPatterns = [
-      /Customer[:\s]+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)/,
-      /Owner[:\s]+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)/
+    // Strategy 1: Look for Tekmetric-specific customer elements
+    const customerSelectors = [
+      '[data-testid*="customer-name"]',
+      '[data-testid*="customerName"]',
+      '[data-testid*="customer"]',
+      '[class*="CustomerName"]',
+      '[class*="customer-name"]',
+      '[class*="customerInfo"]',
+      '[class*="customer-info"]',
+      'a[href*="/customers/"]'
     ];
     
-    for (const pattern of customerPatterns) {
-      const match = pageText.match(pattern);
-      if (match && match[1]) {
-        context.customerName = match[1].trim();
-        context.customer = { name: context.customerName };
-        break;
+    for (const sel of customerSelectors) {
+      const elements = document.querySelectorAll(sel);
+      for (const el of elements) {
+        const text = el.textContent?.trim() || '';
+        // Look for a name pattern (2-3 words starting with capitals)
+        const nameMatch = text.match(/^([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})$/);
+        if (nameMatch && nameMatch[1].length > 3 && nameMatch[1].length < 50) {
+          context.customerName = nameMatch[1];
+          context.customer = { name: context.customerName };
+          console.log('[MOS Tools] Customer name extracted via selector:', sel, context.customerName);
+          break;
+        }
+      }
+      if (context.customerName) break;
+    }
+    
+    // Strategy 2: Look for customer link in breadcrumb or header
+    if (!context.customerName) {
+      const customerLinks = document.querySelectorAll('a[href*="/customer"]');
+      for (const link of customerLinks) {
+        const text = link.textContent?.trim() || '';
+        // Must look like a name (not "View Customer" etc)
+        if (text.length > 3 && text.length < 40 && /^[A-Z][a-zA-Z'-]+\s+[A-Z]/.test(text)) {
+          context.customerName = text;
+          context.customer = { name: context.customerName };
+          console.log('[MOS Tools] Customer name extracted via customer link:', context.customerName);
+          break;
+        }
       }
     }
     
-    // Strategy 2: Look for customer-related elements
+    // Strategy 3: Search page text for "Customer:" or "Owner:" label
     if (!context.customerName) {
-      const customerSelectors = [
-        '[data-testid*="customer"]',
-        '[class*="customer"]',
-        '[class*="Customer"]',
-        '[class*="owner"]'
+      const customerPatterns = [
+        /Customer[:\s]+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})/,
+        /Owner[:\s]+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})/
       ];
       
-      for (const sel of customerSelectors) {
-        const el = document.querySelector(sel);
-        if (el) {
-          const text = el.textContent?.trim() || '';
-          // Look for a name pattern (First Last)
-          const nameMatch = text.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
-          if (nameMatch) {
-            context.customerName = nameMatch[1];
-            context.customer = { name: context.customerName };
-            break;
-          }
+      for (const pattern of customerPatterns) {
+        const match = pageText.match(pattern);
+        if (match && match[1]) {
+          context.customerName = match[1].trim();
+          context.customer = { name: context.customerName };
+          console.log('[MOS Tools] Customer name extracted via label pattern:', context.customerName);
+          break;
         }
       }
     }

@@ -803,10 +803,10 @@ function renderCommonFailures(data) {
   
   elements.failuresContent.classList.remove('hidden');
   
-  // Source badge
-  const source = data.source || 'shop';
+  // Source badge - API returns "shop_pattern", "ai", or mixed
+  const source = data.source || 'ai';
   let sourceClass, sourceText;
-  if (source === 'shop') {
+  if (source === 'shop_pattern' || source === 'shop') {
     sourceClass = 'source-shop';
     sourceText = '📊 Based on Your Shop Data';
   } else if (source === 'ai') {
