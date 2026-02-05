@@ -319,9 +319,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ 
-      ok: true, 
+      received: true, 
+      status: "acknowledged",
       workOrderId,
-      status,
+      workOrderStatus: status,
       isClosed 
     });
 
@@ -388,9 +389,9 @@ export async function GET(request: NextRequest) {
         .catch(err => console.error(`[Protractor Callback] Background processing error:`, err.message));
     }
 
-    // Respond immediately with success
     return NextResponse.json({ 
-      ok: true, 
+      received: true, 
+      status: "acknowledged",
       type: objectType,
       operation
     });
