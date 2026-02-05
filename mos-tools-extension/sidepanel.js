@@ -1428,7 +1428,7 @@ async function handleKeytagPrint() {
     
     // Print the keytag using same mechanism as sticker
     const keytagData = {
-      image: result.image,
+      dataUrl: result.image,
       widthInches: result.dimensions?.width || '3.45in',
       heightInches: result.dimensions?.height || '1.11in'
     };
