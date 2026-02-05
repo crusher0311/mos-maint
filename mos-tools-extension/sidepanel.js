@@ -1422,12 +1422,17 @@ async function handleKeytagPrint() {
       }
     });
     
-    if (!result.success || !result.keytag) {
+    if (!result.success || !result.image) {
       throw new Error(result.error || 'Failed to generate keytag');
     }
     
     // Print the keytag using same mechanism as sticker
-    printKeytagImage(result.keytag);
+    const keytagData = {
+      image: result.image,
+      widthInches: result.dimensions?.width || '3.45in',
+      heightInches: result.dimensions?.height || '1.11in'
+    };
+    printKeytagImage(keytagData);
     showNotification('Keytag generated!', 'success');
     
   } catch (err) {

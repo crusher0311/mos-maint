@@ -1,0 +1,77 @@
+background.js:530 [MOS Tools] Background service worker loaded
+background.js:25 [MOS] Restored API token from storage
+background.js:29 [MOS] Restored API URL: https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev
+background.js:93 [MOS] Side panel opens on action click
+background.js:77 [Tekmetric] Auth token captured
+background.js:104 [MOS] Message received: SET_SMS_CONTEXT
+background.js:133 [MOS] SMS context updated: Object
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:104 [MOS] Message received: GET_MOS_AUTH
+background.js:104 [MOS] Message received: GET_SMS_CONTEXT
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+background.js:104 [MOS] Message received: GET_MOS_AUTH
+background.js:104 [MOS] Message received: GET_SMS_CONTEXT
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:437 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:454 [MOS] Updated RO number from API: 4253
+sidepanel.js:459 [MOS] Updated customer name from API: Kenneth Conway
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+background.js:104 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:1434 [MOS] Keytag print error: Error: Failed to generate keytag
+    at HTMLButtonElement.handleKeytagPrint (sidepanel.js:1426:13)
+handleKeytagPrint @ sidepanel.js:1434
