@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MOS Tools",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Maintenance planning and job management for automotive shops",
   "permissions": [
     "storage",
@@ -49,7 +49,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/mos-print-button.png"],
+      "resources": ["icons/mos-print-button.png", "icons/icon48.png"],
       "matches": ["https://shop.tekmetric.com/*", "https://sandbox.tekmetric.com/*", "https://cba.tekmetric.com/*"]
     }
   ]

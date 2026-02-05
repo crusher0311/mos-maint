@@ -100,6 +100,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ pong: true });
     return false;
   }
+
+  // Open side panel from content script FAB
+  if (message.action === "OPEN_SIDE_PANEL") {
+    if (sender.tab?.id) {
+      chrome.sidePanel.open({ tabId: sender.tab.id })
+        .then(() => sendResponse({ success: true }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true; // async response
+    }
+    sendResponse({ success: false, error: 'No tab ID' });
+    return false;
+  }
   
   console.log("[MOS] Message received:", message.action);
 

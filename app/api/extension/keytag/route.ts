@@ -234,12 +234,6 @@ function generateLegacyHtml(
           min-width: 0;
         }
         
-        .divider {
-          width: 2px;
-          background: ${textColor};
-          flex-shrink: 0;
-        }
-        
         .right-section {
           display: flex;
           flex-direction: column;
@@ -287,7 +281,6 @@ function generateLegacyHtml(
           <div class="customer-name">${escapeHtml(data.customerName.toUpperCase())}</div>
           <div class="vehicle-info">${escapeHtml(data.vehicleInfo.toUpperCase())}</div>
         </div>
-        <div class="divider"></div>
         <div class="right-section">
           ${data.vin ? `<div class="info-row"><span class="info-label">VIN:</span> ${escapeHtml(data.vin)}</div>` : ''}
           <div class="info-row"><span class="info-label">Mileage:</span> ${escapeHtml(mileageFormatted)}</div>

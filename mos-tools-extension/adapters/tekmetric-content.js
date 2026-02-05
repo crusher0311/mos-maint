@@ -854,10 +854,126 @@ function showToast(message, type = 'info') {
   }, 3000);
 }
 
+// ==================== FLOATING ACTION BUTTON ====================
+let fabInjected = false;
+let fabDragging = false;
+let fabDragStartY = 0;
+let fabStartTop = 0;
+
+function injectFloatingButton() {
+  if (fabInjected) return;
+  if (document.getElementById('mos-fab')) {
+    fabInjected = true;
+    return;
+  }
+  
+  // Create the floating action button
+  const fab = document.createElement('button');
+  fab.id = 'mos-fab';
+  fab.title = 'Open MOS Tools';
+  fab.type = 'button';
+  
+  // Use the MOS icon
+  const imgUrl = chrome.runtime.getURL('icons/icon48.png');
+  fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width: 32px; height: 32px; border-radius: 50%;" />`;
+  
+  // Get saved position or default
+  const savedTop = localStorage.getItem('mos-fab-top');
+  const topPosition = savedTop ? parseInt(savedTop) : 200;
+  
+  Object.assign(fab.style, {
+    position: 'fixed',
+    right: '12px',
+    top: `${topPosition}px`,
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    backgroundColor: '#1e40af',
+    border: '2px solid #fff',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    cursor: 'grab',
+    zIndex: '2147483647',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0',
+    transition: 'transform 0.15s, box-shadow 0.15s',
+    userSelect: 'none'
+  });
+  
+  // Hover effects
+  fab.addEventListener('mouseenter', () => {
+    if (!fabDragging) {
+      fab.style.transform = 'scale(1.1)';
+      fab.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
+    }
+  });
+  
+  fab.addEventListener('mouseleave', () => {
+    if (!fabDragging) {
+      fab.style.transform = 'scale(1)';
+      fab.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+    }
+  });
+  
+  // Drag functionality
+  fab.addEventListener('mousedown', (e) => {
+    fabDragging = true;
+    fabDragStartY = e.clientY;
+    fabStartTop = parseInt(fab.style.top);
+    fab.style.cursor = 'grabbing';
+    fab.style.transition = 'none';
+    e.preventDefault();
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!fabDragging) return;
+    const deltaY = e.clientY - fabDragStartY;
+    let newTop = fabStartTop + deltaY;
+    
+    // Constrain to viewport
+    newTop = Math.max(10, Math.min(window.innerHeight - 58, newTop));
+    fab.style.top = `${newTop}px`;
+  });
+  
+  document.addEventListener('mouseup', (e) => {
+    if (!fabDragging) return;
+    
+    const movedDistance = Math.abs(e.clientY - fabDragStartY);
+    fabDragging = false;
+    fab.style.cursor = 'grab';
+    fab.style.transition = 'transform 0.15s, box-shadow 0.15s';
+    
+    // Save position
+    localStorage.setItem('mos-fab-top', fab.style.top.replace('px', ''));
+    
+    // If minimal movement, treat as click
+    if (movedDistance < 5) {
+      openSidePanel();
+    }
+  });
+  
+  document.body.appendChild(fab);
+  fabInjected = true;
+  console.log('[MOS Tools] Floating button injected');
+}
+
+function openSidePanel() {
+  // Send message to background to open the side panel
+  chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.log('[MOS Tools] Could not open side panel:', chrome.runtime.lastError.message);
+    }
+  });
+}
+
 // ==================== INITIALIZATION ====================
 function init() {
   // Initial context check
   updateContext();
+  
+  // Inject floating action button
+  injectFloatingButton();
   
   // Try to inject print button
   checkAndInjectButton();
