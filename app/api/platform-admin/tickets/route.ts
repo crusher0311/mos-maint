@@ -76,21 +76,22 @@ export async function GET(request: NextRequest) {
       .filter(t => t.shopId && !t.shopName)
       .map(t => t.shopId);
     
-    let shopMap: Record<number, string> = {};
+    let shopMap: Record<number, { name: string; locationIdentifier?: string }> = {};
     if (shopIds.length > 0) {
       const shops = await db.collection("shops")
         .find({ id: { $in: shopIds } })
-        .project({ id: 1, name: 1 })
+        .project({ id: 1, name: 1, locationIdentifier: 1 })
         .toArray();
       shopMap = shops.reduce((acc, shop) => {
-        acc[shop.id] = shop.name;
+        acc[shop.id] = { name: shop.name, locationIdentifier: shop.locationIdentifier };
         return acc;
-      }, {} as Record<number, string>);
+      }, {} as Record<number, { name: string; locationIdentifier?: string }>);
     }
 
     const tickets = rawTickets.map(ticket => ({
       ...ticket,
-      shopName: ticket.shopName || (ticket.shopId ? shopMap[ticket.shopId] : null) || null
+      shopName: ticket.shopName || (ticket.shopId ? shopMap[ticket.shopId]?.name : null) || null,
+      locationIdentifier: ticket.locationIdentifier || (ticket.shopId ? shopMap[ticket.shopId]?.locationIdentifier : null) || null
     }));
 
     const stats = await db.collection("support_tickets").aggregate([

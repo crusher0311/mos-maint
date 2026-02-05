@@ -40,6 +40,7 @@ interface SupportTicket {
   userName: string;
   shopId: number | string | null;
   shopName: string | null;
+  locationIdentifier: string | null;
   assignedTo: string | null;
   messages: TicketMessage[];
   createdAt: string;
@@ -388,6 +389,9 @@ export default function PlatformTicketsPage() {
                         <span className="flex items-center gap-1">
                           <Building2 className="w-3 h-3" />
                           {ticket.shopName}
+                          {ticket.locationIdentifier && (
+                            <span className="text-gray-400">({ticket.locationIdentifier})</span>
+                          )}
                         </span>
                       )}
                       <span className="flex items-center gap-1">
@@ -474,7 +478,12 @@ export default function PlatformTicketsPage() {
                 </div>
                 <div>
                   <span className="text-gray-500 block">Shop</span>
-                  <span className="font-medium text-gray-900">{selectedTicket.shopName || "N/A"}</span>
+                  <span className="font-medium text-gray-900">
+                    {selectedTicket.shopName || "N/A"}
+                    {selectedTicket.locationIdentifier && (
+                      <span className="text-gray-500 ml-1">({selectedTicket.locationIdentifier})</span>
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
