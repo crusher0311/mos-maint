@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import {
-  fetchVehicleById,
-  fetchWorkOrderById,
-  upsertProtractorVehicleSnapshot,
-  upsertProtractorWorkOrderSnapshot,
-} from "@/lib/integrations/protractor";
-import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 
 import { Db } from "mongodb";
 
@@ -248,6 +241,8 @@ export async function GET(request: NextRequest) {
     const shopId = Number(shop.shopId);
     console.log(`[Protractor Callback GET] ${operation} ${objectType} ${objectId} for shop ${shopId}`);
 
+    // Just log the event - respond immediately, process later via cron
+    // Protractor will retry if we don't respond with success
     await db.collection("protractor_callback_events").insertOne({
       receivedAt: new Date(),
       method: "GET",
@@ -256,83 +251,17 @@ export async function GET(request: NextRequest) {
       objectId,
       operation,
       shopId,
-      processed: false
+      processed: false,
+      priority: 1 // High priority for cron processing
     });
 
-    if (objectType === "ServiceItem" && objectId && (operation === "Update" || operation === "Create")) {
-      const result = await fetchVehicleById(shopId, objectId);
-      if (result.ok && result.vehicle?.VIN) {
-        await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
-        console.log(`[Protractor Callback GET] ${operation} vehicle snapshot for ${result.vehicle.VIN}`);
-        
-        await db.collection("protractor_callback_events").updateOne(
-          { objectId, objectType, processed: false },
-          { $set: { processed: true, processedAt: new Date(), vin: result.vehicle.VIN } }
-        );
-        
-        return NextResponse.json({ 
-          ok: true, 
-          type: objectType,
-          operation,
-          vin: result.vehicle.VIN,
-          processed: true
-        });
-      }
-    }
+    console.log(`[Protractor Callback GET] Logged ${objectType} ${objectId} for shop ${shopId}`);
 
-    if (objectType === "WorkOrder" && objectId) {
-      const result = await fetchWorkOrderById(shopId, objectId);
-      if (result.ok && result.workOrder) {
-        await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
-        console.log(`[Protractor Callback GET] ${operation} work order snapshot ${objectId}`);
-        
-        if (result.workOrder.Completed) {
-          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
-          if (vin) {
-            const savedWO = await db.collection("protractor_work_orders").findOne({
-              shopId,
-              workOrderId: objectId
-            });
-            
-            if (savedWO && savedWO.packageSummaries?.length > 0) {
-              try {
-                const attribution = await attributeRevenueFromWorkOrder(
-                  shopId,
-                  objectId,
-                  vin,
-                  savedWO.packageSummaries,
-                  "protractor"
-                );
-                if (attribution.matched > 0) {
-                  console.log(`[Protractor Callback GET] Revenue attribution: ${attribution.matched} jobs, $${attribution.revenue.toFixed(2)}`);
-                }
-              } catch (e) {
-                console.error("[Protractor Callback GET] Revenue attribution error:", e);
-              }
-            }
-          }
-        }
-        
-        await db.collection("protractor_callback_events").updateOne(
-          { objectId, objectType, processed: false },
-          { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
-        );
-        
-        return NextResponse.json({ 
-          ok: true, 
-          type: objectType,
-          operation,
-          workOrderNumber: result.workOrder.WorkOrderNumber,
-          processed: true
-        });
-      }
-    }
-
+    // Respond immediately with success - cron will process later
     return NextResponse.json({ 
       ok: true, 
       type: objectType,
-      operation,
-      message: "No action taken"
+      operation
     });
 
   } catch (error: any) {

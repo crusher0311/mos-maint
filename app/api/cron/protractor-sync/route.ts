@@ -24,7 +24,125 @@ import {
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
 import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import pLimit from "p-limit";
+import { Db } from "mongodb";
+
+const QUEUE_BATCH_SIZE = 50;
+const MAX_ATTEMPTS = 3;
+
+async function processWebhookQueue(db: Db): Promise<{ processed: number; failed: number }> {
+  // Process unprocessed GET callback events (webhooks)
+  // These are logged immediately when received, processed here with priority
+  const pendingItems = await db.collection("protractor_callback_events")
+    .find({ 
+      method: "GET",
+      processed: false,
+      $or: [
+        { attempts: { $exists: false } },
+        { attempts: { $lt: MAX_ATTEMPTS } }
+      ]
+    })
+    .sort({ priority: 1, receivedAt: 1 })
+    .limit(QUEUE_BATCH_SIZE)
+    .toArray();
+
+  if (pendingItems.length === 0) {
+    return { processed: 0, failed: 0 };
+  }
+
+  let processed = 0;
+  let failed = 0;
+
+  for (const item of pendingItems) {
+    try {
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: item._id },
+        { 
+          $set: { processingStartedAt: new Date() },
+          $inc: { attempts: 1 }
+        }
+      );
+
+      const { shopId, objectType, objectId, operation } = item;
+
+      if (objectType === "ServiceItem" && objectId) {
+        const result = await fetchVehicleById(shopId, objectId);
+        if (result.ok && result.vehicle?.VIN) {
+          await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
+          
+          await db.collection("protractor_callback_events").updateOne(
+            { objectId, objectType, processed: false },
+            { $set: { processed: true, processedAt: new Date(), vin: result.vehicle.VIN } }
+          );
+        }
+      }
+
+      if (objectType === "WorkOrder" && objectId) {
+        const result = await fetchWorkOrderById(shopId, objectId);
+        if (result.ok && result.workOrder) {
+          await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+          
+          if (result.workOrder.Completed) {
+            const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+            if (vin) {
+              const savedWO = await db.collection("protractor_work_orders").findOne({
+                shopId,
+                workOrderId: objectId
+              });
+              
+              if (savedWO && savedWO.packageSummaries?.length > 0) {
+                try {
+                  const attribution = await attributeRevenueFromWorkOrder(
+                    shopId,
+                    objectId,
+                    vin,
+                    savedWO.packageSummaries,
+                    "protractor"
+                  );
+                  if (attribution.matched > 0) {
+                    console.log(`[Queue] Revenue attribution: ${attribution.matched} jobs, $${attribution.revenue.toFixed(2)}`);
+                  }
+                } catch (e) {
+                  // Revenue attribution is non-critical
+                }
+              }
+            }
+          }
+          
+          await db.collection("protractor_callback_events").updateOne(
+            { objectId, objectType, processed: false },
+            { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
+          );
+        }
+      }
+
+      // Mark as processed on success
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: item._id },
+        { $set: { processed: true, processedAt: new Date() } }
+      );
+
+      processed++;
+
+    } catch (error: any) {
+      // Mark with error - will retry on next cron run if under MAX_ATTEMPTS
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: item._id },
+        { 
+          $set: { 
+            lastError: error.message,
+            lastErrorAt: new Date()
+          }
+        }
+      );
+
+      failed++;
+    }
+  }
+
+  return { processed, failed };
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +166,14 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
+
+  // Process high-priority webhook queue first
+  try {
+    const queueResult = await processWebhookQueue(db);
+    console.log(`[Cron] Processed webhook queue: ${queueResult.processed} items, ${queueResult.failed} failed`);
+  } catch (queueErr: any) {
+    console.error("[Cron] Webhook queue processing error:", queueErr.message);
+  }
 
   try {
     const shops = await db.collection("shops").find({
