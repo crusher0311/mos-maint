@@ -745,6 +745,7 @@ The Tekmetric Chrome extension needs updates to work properly with web-based int
 - Job history display within Tekmetric interface
 - Sticker printing from Chrome extension
 - Consistent behavior across all web-based SMS platforms
+- **Add vehicle recalls to Plan tab** - Fetch and display safety recalls from `/api/vehicles/[vin]/recalls` in a dedicated section at the top of the Plan tab
 
 ### 11.2 Stripe Billing Verification
 Ensure billing system is flawless before scaling:
