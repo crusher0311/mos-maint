@@ -1,9 +1,132 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-
-import { Db } from "mongodb";
+import {
+  fetchVehicleById,
+  fetchWorkOrderById,
+  upsertProtractorVehicleSnapshot,
+  upsertProtractorWorkOrderSnapshot,
+} from "@/lib/integrations/protractor";
+import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
+import { Db, ObjectId } from "mongodb";
 
 const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
+const MAX_IMMEDIATE_RETRIES = 3;
+const RETRY_DELAY_MS = 2000; // 2 seconds between retries
+
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function processCallbackEvent(
+  db: Db,
+  eventId: ObjectId,
+  shopId: number,
+  objectType: string,
+  objectId: string,
+  operation: string
+): Promise<boolean> {
+  try {
+    if (objectType === "ServiceItem" && objectId) {
+      const result = await fetchVehicleById(shopId, objectId);
+      if (result.ok && result.vehicle?.VIN) {
+        await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
+        console.log(`[Protractor Callback] Processed vehicle ${result.vehicle.VIN}`);
+        
+        await db.collection("protractor_callback_events").updateOne(
+          { _id: eventId },
+          { $set: { processed: true, processedAt: new Date(), vin: result.vehicle.VIN } }
+        );
+        return true;
+      }
+    }
+
+    if (objectType === "WorkOrder" && objectId) {
+      const result = await fetchWorkOrderById(shopId, objectId);
+      if (result.ok && result.workOrder) {
+        await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+        console.log(`[Protractor Callback] Processed work order ${objectId}`);
+        
+        if (result.workOrder.Completed) {
+          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+          if (vin) {
+            const savedWO = await db.collection("protractor_work_orders").findOne({
+              shopId,
+              workOrderId: objectId
+            });
+            
+            if (savedWO && savedWO.packageSummaries?.length > 0) {
+              try {
+                const attribution = await attributeRevenueFromWorkOrder(
+                  shopId,
+                  objectId,
+                  vin,
+                  savedWO.packageSummaries,
+                  "protractor"
+                );
+                if (attribution.matched > 0) {
+                  console.log(`[Protractor Callback] Revenue attribution: ${attribution.matched} jobs`);
+                }
+              } catch (e) {
+                // Revenue attribution is non-critical
+              }
+            }
+          }
+        }
+        
+        await db.collection("protractor_callback_events").updateOne(
+          { _id: eventId },
+          { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
+        );
+        return true;
+      }
+    }
+
+    // No action needed for this event type
+    await db.collection("protractor_callback_events").updateOne(
+      { _id: eventId },
+      { $set: { processed: true, processedAt: new Date(), noAction: true } }
+    );
+    return true;
+
+  } catch (error: any) {
+    console.error(`[Protractor Callback] Processing error:`, error.message);
+    return false;
+  }
+}
+
+async function processWithRetries(
+  db: Db,
+  eventId: ObjectId,
+  shopId: number,
+  objectType: string,
+  objectId: string,
+  operation: string
+): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_IMMEDIATE_RETRIES; attempt++) {
+    const success = await processCallbackEvent(db, eventId, shopId, objectType, objectId, operation);
+    
+    if (success) {
+      console.log(`[Protractor Callback] Success on attempt ${attempt}`);
+      return;
+    }
+    
+    // Update attempt count
+    await db.collection("protractor_callback_events").updateOne(
+      { _id: eventId },
+      { 
+        $set: { lastAttemptAt: new Date() },
+        $inc: { attempts: 1 }
+      }
+    );
+    
+    if (attempt < MAX_IMMEDIATE_RETRIES) {
+      console.log(`[Protractor Callback] Attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS}ms...`);
+      await sleep(RETRY_DELAY_MS);
+    } else {
+      console.log(`[Protractor Callback] All ${MAX_IMMEDIATE_RETRIES} attempts failed, will retry in daily cron`);
+    }
+  }
+}
 const RATE_LIMIT_WINDOW_MS = 60000;
 const RATE_LIMIT_MAX = 30;
 
@@ -241,9 +364,8 @@ export async function GET(request: NextRequest) {
     const shopId = Number(shop.shopId);
     console.log(`[Protractor Callback GET] ${operation} ${objectType} ${objectId} for shop ${shopId}`);
 
-    // Just log the event - respond immediately, process later via cron
-    // Protractor will retry if we don't respond with success
-    await db.collection("protractor_callback_events").insertOne({
+    // Log the event first
+    const insertResult = await db.collection("protractor_callback_events").insertOne({
       receivedAt: new Date(),
       method: "GET",
       connectionId,
@@ -252,12 +374,21 @@ export async function GET(request: NextRequest) {
       operation,
       shopId,
       processed: false,
-      priority: 1 // High priority for cron processing
+      attempts: 0,
+      priority: 1
     });
 
+    const eventId = insertResult.insertedId;
     console.log(`[Protractor Callback GET] Logged ${objectType} ${objectId} for shop ${shopId}`);
 
-    // Respond immediately with success - cron will process later
+    // Fire-and-forget: Process with up to 3 retries in the background
+    // Don't await - respond immediately to avoid timeouts
+    if (objectId) {
+      processWithRetries(db, eventId, shopId, objectType, objectId, operation || "Unknown")
+        .catch(err => console.error(`[Protractor Callback] Background processing error:`, err.message));
+    }
+
+    // Respond immediately with success
     return NextResponse.json({ 
       ok: true, 
       type: objectType,
