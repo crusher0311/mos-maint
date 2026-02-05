@@ -230,6 +230,9 @@ function switchTab(tab) {
   } else if (tab === 'canned' && currentContext) {
     loadCannedJobs();
   } else if (tab === 'sticker') {
+    // Show keytag section immediately with current context data (don't wait for sticker API)
+    loadKeytagSection();
+    // Then load sticker config in background
     loadStickerConfig();
   }
 }

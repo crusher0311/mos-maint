@@ -552,9 +552,37 @@ export async function GET(request: NextRequest) {
           const data = await res.json();
           if (data) {
             repairOrderNumber = data.repairOrderNumber || null;
-            customerName = data.customer?.firstName && data.customer?.lastName 
-              ? `${data.customer.firstName} ${data.customer.lastName}` 
-              : data.customer?.name || null;
+            
+            // Try to get customer name from the RO response
+            if (data.customer) {
+              if (data.customer.firstName && data.customer.lastName) {
+                customerName = `${data.customer.firstName} ${data.customer.lastName}`;
+              } else if (data.customer.name) {
+                customerName = data.customer.name;
+              }
+            }
+            
+            // If no customer name in RO, fetch from customer endpoint using customerId
+            if (!customerName && data.customerId) {
+              try {
+                const custRes = await fetch(`https://shop.tekmetric.com/api/v1/customers/${data.customerId}`, {
+                  headers: { Authorization: `Bearer ${tekApiToken}` }
+                });
+                if (custRes.ok) {
+                  const custData = await custRes.json();
+                  if (custData) {
+                    if (custData.firstName && custData.lastName) {
+                      customerName = `${custData.firstName} ${custData.lastName}`;
+                    } else if (custData.name) {
+                      customerName = custData.name;
+                    }
+                  }
+                }
+              } catch (ce) {
+                console.log(`[Extension] Could not fetch customer ${data.customerId}:`, ce);
+              }
+            }
+            
             console.log(`[Extension] Fetched RO details: roNumber=${repairOrderNumber}, customer=${customerName}`);
           }
         }
