@@ -410,6 +410,8 @@ export async function GET(request: NextRequest) {
 
     let vehicle = null;
     let mileage = null;
+    let repairOrderNumber = null;
+    let customerName = null;
 
     if (roId && !vin) {
       let workOrder = null;
@@ -437,6 +439,10 @@ export async function GET(request: NextRequest) {
               if (data) {
                 let roVin = data.vehicle?.vin || data.vehicleVin;
                 const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
+                const repairOrderNumber = data.repairOrderNumber;
+                const customerName = data.customer?.firstName && data.customer?.lastName 
+                  ? `${data.customer.firstName} ${data.customer.lastName}` 
+                  : data.customer?.name;
                 
                 // If no VIN but we have vehicleId, fetch vehicle details
                 if (!roVin && data.vehicleId) {
@@ -451,8 +457,8 @@ export async function GET(request: NextRequest) {
                   }
                 }
                 
-                workOrder = { vin: roVin, odometer };
-                console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
+                workOrder = { vin: roVin, odometer, repairOrderNumber, customerName };
+                console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}, roNumber=${repairOrderNumber}, customer=${customerName}`);
               }
             } else {
               console.log(`[Extension] Tekmetric API returned error: ${res.status} ${res.statusText}`);
@@ -482,6 +488,8 @@ export async function GET(request: NextRequest) {
         const wo: any = workOrder;
         vin = wo.vin || wo.vehicleVin;
         mileage = wo.odometer || wo.mileageIn || wo.mileage || wo.odometerIn;
+        repairOrderNumber = wo.repairOrderNumber || null;
+        customerName = wo.customerName || null;
       }
     }
 
@@ -591,7 +599,10 @@ export async function GET(request: NextRequest) {
         // Include Protractor deferred work list if available
         deferredWork: cachedPlan.plan.deferredWork || [],
         vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
-        fromDashboardCache: true
+        fromDashboardCache: true,
+        // Include RO number and customer name from Tekmetric
+        repairOrderNumber,
+        customerName
       }, { headers: corsHeaders });
     }
     
@@ -759,7 +770,9 @@ export async function GET(request: NextRequest) {
       overdue: plan.overdue,
       dueSoon: plan.dueSoon,
       recommended: plan.recommended,
-      analyzed: !!analysisData
+      analyzed: !!analysisData,
+      repairOrderNumber,
+      customerName
     }, { headers: corsHeaders });
 
   } catch (error: any) {

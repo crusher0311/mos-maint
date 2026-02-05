@@ -444,12 +444,21 @@ function renderPlan(data) {
       currentContext.mileage = data.mileage;
     }
   }
-  if (data.roNumber && currentContext) {
-    currentContext.roNumber = data.roNumber;
-    elements.roDisplay.textContent = `RO #${data.roNumber}`;
+  // Update RO number from API response (repairOrderNumber is the friendly number)
+  if (data.repairOrderNumber && currentContext) {
+    currentContext.roNumber = String(data.repairOrderNumber);
+    elements.roDisplay.textContent = `RO #${data.repairOrderNumber}`;
+    console.log('[MOS] Updated RO number from API:', data.repairOrderNumber);
   }
+  // Update customer name from API response
   if (data.customerName && currentContext) {
     currentContext.customerName = data.customerName;
+    console.log('[MOS] Updated customer name from API:', data.customerName);
+  }
+  
+  // Update keytag fields with the new context data
+  if (typeof updateKeytagFields === 'function') {
+    updateKeytagFields();
   }
   
   const hasOverdue = data.overdue && data.overdue.length > 0;
@@ -1326,15 +1335,15 @@ async function loadStickerConfig() {
       elements.stickerMileage.value = currentContext.mileage.toLocaleString();
     }
     
-    // Check if keytags feature is enabled and load keytag section
-    await loadKeytagSection();
+    // Check if keytags feature is enabled and load keytag section (no await needed)
+    loadKeytagSection();
     
   } catch (err) {
     console.error('[MOS] Failed to load sticker config:', err);
   }
 }
 
-async function loadKeytagSection() {
+function loadKeytagSection() {
   // Check if keytags feature is enabled for this shop
   keytagEnabled = shopFeatures.keytags === true;
   
@@ -1343,23 +1352,28 @@ async function loadKeytagSection() {
     return;
   }
   
-  // Show keytag section
+  // Show keytag section immediately
   elements.keytagSection.classList.remove('hidden');
   
   // Pre-fill keytag fields from current context
-  if (currentContext) {
-    if (elements.keytagVehicle && currentContext.vehicleDisplay) {
-      elements.keytagVehicle.value = currentContext.vehicleDisplay;
-    }
-    if (elements.keytagRo && currentContext.roNumber) {
-      elements.keytagRo.value = currentContext.roNumber;
-    }
-    if (elements.keytagMileage && currentContext.mileage) {
-      elements.keytagMileage.value = currentContext.mileage.toLocaleString();
-    }
-    if (elements.keytagCustomer && currentContext.customerName) {
-      elements.keytagCustomer.value = currentContext.customerName;
-    }
+  updateKeytagFields();
+}
+
+// Separate function to update keytag fields - can be called when context updates
+function updateKeytagFields() {
+  if (!currentContext || !elements.keytagSection) return;
+  
+  if (elements.keytagVehicle && currentContext.vehicleDisplay) {
+    elements.keytagVehicle.value = currentContext.vehicleDisplay;
+  }
+  if (elements.keytagRo && currentContext.roNumber) {
+    elements.keytagRo.value = currentContext.roNumber;
+  }
+  if (elements.keytagMileage && currentContext.mileage) {
+    elements.keytagMileage.value = currentContext.mileage.toLocaleString();
+  }
+  if (elements.keytagCustomer && currentContext.customerName) {
+    elements.keytagCustomer.value = currentContext.customerName;
   }
 }
 
