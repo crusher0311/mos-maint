@@ -1416,8 +1416,10 @@ async function handleKeytagPrint() {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/keytag',
-      method: 'POST',
-      body
+      options: {
+        method: 'POST',
+        body: JSON.stringify(body)
+      }
     });
     
     if (!result.success || !result.keytag) {
