@@ -420,7 +420,8 @@ function renderPlan(data) {
   if (data.vehicle) {
     const v = data.vehicle;
     if (v.year && v.make && v.model) {
-      elements.vehicleDisplay.textContent = `${v.year} ${v.make} ${v.model}`;
+      const displayText = `${v.year} ${v.make} ${v.model}`;
+      elements.vehicleDisplay.textContent = displayText;
       // Update context with vehicle data from API for job lookup search
       if (currentContext) {
         currentContext.vehicle = {
@@ -429,6 +430,7 @@ function renderPlan(data) {
           model: v.model,
           engine: v.engine || null
         };
+        currentContext.vehicleDisplay = displayText;
         console.log('[MOS] Updated context with vehicle from API:', currentContext.vehicle);
       }
     } else if (v.vin) {
@@ -441,6 +443,13 @@ function renderPlan(data) {
     if (currentContext) {
       currentContext.mileage = data.mileage;
     }
+  }
+  if (data.roNumber && currentContext) {
+    currentContext.roNumber = data.roNumber;
+    elements.roDisplay.textContent = `RO #${data.roNumber}`;
+  }
+  if (data.customerName && currentContext) {
+    currentContext.customerName = data.customerName;
   }
   
   const hasOverdue = data.overdue && data.overdue.length > 0;

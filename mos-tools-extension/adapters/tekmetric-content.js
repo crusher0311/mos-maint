@@ -13,114 +13,198 @@ function detectContext() {
     provider: "tekmetric",
     shopId: null,
     roId: null,
-    roNumber: null, // User-friendly RO number displayed on page
+    roNumber: null,
     vin: null,
     vehicle: null,
+    vehicleDisplay: null,
     customer: null,
+    customerName: null,
     mileage: null
   };
 
   // Extract shop ID and RO ID from URL
-  // Patterns: /admin/shop/123/repair-orders/456 or /shop/123/repair-orders/456
   const urlMatch = url.match(/\/(?:admin\/)?shop\/(\d+)\/repair-orders\/(\d+)/);
   if (urlMatch) {
     context.shopId = urlMatch[1];
     context.roId = urlMatch[2];
   }
   
-  // Try to extract display RO number from page header
-  // Look for "RO #4261:" pattern in specific elements first, then fallback to full page
+  // ============ EXTRACT RO NUMBER ============
   try {
-    // Strategy 1: Look for RO number in h1/h2/h3 headers (most reliable)
-    const headers = document.querySelectorAll('h1, h2, h3, [class*="Header"], [class*="Title"], [data-testid*="header"]');
-    for (const header of headers) {
-      const roNumMatch = header.textContent.match(/RO\s*#\s*(\d+)/i);
-      if (roNumMatch) {
-        context.roNumber = roNumMatch[1];
-        break;
-      }
-    }
+    // Strategy 1: Look for RO # pattern in the page title/header area
+    // Tekmetric typically shows "RO #1234:" in a prominent header
+    const pageText = document.body?.innerText || '';
     
-    // Strategy 2: Look for breadcrumb or page title area
-    if (!context.roNumber) {
-      const breadcrumbs = document.querySelectorAll('[class*="breadcrumb"], [class*="Breadcrumb"], nav');
-      for (const bc of breadcrumbs) {
-        const roNumMatch = bc.textContent.match(/RO\s*#\s*(\d+)/i);
-        if (roNumMatch) {
-          context.roNumber = roNumMatch[1];
+    // Try multiple RO patterns
+    const roPatterns = [
+      /RO\s*#\s*(\d+)\s*:/i,      // "RO #1234:"
+      /RO\s*#\s*(\d+)/i,          // "RO #1234"
+      /Repair Order\s*#?\s*(\d+)/i // "Repair Order 1234"
+    ];
+    
+    for (const pattern of roPatterns) {
+      const match = pageText.match(pattern);
+      if (match && match[1]) {
+        // Make sure it's a reasonable RO number (not the internal Tekmetric ID)
+        const num = parseInt(match[1]);
+        if (num > 0 && num < 1000000) {
+          context.roNumber = match[1];
           break;
         }
       }
     }
     
-    // Strategy 3: Fallback to full page text search
+    // Strategy 2: Look in specific header elements
     if (!context.roNumber) {
-      const pageText = document.body?.innerText || '';
-      const roNumMatch = pageText.match(/RO\s*#\s*(\d+)/i);
-      if (roNumMatch) {
-        context.roNumber = roNumMatch[1];
+      const headerSelectors = [
+        'h1', 'h2', 'h3',
+        '[class*="header"] span',
+        '[class*="Header"] span',
+        '[class*="title"]',
+        '[class*="Title"]'
+      ];
+      
+      for (const sel of headerSelectors) {
+        const elements = document.querySelectorAll(sel);
+        for (const el of elements) {
+          const text = el.textContent || '';
+          const match = text.match(/RO\s*#\s*(\d+)/i);
+          if (match && match[1]) {
+            const num = parseInt(match[1]);
+            if (num > 0 && num < 1000000) {
+              context.roNumber = match[1];
+              break;
+            }
+          }
+        }
+        if (context.roNumber) break;
       }
     }
   } catch (e) {
     console.warn('[MOS Tools] Error extracting RO number:', e);
   }
 
-  // Try to extract vehicle info from the page
+  // ============ EXTRACT VEHICLE INFO ============
   try {
-    // Look for vehicle info in the page header
-    const vehicleHeader = document.querySelector('[data-testid="vehicle-info"]') ||
-                         document.querySelector('.vehicle-info') ||
-                         document.querySelector('[class*="VehicleInfo"]');
+    const pageText = document.body?.innerText || '';
     
-    if (vehicleHeader) {
-      const text = vehicleHeader.textContent;
-      // Try to parse "2019 Honda Accord" format
-      const vehicleMatch = text.match(/(\d{4})\s+(\w+)\s+(.+)/);
-      if (vehicleMatch) {
-        context.vehicle = {
-          year: parseInt(vehicleMatch[1]),
-          make: vehicleMatch[2],
-          model: vehicleMatch[3].trim()
-        };
-      }
-    }
-
-    // Look for VIN
-    const vinElements = document.querySelectorAll('[data-testid*="vin"], [class*="vin"]');
-    for (const el of vinElements) {
-      const vinMatch = el.textContent.match(/[A-HJ-NPR-Z0-9]{17}/i);
-      if (vinMatch) {
-        context.vin = vinMatch[0].toUpperCase();
-        break;
-      }
-    }
-
-    // Look for mileage - multiple strategies
-    // Strategy 1: Look for data-testid elements
-    const mileageElements = document.querySelectorAll('[data-testid*="mileage"], [data-testid*="miles"], [data-testid*="odometer"]');
-    for (const el of mileageElements) {
-      const mileageMatch = el.textContent.match(/[\d,]+/);
-      if (mileageMatch) {
-        context.mileage = parseInt(mileageMatch[0].replace(/,/g, ''));
-        break;
+    // Strategy 1: Look for Year Make Model pattern anywhere on page
+    // Common patterns: "2019 Honda Accord", "2020 Toyota Camry LE"
+    const vehiclePattern = /\b(19\d{2}|20\d{2})\s+([A-Z][a-zA-Z-]+)\s+([A-Z][a-zA-Z0-9\s-]+?)(?:\s+VIN|\s+In:|\s+Out:|\n|$)/i;
+    const vehicleMatch = pageText.match(vehiclePattern);
+    
+    if (vehicleMatch) {
+      const year = parseInt(vehicleMatch[1]);
+      const make = vehicleMatch[2].trim();
+      let model = vehicleMatch[3].trim();
+      
+      // Clean up model - remove trailing numbers that might be mileage
+      model = model.replace(/\s+\d{1,3}(,\d{3})*\s*$/, '').trim();
+      
+      if (year >= 1900 && year <= 2030 && make && model) {
+        context.vehicle = { year, make, model };
+        context.vehicleDisplay = `${year} ${make} ${model}`;
       }
     }
     
-    // Strategy 2: Look for "In:" or "Out:" mileage pattern in the header
+    // Strategy 2: Try common Tekmetric selectors
+    if (!context.vehicle) {
+      const vehicleSelectors = [
+        '[data-testid="vehicle-info"]',
+        '[class*="VehicleInfo"]',
+        '[class*="vehicle-info"]',
+        '[class*="vehicleHeader"]'
+      ];
+      
+      for (const sel of vehicleSelectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          const text = el.textContent || '';
+          const match = text.match(/\b(19\d{2}|20\d{2})\s+(\w+)\s+([^\n]+)/);
+          if (match) {
+            const year = parseInt(match[1]);
+            const make = match[2].trim();
+            const model = match[3].trim().split(/\s{2,}/)[0]; // Take first part before multiple spaces
+            if (year >= 1900 && year <= 2030) {
+              context.vehicle = { year, make, model };
+              context.vehicleDisplay = `${year} ${make} ${model}`;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // ============ EXTRACT VIN ============
+    // Look for 17-character VIN pattern
+    const vinMatch = pageText.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
+    if (vinMatch) {
+      context.vin = vinMatch[1].toUpperCase();
+    }
+    
+    // Also try specific VIN elements
+    if (!context.vin) {
+      const vinElements = document.querySelectorAll('[data-testid*="vin"], [class*="vin"], [class*="VIN"]');
+      for (const el of vinElements) {
+        const match = el.textContent.match(/[A-HJ-NPR-Z0-9]{17}/i);
+        if (match) {
+          context.vin = match[0].toUpperCase();
+          break;
+        }
+      }
+    }
+
+    // ============ EXTRACT MILEAGE ============
+    // Strategy 1: Look for specific DOM elements first
+    const mileageSelectors = [
+      '[data-testid*="mileage"]',
+      '[data-testid*="miles"]',
+      '[data-testid*="odometer"]',
+      '[class*="mileage"]',
+      '[class*="Mileage"]',
+      '[class*="odometer"]'
+    ];
+    
+    for (const sel of mileageSelectors) {
+      const elements = document.querySelectorAll(sel);
+      for (const el of elements) {
+        const text = el.textContent || '';
+        const match = text.match(/[\d,]+/);
+        if (match) {
+          const value = parseInt(match[0].replace(/,/g, ''));
+          if (value > 100 && value < 1000000) {
+            context.mileage = value;
+            console.log('[MOS Tools] Mileage extracted via selector:', sel);
+            break;
+          }
+        }
+      }
+      if (context.mileage) break;
+    }
+    
+    // Strategy 2: Look for "In: 40,238" or "Out: 40,238" patterns in page text
     if (!context.mileage) {
-      const headerArea = document.querySelector('[class*="Header"]') || 
-                        document.querySelector('[class*="header"]') ||
-                        document.querySelector('header') ||
-                        document.body;
-      const headerText = headerArea?.textContent || '';
-      // Match patterns like "In: 40,238" or "Out: 40,238"
-      const inOutMatch = headerText.match(/(?:In|Out):\s*([\d,]+)/i);
-      if (inOutMatch) {
-        context.mileage = parseInt(inOutMatch[1].replace(/,/g, ''));
+      const mileagePatterns = [
+        /In:\s*([\d,]+)/i,
+        /Out:\s*([\d,]+)/i,
+        /Mileage[:\s]*([\d,]+)/i,
+        /Odometer[:\s]*([\d,]+)/i
+      ];
+      
+      for (const pattern of mileagePatterns) {
+        const match = pageText.match(pattern);
+        if (match) {
+          const value = parseInt(match[1].replace(/,/g, ''));
+          if (value > 100 && value < 1000000) {
+            context.mileage = value;
+            console.log('[MOS Tools] Mileage extracted via regex pattern');
+            break;
+          }
+        }
       }
     }
     
-    // Strategy 3: Look for any element containing mileage-like numbers near "In" or "Out" text
+    // Strategy 3: Look for elements containing "In" or "Out" text with numbers
     if (!context.mileage) {
       const allElements = document.querySelectorAll('span, div, p');
       for (const el of allElements) {
@@ -129,10 +213,51 @@ function detectContext() {
           const match = text.match(/[\d,]+/);
           if (match) {
             const value = parseInt(match[0].replace(/,/g, ''));
-            if (value > 1000 && value < 1000000) { // Reasonable mileage range
+            if (value > 100 && value < 1000000) {
               context.mileage = value;
+              console.log('[MOS Tools] Mileage extracted via In/Out element');
               break;
             }
+          }
+        }
+      }
+    }
+
+    // ============ EXTRACT CUSTOMER NAME ============
+    // Look for customer name patterns
+    const customerPatterns = [
+      /Customer[:\s]+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)/,
+      /Owner[:\s]+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)/
+    ];
+    
+    for (const pattern of customerPatterns) {
+      const match = pageText.match(pattern);
+      if (match && match[1]) {
+        context.customerName = match[1].trim();
+        context.customer = { name: context.customerName };
+        break;
+      }
+    }
+    
+    // Strategy 2: Look for customer-related elements
+    if (!context.customerName) {
+      const customerSelectors = [
+        '[data-testid*="customer"]',
+        '[class*="customer"]',
+        '[class*="Customer"]',
+        '[class*="owner"]'
+      ];
+      
+      for (const sel of customerSelectors) {
+        const el = document.querySelector(sel);
+        if (el) {
+          const text = el.textContent?.trim() || '';
+          // Look for a name pattern (First Last)
+          const nameMatch = text.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
+          if (nameMatch) {
+            context.customerName = nameMatch[1];
+            context.customer = { name: context.customerName };
+            break;
           }
         }
       }
@@ -142,6 +267,7 @@ function detectContext() {
     console.log("[MOS Tools] Error parsing page context:", err);
   }
 
+  console.log('[MOS Tools] Detected context:', context);
   return context;
 }
 

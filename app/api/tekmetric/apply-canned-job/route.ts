@@ -25,16 +25,69 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
-  const shopId = Number(session.shopId);
-  if (!shopId) {
+  
+  // Extension passes Tekmetric shop ID in query params
+  const url = new URL(req.url);
+  const smsShopId = url.searchParams.get("shopId");
+  
+  let shop;
+  let shopId: number;
+  let tekmetricShopId: number | string;
+  
+  // Get user's accessible shops (their shop + any enterprise shops they manage)
+  const sessionShopId = Number(session.shopId);
+  const userShop = await db.collection("shops").findOne({ shopId: sessionShopId });
+  const enterpriseId = userShop?.enterpriseId;
+  
+  // Build list of shop IDs this user can access
+  let accessibleShopIds: number[] = [sessionShopId];
+  if (enterpriseId) {
+    const enterpriseShops = await db.collection("shops")
+      .find({ enterpriseId })
+      .project({ shopId: 1 })
+      .toArray();
+    accessibleShopIds = enterpriseShops.map(s => Number(s.shopId));
+  }
+  
+  if (smsShopId) {
+    // Look up shop by Tekmetric shop ID (passed from extension context)
+    shop = await db.collection("shops").findOne({
+      $or: [
+        { "tekmetric.shopId": Number(smsShopId) },
+        { "tekmetric.shopId": smsShopId },
+        { "tekmetricShopId": Number(smsShopId) },
+        { "tekmetricShopId": smsShopId }
+      ]
+    });
+    
+    if (shop) {
+      shopId = Number(shop.shopId);
+      tekmetricShopId = Number(smsShopId);
+      
+      // Authorization check: ensure user has access to this shop
+      if (!accessibleShopIds.includes(shopId)) {
+        console.warn(`[Tekmetric Apply Canned Job] User ${session.email} attempted to access shop ${shopId} (Tekmetric ${smsShopId}) without permission`);
+        return NextResponse.json({ error: "Access denied to this shop" }, { status: 403, headers: corsHeaders });
+      }
+    } else {
+      // Fallback: try session shopId
+      shopId = sessionShopId;
+      shop = userShop;
+      tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
+    }
+  } else {
+    // Use session shopId (dashboard context)
+    shopId = sessionShopId;
+    shop = userShop;
+    tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
+  }
+  
+  if (!shopId || !shop) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400, headers: corsHeaders });
   }
-
-  const shop = await db.collection("shops").findOne({ shopId });
-  const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
   
   if (!tekmetricShopId) {
-    return NextResponse.json({ error: "Tekmetric not configured" }, { status: 400, headers: corsHeaders });
+    return NextResponse.json({ error: "Tekmetric not configured for this shop" }, { status: 400, headers: corsHeaders });
   }
 
   let body: { 
