@@ -8,6 +8,7 @@ import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/inte
 import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
 import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices, fetchWorkOrdersForVehicle as fetchProtractorWorkOrders } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
+import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -268,7 +269,26 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   }
 
   // ✅ Resolve current miles (used in header and to patch the latest RO row if it's 0)
-  const resolvedMiles = await getLatestMilesForVin(db, vin);
+  let resolvedMiles = await getLatestMilesForVin(db, vin);
+  let mileageEstimated = false;
+  let mileageEstimateDetails: any = null;
+
+  if (!resolvedMiles || resolvedMiles <= 0) {
+    try {
+      const estimate = await estimateMileageFromCarfax(shopId, vin);
+      if (estimate.estimated) {
+        resolvedMiles = estimate.mileage;
+        mileageEstimated = true;
+        mileageEstimateDetails = {
+          confidence: estimate.confidence,
+          dataPoints: estimate.dataPoints,
+          lastRecordedMileage: estimate.lastRecordedMileage,
+          lastRecordedDate: estimate.lastRecordedDate,
+          milesPerDay: estimate.milesPerDay,
+        };
+      }
+    } catch {}
+  }
 
   const customer = vehicle.customerId
     ? await db.collection("customers").findOne(
@@ -593,6 +613,8 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         createdAt: r.createdAt
       }))}
       resolvedMiles={resolvedMiles}
+      mileageEstimated={mileageEstimated}
+      mileageEstimateDetails={mileageEstimateDetails}
       dvi={dvi}
       tekmetricDvi={tekmetricDvi}
       protractorDvi={protractorDvi}

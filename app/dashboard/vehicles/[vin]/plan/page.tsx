@@ -8,7 +8,8 @@ import {
 } from "@/lib/integrations/autoflow";
 import { 
   resolveCarfaxConfig, 
-  fetchCarfaxWithCache 
+  fetchCarfaxWithCache,
+  estimateMileageFromCarfax
 } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { getVehicleRecallsLocal, getEnhancedVehicleDataLocal, type VehicleRecall } from "@/lib/integrations/dataone-local";
@@ -1408,6 +1409,27 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
   }
 
+  let mileageEstimated = false;
+  let mileageEstimateDetails: any = null;
+
+  if (!currentMiles || currentMiles <= 0) {
+    try {
+      const estimate = await estimateMileageFromCarfax(shopId, vin);
+      if (estimate.estimated) {
+        currentMiles = estimate.mileage;
+        mileageEstimated = true;
+        mileageEstimateDetails = {
+          confidence: estimate.confidence,
+          dataPoints: estimate.dataPoints,
+          lastRecordedMileage: estimate.lastRecordedMileage,
+          lastRecordedDate: estimate.lastRecordedDate,
+          milesPerDay: estimate.milesPerDay,
+        };
+        console.log(`[Plan] Estimated mileage for ${vin}: ${currentMiles} mi from CARFAX`);
+      }
+    } catch {}
+  }
+
   // Always fetch vehicle info from DataOne local for accurate make/model (fast local query)
   const dataoneVehicle = await getEnhancedVehicleDataLocal(vin);
   
@@ -1686,7 +1708,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   {customerName && <><span className="font-medium text-neutral-800">{customerName}</span> • </>}
                   {latestRoNumber && <>RO# <code className="font-medium">{latestRoNumber}</code> • </>}
                   VIN <code>{vin}</code>
-                  {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
+                  {currentMiles != null && currentMiles > 0 && (
+                    <> • Current: <span
+                      className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
+                      title={mileageEstimated && mileageEstimateDetails
+                        ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
+                        : undefined}
+                    >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
+                  )}
                   {mpdBlended != null && <> • ~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</>}
                 </div>
               </div>
@@ -1767,7 +1796,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
           </h1>
           <div className="text-sm text-neutral-600 mt-1">
             VIN: {vin}
-            {currentMiles != null && currentMiles > 0 && <> • Current: {fmtDistance(currentMiles, distanceUnit)} {distLabel}</>}
+            {currentMiles != null && currentMiles > 0 && (
+              <> • Current: <span
+                className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
+                title={mileageEstimated && mileageEstimateDetails
+                  ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
+                  : undefined}
+              >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
+            )}
           </div>
         </div>
       </div>

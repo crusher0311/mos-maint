@@ -129,6 +129,14 @@ interface VehicleDetailClientProps {
   ownerName: string;
   ros: RepairOrderSummary[];
   resolvedMiles: number | null;
+  mileageEstimated?: boolean;
+  mileageEstimateDetails?: {
+    confidence: string;
+    dataPoints: number;
+    lastRecordedMileage: number;
+    lastRecordedDate: string;
+    milesPerDay: number;
+  } | null;
   dvi: DviResult;
   tekmetricDvi?: TekmetricDvi | null;
   protractorDvi?: ProtractorDvi | null;
@@ -195,6 +203,8 @@ export default function VehicleDetailClient({
   ownerName,
   ros,
   resolvedMiles,
+  mileageEstimated = false,
+  mileageEstimateDetails = null,
   dvi,
   tekmetricDvi,
   protractorDvi,
@@ -309,9 +319,18 @@ export default function VehicleDetailClient({
               </h1>
               <div className="flex items-center gap-2 mt-1">
                 <Gauge className="w-4 h-4 text-blue-600" />
-                <span className="text-sm text-gray-600">
-                  {miles ? `${miles.toLocaleString()} miles` : "Mileage unknown"}
-                </span>
+                {miles ? (
+                  <span
+                    className={`text-sm text-gray-600 ${mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-gray-400' : ''}`}
+                    title={mileageEstimated && mileageEstimateDetails
+                      ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
+                      : mileageEstimated ? 'Estimated from CARFAX service history' : undefined}
+                  >
+                    {miles.toLocaleString()} miles{mileageEstimated ? ' (est.)' : ''}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-600">Mileage unknown</span>
+                )}
                 <button className="p-1 text-gray-400 hover:text-gray-600">
                   <Edit2 className="w-3 h-3" />
                 </button>
