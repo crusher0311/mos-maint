@@ -1,6 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import { Db } from "mongodb";
+
+async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
+  const noMileageVins = rows
+    .filter((r) => !r.displayMiles)
+    .map((r) => r.displayVin)
+    .filter(Boolean);
+
+  if (noMileageVins.length === 0) return;
+
+  try {
+    const carfaxDocs = await db.collection("carfax_reports")
+      .find({ shopId, vin: { $in: noMileageVins }, ok: true })
+      .toArray();
+
+    const fiveYearsAgo = new Date();
+    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+    const now = Date.now();
+
+    const estimates = new Map<string, { mileage: number; details: any }>();
+    for (const doc of carfaxDocs) {
+      if (!Array.isArray(doc.serviceRecords)) continue;
+      const valid = doc.serviceRecords
+        .filter((r: any) => {
+          if (!r.date || r.odometer == null || r.odometer <= 0) return false;
+          const d = new Date(r.date);
+          return !isNaN(d.getTime()) && d >= fiveYearsAgo;
+        })
+        .map((r: any) => ({ date: new Date(r.date), odometer: r.odometer as number }))
+        .sort((a: any, b: any) => b.date.getTime() - a.date.getTime())
+        .slice(0, 3);
+      if (valid.length < 2) continue;
+      const newest = valid[0];
+      const oldest = valid[valid.length - 1];
+      const daysBetween = (newest.date.getTime() - oldest.date.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysBetween < 30) continue;
+      const milesDriven = newest.odometer - oldest.odometer;
+      if (milesDriven <= 0) continue;
+      const milesPerDay = milesDriven / daysBetween;
+      const daysSinceNewest = (now - newest.date.getTime()) / (1000 * 60 * 60 * 24);
+      const estimated = Math.round(newest.odometer + milesPerDay * daysSinceNewest);
+      estimates.set(doc.vin, {
+        mileage: estimated,
+        details: {
+          confidence: valid.length >= 3 ? "good" : "fair",
+          dataPoints: valid.length,
+          lastRecordedMileage: newest.odometer,
+          lastRecordedDate: newest.date.toISOString().split("T")[0],
+          milesPerDay: Math.round(milesPerDay * 10) / 10,
+        }
+      });
+    }
+
+    for (const row of rows) {
+      if (!row.displayMiles && row.displayVin) {
+        const est = estimates.get(row.displayVin);
+        if (est) {
+          row.displayMiles = est.mileage;
+          row.mileageEstimated = true;
+          row.mileageEstimateDetails = est.details;
+          if (row.af) row.af.miles = est.mileage;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[Dashboard] CARFAX batch estimation error:", e);
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,6 +138,8 @@ export async function GET(request: NextRequest) {
         dviDone: false,
         archived: true,
         source: wo.smsType,
+        mileageEstimated: false,
+        mileageEstimateDetails: null as any,
         af: {
           status: 'Archived',
           createdAt: wo.closedAt || wo.updatedAt,
@@ -82,6 +152,8 @@ export async function GET(request: NextRequest) {
           engine: wo.vehicle?.engine || null,
         },
       }));
+
+      await batchEstimateMileage(db, Number(user.shopId), rows);
 
       return NextResponse.json({
         rows,
@@ -152,6 +224,8 @@ export async function GET(request: NextRequest) {
       dviDone: wo.hasDvi || false,
       source: wo.smsType,
       displayStatus: wo.label || wo.status,
+      mileageEstimated: false,
+      mileageEstimateDetails: null as any,
       af: {
         status: wo.status,
         createdAt: wo.createdAt,
@@ -164,6 +238,8 @@ export async function GET(request: NextRequest) {
         engine: wo.vehicle?.engine || null,
       }
     }));
+
+    await batchEstimateMileage(db, Number(user.shopId), rows);
 
     rows.sort((a: any, b: any) => {
       const nameA = a.displayName || "";

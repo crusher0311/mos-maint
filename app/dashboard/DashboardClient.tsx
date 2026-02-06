@@ -1060,9 +1060,16 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                         )}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-xs sm:text-sm text-gray-600">
-                        {r.displayMiles != null
-                          ? Number(r.displayMiles).toLocaleString()
-                          : "—"}
+                        {r.displayMiles != null ? (
+                          <span
+                            className={r.mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
+                            title={r.mileageEstimated && r.mileageEstimateDetails
+                              ? `Estimated from CARFAX (${r.mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${Number(r.mileageEstimateDetails.lastRecordedMileage).toLocaleString()} mi on ${r.mileageEstimateDetails.lastRecordedDate}\nAvg: ${r.mileageEstimateDetails.milesPerDay} mi/day`
+                              : undefined}
+                          >
+                            {Number(r.displayMiles).toLocaleString()}{r.mileageEstimated ? ' (est.)' : ''}
+                          </span>
+                        ) : "—"}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-1 sm:gap-2">
