@@ -149,6 +149,131 @@ interface PrefetchedData {
   shopWorkOrders?: any[];
 }
 
+const PREFETCH_MAX_CONCURRENT = 2;
+const PREFETCH_DELAY_MS = 500;
+const PREFETCH_MAX_VEHICLES = 15;
+const ANALYSIS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const PREFETCH_LOCK_TTL_MS = 10 * 60 * 1000;
+
+const shopPrefetchInProgress = new Set<number>();
+
+async function backgroundPrefetchShopPlans(
+  mosShopId: number,
+  currentVin: string,
+  showInspectItems: boolean,
+  shopIntervals: ShopIntervals
+) {
+  if (shopPrefetchInProgress.has(mosShopId)) {
+    return;
+  }
+
+  shopPrefetchInProgress.add(mosShopId);
+  setTimeout(() => shopPrefetchInProgress.delete(mosShopId), PREFETCH_LOCK_TTL_MS);
+
+  try {
+    const db = await getDb();
+    const recentLock = await db.collection("extension_prefetch_locks").findOne({
+      shopId: mosShopId,
+      startedAt: { $gt: new Date(Date.now() - PREFETCH_LOCK_TTL_MS) }
+    });
+    if (recentLock) {
+      console.log(`[Extension Prefetch] Shop ${mosShopId}: DB lock active, skipping`);
+      shopPrefetchInProgress.delete(mosShopId);
+      return;
+    }
+    await db.collection("extension_prefetch_locks").updateOne(
+      { shopId: mosShopId },
+      { $set: { shopId: mosShopId, startedAt: new Date() } },
+      { upsert: true }
+    );
+  } catch (e) {
+    // Non-critical, proceed anyway
+  }
+
+  try {
+    const db2 = await getDb();
+    
+    const openWorkOrders = await db2.collection("tekmetric_work_orders").find({
+      shopId: { $in: [String(mosShopId), Number(mosShopId)] },
+      status: { $nin: ["Invoice", "Invoiced", "Posted", "Deleted", "Void", "Closed"] },
+      vin: { $exists: true, $ne: null },
+      odometer: { $gt: 0 }
+    }).sort({ updatedAt: -1 }).limit(PREFETCH_MAX_VEHICLES + 10).toArray();
+
+    const uniqueVins = new Map<string, { vin: string; mileage: number }>();
+    for (const wo of openWorkOrders) {
+      const vin = (wo.vin || "").toUpperCase();
+      if (!vin || vin.length !== 17 || vin === currentVin.toUpperCase()) continue;
+      if (uniqueVins.has(vin)) continue;
+      uniqueVins.set(vin, { vin, mileage: wo.odometer });
+    }
+
+    if (uniqueVins.size === 0) {
+      console.log(`[Extension Prefetch] Shop ${mosShopId}: No other open ROs to prefetch`);
+      shopPrefetchInProgress.delete(mosShopId);
+      return;
+    }
+
+    const allVins = Array.from(uniqueVins.keys());
+    const existingCaches = await db2.collection("maintenance_analysis_cache").find({
+      vin: { $in: allVins },
+      shopId: mosShopId
+    }).project({ vin: 1, analyzedAt: 1, mileageAtAnalysis: 1 }).toArray();
+
+    const cacheMap = new Map<string, { analyzedAt: Date; mileage: number }>();
+    for (const c of existingCaches) {
+      if (c.analyzedAt) {
+        cacheMap.set(c.vin, { analyzedAt: new Date(c.analyzedAt), mileage: c.mileageAtAnalysis || 0 });
+      }
+    }
+
+    const vehiclesToPrefetch: { vin: string; mileage: number }[] = [];
+    for (const [vin, data] of uniqueVins) {
+      if (vehiclesToPrefetch.length >= PREFETCH_MAX_VEHICLES) break;
+      const cached = cacheMap.get(vin);
+      if (cached) {
+        const age = Date.now() - cached.analyzedAt.getTime();
+        const mileageChanged = Math.abs(data.mileage - cached.mileage) > 100;
+        if (age < ANALYSIS_CACHE_TTL_MS && !mileageChanged) continue;
+      }
+      vehiclesToPrefetch.push(data);
+    }
+
+    if (vehiclesToPrefetch.length === 0) {
+      console.log(`[Extension Prefetch] Shop ${mosShopId}: All ${uniqueVins.size} open RO plans already cached`);
+      shopPrefetchInProgress.delete(mosShopId);
+      return;
+    }
+
+    console.log(`[Extension Prefetch] Shop ${mosShopId}: Building plans for ${vehiclesToPrefetch.length} vehicles (${uniqueVins.size} open ROs total)`);
+
+    let built = 0;
+    for (let i = 0; i < vehiclesToPrefetch.length; i += PREFETCH_MAX_CONCURRENT) {
+      const batch = vehiclesToPrefetch.slice(i, i + PREFETCH_MAX_CONCURRENT);
+      await Promise.allSettled(
+        batch.map(async (v) => {
+          try {
+            await runOnDemandAnalysis(mosShopId, v.vin, v.mileage, showInspectItems, shopIntervals);
+            built++;
+            console.log(`[Extension Prefetch] Shop ${mosShopId}: Built plan for ${v.vin} (${built}/${vehiclesToPrefetch.length})`);
+          } catch (e: any) {
+            console.warn(`[Extension Prefetch] Shop ${mosShopId}: Failed ${v.vin}: ${e.message}`);
+          }
+        })
+      );
+      if (i + PREFETCH_MAX_CONCURRENT < vehiclesToPrefetch.length) {
+        await new Promise(r => setTimeout(r, PREFETCH_DELAY_MS));
+      }
+    }
+
+    console.log(`[Extension Prefetch] Shop ${mosShopId}: Completed ${built}/${vehiclesToPrefetch.length} plans`);
+  } catch (e: any) {
+    console.error(`[Extension Prefetch] Shop ${mosShopId}: Error:`, e.message);
+  } finally {
+    shopPrefetchInProgress.delete(mosShopId);
+  }
+}
+
 async function runOnDemandAnalysis(
   shopId: number, 
   vin: string, 
@@ -642,15 +767,16 @@ export async function GET(request: NextRequest) {
         plan.recommended.push(convertItem(item));
       }
       
+      backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals)
+        .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
+
       return NextResponse.json({
         vehicle: cachedPlan.plan.vehicle || vehicle || { vin: vin.toUpperCase() },
         mileage: cachedPlan.plan.currentMiles || mileage,
         ...plan,
-        // Include Protractor deferred work list if available
         deferredWork: cachedPlan.plan.deferredWork || [],
         vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
         fromDashboardCache: true,
-        // Include RO number and customer name from Tekmetric
         repairOrderNumber,
         customerName
       }, { headers: corsHeaders });
@@ -808,6 +934,9 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+
+    backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals)
+      .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
     return NextResponse.json({
       vehicle: vehicle ? {

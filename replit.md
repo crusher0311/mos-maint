@@ -27,7 +27,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 
 **Feature Specifications:**
 *   **Core Management**: Vehicle analysis, customer dashboards, and multi-shop management.
-*   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services.
+*   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services. Extension-triggered background prefetch: when a Tekmetric extension user views a plan for one RO, other open ROs at the same shop are prefetched in the background (up to 15, rate-limited per shop with DB lock).
 *   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
 *   **Modular Features**: A la carte feature flags control functionalities like maintenance, job lookup, oil stickers, keytags, auto booking, and part cross-reference.
 *   **User Preferences**: Shops can select their preferred distance units (miles/kilometers).
