@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
-import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
 import { getValidToken } from "@/lib/tekmetric-auth";
@@ -196,16 +196,32 @@ async function backgroundPrefetchShopPlans(
     const openWorkOrders = await db2.collection("tekmetric_work_orders").find({
       shopId: { $in: [String(mosShopId), Number(mosShopId)] },
       status: { $nin: ["Invoice", "Invoiced", "Posted", "Deleted", "Void", "Closed"] },
-      vin: { $exists: true, $ne: null },
-      odometer: { $gt: 0 }
+      vin: { $exists: true, $ne: null }
     }).sort({ updatedAt: -1 }).limit(PREFETCH_MAX_VEHICLES + 10).toArray();
 
     const uniqueVins = new Map<string, { vin: string; mileage: number }>();
+    const zeroMileageVins: string[] = [];
     for (const wo of openWorkOrders) {
       const vin = (wo.vin || "").toUpperCase();
       if (!vin || vin.length !== 17 || vin === currentVin.toUpperCase()) continue;
       if (uniqueVins.has(vin)) continue;
-      uniqueVins.set(vin, { vin, mileage: wo.odometer });
+      const odometer = wo.odometer || 0;
+      if (odometer > 0) {
+        uniqueVins.set(vin, { vin, mileage: odometer });
+      } else {
+        zeroMileageVins.push(vin);
+      }
+    }
+
+    for (const vin of zeroMileageVins) {
+      if (uniqueVins.has(vin)) continue;
+      try {
+        const estimate = await estimateMileageFromCarfax(mosShopId, vin);
+        if (estimate.estimated) {
+          uniqueVins.set(vin, { vin, mileage: estimate.mileage });
+          console.log(`[Extension Prefetch] Shop ${mosShopId}: Estimated ${vin} at ${estimate.mileage} mi from CARFAX`);
+        }
+      } catch {}
     }
 
     if (uniqueVins.size === 0) {
@@ -629,6 +645,31 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    let mileageEstimated = false;
+    let mileageEstimateDetails: any = null;
+
+    if (vin && (!mileage || mileage <= 0)) {
+      try {
+        const estimate = await estimateMileageFromCarfax(mosShopId, vin.toUpperCase());
+        if (estimate.estimated) {
+          mileage = estimate.mileage;
+          mileageEstimated = true;
+          mileageEstimateDetails = {
+            confidence: estimate.confidence,
+            dataPoints: estimate.dataPoints,
+            lastRecordedMileage: estimate.lastRecordedMileage,
+            lastRecordedDate: estimate.lastRecordedDate,
+            milesPerDay: estimate.milesPerDay,
+          };
+          console.log(`[Extension] Estimated mileage for ${vin}: ${mileage} mi (${estimate.confidence}, ${estimate.dataPoints} CARFAX points, ${estimate.milesPerDay} mi/day)`);
+        } else {
+          console.log(`[Extension] Cannot estimate mileage for ${vin}: ${estimate.reason}`);
+        }
+      } catch (e: any) {
+        console.warn(`[Extension] CARFAX mileage estimation failed for ${vin}: ${e.message}`);
+      }
+    }
+
     if (!vin) {
       return NextResponse.json({
         vehicle: null,
@@ -773,6 +814,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         vehicle: cachedPlan.plan.vehicle || vehicle || { vin: vin.toUpperCase() },
         mileage: cachedPlan.plan.currentMiles || mileage,
+        mileageEstimated,
+        mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
         ...plan,
         deferredWork: cachedPlan.plan.deferredWork || [],
         vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
@@ -946,6 +989,8 @@ export async function GET(request: NextRequest) {
         vin: vehicle.vin
       } : vin ? { vin: vin.toUpperCase() } : null,
       mileage,
+      mileageEstimated,
+      mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
       overdue: plan.overdue,
       dueSoon: plan.dueSoon,
       recommended: plan.recommended,

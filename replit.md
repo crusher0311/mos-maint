@@ -23,7 +23,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Sticker & Keytag Generation**: QR codes are generated using HoverCode API, sticker images via `node-html-to-image`, and Dymo label printing is supported with a visual designer.
 *   **AI & Recommendations**: Offers AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor.
 *   **Auto Booking**: A feature-gated system for automated oil change appointment scheduling.
-*   **Chrome Extension**: A side panel extension enhances Tekmetric integration with maintenance recommendations, job history, and sticker printing.
+*   **Chrome Extension**: A side panel extension (v1.8.0) enhances Tekmetric integration with maintenance recommendations, job history, and sticker printing. Includes CARFAX-based mileage estimation when odometer is zero (uses last 3 data points within 5 years to calculate miles/day rate, requires minimum 2 data points). Estimated mileage displays as bold italic with hover tooltip showing estimation details.
 
 **Feature Specifications:**
 *   **Core Management**: Vehicle analysis, customer dashboards, and multi-shop management.

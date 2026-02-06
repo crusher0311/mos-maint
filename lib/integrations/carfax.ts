@@ -275,6 +275,84 @@ function snapshotToResult(doc: any): CarfaxResult {
   };
 }
 
+/** -------- Mileage estimation from CARFAX history -------- */
+export type MileageEstimate = {
+  estimated: true;
+  mileage: number;
+  confidence: "good" | "fair";
+  dataPoints: number;
+  lastRecordedMileage: number;
+  lastRecordedDate: string;
+  milesPerDay: number;
+} | {
+  estimated: false;
+  mileage: null;
+  reason: string;
+};
+
+export async function estimateMileageFromCarfax(
+  shopId: number,
+  vin: string
+): Promise<MileageEstimate> {
+  const db = await getDb();
+  const doc = await db.collection("carfax_reports").findOne({ shopId, vin });
+
+  if (!doc || !doc.ok || !Array.isArray(doc.serviceRecords)) {
+    return { estimated: false, mileage: null, reason: "No CARFAX data available" };
+  }
+
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+
+  const validRecords = doc.serviceRecords
+    .filter((r: any) => {
+      if (!r.date || r.odometer == null || r.odometer <= 0) return false;
+      const d = new Date(r.date);
+      if (isNaN(d.getTime())) return false;
+      if (d < fiveYearsAgo) return false;
+      return true;
+    })
+    .map((r: any) => ({
+      date: new Date(r.date),
+      odometer: r.odometer as number,
+    }))
+    .sort((a: { date: Date }, b: { date: Date }) => b.date.getTime() - a.date.getTime());
+
+  if (validRecords.length < 2) {
+    return { estimated: false, mileage: null, reason: "Not enough CARFAX data points to estimate mileage" };
+  }
+
+  const recentRecords = validRecords.slice(0, 3);
+
+  const newest = recentRecords[0];
+  const oldest = recentRecords[recentRecords.length - 1];
+
+  const daysBetween = (newest.date.getTime() - oldest.date.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysBetween < 30) {
+    return { estimated: false, mileage: null, reason: "CARFAX records too close together to estimate rate" };
+  }
+
+  const milesDriven = newest.odometer - oldest.odometer;
+  if (milesDriven <= 0) {
+    return { estimated: false, mileage: null, reason: "CARFAX odometer readings not consistent" };
+  }
+
+  const milesPerDay = milesDriven / daysBetween;
+
+  const daysSinceNewest = (Date.now() - newest.date.getTime()) / (1000 * 60 * 60 * 24);
+  const estimatedMileage = Math.round(newest.odometer + (milesPerDay * daysSinceNewest));
+
+  return {
+    estimated: true,
+    mileage: estimatedMileage,
+    confidence: recentRecords.length >= 3 ? "good" : "fair",
+    dataPoints: recentRecords.length,
+    lastRecordedMileage: newest.odometer,
+    lastRecordedDate: newest.date.toISOString().split("T")[0],
+    milesPerDay: Math.round(milesPerDay * 10) / 10,
+  };
+}
+
 /** Cached fetch; defaults to 7 days freshness */
 export async function fetchCarfaxWithCache(
   shopId: number,

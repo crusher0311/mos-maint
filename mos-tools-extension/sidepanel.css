@@ -237,6 +237,13 @@ body {
   border-radius: 4px;
 }
 
+.mileage-display.mileage-estimated {
+  font-weight: 700;
+  font-style: italic;
+  cursor: help;
+  border-bottom: 1px dashed var(--gray-400);
+}
+
 /* ==================== Tab Navigation ==================== */
 .tab-nav {
   display: flex;

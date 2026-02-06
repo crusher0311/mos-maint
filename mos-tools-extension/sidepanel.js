@@ -258,6 +258,16 @@ function updateContext(context) {
     if (context.mileage) {
       elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} mi`;
       elements.mileageDisplay.classList.remove('hidden');
+      if (context.mileageEstimated) {
+        elements.mileageDisplay.classList.add('mileage-estimated');
+        const details = context.mileageEstimateDetails;
+        elements.mileageDisplay.title = details
+          ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} mi on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} mi/day`
+          : 'Estimated from CARFAX service history';
+      } else {
+        elements.mileageDisplay.classList.remove('mileage-estimated');
+        elements.mileageDisplay.title = '';
+      }
     } else {
       elements.mileageDisplay.classList.add('hidden');
     }
@@ -445,6 +455,18 @@ function renderPlan(data) {
     elements.mileageDisplay.classList.remove('hidden');
     if (currentContext) {
       currentContext.mileage = data.mileage;
+      currentContext.mileageEstimated = !!data.mileageEstimated;
+      currentContext.mileageEstimateDetails = data.mileageEstimateDetails || null;
+    }
+    if (data.mileageEstimated) {
+      elements.mileageDisplay.classList.add('mileage-estimated');
+      const details = data.mileageEstimateDetails;
+      elements.mileageDisplay.title = details
+        ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} mi on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} mi/day`
+        : 'Estimated from CARFAX service history';
+    } else {
+      elements.mileageDisplay.classList.remove('mileage-estimated');
+      elements.mileageDisplay.title = '';
     }
   }
   // Update RO number from API response (repairOrderNumber is the friendly number)
