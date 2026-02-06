@@ -244,7 +244,7 @@ function fillCarfaxMileageGaps(
 }
 
 /* ---------------- Get latest miles from multiple sources ---------------- */
-async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | null> {
+async function getLatestMilesForVin(db: any, vinRaw: string): Promise<{ miles: number | null; recordedDate: Date | null }> {
   const vin = String(vinRaw || "").toUpperCase();
   const toPos = (v: unknown) => {
     if (v == null) return null;
@@ -255,9 +255,10 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
   // Latest RO mileage
   const ro = await db.collection("repair_orders").findOne(
     { vin },
-    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1 } }
+    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1, updatedAt: 1, createdAt: 1 } }
   );
   const mRO = toPos(ro?.mileage);
+  const dRO = ro?.updatedAt || ro?.createdAt || null;
 
   // Latest event with mileage
   const af = await db.collection("events").aggregate([
@@ -275,6 +276,7 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
     { $limit: 10 },
     {
       $project: {
+        createdAt: 1,
         mileage: {
           $ifNull: [
             "$payload.ticket.mileage",
@@ -289,15 +291,30 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
       },
     },
   ]).toArray();
-  const mAF = af.map((x: any) => toPos(x?.mileage)).find((x: any) => x != null) ?? null;
+  const afMatch = af.find((x: any) => toPos(x?.mileage) != null);
+  const mAF = afMatch ? toPos(afMatch.mileage) : null;
+  const dAF = afMatch?.createdAt || null;
 
   // Vehicle-level odometer/lastMileage/mileage (Tekmetric stores as mileage)
-  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1, mileage: 1 } });
+  const veh = await db.collection("vehicles").findOne({ vin }, { projection: { odometer: 1, lastMileage: 1, mileage: 1, updatedAt: 1 } });
   const mVeh = toPos(veh?.mileage) ?? toPos(veh?.odometer) ?? toPos(veh?.lastMileage);
+  const dVeh = veh?.updatedAt || null;
 
-  // Return the highest valid mileage
-  const candidates = [mRO, mAF, mVeh].filter((x): x is number => x != null);
-  return candidates.length > 0 ? Math.max(...candidates) : null;
+  // Return the most recent mileage reading (by date) to ensure projection uses the latest data point
+  const candidates: { miles: number; date: Date | null }[] = [];
+  if (mRO != null) candidates.push({ miles: mRO, date: dRO ? new Date(dRO) : null });
+  if (mAF != null) candidates.push({ miles: mAF, date: dAF ? new Date(dAF) : null });
+  if (mVeh != null) candidates.push({ miles: mVeh, date: dVeh ? new Date(dVeh) : null });
+
+  if (candidates.length === 0) return { miles: null, recordedDate: null };
+  // Prefer candidate with most recent date; fall back to highest miles if no dates
+  const withDates = candidates.filter(c => c.date != null);
+  if (withDates.length > 0) {
+    withDates.sort((a, b) => b.date!.getTime() - a.date!.getTime());
+    return { miles: withDates[0].miles, recordedDate: withDates[0].date };
+  }
+  candidates.sort((a, b) => b.miles - a.miles);
+  return { miles: candidates[0].miles, recordedDate: null };
 }
 
 /* ---------------- Normalization / rules engine ---------------- */
@@ -1010,7 +1027,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
   );
 
   // Early mileage check and cache lookup (skip cache if force refresh)
-  const earlyMiles = await getLatestMilesForVin(db, vin);
+  const earlyMilesResult = await getLatestMilesForVin(db, vin);
+  const earlyMiles = earlyMilesResult.miles;
   const cachedPlan = forceRefresh ? null : await getCachedPlan(db, vin, shopId, earlyMiles);
   const useCachedData = cachedPlan !== null;
   
@@ -1392,19 +1410,21 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Get current miles and OEM schedule - skip OEM fetch on cache hit
   let currentMiles: number | null;
+  let lastRecordedMiles: number | null = null;
+  let mileageRecordedDate: Date | null = null;
   let oemData: any = { source: 'cache', count: 0, items: [], vehicle: null };
   
   if (useCachedData) {
-    // On cache hit, use cached current miles (already validated in cache lookup)
     currentMiles = cachedPlan?.plan?.currentMiles ?? null;
     console.log(`[Plan] Using cached currentMiles: ${currentMiles}`);
   } else {
-    // On cache miss, fetch both current miles and OEM schedule
-    const [fetchedMiles, fetchedOemData] = await Promise.all([
+    const [fetchedResult, fetchedOemData] = await Promise.all([
       getLatestMilesForVin(db, vin),
       getMaintenanceScheduleCached(vin)
     ]);
-    currentMiles = fetchedMiles;
+    currentMiles = fetchedResult.miles;
+    lastRecordedMiles = fetchedResult.miles;
+    mileageRecordedDate = fetchedResult.recordedDate;
     oemData = fetchedOemData;
     console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
   }
@@ -1428,6 +1448,22 @@ async function PlanContent({ params, searchParams }: PageProps) {
         console.log(`[Plan] Estimated mileage for ${vin}: ${currentMiles} mi from CARFAX`);
       }
     } catch {}
+  } else if (currentMiles > 0 && mpdBlended != null && mpdBlended > 0 && mileageRecordedDate) {
+    const daysSinceRecorded = daysBetween(new Date(), mileageRecordedDate);
+    if (daysSinceRecorded >= 1 && daysSinceRecorded <= 180) {
+      lastRecordedMiles = currentMiles;
+      const projected = Math.round(currentMiles + mpdBlended * daysSinceRecorded);
+      currentMiles = projected;
+      mileageEstimated = true;
+      mileageEstimateDetails = {
+        confidence: "projected",
+        lastRecordedMileage: lastRecordedMiles,
+        lastRecordedDate: mileageRecordedDate.toISOString().split("T")[0],
+        milesPerDay: Math.round(mpdBlended * 10) / 10,
+        daysSinceRecorded: Math.round(daysSinceRecorded),
+      };
+      console.log(`[Plan] Projected mileage for ${vin}: ${lastRecordedMiles} + (${mpdBlended.toFixed(1)} mi/day × ${Math.round(daysSinceRecorded)} days) = ${currentMiles} mi`);
+    }
   }
 
   // Always fetch vehicle info from DataOne local for accurate make/model (fast local query)
@@ -1710,10 +1746,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   VIN <code>{vin}</code>
                   {currentMiles != null && currentMiles > 0 && (
                     <> • Current: <span
-                      className="font-bold italic cursor-help border-b border-dashed border-neutral-400"
+                      className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
                       title={mileageEstimated && mileageEstimateDetails
-                        ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
-                        : `Last recorded mileage from repair order`}
+                        ? mileageEstimateDetails.confidence === "projected"
+                          ? `Projected from last recorded ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
+                          : `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
+                        : undefined}
                     >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
                   )}
                   {mpdBlended != null && <> • <span
@@ -1801,10 +1839,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
             VIN: {vin}
             {currentMiles != null && currentMiles > 0 && (
               <> • Current: <span
-                className="font-bold italic cursor-help border-b border-dashed border-neutral-400"
+                className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
                 title={mileageEstimated && mileageEstimateDetails
-                  ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
-                  : `Last recorded mileage from repair order`}
+                  ? mileageEstimateDetails.confidence === "projected"
+                    ? `Projected from last recorded ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
+                    : `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
+                  : undefined}
               >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
             )}
           </div>

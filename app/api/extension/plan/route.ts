@@ -648,22 +648,43 @@ export async function GET(request: NextRequest) {
     let mileageEstimated = false;
     let mileageEstimateDetails: any = null;
 
-    if (vin && (!mileage || mileage <= 0)) {
+    if (vin) {
       try {
         const estimate = await estimateMileageFromCarfax(mosShopId, vin.toUpperCase());
-        if (estimate.estimated) {
-          mileage = estimate.mileage;
-          mileageEstimated = true;
-          mileageEstimateDetails = {
-            confidence: estimate.confidence,
-            dataPoints: estimate.dataPoints,
-            lastRecordedMileage: estimate.lastRecordedMileage,
-            lastRecordedDate: estimate.lastRecordedDate,
-            milesPerDay: estimate.milesPerDay,
-          };
-          console.log(`[Extension] Estimated mileage for ${vin}: ${mileage} mi (${estimate.confidence}, ${estimate.dataPoints} CARFAX points, ${estimate.milesPerDay} mi/day)`);
-        } else {
-          console.log(`[Extension] Cannot estimate mileage for ${vin}: ${estimate.reason}`);
+        if (!mileage || mileage <= 0) {
+          if (estimate.estimated) {
+            mileage = estimate.mileage;
+            mileageEstimated = true;
+            mileageEstimateDetails = {
+              confidence: estimate.confidence,
+              dataPoints: estimate.dataPoints,
+              lastRecordedMileage: estimate.lastRecordedMileage,
+              lastRecordedDate: estimate.lastRecordedDate,
+              milesPerDay: estimate.milesPerDay,
+            };
+            console.log(`[Extension] Estimated mileage for ${vin}: ${mileage} mi (${estimate.confidence}, ${estimate.dataPoints} CARFAX points, ${estimate.milesPerDay} mi/day)`);
+          } else {
+            console.log(`[Extension] Cannot estimate mileage for ${vin}: ${estimate.reason}`);
+          }
+        } else if (mileage > 0 && estimate.estimated && estimate.milesPerDay > 0) {
+          const vehicleUpdated = vehicle?.updatedAt ? new Date(vehicle.updatedAt) : null;
+          const recordedDate = vehicleUpdated || null;
+          if (recordedDate) {
+            const daysSince = (Date.now() - recordedDate.getTime()) / (1000 * 60 * 60 * 24);
+            if (daysSince >= 1 && daysSince <= 180) {
+              const lastRecorded = mileage;
+              mileage = Math.round(mileage + estimate.milesPerDay * daysSince);
+              mileageEstimated = true;
+              mileageEstimateDetails = {
+                confidence: "projected",
+                lastRecordedMileage: lastRecorded,
+                lastRecordedDate: recordedDate.toISOString().split("T")[0],
+                milesPerDay: Math.round(estimate.milesPerDay * 10) / 10,
+                daysSinceRecorded: Math.round(daysSince),
+              };
+              console.log(`[Extension] Projected mileage for ${vin}: ${lastRecorded} + (${estimate.milesPerDay.toFixed(1)} mi/day × ${Math.round(daysSince)} days) = ${mileage} mi`);
+            }
+          }
         }
       } catch (e: any) {
         console.warn(`[Extension] CARFAX mileage estimation failed for ${vin}: ${e.message}`);
