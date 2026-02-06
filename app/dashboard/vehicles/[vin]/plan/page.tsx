@@ -1710,10 +1710,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   VIN <code>{vin}</code>
                   {currentMiles != null && currentMiles > 0 && (
                     <> • Current: <span
-                      className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
+                      className="font-bold italic cursor-help border-b border-dashed border-neutral-400"
                       title={mileageEstimated && mileageEstimateDetails
                         ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
-                        : undefined}
+                        : `Last recorded mileage from repair order`}
                     >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
                   )}
                   {mpdBlended != null && <> • <span
@@ -1801,10 +1801,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
             VIN: {vin}
             {currentMiles != null && currentMiles > 0 && (
               <> • Current: <span
-                className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
+                className="font-bold italic cursor-help border-b border-dashed border-neutral-400"
                 title={mileageEstimated && mileageEstimateDetails
                   ? `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
-                  : undefined}
+                  : `Last recorded mileage from repair order`}
               >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
             )}
           </div>
