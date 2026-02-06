@@ -1716,7 +1716,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         : undefined}
                     >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
                   )}
-                  {mpdBlended != null && <> • ~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</>}
+                  {mpdBlended != null && <> • <span
+                      className="font-bold italic cursor-help border-b border-dashed border-neutral-400"
+                      title={`Estimated driving rate based on CARFAX service history`}
+                    >~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</span></>}
                 </div>
               </div>
             </div>
