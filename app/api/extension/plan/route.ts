@@ -553,6 +553,7 @@ export async function GET(request: NextRequest) {
     let mileage = null;
     let repairOrderNumber = null;
     let customerName = null;
+    let currentRoDate: Date | null = null;
 
     if (roId && !vin) {
       let workOrder = null;
@@ -625,12 +626,12 @@ export async function GET(request: NextRequest) {
       }
       
       if (workOrder) {
-        // Tekmetric sync stores: vin, odometer (not vehicleVin, mileageIn)
         const wo: any = workOrder;
         vin = wo.vin || wo.vehicleVin;
         mileage = wo.odometer || wo.mileageIn || wo.mileage || wo.odometerIn;
         repairOrderNumber = wo.repairOrderNumber || null;
         customerName = wo.customerName || null;
+        currentRoDate = wo.updatedDate ? new Date(wo.updatedDate) : (wo.updatedAt || wo.createdAt || wo.fetchedAt ? new Date(wo.updatedAt || wo.createdAt || wo.fetchedAt) : null);
       }
     }
 
@@ -670,7 +671,8 @@ export async function GET(request: NextRequest) {
           const vehicleUpdated = vehicle?.updatedAt ? new Date(vehicle.updatedAt) : null;
           const recordedDate = vehicleUpdated || null;
           if (recordedDate) {
-            const daysSince = (Date.now() - recordedDate.getTime()) / (1000 * 60 * 60 * 24);
+            const projectToDate = currentRoDate || new Date();
+            const daysSince = (projectToDate.getTime() - recordedDate.getTime()) / (1000 * 60 * 60 * 24);
             if (daysSince >= 1 && daysSince <= 180) {
               const lastRecorded = mileage;
               mileage = Math.round(mileage + estimate.milesPerDay * daysSince);
@@ -679,10 +681,11 @@ export async function GET(request: NextRequest) {
                 confidence: "projected",
                 lastRecordedMileage: lastRecorded,
                 lastRecordedDate: recordedDate.toISOString().split("T")[0],
+                projectedToDate: projectToDate.toISOString().split("T")[0],
                 milesPerDay: Math.round(estimate.milesPerDay * 10) / 10,
                 daysSinceRecorded: Math.round(daysSince),
               };
-              console.log(`[Extension] Projected mileage for ${vin}: ${lastRecorded} + (${estimate.milesPerDay.toFixed(1)} mi/day × ${Math.round(daysSince)} days) = ${mileage} mi`);
+              console.log(`[Extension] Projected mileage for ${vin}: ${lastRecorded} + (${estimate.milesPerDay.toFixed(1)} mi/day × ${Math.round(daysSince)} days) = ${mileage} mi (projected to ${projectToDate.toISOString().split("T")[0]})`);
             }
           }
         }

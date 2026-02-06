@@ -1087,6 +1087,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   let latestRepairOrderId: string | number | null = null;
   let activeIntegration: "protractor" | "tekmetric" | null = null;
   let customerName: string | null = null;
+  let currentRoDate: Date | null = null;
   
   // Helper to extract customer name from work order (works for all integrations)
   const extractCustomerName = (wo: any): string | null => {
@@ -1191,6 +1192,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     latestRoNumber = best.roNumber;
     latestWorkOrderId = best.workOrderId ? String(best.workOrderId) : null;
     customerName = best.customerName;
+    currentRoDate = new Date(best.updatedAt);
     
     // Set active integration based on which source won
     if (best.source === 'Tekmetric') {
@@ -1449,7 +1451,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
       }
     } catch {}
   } else if (currentMiles > 0 && mpdBlended != null && mpdBlended > 0 && mileageRecordedDate) {
-    const daysSinceRecorded = daysBetween(new Date(), mileageRecordedDate);
+    const projectToDate = currentRoDate || new Date();
+    const daysSinceRecorded = daysBetween(projectToDate, mileageRecordedDate);
     if (daysSinceRecorded >= 1 && daysSinceRecorded <= 180) {
       lastRecordedMiles = currentMiles;
       const projected = Math.round(currentMiles + mpdBlended * daysSinceRecorded);
@@ -1459,10 +1462,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
         confidence: "projected",
         lastRecordedMileage: lastRecordedMiles,
         lastRecordedDate: mileageRecordedDate.toISOString().split("T")[0],
+        projectedToDate: projectToDate.toISOString().split("T")[0],
         milesPerDay: Math.round(mpdBlended * 10) / 10,
         daysSinceRecorded: Math.round(daysSinceRecorded),
       };
-      console.log(`[Plan] Projected mileage for ${vin}: ${lastRecordedMiles} + (${mpdBlended.toFixed(1)} mi/day × ${Math.round(daysSinceRecorded)} days) = ${currentMiles} mi`);
+      console.log(`[Plan] Projected mileage for ${vin}: ${lastRecordedMiles} + (${mpdBlended.toFixed(1)} mi/day × ${Math.round(daysSinceRecorded)} days) = ${currentMiles} mi (projected to ${projectToDate.toISOString().split("T")[0]})`);
     }
   }
 
@@ -1749,7 +1753,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
                       title={mileageEstimated && mileageEstimateDetails
                         ? mileageEstimateDetails.confidence === "projected"
-                          ? `Projected from last recorded ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
+                          ? `Projected to check-in ${mileageEstimateDetails.projectedToDate || 'date'}\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
                           : `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
                         : undefined}
                     >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
@@ -1842,7 +1846,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                 className={mileageEstimated ? 'font-bold italic cursor-help border-b border-dashed border-neutral-400' : ''}
                 title={mileageEstimated && mileageEstimateDetails
                   ? mileageEstimateDetails.confidence === "projected"
-                    ? `Projected from last recorded ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
+                    ? `Projected to check-in ${mileageEstimateDetails.projectedToDate || 'date'}\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
                     : `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
                   : undefined}
               >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
