@@ -873,9 +873,9 @@ function injectFloatingButton() {
   fab.title = 'Open MOS Tools';
   fab.type = 'button';
   
-  // Use the MOS icon
-  const imgUrl = chrome.runtime.getURL('icons/icon48.png');
-  fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width: 32px; height: 32px; border-radius: 50%;" />`;
+  // Use the MOS Toolbox icon
+  const imgUrl = chrome.runtime.getURL('icons/mos-toolbox.png');
+  fab.innerHTML = `<img src="${imgUrl}" alt="MOS Tools" style="width: 44px; height: 44px; object-fit: contain;" />`;
   
   // Get saved position or default
   const savedTop = localStorage.getItem('mos-fab-top');
@@ -887,16 +887,16 @@ function injectFloatingButton() {
     top: `${topPosition}px`,
     width: '48px',
     height: '48px',
-    borderRadius: '50%',
-    backgroundColor: '#1e40af',
-    border: '2px solid #fff',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    borderRadius: '8px',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e0e0e0',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
     cursor: 'grab',
     zIndex: '2147483647',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '0',
+    padding: '2px',
     transition: 'transform 0.15s, box-shadow 0.15s',
     userSelect: 'none'
   });
@@ -904,15 +904,15 @@ function injectFloatingButton() {
   // Hover effects
   fab.addEventListener('mouseenter', () => {
     if (!fabDragging) {
-      fab.style.transform = 'scale(1.1)';
-      fab.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
+      fab.style.transform = 'scale(1.08)';
+      fab.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
     }
   });
   
   fab.addEventListener('mouseleave', () => {
     if (!fabDragging) {
       fab.style.transform = 'scale(1)';
-      fab.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+      fab.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
     }
   });
   
