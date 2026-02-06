@@ -366,7 +366,28 @@ export async function GET(request: NextRequest) {
     const shopId = Number(shop.shopId);
     console.log(`[Protractor Callback GET] ${operation} ${objectType} ${objectId} for shop ${shopId}`);
 
-    // Log the event first
+    // Deduplication: skip if we already processed this exact object in the last 60 seconds
+    if (objectId) {
+      const recentDuplicate = await db.collection("protractor_callback_events").findOne({
+        shopId,
+        objectType,
+        objectId,
+        processed: true,
+        processedAt: { $gte: new Date(Date.now() - 60000) }
+      });
+
+      if (recentDuplicate) {
+        console.log(`[Protractor Callback GET] Skipping duplicate ${objectType} ${objectId} for shop ${shopId} (processed ${Math.round((Date.now() - recentDuplicate.processedAt.getTime()) / 1000)}s ago)`);
+        return NextResponse.json({ 
+          ok: true, 
+          status: "duplicate_skipped",
+          type: objectType,
+          operation
+        });
+      }
+    }
+
+    // Log the event
     const insertResult = await db.collection("protractor_callback_events").insertOne({
       receivedAt: new Date(),
       method: "GET",
