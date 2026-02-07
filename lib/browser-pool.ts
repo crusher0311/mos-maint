@@ -4,7 +4,7 @@ let browserInstance: Browser | null = null;
 let browserPromise: Promise<Browser> | null = null;
 let lastUsed: number = Date.now();
 
-const BROWSER_IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const BROWSER_IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
 async function getChromiumPath(): Promise<string> {
   if (process.env.CHROMIUM_PATH) {
@@ -83,6 +83,15 @@ export async function closeBrowser(): Promise<void> {
   if (idleCheckerInterval) {
     clearInterval(idleCheckerInterval);
     idleCheckerInterval = null;
+  }
+}
+
+export function warmupBrowser(): void {
+  if (!browserInstance && !browserPromise) {
+    console.log("[Browser Pool] Pre-warming browser...");
+    getBrowser().catch((e) => {
+      console.error("[Browser Pool] Pre-warm failed:", e);
+    });
   }
 }
 
