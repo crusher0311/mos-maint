@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
+import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -281,6 +282,7 @@ interface StickerConfig {
   useKilometers?: boolean;
   hovercodeQRId?: string;
   roundMileage?: boolean;
+  usePredictiveDate?: boolean;
   defaultSize?: string;
   intervals?: {
     conventional?: { mileage: number; months: number };
@@ -411,6 +413,7 @@ export async function GET(request: NextRequest) {
         defaultSize: stickerConfig.defaultSize || "2x2.5",
         useKilometers: stickerConfig.useKilometers || false,
         roundMileage: stickerConfig.roundMileage ?? true,
+        usePredictiveDate: stickerConfig.usePredictiveDate || false,
         intervals: {
           conventional: stickerConfig.intervals?.conventional || DEFAULT_INTERVALS.conventional,
           synthetic: stickerConfig.intervals?.synthetic || DEFAULT_INTERVALS.synthetic,
@@ -504,9 +507,38 @@ export async function POST(request: NextRequest) {
     }
 
     const nextServiceMileage = currentMileage + intervalMileage;
-    const nextDate = new Date();
-    nextDate.setMonth(nextDate.getMonth() + intervalMonths);
-    const nextServiceDate = nextDate.toISOString().split("T")[0];
+
+    // Calculate next service date using interval months as default
+    const maxDate = new Date();
+    maxDate.setMonth(maxDate.getMonth() + intervalMonths);
+    let nextServiceDate = maxDate.toISOString().split("T")[0];
+    let datePredictionSource: string | null = null;
+
+    // If predictive date is enabled and we have a VIN, try driving-habits-based prediction
+    if (stickerConfig.usePredictiveDate && vin) {
+      try {
+        const estimate = await estimateMileageFromCarfax(mosShopId!, vin);
+        if (estimate.estimated && estimate.milesPerDay > 0) {
+          const daysToMileage = Math.ceil(intervalMileage / estimate.milesPerDay);
+          const predictedDate = new Date();
+          predictedDate.setDate(predictedDate.getDate() + daysToMileage);
+
+          // Use predicted date if sooner than interval months, otherwise cap at interval months
+          if (predictedDate < maxDate) {
+            nextServiceDate = predictedDate.toISOString().split("T")[0];
+            datePredictionSource = "predictive";
+            console.log(`[Extension Sticker] Predictive date: ${nextServiceDate} (${estimate.milesPerDay} mi/day, ${daysToMileage} days to ${intervalMileage} mi) — sooner than ${intervalMonths}-month cap`);
+          } else {
+            datePredictionSource = "interval_cap";
+            console.log(`[Extension Sticker] Predictive date would be ${predictedDate.toISOString().split("T")[0]} but capped at ${intervalMonths}-month interval: ${nextServiceDate}`);
+          }
+        } else {
+          console.log(`[Extension Sticker] No driving data for VIN ${vin}, using ${intervalMonths}-month interval`);
+        }
+      } catch (err: any) {
+        console.error(`[Extension Sticker] Predictive date error for VIN ${vin}:`, err.message);
+      }
+    }
 
     const size = stickerConfig.defaultSize || "2x2.5";
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
