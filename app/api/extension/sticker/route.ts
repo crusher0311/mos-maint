@@ -123,6 +123,81 @@ async function fetchImageAsDataUri(imageUrl: string): Promise<string | null> {
   }
 }
 
+function extractSvgAttr(tag: string, attr: string): string | null {
+  const re = new RegExp(`(?:^|\\s)${attr}=["']([^"']*)["']`);
+  const m = tag.match(re);
+  return m ? m[1] : null;
+}
+
+async function svgToPngDataUri(svgContent: string, size: number = 300, externalLogoUrl?: string | null): Promise<string | null> {
+  try {
+    const { createCanvas, loadImage } = require("canvas");
+
+    const imageTagMatch = svgContent.match(/<image[^>]*>/);
+    let logoRect = { x: 0, y: 0, w: 0, h: 0 };
+    let embeddedLogoData: string | null = null;
+
+    if (imageTagMatch) {
+      const tag = imageTagMatch[0];
+      embeddedLogoData = extractSvgAttr(tag, "xlink:href") || extractSvgAttr(tag, "href");
+      const viewBoxMatch = svgContent.match(/viewBox=["']([^"']*)["']/);
+      const svgSize = viewBoxMatch ? parseFloat(viewBoxMatch[1].split(/\s+/)[2]) || 220 : 220;
+      const scale = size / svgSize;
+
+      let translateX = 0, translateY = 0;
+      const beforeImage = svgContent.substring(0, svgContent.indexOf("<image"));
+      const gTags = [...beforeImage.matchAll(/<g[^>]*transform=["']translate\(([^,)]+),?\s*([^)]*)\)["'][^>]*>/g)];
+      for (const g of gTags) {
+        translateX += parseFloat(g[1]) || 0;
+        translateY += parseFloat(g[2]) || 0;
+      }
+
+      logoRect = {
+        x: (parseFloat(extractSvgAttr(tag, "x") || "0") + translateX) * scale,
+        y: (parseFloat(extractSvgAttr(tag, "y") || "0") + translateY) * scale,
+        w: parseFloat(extractSvgAttr(tag, "width") || "0") * scale,
+        h: parseFloat(extractSvgAttr(tag, "height") || "0") * scale,
+      };
+    }
+
+    const svgWithoutImage = svgContent.replace(/<image[^>]*\/?>/g, "");
+    const svgBuffer = Buffer.from(svgWithoutImage);
+    const svgDataUri = `data:image/svg+xml;base64,${svgBuffer.toString("base64")}`;
+    const img = await loadImage(svgDataUri);
+    const canvas = createCanvas(size, size);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, size, size);
+
+    const logoSource = externalLogoUrl || embeddedLogoData;
+    if (logoSource && logoRect.w > 0) {
+      try {
+        let logoImg;
+        if (externalLogoUrl) {
+          const logoResp = await fetch(externalLogoUrl);
+          if (logoResp.ok) {
+            const logoBuf = Buffer.from(await logoResp.arrayBuffer());
+            logoImg = await loadImage(logoBuf);
+          }
+        }
+        if (!logoImg && embeddedLogoData) {
+          logoImg = await loadImage(embeddedLogoData);
+        }
+        if (logoImg) {
+          ctx.drawImage(logoImg, logoRect.x, logoRect.y, logoRect.w, logoRect.h);
+        }
+      } catch (logoErr) {
+        console.warn("[Extension Sticker] Could not overlay logo:", logoErr);
+      }
+    }
+
+    const pngBuffer = canvas.toBuffer("image/png");
+    return `data:image/png;base64,${pngBuffer.toString("base64")}`;
+  } catch (error) {
+    console.error("[Extension Sticker] SVG to PNG conversion error:", error);
+    return null;
+  }
+}
+
 async function getExistingHovercodeQR(hovercodeId: string): Promise<string | null> {
   if (!HOVERCODE_API_TOKEN) return null;
 
@@ -139,9 +214,23 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<string | nul
     if (data.png) {
       return await fetchImageAsDataUri(data.png);
     }
-    if (data.svg) {
-      return `data:image/svg+xml;base64,${Buffer.from(data.svg).toString("base64")}`;
+
+    const logoUrl = data.logo || null;
+
+    if (data.svg_file) {
+      const svgResponse = await fetch(data.svg_file);
+      if (svgResponse.ok) {
+        const svgText = await svgResponse.text();
+        const pngDataUri = await svgToPngDataUri(svgText, 300, logoUrl);
+        if (pngDataUri) return pngDataUri;
+      }
     }
+
+    if (data.svg) {
+      const pngDataUri = await svgToPngDataUri(data.svg, 300, logoUrl);
+      if (pngDataUri) return pngDataUri;
+    }
+
     return null;
   } catch {
     return null;
@@ -438,7 +527,22 @@ export async function POST(request: NextRequest) {
     const redirectUrl = stickerConfig.appointmentUrl || getStickerRedirectUrl(mosShopId!);
     const qrColor = stickerConfig.colors?.primary || "#1976d2";
 
-    if (stickerConfig.hovercodeQRId) {
+    if (stickerConfig.hovercodeQRId && mosShopId) {
+      try {
+        const mediaDoc = await db.collection("shop_media").findOne({
+          shopId: mosShopId,
+          type: "qr_code",
+          hovercodeId: stickerConfig.hovercodeQRId,
+        });
+        if (mediaDoc?.dataUri) {
+          console.log("[Extension Sticker] Using QR from shop_media cache");
+          qrDataUrl = mediaDoc.dataUri;
+        }
+      } catch (e) {
+        console.warn("[Extension Sticker] shop_media lookup failed:", e);
+      }
+    }
+    if (!qrDataUrl && stickerConfig.hovercodeQRId) {
       qrDataUrl = await getExistingHovercodeQR(stickerConfig.hovercodeQRId);
     }
     if (!qrDataUrl) {
