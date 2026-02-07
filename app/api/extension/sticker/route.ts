@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import { renderHtmlToImage } from "@/lib/browser-pool";
+import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
@@ -232,273 +232,6 @@ interface DesignerLayout {
   version?: number;
 }
 
-function generateStickerHtml(
-  config: StickerConfig,
-  nextServiceMileage: number,
-  nextServiceDate: string,
-  useHours: boolean,
-  useKilometers: boolean,
-  qrDataUrl: string | null,
-  dimensions: { width: number; height: number }
-): string {
-  const backgroundColor = config.colors?.background || "#ffffff";
-  const phoneColor = config.colors?.phoneColor || "#000000";
-  const taglineColor = config.colors?.taglineColor || "#333333";
-  const taglineLine2Color = config.colors?.taglineLine2Color || config.colors?.taglineColor || "#333333";
-  const serviceLabelColor = config.colors?.serviceLabelColor || "#666666";
-  const serviceValueColor = config.colors?.serviceValueColor || config.colors?.primary || "#cc0000";
-  const distanceUnit = useHours ? "hrs" : useKilometers ? "km" : "mi";
-
-  const formattedDate = nextServiceDate
-    ? new Date(nextServiceDate).toLocaleDateString("en-US", {
-        month: "numeric",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "";
-
-  let mileageValue = nextServiceMileage;
-  if (mileageValue && config.roundMileage) {
-    mileageValue = Math.round(mileageValue / 100) * 100;
-  }
-  const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
-
-  const scaleFactor = dimensions.width / 200;
-  const logoHeight = Math.round(60 * scaleFactor);
-  
-  const phoneFontStyle = config.fontStyles?.phone || { bold: true, italic: false, size: 14 };
-  const taglineFontStyle = config.fontStyles?.tagline || { bold: false, italic: true, size: 11 };
-  const taglineLine2FontStyle = config.fontStyles?.taglineLine2 || { bold: false, italic: true, size: 11 };
-  const serviceLabelFontStyle = config.fontStyles?.serviceLabel || { bold: false, italic: false, size: 12 };
-  const serviceValueFontStyle = config.fontStyles?.serviceValue || { bold: true, italic: true, size: 14 };
-  
-  const phoneSize = Math.round((phoneFontStyle.size || 14) * scaleFactor);
-  const taglineSize = Math.round((taglineFontStyle.size || 11) * scaleFactor);
-  const taglineLine2Size = Math.round((taglineLine2FontStyle.size || 11) * scaleFactor);
-  const qrSize = Math.round(80 * scaleFactor);
-  const padding = Math.round(10 * scaleFactor);
-  
-  const labelSizeRaw = Math.round((serviceLabelFontStyle.size || 12) * scaleFactor);
-  const valueSizeRaw = Math.round((serviceValueFontStyle.size || 14) * scaleFactor);
-  const maxLabelSize = Math.round(22 * scaleFactor);
-  const maxValueSize = Math.round(28 * scaleFactor);
-  const labelSize = Math.min(labelSizeRaw, maxLabelSize);
-  const valueSize = Math.min(valueSizeRaw, maxValueSize);
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: ${dimensions.width}px;
-      height: ${dimensions.height}px;
-      font-family: Arial, Helvetica, sans-serif;
-      background: ${backgroundColor};
-      color: #000000;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: ${padding}px;
-    }
-    .logo-container { 
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: ${logoHeight}px;
-      margin-bottom: ${Math.round(6 * scaleFactor)}px;
-    }
-    .logo { max-height: 100%; max-width: ${dimensions.width - padding * 2}px; object-fit: contain; }
-    .phone {
-      font-size: ${phoneSize}px;
-      font-weight: ${phoneFontStyle.bold ? 'bold' : 'normal'};
-      font-style: ${phoneFontStyle.italic ? 'italic' : 'normal'};
-      color: ${phoneColor};
-      margin-bottom: ${Math.round(4 * scaleFactor)}px;
-    }
-    .tagline {
-      font-size: ${taglineSize}px;
-      font-weight: ${taglineFontStyle.bold ? 'bold' : 'normal'};
-      font-style: ${taglineFontStyle.italic ? 'italic' : 'normal'};
-      color: ${taglineColor};
-      text-align: center;
-    }
-    .tagline-line2 {
-      font-size: ${taglineLine2Size}px;
-      font-weight: ${taglineLine2FontStyle.bold ? 'bold' : 'normal'};
-      font-style: ${taglineLine2FontStyle.italic ? 'italic' : 'normal'};
-      color: ${taglineLine2Color};
-      text-align: center;
-      margin-bottom: ${Math.round(8 * scaleFactor)}px;
-    }
-    .service-section {
-      display: flex;
-      align-items: center;
-      width: 100%;
-      flex: 1;
-      gap: ${Math.round(10 * scaleFactor)}px;
-    }
-    .qr-container { flex-shrink: 0; }
-    .qr-code { width: ${qrSize}px; height: ${qrSize}px; }
-    .service-info { flex: 1; text-align: center; }
-    .service-label {
-      font-size: ${labelSize}px;
-      font-weight: ${serviceLabelFontStyle.bold ? 'bold' : 'normal'};
-      font-style: ${serviceLabelFontStyle.italic ? 'italic' : 'normal'};
-      color: ${serviceLabelColor};
-      margin-bottom: ${Math.round(4 * scaleFactor)}px;
-    }
-    .service-value {
-      font-size: ${valueSize}px;
-      font-weight: ${serviceValueFontStyle.bold ? 'bold' : 'normal'};
-      font-style: ${serviceValueFontStyle.italic ? 'italic' : 'normal'};
-      color: ${serviceValueColor};
-      line-height: 1.3;
-    }
-  </style>
-</head>
-<body>
-  ${config.logo ? `<div class="logo-container"><img class="logo" src="${config.logo}" /></div>` : ''}
-  ${config.phone ? `<div class="phone">${config.phone}</div>` : ''}
-  ${config.tagline ? `<div class="tagline">${config.tagline}</div>` : ''}
-  ${config.taglineLine2 ? `<div class="tagline-line2">${config.taglineLine2}</div>` : ''}
-  <div class="service-section">
-    ${qrDataUrl ? `<div class="qr-container"><img class="qr-code" src="${qrDataUrl}" /></div>` : ''}
-    <div class="service-info">
-      <div class="service-label">${config.serviceLabel || 'Next Svc Due:'}</div>
-      <div class="service-value">
-        ${formattedDate}<br/>
-        ${formattedMileage} ${distanceUnit}
-      </div>
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-function generateStickerHtmlFromLayout(
-  layout: DesignerLayout,
-  config: StickerConfig,
-  nextServiceMileage: number,
-  nextServiceDate: string,
-  useKilometers: boolean,
-  logoDataUrl: string | null,
-  qrDataUrl: string | null,
-  dimensions: { width: number; height: number }
-): string {
-  const scaleX = dimensions.width / layout.canvasWidth;
-  const scaleY = dimensions.height / layout.canvasHeight;
-  
-  const distanceUnit = useKilometers ? "km" : "mi";
-  const roundMileage = config.roundMileage !== false;
-  
-  const formattedDate = nextServiceDate
-    ? new Date(nextServiceDate).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "";
-  
-  let mileageValue = nextServiceMileage;
-  if (mileageValue && roundMileage) {
-    mileageValue = Math.round(mileageValue / 100) * 100;
-  }
-  const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
-  
-  const getElementContent = (element: DesignerElement): string => {
-    switch (element.type) {
-      case 'logo':
-        if (logoDataUrl) {
-          return `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:${element.imageFit || 'contain'};" />`;
-        }
-        return '';
-      case 'qrCode':
-        if (qrDataUrl) {
-          return `<img src="${qrDataUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
-        }
-        return '';
-      case 'phone':
-        return config.phone || '';
-      case 'tagline':
-        return config.tagline || '';
-      case 'taglineLine2':
-        return config.taglineLine2 || '';
-      case 'serviceLabel':
-        return element.content || config.serviceLabel || 'Next Oil Service';
-      case 'serviceDate':
-        return formattedDate;
-      case 'serviceMileage':
-        return formattedMileage ? `${formattedMileage} ${distanceUnit}` : '';
-      default:
-        return element.content || '';
-    }
-  };
-  
-  const visibleElements = layout.elements.filter(el => el.visible);
-  
-  const elementsHtml = visibleElements.map(element => {
-    const x = Math.round(element.x * scaleX);
-    const y = Math.round(element.y * scaleY);
-    const width = Math.round(element.width * scaleX);
-    const height = Math.round(element.height * scaleY);
-    const fontSize = Math.round(element.fontSize * Math.min(scaleX, scaleY));
-    
-    const content = getElementContent(element);
-    if (!content) return '';
-    
-    const isImage = element.type === 'logo' || element.type === 'qrCode';
-    
-    return `
-      <div style="
-        position: absolute;
-        left: ${x}px;
-        top: ${y}px;
-        width: ${width}px;
-        height: ${height}px;
-        ${!isImage ? `
-          font-size: ${fontSize}px;
-          font-weight: ${element.fontWeight};
-          font-style: ${element.fontStyle};
-          text-align: ${element.textAlign};
-          color: ${element.color};
-          display: flex;
-          align-items: center;
-          justify-content: ${element.textAlign === 'center' ? 'center' : element.textAlign === 'right' ? 'flex-end' : 'flex-start'};
-          overflow: hidden;
-          white-space: nowrap;
-          line-height: 1.2;
-        ` : ''}
-        ${element.backgroundColor ? `background-color: ${element.backgroundColor};` : ''}
-      ">
-        ${content}
-      </div>
-    `;
-  }).join('');
-  
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: ${dimensions.width}px;
-      height: ${dimensions.height}px;
-      font-family: Arial, Helvetica, sans-serif;
-      background: ${layout.backgroundColor};
-      position: relative;
-    }
-  </style>
-</head>
-<body>
-  ${elementsHtml}
-</body>
-</html>
-  `;
-}
-
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
@@ -712,38 +445,64 @@ export async function POST(request: NextRequest) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
     }
 
-    let html: string;
+    let image: Buffer;
     
     if (stickerConfig.designerLayout && stickerConfig.designerLayout.elements) {
-      html = generateStickerHtmlFromLayout(
-        stickerConfig.designerLayout,
-        configWithLogo,
-        nextServiceMileage,
-        nextServiceDate,
-        useKilometers,
-        logoDataUrl,
-        qrDataUrl,
-        dimensions
+      const distanceUnit = useHours ? "hrs" : useKilometers ? "km" : "mi";
+      const roundMileage = stickerConfig.roundMileage !== false;
+      const formattedDate = nextServiceDate
+        ? new Date(nextServiceDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : "";
+      let mileageValue = nextServiceMileage;
+      if (mileageValue && roundMileage) {
+        mileageValue = Math.round(mileageValue / 100) * 100;
+      }
+      const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
+
+      image = await renderStickerDesigner(
+        {
+          elements: stickerConfig.designerLayout.elements,
+          canvasWidth: stickerConfig.designerLayout.canvasWidth,
+          canvasHeight: stickerConfig.designerLayout.canvasHeight,
+          backgroundColor: stickerConfig.designerLayout.backgroundColor,
+        },
+        {
+          phone: configWithLogo.phone,
+          tagline: configWithLogo.tagline,
+          taglineLine2: configWithLogo.taglineLine2,
+          serviceLabel: stickerConfig.serviceLabel,
+          formattedDate,
+          formattedMileage,
+          distanceUnit,
+          logoDataUrl,
+          qrDataUrl,
+        },
+        dimensions,
+        2
       );
     } else {
-      html = generateStickerHtml(
-        configWithLogo,
-        nextServiceMileage,
-        nextServiceDate,
-        useHours,
-        useKilometers,
-        qrDataUrl,
-        dimensions
+      image = await renderStickerStandard(
+        {
+          logo: configWithLogo.logo,
+          phone: configWithLogo.phone,
+          tagline: configWithLogo.tagline,
+          taglineLine2: configWithLogo.taglineLine2,
+          serviceLabel: stickerConfig.serviceLabel,
+          roundMileage: stickerConfig.roundMileage,
+          fontStyles: stickerConfig.fontStyles,
+          colors: stickerConfig.colors,
+        },
+        {
+          nextServiceMileage,
+          nextServiceDate,
+          useHours,
+          useKilometers,
+          qrDataUrl,
+        },
+        dimensions,
+        2
       );
     }
-
-    const image = await renderHtmlToImage(
-      html,
-      "body",
-      dimensions.width,
-      dimensions.height,
-      2
-    );
 
     await db.collection("sticker_generations").insertOne({
       shopId: mosShopId,
