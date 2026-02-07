@@ -357,7 +357,9 @@ export async function POST(req: NextRequest) {
     const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
     const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
 
-    // If shop has a configured QR ID (set by platform admin), re-fetch that from HoverCode
+    await db.collection("shop_media").deleteOne({ shopId, type: "qr_code" });
+    console.log("[QR Cache POST] Cleared cached QR for fresh re-fetch");
+
     if (configuredQRId) {
       console.log("[QR Cache POST] Re-fetching configured QR ID:", configuredQRId);
       const existingPngUrl = await fetchExistingQR(configuredQRId);
