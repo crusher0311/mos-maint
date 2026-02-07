@@ -1,0 +1,35 @@
+2026-02-07 13:34:48.310 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-db5qs syslog.procid:1 [Extension Sticker] Logo fetch failed: n [Error]: request to http://127.0.0.1:1106/credential failed, reason: connect ECONNREFUSED 127.0.0.1:1106
+2026-02-07 13:34:48.661 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-db5qs syslog.procid:1 [Extension Sticker] Generate error: Error: Unable to launch browser, error message: Could not find Chrome (ver. 128.0.6613.119). This can occur if either
+2026-02-07 13:34:48.661 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-db5qs syslog.procid:1 at f.<anonymous> (/opt/render/project/src/.next/server/app/api/extension/sticker/route.js:133:88769)
+2026-02-07 13:34:48.661 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-db5qs syslog.procid:1 at a (/opt/render/project/src/.next/server/app/api/extension/sticker/route.js:133:86321)
+2026-02-07 13:35:24.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"72.198.61.82","host":"mos.tools","method":"OPTIONS","path":"/api/extension/sticker","requestId":"40ccff4a-2470-48e2","responseBytes":312,"responseTimeMS":2,"statusCode":204,"time":"2026-02-07T19:35:24Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}1 result found
+2026-02-07 13:35:25.160 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-lv7fz syslog.procid:1 [Extension Sticker] Found MOS shop 28 for SMS shop 14956, provider: tekmetric
+2026-02-07 13:35:25.770 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-lv7fz syslog.procid:1 [Extension Sticker] Logo fetch failed: n [Error]: request to http://127.0.0.1:1106/credential failed, reason: connect ECONNREFUSED 127.0.0.1:1106
+2026-02-07 13:35:26.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"72.198.61.82","host":"mos.tools","method":"POST","path":"/api/extension/sticker","requestId":"76a2c754-d954-4c6e","responseBytes":433,"responseTimeMS":1213,"statusCode":500,"time":"2026-02-07T19:35:26Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}1 result found
+2026-02-07 13:35:26.138 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-lv7fz syslog.procid:1 [Extension Sticker] Generate error: Error: Unable to launch browser, error message: Could not find Chrome (ver. 128.0.6613.119). This can occur if either
+2026-02-07 13:35:26.138 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-lv7fz syslog.procid:1 at f.<anonymous> (/opt/render/project/src/.next/server/app/api/extension/sticker/route.js:133:88769)
+2026-02-07 13:35:26.138 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-lv7fz syslog.procid:1 at a (/opt/render/project/src/.next/server/app/api/extension/sticker/route.js:133:86321)
+
+Jump to Live tail

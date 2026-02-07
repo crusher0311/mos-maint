@@ -1,0 +1,140 @@
+background.js:542 [MOS Tools] Background service worker loaded
+background.js:93 [MOS] Side panel opens on action click
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:116 [MOS] Message received: SET_SMS_CONTEXT
+background.js:145 [MOS] SMS context updated: Object
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:116 [MOS] Message received: PRINT_STICKER_IMMEDIATE
+background.js:116 [MOS] Message received: GET_MOS_AUTH
+background.js:116 [MOS] Message received: MOS_LOGIN
+background.js:268 [MOS] Login successful: anock@carexpertsok.com
+background.js:116 [MOS] Message received: GET_SMS_CONTEXT
+background.js:116 [MOS] Message received: MOS_API_REQUEST
+background.js:116 [MOS] Message received: MOS_API_REQUEST
+background.js:116 [MOS] Message received: PRINT_STICKER_IMMEDIATE
+background.js:511 [MOS] Auto-detected oil type: synthetic for unknown
+background.js:77 [Tekmetric] Auth token captured
+background.js:116 [MOS] Message received: SET_SMS_CONTEXT
+background.js:145 [MOS] SMS context updated: Object
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:67 [Tekmetric] Shop ID captured: 14956
+background.js:77 [Tekmetric] Auth token captured
+background.js:77 [Tekmetric] Auth token captured
+background.js:116 [MOS] Message received: GET_MOS_AUTH
+background.js:116 [MOS] Message received: GET_SMS_CONTEXT
+background.js:116 [MOS] Message received: MOS_API_REQUEST
+background.js:116 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:447 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:476 [MOS] Updated RO number from API: 4253
+sidepanel.js:481 [MOS] Updated customer name from API: Kenneth Conway
+background.js:116 [MOS] Message received: PRINT_STICKER_IMMEDIATE
+background.js:511 [MOS] Auto-detected oil type: synthetic for unknown
