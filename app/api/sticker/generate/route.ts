@@ -356,8 +356,25 @@ export async function POST(req: NextRequest) {
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
-      // First, try to use cached QR code (fastest, most reliable)
-      if (config.cachedQrCodeDataUri) {
+      // First, check shop_media cache (unified QR cache with proper logo)
+      if (config.hovercodeQRId) {
+        try {
+          const mediaDoc = await db.collection("shop_media").findOne({
+            shopId,
+            mediaType: "qr_code",
+            hovercodeId: config.hovercodeQRId,
+          });
+          if (mediaDoc?.dataUri) {
+            console.log("[Sticker Generate] Using QR from shop_media cache");
+            qrDataUrl = mediaDoc.dataUri;
+          }
+        } catch (e) {
+          console.warn("[Sticker Generate] shop_media lookup failed:", e);
+        }
+      }
+      
+      // Fallback to old config cache
+      if (!qrDataUrl && config.cachedQrCodeDataUri) {
         console.log("[Sticker Generate] Using cached QR code from config");
         qrDataUrl = config.cachedQrCodeDataUri;
       }
