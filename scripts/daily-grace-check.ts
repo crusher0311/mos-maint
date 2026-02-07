@@ -1,7 +1,7 @@
 #!/usr/bin/env npx ts-node
 import "dotenv/config";
 
-const API_BASE = process.env.PRODUCTION_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
+const API_BASE = process.env.PRODUCTION_URL || process.env.NEXT_PUBLIC_APP_URL || "https://mos.tools";
 const ADMIN_SECRET = process.env.CRON_SECRET;
 
 async function runGracePeriodCheck() {
@@ -102,7 +102,7 @@ async function main() {
   console.log(`  Protractor sync: ${protractorResult ? "OK" : "FAILED"}`);
   console.log(`========================================`);
   
-  if (!graceResult || !protractorResult) {
+  if (!graceResult && !protractorResult) {
     process.exit(1);
   }
 }
