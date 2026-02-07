@@ -127,16 +127,53 @@ async function downloadAndCacheQR(pngUrlOrDataUri: string, shopId: number, qrId:
   }
 }
 
+function extractAttr(tag: string, attr: string): string | null {
+  const re = new RegExp(`(?:^|\\s)${attr}=["']([^"']*)["']`);
+  const m = tag.match(re);
+  return m ? m[1] : null;
+}
+
 async function svgToPngDataUri(svgContent: string, size: number = 300): Promise<string | null> {
   try {
     const { createCanvas, loadImage } = require("canvas");
-    const svgBuffer = Buffer.from(svgContent);
+
+    const imageTagMatch = svgContent.match(/<image[^>]*>/);
+    let logoData: string | null = null;
+    let logoRect = { x: 0, y: 0, w: 0, h: 0 };
+
+    if (imageTagMatch) {
+      const tag = imageTagMatch[0];
+      logoData = extractAttr(tag, "xlink:href") || extractAttr(tag, "href");
+      const viewBoxMatch = svgContent.match(/viewBox=["']([^"']*)["']/);
+      const svgSize = viewBoxMatch ? parseFloat(viewBoxMatch[1].split(/\s+/)[2]) || 220 : 220;
+      const scale = size / svgSize;
+      logoRect = {
+        x: parseFloat(extractAttr(tag, "x") || "0") * scale,
+        y: parseFloat(extractAttr(tag, "y") || "0") * scale,
+        w: parseFloat(extractAttr(tag, "width") || "0") * scale,
+        h: parseFloat(extractAttr(tag, "height") || "0") * scale,
+      };
+    }
+
+    const svgWithoutImage = svgContent.replace(/<image[^>]*\/?>/g, "");
+    const svgBuffer = Buffer.from(svgWithoutImage);
     const svgBase64 = svgBuffer.toString("base64");
     const svgDataUri = `data:image/svg+xml;base64,${svgBase64}`;
     const img = await loadImage(svgDataUri);
     const canvas = createCanvas(size, size);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, size, size);
+
+    if (logoData && logoRect.w > 0) {
+      try {
+        const logoImg = await loadImage(logoData);
+        ctx.drawImage(logoImg, logoRect.x, logoRect.y, logoRect.w, logoRect.h);
+        console.log("[QR Cache] Logo overlaid onto QR at", logoRect);
+      } catch (logoErr) {
+        console.warn("[QR Cache] Could not overlay logo:", logoErr);
+      }
+    }
+
     const pngBuffer = canvas.toBuffer("image/png");
     return `data:image/png;base64,${pngBuffer.toString("base64")}`;
   } catch (error) {
