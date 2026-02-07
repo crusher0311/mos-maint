@@ -1557,6 +1557,22 @@ async function handleStickerPrint() {
       body.provider = currentContext.provider || 'tekmetric';
     }
     
+    // Add customer/vehicle data for auto booking
+    if (currentContext) {
+      if (currentContext.customerName) body.customerName = currentContext.customerName;
+      if (currentContext.customerId) body.customerId = currentContext.customerId;
+      if (currentContext.customerPhone) body.customerPhone = currentContext.customerPhone;
+      if (currentContext.customerEmail) body.customerEmail = currentContext.customerEmail;
+      if (currentContext.vin) body.vin = currentContext.vin;
+      if (currentContext.roNumber) body.roNumber = currentContext.roNumber;
+      if (currentContext.vehicleId) body.vehicleId = currentContext.vehicleId;
+      if (currentContext.vehicle) {
+        if (currentContext.vehicle.year) body.vehicleYear = currentContext.vehicle.year;
+        if (currentContext.vehicle.make) body.vehicleMake = currentContext.vehicle.make;
+        if (currentContext.vehicle.model) body.vehicleModel = currentContext.vehicle.model;
+      }
+    }
+    
     // Add optional tagline
     const tagline = elements.stickerTagline?.value?.trim();
     if (tagline) {
