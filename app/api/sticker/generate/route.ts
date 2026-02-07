@@ -361,7 +361,7 @@ export async function POST(req: NextRequest) {
         try {
           const mediaDoc = await db.collection("shop_media").findOne({
             shopId,
-            mediaType: "qr_code",
+            type: "qr_code",
             hovercodeId: config.hovercodeQRId,
           });
           if (mediaDoc?.dataUri) {
