@@ -883,11 +883,15 @@ export async function triggerAutoBookingFromSticker(
       return { queued: false, error: "Customer info required for booking" };
     }
     
-    // Use the sticker's nextServiceDate directly as the target booking date
+    // Apply lead time: schedule the appointment leadTimeDays before the service due date
     const stickerDate = new Date(nextServiceDate);
+    const bookingTarget = new Date(stickerDate);
+    bookingTarget.setDate(bookingTarget.getDate() - settings.leadTimeDays);
     
-    // Find available slot starting from the sticker date (no leadTimeDays shift)
-    const slotResult = await findAvailableSlotFromDate(shopId, stickerDate, settings);
+    console.log(`[Auto Booking] Service due: ${nextServiceDate}, lead time: ${settings.leadTimeDays} days, booking target: ${formatDate(bookingTarget)}`);
+    
+    // Find available slot starting from the lead-time-adjusted date
+    const slotResult = await findAvailableSlotFromDate(shopId, bookingTarget, settings);
     
     if (!slotResult.success || !slotResult.slot) {
       return { queued: false, error: slotResult.error || "No available slot near service date" };
