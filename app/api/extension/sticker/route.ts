@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken } from "@/lib/extension-auth";
-import nodeHtmlToImage from "node-html-to-image";
+import { renderHtmlToImage } from "@/lib/browser-pool";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
@@ -62,9 +62,22 @@ const SIZE_INCHES: Record<string, { width: string; height: string }> = {
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
 const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
 
-async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string): Promise<string | null> {
+async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: string): Promise<string | null> {
   try {
-    if (logoObjectPath) {
+    if (shopId) {
+      const db = await getDb();
+      const numericShopId = Number(shopId);
+      const shopMedia = await db.collection("shop_media").findOne({ 
+        $or: [{ shopId: numericShopId }, { shopId: shopId }],
+        type: "logo" 
+      });
+      if (shopMedia?.dataUri) {
+        console.log("[Extension Sticker] Using logo from MongoDB shop_media");
+        return shopMedia.dataUri;
+      }
+    }
+
+    if (logoObjectPath && !process.env.RENDER_EXTERNAL_URL) {
       const pathParts = logoObjectPath.split("/").filter(Boolean);
       if (pathParts.length >= 2) {
         const bucketName = pathParts[0];
@@ -679,8 +692,8 @@ export async function POST(request: NextRequest) {
     const useHours = unit === "hrs";
 
     let logoDataUrl: string | null = null;
-    if (stickerConfig.logo || stickerConfig.logoObjectPath) {
-      logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath);
+    if (stickerConfig.logo || stickerConfig.logoObjectPath || mosShopId) {
+      logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath, String(mosShopId));
     }
     const configWithLogo = { 
       ...stickerConfig, 
@@ -724,15 +737,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const image = await nodeHtmlToImage({
+    const image = await renderHtmlToImage(
       html,
-      type: "png",
-      transparent: false,
-      puppeteerArgs: {
-        executablePath: process.env.CHROMIUM_PATH || undefined,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-      },
-    });
+      "body",
+      dimensions.width,
+      dimensions.height,
+      2
+    );
 
     await db.collection("sticker_generations").insertOne({
       shopId: mosShopId,
@@ -767,8 +778,7 @@ export async function POST(request: NextRequest) {
       console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
     }
 
-    const imageBuffer = image as Buffer;
-    const base64Image = imageBuffer.toString("base64");
+    const base64Image = image.toString("base64");
     const dataUrl = `data:image/png;base64,${base64Image}`;
 
     const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["2x2.5"];
