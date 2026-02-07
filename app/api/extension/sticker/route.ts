@@ -463,6 +463,7 @@ export async function POST(request: NextRequest) {
       vehicleMake,
       vehicleModel,
       roNumber,
+      excludeQR,
     } = body;
     
     // Accept either customMileage or customMiles
@@ -579,6 +580,12 @@ export async function POST(request: NextRequest) {
     }
     if (!qrDataUrl) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
+    }
+
+    // If user explicitly excluded QR code for this sticker, null it out
+    if (excludeQR) {
+      qrDataUrl = null;
+      console.log("[Extension Sticker] QR code excluded by user for this sticker");
     }
 
     let image: Buffer;

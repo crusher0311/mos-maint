@@ -89,6 +89,8 @@ const elements = {
   customMonths: document.getElementById('custom-months'),
   customMileage: document.getElementById('custom-mileage'),
   stickerTagline: document.getElementById('sticker-tagline'),
+  stickerIncludeQR: document.getElementById('sticker-include-qr'),
+  stickerQRToggle: document.getElementById('sticker-qr-toggle'),
   stickerPrintBtn: document.getElementById('sticker-print-btn'),
   stickerError: document.getElementById('sticker-error'),
   
@@ -1577,6 +1579,11 @@ async function handleStickerPrint() {
     const tagline = elements.stickerTagline?.value?.trim();
     if (tagline) {
       body.tagline = tagline;
+    }
+    
+    // QR code toggle - only exclude if unchecked
+    if (elements.stickerIncludeQR && !elements.stickerIncludeQR.checked) {
+      body.excludeQR = true;
     }
     
     if (intervalType === 'custom') {

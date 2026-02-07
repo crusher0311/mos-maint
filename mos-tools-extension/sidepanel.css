@@ -1165,6 +1165,27 @@ body {
   padding: 10px 8px;
 }
 
+.print-checkbox-row {
+  margin: 8px 0 4px;
+}
+
+.print-checkbox-row .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--gray-600);
+  cursor: pointer;
+  user-select: none;
+}
+
+.print-checkbox-row .checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #3B82F6;
+  cursor: pointer;
+}
+
 .custom-fields {
   background: var(--gray-50);
   border-radius: 10px;

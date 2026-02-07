@@ -34,6 +34,7 @@
       "run_at": "document_idle"
     }
   ],
+  "options_page": "options.html",
   "action": {
     "default_title": "MOS Tools",
     "default_icon": {
