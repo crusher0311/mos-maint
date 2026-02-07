@@ -591,6 +591,34 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray();
 
+    // Fetch manually-added vehicles for this shop
+    const manualVehicles = await db.collection("manual_vehicles")
+      .find({ shopId: Number(user.shopId), archived: { $ne: true } })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    const manualRows = manualVehicles.map((v: any) => ({
+      displayName: v.customerName || "Unknown Customer",
+      displayVehicle: [v.vehicleYear, v.vehicleMake, v.vehicleModel].filter(Boolean).join(" ") || "Unknown Vehicle",
+      displayVin: v.vin,
+      displayRo: v.roNumber || null,
+      displayMiles: v.mileage || null,
+      dviDone: false,
+      source: "manual",
+      updatedAt: v.updatedAt || v.createdAt,
+      af: {
+        status: "Manual",
+        createdAt: v.createdAt,
+        miles: v.mileage || null,
+      },
+      vehicle: {
+        year: v.vehicleYear || null,
+        make: v.vehicleMake || null,
+        model: v.vehicleModel || null,
+        engine: null,
+      },
+    }));
+
     // Combine all rows - each work order shows as its own row (no VIN deduplication)
     const seenWorkOrders = new Set<string>();
     let allRows: any[] = [];
@@ -606,6 +634,14 @@ export async function GET(request: NextRequest) {
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
       if (!seenWorkOrders.has(woKey)) {
         seenWorkOrders.add(woKey);
+        allRows.push(row);
+      }
+    }
+
+    // Add manual vehicles (only if VIN not already present from SMS sources)
+    const smsVins = new Set(allRows.map((r: any) => r.displayVin));
+    for (const row of manualRows) {
+      if (!smsVins.has(row.displayVin)) {
         allRows.push(row);
       }
     }

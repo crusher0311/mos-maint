@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
+import AddVehicleModal from "@/components/AddVehicleModal";
 import { ReactNode } from "react";
-import { queueMultiplePrefetch } from "@/lib/plan-prefetch";
+import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -46,6 +47,7 @@ const PAGE_SIZE = 100;
 
 // Map Protractor workflow stages to display names, colors, and icons
 const WORKFLOW_STAGE_MAP: Record<string, { label: string; color: string; icon: ReactNode }> = {
+  "Manual": { label: "Manual", color: "bg-violet-100 text-violet-800", icon: <Plus className="w-3 h-3" /> },
   "VehicleOnSite": { label: "Vehicle On Site", color: "bg-cyan-100 text-cyan-800", icon: <Car className="w-3 h-3" /> },
   "Unassigned": { label: "Vehicle On Site", color: "bg-cyan-100 text-cyan-800", icon: <Car className="w-3 h-3" /> },
   "InspectionInProgress": { label: "Inspection In Progress", color: "bg-blue-100 text-blue-800", icon: <Search className="w-3 h-3" /> },
@@ -160,6 +162,18 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
+  const [showAddVehicle, setShowAddVehicle] = useState(false);
+
+  const handleVehicleAdded = (row: any) => {
+    setData(prev => ({
+      ...prev,
+      rows: [row, ...prev.rows],
+    }));
+    const shopId = data.shopId || data.user?.shopId;
+    if (row.displayVin && row.displayMiles && shopId) {
+      queuePrefetch(row.displayVin, row.displayMiles, shopId, "high");
+    }
+  };
 
   useEffect(() => {
     function handleClickOutsideContext(e: MouseEvent) {
@@ -885,6 +899,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <button
+              onClick={() => setShowAddVehicle(true)}
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Vehicle</span>
+            </button>
+            <button
               onClick={handleToggleArchived}
               className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                 showArchived 
@@ -1514,6 +1535,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           </div>
         </div>
       )}
+
+      <AddVehicleModal
+        isOpen={showAddVehicle}
+        onClose={() => setShowAddVehicle(false)}
+        onVehicleAdded={handleVehicleAdded}
+      />
     </div>
   );
 }
