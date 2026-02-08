@@ -510,7 +510,6 @@ function triage({
 
   for (const [dviKey, dviInfo] of dviMap) {
     if (usedDviKeys.has(dviKey)) continue;
-    if (shopIntervals[dviKey]?.excluded) continue;
     triaged.push({
       key: `dvi_${dviKey}`,
       serviceKey: dviKey,
@@ -536,7 +535,6 @@ function triage({
     seenDeferredTitles.delete(normalizedTitle);
     
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
-    if (shopIntervals[protractorServiceKey]?.excluded) continue;
     if (deferredServiceKeysUsedByOem.has(protractorServiceKey)) continue;
     
     triaged.push({

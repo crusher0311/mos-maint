@@ -819,7 +819,6 @@ function triage({
   // Add standalone DVI findings (red/yellow items not matched to OEM)
   for (const [dviKey, dviInfo] of dviMap) {
     if (usedDviKeys.has(dviKey)) continue; // already matched to OEM item
-    if (shopIntervals[dviKey]?.excluded) continue; // shop excluded this item
     triaged.push({
       key: `dvi_${dviKey}`,
       serviceKey: dviKey,
@@ -858,9 +857,6 @@ function triage({
     seenDeferredTitles.delete(normalizedTitle);
     
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
-    
-    // Skip items excluded by the shop
-    if (shopIntervals[protractorServiceKey]?.excluded) continue;
     
     // Skip deferred items that matched an OEM item - they'll show the "+ deferred" button on the OEM row
     if (deferredServiceKeysUsedByOem.has(protractorServiceKey)) {
