@@ -541,6 +541,7 @@ type TriagedItem = {
 
 type ShopIntervalOverride = {
   useShop: boolean;
+  excluded?: boolean;
   miles: number | null;
   months: number | null;
 };
@@ -728,10 +729,15 @@ function triage({
     const uniqueKey = `${serviceKey}_${o.maintenance_id}`;
     const last = lastMap.get(serviceKey) ?? null;
     
+    // Skip items that the shop has marked as excluded
+    const shopOverride = shopIntervals[serviceKey];
+    if (shopOverride?.excluded) {
+      continue;
+    }
+    
     // Check for shop interval override - only use shop intervals if:
     // 1. Shop has configured custom intervals for this service (useShop === true)
     // 2. Service was last performed at shop (last?.source === 'shop')
-    const shopOverride = shopIntervals[serviceKey];
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
     const intervalMiles = usingShopInterval && shopOverride.miles != null 
@@ -813,6 +819,7 @@ function triage({
   // Add standalone DVI findings (red/yellow items not matched to OEM)
   for (const [dviKey, dviInfo] of dviMap) {
     if (usedDviKeys.has(dviKey)) continue; // already matched to OEM item
+    if (shopIntervals[dviKey]?.excluded) continue; // shop excluded this item
     triaged.push({
       key: `dvi_${dviKey}`,
       serviceKey: dviKey,
@@ -851,6 +858,9 @@ function triage({
     seenDeferredTitles.delete(normalizedTitle);
     
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
+    
+    // Skip items excluded by the shop
+    if (shopIntervals[protractorServiceKey]?.excluded) continue;
     
     // Skip deferred items that matched an OEM item - they'll show the "+ deferred" button on the OEM row
     if (deferredServiceKeysUsedByOem.has(protractorServiceKey)) {

@@ -282,6 +282,7 @@ type DeclinedServiceEntry = {
 
 type ShopIntervalOverride = {
   useShop: boolean;
+  excluded?: boolean;
   miles: number | null;
   months: number | null;
 };
@@ -443,6 +444,9 @@ function triage({
     const last = lastMap.get(serviceKey) ?? null;
     
     const shopOverride = shopIntervals[serviceKey];
+    if (shopOverride?.excluded) {
+      continue;
+    }
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
     const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : (o.miles ?? null);
@@ -506,6 +510,7 @@ function triage({
 
   for (const [dviKey, dviInfo] of dviMap) {
     if (usedDviKeys.has(dviKey)) continue;
+    if (shopIntervals[dviKey]?.excluded) continue;
     triaged.push({
       key: `dvi_${dviKey}`,
       serviceKey: dviKey,
@@ -531,6 +536,7 @@ function triage({
     seenDeferredTitles.delete(normalizedTitle);
     
     const protractorServiceKey = toKeyFromName(title) || `protractor_${dw.ID}`;
+    if (shopIntervals[protractorServiceKey]?.excluded) continue;
     if (deferredServiceKeysUsedByOem.has(protractorServiceKey)) continue;
     
     triaged.push({
