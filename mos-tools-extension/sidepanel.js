@@ -210,6 +210,7 @@ function showMainState() {
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.add('hidden');
   elements.mainState.classList.remove('hidden');
+  showSupportFab();
 }
 
 function switchTab(tab) {
@@ -387,6 +388,11 @@ async function handleLogout() {
   await sendMessage({ action: 'MOS_LOGOUT' });
   isAuthenticated = false;
   currentContext = null;
+  hideSupportFab();
+  closeSupportChat();
+  supportMessages = [];
+  supportSessionId = null;
+  supportShowEscalate = false;
   showLoginState();
 }
 
@@ -1769,5 +1775,367 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
+// ==================== SUPPORT CHAT ====================
+let supportChatOpen = false;
+let supportMessages = [];
+let supportSessionId = null;
+let supportLoading = false;
+let supportShowEscalate = false;
+
+const supportElements = {
+  fab: document.getElementById('support-chat-fab'),
+  panel: document.getElementById('support-chat-panel'),
+  closeBtn: document.getElementById('support-close-btn'),
+  ticketBtn: document.getElementById('support-ticket-btn'),
+  messagesContainer: document.getElementById('support-messages'),
+  emptyState: document.getElementById('support-empty'),
+  escalateBar: document.getElementById('support-escalate-bar'),
+  escalateBtn: document.getElementById('support-escalate-btn'),
+  actionsBar: document.getElementById('support-actions-bar'),
+  resolveBtn: document.getElementById('support-resolve-btn'),
+  humanBtn: document.getElementById('support-human-btn'),
+  input: document.getElementById('support-input'),
+  sendBtn: document.getElementById('support-send-btn'),
+  chatView: document.getElementById('support-chat-view'),
+  ticketView: document.getElementById('support-ticket-view'),
+  ticketBackBtn: document.getElementById('support-ticket-back-btn'),
+  ticketSubject: document.getElementById('ticket-subject'),
+  ticketCategory: document.getElementById('ticket-category'),
+  ticketPriority: document.getElementById('ticket-priority'),
+  ticketDescription: document.getElementById('ticket-description'),
+  ticketSubmitBtn: document.getElementById('ticket-submit-btn'),
+  ticketError: document.getElementById('ticket-error'),
+  ticketSuccess: document.getElementById('ticket-success')
+};
+
+function initSupportChat() {
+  if (!supportElements.fab) return;
+
+  supportElements.fab.addEventListener('click', openSupportChat);
+  supportElements.closeBtn.addEventListener('click', closeSupportChat);
+  supportElements.sendBtn.addEventListener('click', sendSupportMessage);
+  supportElements.input.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendSupportMessage();
+    }
+  });
+  supportElements.input.addEventListener('input', () => {
+    supportElements.sendBtn.disabled = !supportElements.input.value.trim();
+  });
+
+  supportElements.escalateBtn.addEventListener('click', escalateSupportChat);
+  supportElements.resolveBtn.addEventListener('click', resolveSupportChat);
+  supportElements.humanBtn.addEventListener('click', escalateSupportChat);
+  supportElements.ticketBtn.addEventListener('click', showTicketForm);
+  supportElements.ticketBackBtn.addEventListener('click', hideTicketForm);
+  supportElements.ticketSubmitBtn.addEventListener('click', submitSupportTicket);
+}
+
+function showSupportFab() {
+  if (supportElements.fab && isAuthenticated) {
+    supportElements.fab.classList.remove('hidden');
+  }
+}
+
+function hideSupportFab() {
+  if (supportElements.fab) {
+    supportElements.fab.classList.add('hidden');
+  }
+}
+
+async function openSupportChat() {
+  supportChatOpen = true;
+  supportElements.fab.classList.add('hidden');
+  supportElements.panel.classList.remove('hidden');
+
+  if (supportMessages.length === 0) {
+    await fetchSupportSession();
+  }
+}
+
+function closeSupportChat() {
+  supportChatOpen = false;
+  supportElements.panel.classList.add('hidden');
+  showSupportFab();
+}
+
+async function fetchSupportSession() {
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/support'
+    });
+
+    if (result && result.ok && result.session) {
+      supportSessionId = result.session.sessionId;
+      supportMessages = result.session.messages || [];
+      renderSupportMessages();
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to fetch support session:', err);
+  }
+}
+
+async function sendSupportMessage() {
+  const text = supportElements.input.value.trim();
+  if (!text || supportLoading) return;
+
+  supportElements.input.value = '';
+  supportElements.sendBtn.disabled = true;
+  supportLoading = true;
+
+  supportMessages.push({ role: 'user', content: text, timestamp: new Date().toISOString() });
+  renderSupportMessages();
+  showSupportLoading();
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/support',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ action: 'chat', message: text })
+      }
+    });
+
+    hideSupportLoading();
+
+    if (result && result.ok) {
+      supportSessionId = result.sessionId;
+      supportMessages.push({
+        role: 'assistant',
+        content: result.response,
+        timestamp: new Date().toISOString()
+      });
+
+      if (supportMessages.filter(m => m.role === 'user').length >= 3) {
+        supportShowEscalate = true;
+      }
+    } else {
+      supportMessages.push({
+        role: 'assistant',
+        content: "I'm having trouble connecting. Would you like to create a support ticket?",
+        timestamp: new Date().toISOString()
+      });
+      supportShowEscalate = true;
+    }
+  } catch (err) {
+    hideSupportLoading();
+    supportMessages.push({
+      role: 'assistant',
+      content: "I'm having trouble connecting. Would you like to create a support ticket?",
+      timestamp: new Date().toISOString()
+    });
+    supportShowEscalate = true;
+  } finally {
+    supportLoading = false;
+    renderSupportMessages();
+  }
+}
+
+async function escalateSupportChat() {
+  if (!supportSessionId || supportLoading) return;
+  supportLoading = true;
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/support',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'escalate',
+          sessionId: supportSessionId,
+          subject: 'Escalated from AI Chat Support (Extension)'
+        })
+      }
+    });
+
+    if (result && result.ok) {
+      supportMessages.push({
+        role: 'assistant',
+        content: `I've created support ticket ${result.ticketNumber} for you. Our team will review your conversation and get back to you soon.`,
+        timestamp: new Date().toISOString()
+      });
+      supportShowEscalate = false;
+      showSupportAlert(`Ticket ${result.ticketNumber} created successfully!`, 'success');
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to escalate:', err);
+    showSupportAlert('Failed to create ticket. Please try again.', 'error');
+  } finally {
+    supportLoading = false;
+    renderSupportMessages();
+  }
+}
+
+async function resolveSupportChat() {
+  if (!supportSessionId) return;
+
+  try {
+    await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/support',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ action: 'resolve', sessionId: supportSessionId })
+      }
+    });
+
+    supportMessages = [];
+    supportSessionId = null;
+    supportShowEscalate = false;
+    renderSupportMessages();
+    closeSupportChat();
+    showSupportAlert('Chat resolved. Thanks for your feedback!', 'success');
+  } catch (err) {
+    console.error('[MOS] Failed to resolve:', err);
+  }
+}
+
+function renderSupportMessages() {
+  const container = supportElements.messagesContainer;
+
+  if (supportMessages.length === 0) {
+    supportElements.emptyState.classList.remove('hidden');
+    supportElements.actionsBar.classList.add('hidden');
+  } else {
+    supportElements.emptyState.classList.add('hidden');
+    supportElements.actionsBar.classList.remove('hidden');
+  }
+
+  const existingBubbles = container.querySelectorAll('.support-msg, .support-msg-loading');
+  existingBubbles.forEach(el => el.remove());
+
+  supportMessages.forEach(msg => {
+    const bubble = document.createElement('div');
+    bubble.className = `support-msg ${msg.role}`;
+    bubble.textContent = msg.content;
+    container.appendChild(bubble);
+  });
+
+  supportElements.escalateBar.classList.toggle('hidden', !supportShowEscalate);
+
+  requestAnimationFrame(() => {
+    container.scrollTop = container.scrollHeight;
+  });
+}
+
+function showSupportLoading() {
+  const loader = document.createElement('div');
+  loader.className = 'support-msg-loading';
+  loader.id = 'support-loading-indicator';
+  loader.innerHTML = '<div class="support-typing-dots"><span></span><span></span><span></span></div>';
+  supportElements.messagesContainer.appendChild(loader);
+  supportElements.messagesContainer.scrollTop = supportElements.messagesContainer.scrollHeight;
+}
+
+function hideSupportLoading() {
+  const loader = document.getElementById('support-loading-indicator');
+  if (loader) loader.remove();
+}
+
+function showTicketForm() {
+  supportElements.chatView.classList.add('hidden');
+  supportElements.ticketView.classList.remove('hidden');
+  supportElements.ticketError.classList.add('hidden');
+  supportElements.ticketSuccess.classList.add('hidden');
+  supportElements.ticketSubject.value = '';
+  supportElements.ticketDescription.value = '';
+  supportElements.ticketCategory.value = 'general';
+  supportElements.ticketPriority.value = 'medium';
+}
+
+function hideTicketForm() {
+  supportElements.ticketView.classList.add('hidden');
+  supportElements.chatView.classList.remove('hidden');
+}
+
+async function submitSupportTicket() {
+  const subject = supportElements.ticketSubject.value.trim();
+  const description = supportElements.ticketDescription.value.trim();
+  const category = supportElements.ticketCategory.value;
+  const priority = supportElements.ticketPriority.value;
+
+  supportElements.ticketError.classList.add('hidden');
+  supportElements.ticketSuccess.classList.add('hidden');
+
+  if (!subject) {
+    supportElements.ticketError.textContent = 'Please enter a subject';
+    supportElements.ticketError.classList.remove('hidden');
+    return;
+  }
+  if (!description) {
+    supportElements.ticketError.textContent = 'Please enter a description';
+    supportElements.ticketError.classList.remove('hidden');
+    return;
+  }
+
+  supportElements.ticketSubmitBtn.disabled = true;
+  supportElements.ticketSubmitBtn.textContent = 'Submitting...';
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/support',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ action: 'ticket', subject, description, category, priority })
+      }
+    });
+
+    if (result && result.ok) {
+      const ticketNum = result.ticketNumber || result.ticket?.ticketNumber || '';
+      supportElements.ticketSuccess.textContent = `Ticket ${ticketNum} created successfully! Our team will get back to you soon.`;
+      supportElements.ticketSuccess.classList.remove('hidden');
+      showSupportAlert(`Ticket ${ticketNum} submitted!`, 'success');
+
+      supportElements.ticketSubject.value = '';
+      supportElements.ticketDescription.value = '';
+
+      setTimeout(() => {
+        hideTicketForm();
+      }, 3000);
+    } else {
+      throw new Error(result.error || 'Failed to submit ticket');
+    }
+  } catch (err) {
+    console.error('[MOS] Ticket submission error:', err);
+    supportElements.ticketError.textContent = err.message || 'Failed to submit ticket. Please try again.';
+    supportElements.ticketError.classList.remove('hidden');
+  } finally {
+    supportElements.ticketSubmitBtn.disabled = false;
+    supportElements.ticketSubmitBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Submit Ticket
+    `;
+  }
+}
+
+function showSupportAlert(message, type = 'info') {
+  const existing = document.querySelector('.support-alert');
+  if (existing) existing.remove();
+
+  const alert = document.createElement('div');
+  alert.className = `support-alert alert-${type}`;
+
+  const icon = type === 'success'
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+    : type === 'error'
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+
+  alert.innerHTML = `${icon}<span>${escapeHtml(message)}</span>`;
+  document.body.appendChild(alert);
+
+  setTimeout(() => {
+    alert.style.opacity = '0';
+    alert.style.transition = 'opacity 0.3s';
+    setTimeout(() => alert.remove(), 300);
+  }, 4000);
+}
+
 // ==================== START ====================
 init();
+initSupportChat();
