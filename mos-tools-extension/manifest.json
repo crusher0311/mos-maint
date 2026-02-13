@@ -14,7 +14,9 @@
     "https://sandbox.tekmetric.com/*",
     "https://cba.tekmetric.com/*",
     "https://*.protractor.com/*",
-    "https://*.autoflow.com/*"
+    "https://*.autoflow.com/*",
+    "https://mos.tools/*",
+    "https://*.mos.tools/*"
   ],
   "background": {
     "service_worker": "background.js",
