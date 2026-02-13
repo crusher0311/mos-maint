@@ -296,6 +296,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
+        { name: "Labor Rate Rules", href: "/dashboard/settings/labor-rates" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
