@@ -421,36 +421,6 @@ export default function PlatformShopsPage() {
             Resume All Incomplete
           </button>
           <button
-            onClick={async () => {
-              if (!confirm("Reset ALL Tekmetric backfill progress and re-run from scratch? This will re-pull all job history.")) return;
-              setActionLoading("reset-tek");
-              try {
-                const res = await fetch("/api/platform-admin/backfill", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "reset_all_tekmetric" }),
-                });
-                const data = await res.json();
-                if (data.ok) {
-                  alert(data.message || `Reset & restarted ${data.totalResumed} Tekmetric backfills`);
-                  loadShops();
-                } else {
-                  alert(data.error || "Failed to reset Tekmetric backfills");
-                }
-              } catch (err) {
-                console.error("Reset Tekmetric error:", err);
-                alert("Failed to reset Tekmetric backfills");
-              } finally {
-                setActionLoading(null);
-              }
-            }}
-            disabled={actionLoading === "reset-tek"}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded-lg disabled:opacity-50"
-          >
-            {actionLoading === "reset-tek" ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-            Reset Tekmetric Backfills
-          </button>
-          <button
             onClick={loadShops}
             className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
           >
