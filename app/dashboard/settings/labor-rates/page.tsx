@@ -46,7 +46,7 @@ const CONDITION_TYPES: { value: ConditionType; label: string; icon: any; descrip
   { value: "make", label: "Vehicle Make", icon: Car, description: "Match specific vehicle manufacturers" },
   { value: "fuelType", label: "Fuel Type", icon: Fuel, description: "Match by fuel type (Gas, Diesel, Electric, Hybrid)" },
   { value: "jobCategory", label: "Job Category", icon: Wrench, description: "Match by Tekmetric job category" },
-  { value: "customer", label: "Customer", icon: User, description: "Match by customer name on the repair order" },
+  { value: "customer", label: "Customer Name / Phone", icon: User, description: "Match by customer name or phone number on the repair order" },
   { value: "roField", label: "RO Data Field", icon: Database, description: "Match any field from the repair order (engine, drive type, etc.)" },
 ];
 
@@ -646,7 +646,7 @@ function RuleEditor({
                       }}
                       placeholder={
                         cond.type === "customer"
-                          ? "Type customer name and press Enter"
+                          ? "Type customer name or phone and press Enter"
                           : fieldLabel
                             ? `Type ${fieldLabel.toLowerCase()} value and press Enter`
                             : "Type a value and press Enter"

@@ -641,7 +641,14 @@ function matchRuleCondition(condition, vehicleData) {
     }
     case 'customer': {
       const customerName = (vehicleData.customerName || '').toLowerCase();
-      return values.some(v => customerName.includes(v.toLowerCase()));
+      const customerPhones = (vehicleData.customerPhones || []).map(p => p.replace(/\D/g, ''));
+      return values.some(v => {
+        const lower = v.toLowerCase();
+        if (customerName.includes(lower)) return true;
+        const digits = v.replace(/\D/g, '');
+        if (digits.length >= 4 && customerPhones.some(p => p.includes(digits))) return true;
+        return false;
+      });
     }
     case 'roField': {
       const fieldPath = condition.field;
@@ -740,6 +747,10 @@ async function autoApplyLaborRate(context) {
   const customer = roData.customer || {};
   const customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
     || context.customerName || '';
+  const customerPhones = [
+    customer.phone, customer.phoneNumber, customer.cellPhone, customer.mobilePhone,
+    ...(customer.phones || []).map(p => typeof p === 'string' ? p : p?.number || '')
+  ].filter(Boolean);
   const vehicleData = {
     make: vehicle.make || context.vehicle?.make || '',
     year: vehicle.year || context.vehicle?.year || null,
@@ -747,10 +758,11 @@ async function autoApplyLaborRate(context) {
     fuelType: vehicle.fuelType || vehicle.fuelTypeName || '',
     jobCategories: (roData.jobs || []).map(j => j.category || j.type || '').filter(Boolean),
     customerName,
-    roData: roData // Full RO data for roField matching
+    customerPhones,
+    roData: roData
   };
 
-  console.log("[LaborRate] Matching against vehicle:", vehicleData.make, vehicleData.fuelType, "customer:", customerName);
+  console.log("[LaborRate] Matching against vehicle:", vehicleData.make, vehicleData.fuelType, "customer:", customerName, "phones:", customerPhones.length);
 
   const matchedRule = findMatchingRule(rules, vehicleData);
   if (!matchedRule) {
