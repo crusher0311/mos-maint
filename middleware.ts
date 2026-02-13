@@ -11,7 +11,10 @@ function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
   if (pathname.startsWith("/api/ping")) return true;
-  if (pathname.startsWith("/api/e2e/")) return true; // e2e test endpoints
+  if (pathname.startsWith("/api/e2e/")) return true;
+  if (pathname.startsWith("/api/extension/")) return true;
+  if (pathname.startsWith("/api/cron/")) return true;
+  if (pathname.startsWith("/api/platform-admin/log-stream")) return true;
   if (pathname.startsWith("/_next/")) return true;
   if (pathname === "/favicon.ico" || pathname === "/robots.txt" || pathname === "/sitemap.xml") return true;
   return false;
