@@ -120,6 +120,9 @@ export async function GET() {
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
       const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
       const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
+      const activeIntegration = shop.integrationProvider === "tekmetric" ? "tekmetric" 
+        : shop.integrationProvider === "protractor" ? "protractor"
+        : hasTekmetric ? "tekmetric" : hasProtractor ? "protractor" : null;
       const backfill = backfillMap.get(String(shop.shopId));
       const tekmetricBackfill = tekmetricBackfillMap.get(String(shop.shopId));
       const jobHistoryCount = jobHistoryCountMap.get(String(shop.shopId)) || 0;
@@ -153,17 +156,24 @@ export async function GET() {
         stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
         stickerConfig: shop.stickerConfig || {},
         enabledFeatures: shop.enabledFeatures || {},
-        backfill: (hasProtractor || hasTekmetric) ? (() => {
-          const bf = hasProtractor ? backfill : tekmetricBackfill;
+        backfill: activeIntegration ? (() => {
+          const bf = activeIntegration === "protractor" ? backfill : tekmetricBackfill;
           const completed = bf?.completed || false;
           const inProgress = bf?.inProgress === true;
-          const lastActivityAt = bf?.lastActivityAt || bf?.lastAttemptedAt || null;
+          const lastActivityAt = bf?.lastActivityAt || bf?.lastAttemptedAt || bf?.lastRunAt || null;
           const lastError = bf?.lastError || null;
           const lastErrorAt = bf?.lastErrorAt || null;
           
           const STALE_THRESHOLD_MS = 5 * 60 * 1000;
-          const isStale = inProgress && lastActivityAt && 
-            (Date.now() - new Date(lastActivityAt).getTime() > STALE_THRESHOLD_MS);
+          const lastActiveTime = lastActivityAt ? new Date(lastActivityAt).getTime() : 0;
+          
+          const isTekmetricActive = activeIntegration === "tekmetric" && !completed && bf?.lastRunAt &&
+            (Date.now() - new Date(bf.lastRunAt).getTime() < STALE_THRESHOLD_MS);
+          
+          const isStale = !completed && !isTekmetricActive && (
+            (inProgress && lastActiveTime && (Date.now() - lastActiveTime > STALE_THRESHOLD_MS)) ||
+            (activeIntegration === "tekmetric" && bf?.lastRunAt && (Date.now() - new Date(bf.lastRunAt).getTime() > STALE_THRESHOLD_MS))
+          );
           
           let status: "completed" | "active" | "stale" | "error" | "pending" = "pending";
           if (completed) {
@@ -172,20 +182,22 @@ export async function GET() {
             status = "error";
           } else if (isStale) {
             status = "stale";
-          } else if (inProgress) {
+          } else if (inProgress || isTekmetricActive) {
+            status = "active";
+          } else if (bf?.queuedAt || bf?.currentChunkEnd) {
             status = "active";
           }
           
           return {
             completed,
-            inProgress,
+            inProgress: inProgress || isTekmetricActive || false,
             status,
             isStale,
             totalJobsIndexed: jobIndexCount || bf?.totalJobsIndexed || 0,
             currentChunkDate: bf?.currentChunkEnd || bf?.currentChunkStart || null,
-            source: hasProtractor ? "protractor" : "tekmetric",
+            source: activeIntegration,
             lastAttemptedAt: bf?.lastAttemptedAt || bf?.lastRunAt || null,
-            lastActivityAt,
+            lastActivityAt: lastActivityAt || bf?.lastRunAt || null,
             lastError,
             lastErrorAt,
             processedCount: bf?.processedCount || 0,
