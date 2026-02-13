@@ -164,15 +164,19 @@ export async function GET() {
           const lastError = bf?.lastError || null;
           const lastErrorAt = bf?.lastErrorAt || null;
           
-          const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+          const STALE_THRESHOLD_MS = 10 * 60 * 1000;
           const lastActiveTime = lastActivityAt ? new Date(lastActivityAt).getTime() : 0;
           
-          const isTekmetricActive = activeIntegration === "tekmetric" && !completed && bf?.lastRunAt &&
-            (Date.now() - new Date(bf.lastRunAt).getTime() < STALE_THRESHOLD_MS);
+          const tekLastRun = bf?.lastRunAt ? new Date(bf.lastRunAt).getTime() : 0;
+          const tekQueued = bf?.queuedAt ? new Date(bf.queuedAt).getTime() : 0;
+          const tekMostRecent = Math.max(tekLastRun, tekQueued);
+          
+          const isTekmetricActive = activeIntegration === "tekmetric" && !completed && 
+            tekMostRecent > 0 && (Date.now() - tekMostRecent < STALE_THRESHOLD_MS);
           
           const isStale = !completed && !isTekmetricActive && (
-            (inProgress && lastActiveTime && (Date.now() - lastActiveTime > STALE_THRESHOLD_MS)) ||
-            (activeIntegration === "tekmetric" && bf?.lastRunAt && (Date.now() - new Date(bf.lastRunAt).getTime() > STALE_THRESHOLD_MS))
+            (activeIntegration === "protractor" && inProgress && lastActiveTime && (Date.now() - lastActiveTime > STALE_THRESHOLD_MS)) ||
+            (activeIntegration === "tekmetric" && tekMostRecent > 0 && (Date.now() - tekMostRecent > STALE_THRESHOLD_MS))
           );
           
           let status: "completed" | "active" | "stale" | "error" | "pending" = "pending";
@@ -180,10 +184,10 @@ export async function GET() {
             status = "completed";
           } else if (lastError && lastErrorAt) {
             status = "error";
-          } else if (isStale) {
-            status = "stale";
           } else if (inProgress || isTekmetricActive) {
             status = "active";
+          } else if (isStale) {
+            status = "stale";
           } else if (bf?.queuedAt || bf?.currentChunkEnd) {
             status = "active";
           }
