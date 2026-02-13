@@ -19,6 +19,7 @@ interface ShopFeatures {
   keytags?: boolean;
   auto_booking?: boolean;
   part_xref?: boolean;
+  labor_rates?: boolean;
 }
 
 interface IntegrationDetails {
@@ -1056,6 +1057,7 @@ export default function PlatformShopsPage() {
                             keytags: true,
                             auto_booking: true,
                             part_xref: true,
+                            labor_rates: true,
                           });
                         }
                       }}
@@ -1107,6 +1109,7 @@ export default function PlatformShopsPage() {
                     { key: "keytags", label: "Keytags", desc: "Print customer/vehicle info on Dymo labels" },
                     { key: "auto_booking", label: "Auto Booking", desc: "Automated appointment booking for oil changes" },
                     { key: "part_xref", label: "Part Cross-Reference", desc: "Cross-reference parts across manufacturers" },
+                    { key: "labor_rates", label: "Labor Rate Rules", desc: "Auto-apply labor rates based on vehicle, customer, and job criteria" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input

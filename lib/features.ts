@@ -11,7 +11,8 @@ export type FeatureId =
   | "oil_sticker"      // Oil change sticker platform
   | "keytags"          // Key identification tags for vehicles in shop
   | "auto_booking"     // Auto booking for oil change appointments
-  | "part_xref";       // Part cross-reference tool
+  | "part_xref"        // Part cross-reference tool
+  | "labor_rates";     // Labor rate rules auto-apply
 
 export type FeatureConfig = {
   id: FeatureId;
@@ -79,6 +80,14 @@ export const FEATURES: FeatureConfig[] = [
     name: "Auto Booking",
     description: "Automated appointment booking for oil change reminders",
     icon: "Calendar",
+    requiresSMS: false,
+    smsProviders: [],
+  },
+  {
+    id: "labor_rates",
+    name: "Labor Rate Rules",
+    description: "Automatically apply labor rates based on vehicle, customer, and job criteria",
+    icon: "DollarSign",
     requiresSMS: false,
     smsProviders: [],
   },
