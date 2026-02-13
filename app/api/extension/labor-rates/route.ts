@@ -51,6 +51,7 @@ export async function PUT(req: NextRequest) {
     priority: Number(r.priority) || 0,
     conditions: (r.conditions || []).map((c: any) => ({
       type: c.type,
+      field: c.field || null,
       label: c.label || null,
       values: Array.isArray(c.values) ? c.values : [],
     })),

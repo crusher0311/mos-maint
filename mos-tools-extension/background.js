@@ -639,13 +639,32 @@ function matchRuleCondition(condition, vehicleData) {
       const jobCategories = (vehicleData.jobCategories || []).map(c => c.toLowerCase());
       return values.some(v => jobCategories.includes(v.toLowerCase()));
     }
-    case 'customTag': {
-      const tags = (vehicleData.tags || []).map(t => t.toLowerCase());
-      return values.some(v => tags.includes(v.toLowerCase()));
+    case 'customer': {
+      const customerName = (vehicleData.customerName || '').toLowerCase();
+      return values.some(v => customerName.includes(v.toLowerCase()));
+    }
+    case 'roField': {
+      const fieldPath = condition.field;
+      if (!fieldPath) return false;
+      const fieldValue = getNestedValue(vehicleData.roData, fieldPath);
+      if (fieldValue == null || fieldValue === '') return false;
+      const fieldStr = String(fieldValue).toLowerCase();
+      return values.some(v => fieldStr.includes(v.toLowerCase()));
     }
     default:
       return false;
   }
+}
+
+function getNestedValue(obj, path) {
+  if (!obj || !path) return null;
+  const parts = path.split('.');
+  let current = obj;
+  for (const part of parts) {
+    if (current == null) return null;
+    current = current[part];
+  }
+  return current;
 }
 
 function findMatchingRule(rules, vehicleData) {
@@ -718,16 +737,20 @@ async function autoApplyLaborRate(context) {
 
   // Build vehicle data for matching
   const vehicle = roData.vehicle || {};
+  const customer = roData.customer || {};
+  const customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
+    || context.customerName || '';
   const vehicleData = {
     make: vehicle.make || context.vehicle?.make || '',
     year: vehicle.year || context.vehicle?.year || null,
     model: vehicle.model || context.vehicle?.model || '',
     fuelType: vehicle.fuelType || vehicle.fuelTypeName || '',
     jobCategories: (roData.jobs || []).map(j => j.category || j.type || '').filter(Boolean),
-    tags: [] // Custom tags from shop settings could be added later
+    customerName,
+    roData: roData // Full RO data for roField matching
   };
 
-  console.log("[LaborRate] Matching against vehicle:", vehicleData.make, vehicleData.fuelType);
+  console.log("[LaborRate] Matching against vehicle:", vehicleData.make, vehicleData.fuelType, "customer:", customerName);
 
   const matchedRule = findMatchingRule(rules, vehicleData);
   if (!matchedRule) {

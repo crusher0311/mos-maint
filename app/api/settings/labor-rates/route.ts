@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     priority: Number(priority) || 0,
     conditions: conditions.map((c: any) => ({
       type: c.type,
+      field: c.field || null,
       label: c.label || null,
       values: Array.isArray(c.values) ? c.values : [],
     })),
@@ -75,6 +76,7 @@ export async function PUT(req: NextRequest) {
         "laborRateRules.$.priority": Number(priority) || 0,
         "laborRateRules.$.conditions": safeConditions.map((c: any) => ({
           type: c.type,
+          field: c.field || null,
           label: c.label || null,
           values: Array.isArray(c.values) ? c.values : [],
         })),

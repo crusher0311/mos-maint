@@ -18,12 +18,15 @@ import {
   Car,
   Fuel,
   Wrench,
+  User,
+  Database,
 } from "lucide-react";
 
-type ConditionType = "make" | "fuelType" | "jobCategory" | "customTag";
+type ConditionType = "make" | "fuelType" | "jobCategory" | "customer" | "roField";
 
 type RuleCondition = {
   type: ConditionType;
+  field?: string | null;
   label: string | null;
   values: string[];
 };
@@ -43,7 +46,20 @@ const CONDITION_TYPES: { value: ConditionType; label: string; icon: any; descrip
   { value: "make", label: "Vehicle Make", icon: Car, description: "Match specific vehicle manufacturers" },
   { value: "fuelType", label: "Fuel Type", icon: Fuel, description: "Match by fuel type (Gas, Diesel, Electric, Hybrid)" },
   { value: "jobCategory", label: "Job Category", icon: Wrench, description: "Match by Tekmetric job category" },
-  { value: "customTag", label: "Custom Tag", icon: Tag, description: "Match by custom shop-defined tags" },
+  { value: "customer", label: "Customer", icon: User, description: "Match by customer name on the repair order" },
+  { value: "roField", label: "RO Data Field", icon: Database, description: "Match any field from the repair order (engine, drive type, etc.)" },
+];
+
+const RO_FIELD_OPTIONS: { value: string; label: string; description: string }[] = [
+  { value: "vehicle.engineSize", label: "Engine Size", description: "e.g., 2.0L, 3.5L, 5.7L" },
+  { value: "vehicle.driveType", label: "Drive Type", description: "e.g., FWD, RWD, AWD, 4WD" },
+  { value: "vehicle.bodyType", label: "Body Type", description: "e.g., Sedan, SUV, Truck, Van" },
+  { value: "vehicle.transmission", label: "Transmission", description: "e.g., Automatic, Manual, CVT" },
+  { value: "vehicle.subModel", label: "Sub-Model / Trim", description: "e.g., Sport, Limited, EX-L" },
+  { value: "vehicle.engineType", label: "Engine Type", description: "e.g., V6, V8, I4, Turbo" },
+  { value: "vehicle.year", label: "Year", description: "Match specific model years" },
+  { value: "vehicle.model", label: "Model", description: "e.g., Camry, F-150, Civic" },
+  { value: "customer.type", label: "Customer Type", description: "e.g., Fleet, Individual, Business" },
 ];
 
 const COMMON_MAKES = [
@@ -168,13 +184,14 @@ export default function LaborRatesPage() {
     setIsNewRule(true);
   };
 
-  const addCondition = (type: ConditionType) => {
+  const addCondition = (type: ConditionType, field?: string) => {
     if (!editingRule) return;
+    const fieldOption = field ? RO_FIELD_OPTIONS.find(f => f.value === field) : null;
     setEditingRule({
       ...editingRule,
       conditions: [
         ...editingRule.conditions,
-        { type, label: null, values: [] },
+        { type, field: field || null, label: fieldOption?.label || null, values: [] },
       ],
     });
   };
@@ -205,7 +222,8 @@ export default function LaborRatesPage() {
       case "make": return COMMON_MAKES;
       case "fuelType": return FUEL_TYPES;
       case "jobCategory": return jobCategories;
-      case "customTag": return [];
+      case "customer": return [];
+      case "roField": return [];
       default: return [];
     }
   };
@@ -345,10 +363,15 @@ export default function LaborRatesPage() {
                       </p>
                       {rule.conditions.map((cond, i) => {
                         const Icon = getConditionIcon(cond.type);
+                        const fieldLabel = cond.type === "roField" && cond.field
+                          ? RO_FIELD_OPTIONS.find(f => f.value === cond.field)?.label || cond.field
+                          : null;
                         return (
                           <div key={i} className="flex items-center gap-2 text-sm">
                             <Icon className="w-4 h-4 text-gray-500" />
-                            <span className="font-medium text-gray-700">{getConditionLabel(cond.type)}:</span>
+                            <span className="font-medium text-gray-700">
+                              {getConditionLabel(cond.type)}{fieldLabel ? ` (${fieldLabel})` : ''}:
+                            </span>
                             <div className="flex flex-wrap gap-1">
                               {cond.values.map((v, vi) => (
                                 <span key={vi} className="bg-white border border-gray-200 px-2 py-0.5 rounded text-xs text-gray-700">
@@ -402,13 +425,15 @@ function RuleEditor({
   onSave: () => void;
   onCancel: () => void;
   onChange: (rule: LaborRateRule) => void;
-  onAddCondition: (type: ConditionType) => void;
+  onAddCondition: (type: ConditionType, field?: string) => void;
   onRemoveCondition: (index: number) => void;
   onUpdateConditionValues: (index: number, values: string[]) => void;
   getValueOptions: (type: ConditionType) => string[];
 }) {
   const [showAddCondition, setShowAddCondition] = useState(false);
+  const [showFieldPicker, setShowFieldPicker] = useState(false);
   const [customTagInput, setCustomTagInput] = useState("");
+  const [customerInput, setCustomerInput] = useState("");
 
   return (
     <div className="bg-white rounded-lg border-2 border-blue-300 shadow-lg p-6 space-y-5">
@@ -496,21 +521,56 @@ function RuleEditor({
           </button>
         </div>
 
-        {showAddCondition && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+        {showAddCondition && !showFieldPicker && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
             {CONDITION_TYPES.map((ct) => {
               const Icon = ct.icon;
               return (
                 <button
                   key={ct.value}
-                  onClick={() => { onAddCondition(ct.value); setShowAddCondition(false); }}
+                  onClick={() => {
+                    if (ct.value === "roField") {
+                      setShowFieldPicker(true);
+                    } else {
+                      onAddCondition(ct.value);
+                      setShowAddCondition(false);
+                    }
+                  }}
                   className="flex flex-col items-center gap-1 p-3 rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 transition-colors text-center"
                 >
                   <Icon className="w-5 h-5 text-gray-600" />
                   <span className="text-xs font-medium text-gray-700">{ct.label}</span>
+                  <span className="text-[10px] text-gray-400">{ct.description}</span>
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {showFieldPicker && (
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Choose an RO field to match:</span>
+              <button onClick={() => { setShowFieldPicker(false); setShowAddCondition(false); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {RO_FIELD_OPTIONS.map((fo) => (
+                <button
+                  key={fo.value}
+                  onClick={() => {
+                    onAddCondition("roField", fo.value);
+                    setShowFieldPicker(false);
+                    setShowAddCondition(false);
+                  }}
+                  className="flex flex-col items-start p-2 rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 transition-colors text-left"
+                >
+                  <span className="text-sm font-medium text-gray-700">{fo.label}</span>
+                  <span className="text-xs text-gray-400">{fo.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -522,7 +582,10 @@ function RuleEditor({
           rule.conditions.map((cond, index) => {
             const Icon = getConditionIcon(cond.type);
             const options = getValueOptions(cond.type);
-            const isCustomTag = cond.type === "customTag";
+            const needsFreeText = cond.type === "customer" || cond.type === "roField";
+            const fieldLabel = cond.type === "roField" && cond.field
+              ? RO_FIELD_OPTIONS.find(f => f.value === cond.field)?.label || cond.field
+              : null;
 
             return (
               <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
@@ -531,6 +594,7 @@ function RuleEditor({
                     <Icon className="w-4 h-4 text-gray-600" />
                     <span className="text-sm font-medium text-gray-700">
                       {getConditionLabel(cond.type)}
+                      {fieldLabel && <span className="text-blue-600 ml-1">({fieldLabel})</span>}
                     </span>
                   </div>
                   <button
@@ -561,29 +625,42 @@ function RuleEditor({
                   ))}
                 </div>
 
-                {isCustomTag ? (
+                {needsFreeText ? (
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={customTagInput}
-                      onChange={(e) => setCustomTagInput(e.target.value)}
+                      value={cond.type === "customer" ? customerInput : customTagInput}
+                      onChange={(e) => {
+                        if (cond.type === "customer") setCustomerInput(e.target.value);
+                        else setCustomTagInput(e.target.value);
+                      }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && customTagInput.trim()) {
-                          if (!cond.values.includes(customTagInput.trim())) {
-                            onUpdateConditionValues(index, [...cond.values, customTagInput.trim()]);
+                        const inputVal = cond.type === "customer" ? customerInput : customTagInput;
+                        if (e.key === "Enter" && inputVal.trim()) {
+                          if (!cond.values.includes(inputVal.trim())) {
+                            onUpdateConditionValues(index, [...cond.values, inputVal.trim()]);
                           }
-                          setCustomTagInput("");
+                          if (cond.type === "customer") setCustomerInput("");
+                          else setCustomTagInput("");
                         }
                       }}
-                      placeholder="Type a tag and press Enter"
+                      placeholder={
+                        cond.type === "customer"
+                          ? "Type customer name and press Enter"
+                          : fieldLabel
+                            ? `Type ${fieldLabel.toLowerCase()} value and press Enter`
+                            : "Type a value and press Enter"
+                      }
                       className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                     />
                     <button
                       onClick={() => {
-                        if (customTagInput.trim() && !cond.values.includes(customTagInput.trim())) {
-                          onUpdateConditionValues(index, [...cond.values, customTagInput.trim()]);
+                        const inputVal = cond.type === "customer" ? customerInput : customTagInput;
+                        if (inputVal.trim() && !cond.values.includes(inputVal.trim())) {
+                          onUpdateConditionValues(index, [...cond.values, inputVal.trim()]);
                         }
-                        setCustomTagInput("");
+                        if (cond.type === "customer") setCustomerInput("");
+                        else setCustomTagInput("");
                       }}
                       className="bg-blue-600 text-white px-2 py-1 rounded text-sm hover:bg-blue-700"
                     >
