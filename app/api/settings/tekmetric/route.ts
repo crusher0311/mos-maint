@@ -27,6 +27,24 @@ async function triggerJobHistoryBackfill(shopId: number) {
     );
     
     console.log(`[Tekmetric Settings] Queued job history backfill for shop ${shopId}`);
+
+    try {
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
+      
+      fetch(`${baseUrl}/api/cron/tekmetric-backfill`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
+        },
+      }).catch(err => {
+        console.log(`[Tekmetric Settings] Backfill auto-trigger note: ${err.message}`);
+      });
+      console.log(`[Tekmetric Settings] Auto-triggered backfill for shop ${shopId}`);
+    } catch (e) {
+      // fire-and-forget, cron worker will pick it up regardless
+    }
   } catch (err: any) {
     console.error(`[Tekmetric Settings] Failed to queue backfill for shop ${shopId}:`, err.message);
   }

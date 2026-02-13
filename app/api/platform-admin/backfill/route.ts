@@ -5,6 +5,7 @@ import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
 
@@ -19,6 +20,74 @@ async function requirePlatformAdmin() {
   return { session };
 }
 
+function detectIntegrationType(shop: any): "protractor" | "tekmetric" | null {
+  if (shop.integrationProvider === "tekmetric") return "tekmetric";
+  if (shop.integrationProvider === "protractor") return "protractor";
+
+  const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
+  const hasProtractor = !!(
+    shop.protractor?.configured ||
+    shop.protractor?.apiKey ||
+    shop.protractor?.connectionId ||
+    shop.protractorApiKey ||
+    shop.protractorConnectionId
+  );
+  
+  if (hasTekmetric) return "tekmetric";
+  if (hasProtractor) return "protractor";
+  return null;
+}
+
+async function triggerTekmetricBackfill(shopId: number): Promise<{ ok: boolean; message: string }> {
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId });
+  const tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
+  
+  if (!tekmetricShopId) {
+    return { ok: false, message: "No Tekmetric shop ID found" };
+  }
+
+  await db.collection("tekmetric_backfill_progress").updateOne(
+    { shopId },
+    { 
+      $set: { 
+        shopId,
+        completed: false,
+        inProgress: false,
+        queuedAt: new Date(),
+        logicVersion: 2
+      },
+      $setOnInsert: { startedAt: null }
+    },
+    { upsert: true }
+  );
+
+  await db.collection("shops").updateOne(
+    { shopId },
+    { $set: { tekmetricBackfillComplete: false } }
+  );
+
+  try {
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
+    
+    fetch(`${baseUrl}/api/cron/tekmetric-backfill`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
+      },
+    }).catch(err => {
+      console.log(`[Platform Admin] Tekmetric backfill cron trigger note: ${err.message}`);
+    });
+  } catch (e) {
+    // fire-and-forget
+  }
+
+  console.log(`[Platform Admin] Triggered Tekmetric backfill for shop ${shopId} (tekmetricShopId: ${tekmetricShopId})`);
+  return { ok: true, message: `Tekmetric backfill triggered for shop ${shopId}` };
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requirePlatformAdmin();
   if ("error" in auth) {
@@ -30,12 +99,29 @@ export async function POST(req: NextRequest) {
     const db = await getDb();
 
     if (action === "resume_all_incomplete") {
-      console.log("[Platform Admin] Finding all incomplete backfills...");
+      console.log("[Platform Admin] Finding all incomplete backfills (Protractor + Tekmetric)...");
       
-      const protractorShops = await db.collection("shops")
-        .find({ "protractor.configured": true })
-        .project({ shopId: 1, name: 1 })
+      const allIntegrationShops = await db.collection("shops")
+        .find({
+          $or: [
+            { "protractor.configured": true },
+            { "protractor.apiKey": { $exists: true } },
+            { "protractorApiKey": { $exists: true } },
+            { "protractorConnectionId": { $exists: true } },
+            { "tekmetric.shopId": { $exists: true, $ne: null } },
+            { "tekmetricShopId": { $exists: true, $ne: null } }
+          ]
+        })
+        .project({ shopId: 1, name: 1, integrationProvider: 1, protractor: 1, protractorApiKey: 1, protractorConnectionId: 1, tekmetric: 1, tekmetricShopId: 1, tekmetricBackfillComplete: 1 })
         .toArray();
+      
+      const protractorShops: any[] = [];
+      const tekmetricShops: any[] = [];
+      for (const shop of allIntegrationShops) {
+        const type = detectIntegrationType(shop);
+        if (type === "protractor") protractorShops.push(shop);
+        else if (type === "tekmetric" && !shop.tekmetricBackfillComplete) tekmetricShops.push(shop);
+      }
       
       const allBackfillProgress = await db.collection("backfill_progress")
         .find({})
@@ -45,14 +131,14 @@ export async function POST(req: NextRequest) {
       fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
       fiveYearsAgo.setMonth(fiveYearsAgo.getMonth() + 1);
       
-      const actuallyCompleteShopIds = new Set<number>();
+      const actuallyCompleteProtractorIds = new Set<number>();
       for (const progress of allBackfillProgress) {
         if (progress.completed && progress.currentChunkEnd) {
           const chunkEnd = new Date(progress.currentChunkEnd);
           if (chunkEnd <= fiveYearsAgo) {
-            actuallyCompleteShopIds.add(progress.shopId);
+            actuallyCompleteProtractorIds.add(progress.shopId);
           } else {
-            console.log(`[Platform Admin] Shop ${progress.shopId} marked complete but only at ${chunkEnd.toISOString().split('T')[0]} - will resume`);
+            console.log(`[Platform Admin] Protractor shop ${progress.shopId} marked complete but only at ${chunkEnd.toISOString().split('T')[0]} - will resume`);
             await db.collection("backfill_progress").updateOne(
               { shopId: progress.shopId },
               { $set: { completed: false } }
@@ -61,15 +147,27 @@ export async function POST(req: NextRequest) {
         }
       }
       
-      const incompleteShops = protractorShops.filter((s: any) => !actuallyCompleteShopIds.has(s.shopId));
+      const incompleteProtractor = protractorShops.filter((s: any) => !actuallyCompleteProtractorIds.has(s.shopId));
       
-      console.log(`[Platform Admin] Found ${incompleteShops.length} shops with incomplete backfills (${actuallyCompleteShopIds.size} truly complete)`);
+      const tekmetricBackfillProgress = await db.collection("tekmetric_backfill_progress")
+        .find({})
+        .toArray();
+      const completeTekmetricIds = new Set<number>();
+      for (const progress of tekmetricBackfillProgress) {
+        if (progress.completed && progress.logicVersion === 2) {
+          completeTekmetricIds.add(progress.shopId);
+        }
+      }
+      const incompleteTekmetric = tekmetricShops.filter((s: any) => !completeTekmetricIds.has(s.shopId));
       
-      const MAX_PARALLEL_SHOPS = 20;
-      const resumedShopIds: number[] = [];
+      console.log(`[Platform Admin] Found ${incompleteProtractor.length} incomplete Protractor backfills (${actuallyCompleteProtractorIds.size} complete)`);
+      console.log(`[Platform Admin] Found ${incompleteTekmetric.length} incomplete Tekmetric backfills (${completeTekmetricIds.size} complete)`);
+      
+      const resumedProtractor: number[] = [];
+      const resumedTekmetric: number[] = [];
       
       await Promise.all(
-        incompleteShops.map(shop => 
+        incompleteProtractor.map(shop => 
           db.collection("backfill_progress").updateOne(
             { shopId: shop.shopId },
             { $set: { inProgress: false } }
@@ -77,20 +175,29 @@ export async function POST(req: NextRequest) {
         )
       );
       
-      for (const shop of incompleteShops) {
-        resumedShopIds.push(shop.shopId);
+      for (const shop of incompleteProtractor) {
+        resumedProtractor.push(shop.shopId);
         runProtractorBackfill(shop.shopId).catch(err => {
-          console.error(`[Platform Admin] Backfill error for shop ${shop.shopId}:`, err.message);
+          console.error(`[Platform Admin] Protractor backfill error for shop ${shop.shopId}:`, err.message);
         });
       }
       
-      console.log(`[Platform Admin] Started ${resumedShopIds.length} parallel backfills (max ${MAX_PARALLEL_SHOPS} concurrent per API key isolation)`);
+      for (const shop of incompleteTekmetric) {
+        resumedTekmetric.push(shop.shopId);
+        triggerTekmetricBackfill(shop.shopId).catch(err => {
+          console.error(`[Platform Admin] Tekmetric backfill error for shop ${shop.shopId}:`, err);
+        });
+      }
+      
+      const totalResumed = resumedProtractor.length + resumedTekmetric.length;
+      console.log(`[Platform Admin] Started ${totalResumed} backfills (${resumedProtractor.length} Protractor, ${resumedTekmetric.length} Tekmetric)`);
       
       return NextResponse.json({
         ok: true,
-        message: `Resumed backfill for ${resumedShopIds.length} shops in parallel`,
-        shopIds: resumedShopIds,
-        parallelLimit: MAX_PARALLEL_SHOPS
+        message: `Resumed ${totalResumed} backfills (${resumedProtractor.length} Protractor, ${resumedTekmetric.length} Tekmetric)`,
+        protractorShopIds: resumedProtractor,
+        tekmetricShopIds: resumedTekmetric,
+        totalResumed
       });
     }
     
@@ -99,39 +206,57 @@ export async function POST(req: NextRequest) {
     }
 
     const numericShopId = Number(shopId);
+    const shop = await db.collection("shops").findOne({ shopId: numericShopId });
+    if (!shop) {
+      return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    const integrationType = detectIntegrationType(shop);
 
     if (action === "resume") {
-      const shop = await db.collection("shops").findOne({ shopId: numericShopId });
-      if (!shop) {
-        return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+      if (!integrationType) {
+        return NextResponse.json({ error: "Shop does not have any SMS integration configured" }, { status: 400 });
       }
 
-      const hasProtractor = !!shop.protractor?.connectionId;
-      
-      if (!hasProtractor) {
-        return NextResponse.json({ error: "Shop does not have Protractor configured" }, { status: 400 });
+      console.log(`[Platform Admin] Triggering ${integrationType} backfill for shop ${numericShopId}`);
+
+      if (integrationType === "protractor") {
+        runProtractorBackfill(numericShopId).catch(err => {
+          console.error(`[Platform Admin] Protractor backfill error for shop ${numericShopId}:`, err.message);
+        });
+        return NextResponse.json({ 
+          ok: true, 
+          message: `Protractor backfill resumed for shop ${numericShopId}`,
+          source: "protractor"
+        });
+      } else {
+        const result = await triggerTekmetricBackfill(numericShopId);
+        return NextResponse.json({ 
+          ok: result.ok, 
+          message: result.message,
+          source: "tekmetric"
+        });
       }
-
-      console.log(`[Platform Admin] Triggering backfill resume for shop ${numericShopId}`);
-      
-      runProtractorBackfill(numericShopId).catch(err => {
-        console.error(`[Platform Admin] Backfill error for shop ${numericShopId}:`, err.message);
-      });
-
-      return NextResponse.json({ 
-        ok: true, 
-        message: `Backfill resumed for shop ${numericShopId}` 
-      });
     }
 
     if (action === "reset") {
-      console.log(`[Platform Admin] Resetting backfill progress for shop ${numericShopId}`);
+      console.log(`[Platform Admin] Resetting backfill progress for shop ${numericShopId} (${integrationType || "unknown"})`);
       
-      await db.collection("backfill_progress").deleteOne({ shopId: numericShopId });
+      if (integrationType === "tekmetric") {
+        await Promise.all([
+          db.collection("tekmetric_backfill_progress").deleteOne({ shopId: numericShopId }),
+          db.collection("shops").updateOne(
+            { shopId: numericShopId },
+            { $unset: { tekmetricBackfillComplete: "", tekmetricBackfillCompletedAt: "" } }
+          )
+        ]);
+      } else {
+        await db.collection("backfill_progress").deleteOne({ shopId: numericShopId });
+      }
       
       return NextResponse.json({ 
         ok: true, 
-        message: `Backfill progress reset for shop ${numericShopId}` 
+        message: `Backfill progress reset for shop ${numericShopId} (${integrationType || "unknown"})` 
       });
     }
 
