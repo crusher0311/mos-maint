@@ -73,19 +73,21 @@ async function triggerTekmetricBackfill(shopId: number): Promise<{ ok: boolean; 
       : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
     
     fetch(`${baseUrl}/api/cron/tekmetric-backfill`, {
-      method: "GET",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({ shopId }),
     }).catch(err => {
-      console.log(`[Platform Admin] Tekmetric backfill cron trigger note: ${err.message}`);
+      console.log(`[Platform Admin] Tekmetric backfill trigger note: ${err.message}`);
     });
   } catch (e) {
     // fire-and-forget
   }
 
-  console.log(`[Platform Admin] Triggered Tekmetric backfill for shop ${shopId} (tekmetricShopId: ${tekmetricShopId})`);
-  return { ok: true, message: `Tekmetric backfill triggered for shop ${shopId}` };
+  console.log(`[Platform Admin] Triggered full Tekmetric backfill for shop ${shopId} (tekmetricShopId: ${tekmetricShopId})`);
+  return { ok: true, message: `Tekmetric full backfill triggered for shop ${shopId}` };
 }
 
 export async function POST(req: NextRequest) {

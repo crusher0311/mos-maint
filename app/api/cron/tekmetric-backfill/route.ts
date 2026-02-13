@@ -524,3 +524,89 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
+  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
+    return NextResponse.json({ error: "Tekmetric OAuth credentials not configured" }, { status: 500 });
+  }
+
+  const db = await getDb();
+  const startTime = Date.now();
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const targetShopId = body.shopId ? Number(body.shopId) : null;
+
+    const shopsToProcess = targetShopId
+      ? await (async () => {
+          const shop = await db.collection("shops").findOne({ shopId: targetShopId });
+          if (!shop) return [];
+          const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
+          if (!tekmetricShopId) return [];
+          return [{ shopId: targetShopId, name: shop.name || `Shop ${targetShopId}`, tekmetricShopId: Number(tekmetricShopId) }];
+        })()
+      : await getShopsNeedingBackfill(db);
+
+    if (shopsToProcess.length === 0) {
+      return NextResponse.json({ ok: true, message: "No shops to backfill", shopsRemaining: 0 });
+    }
+
+    const MAX_CHUNKS = 25;
+    const results: any[] = [];
+
+    for (const shop of shopsToProcess) {
+      console.log(`[Tekmetric Backfill] Full backfill starting for: ${shop.name} (Shop ${shop.shopId})`);
+      let totalJobs = 0;
+      let totalSkipped = 0;
+      let totalNormalized = 0;
+      let chunksProcessed = 0;
+
+      for (let i = 0; i < MAX_CHUNKS; i++) {
+        const result = await backfillShopChunk(db, shop.shopId, shop.tekmetricShopId);
+        totalJobs += result.jobsIndexed;
+        totalSkipped += result.skipped;
+        totalNormalized += result.normalizedCount;
+        chunksProcessed++;
+
+        console.log(`[Tekmetric Backfill] Shop ${shop.shopId} chunk ${chunksProcessed}: ${result.message}`);
+
+        if (result.complete) {
+          console.log(`[Tekmetric Backfill] Shop ${shop.shopId}: COMPLETE after ${chunksProcessed} chunks`);
+          break;
+        }
+
+        if (Date.now() - startTime > 270000) {
+          console.log(`[Tekmetric Backfill] Shop ${shop.shopId}: Approaching timeout after ${chunksProcessed} chunks, will continue next run`);
+          break;
+        }
+
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        chunksProcessed,
+        totalJobsIndexed: totalJobs,
+        totalSkipped,
+        totalNormalized,
+        complete: chunksProcessed < MAX_CHUNKS,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      processed: results,
+      duration: `${Date.now() - startTime}ms`
+    });
+
+  } catch (err: any) {
+    console.error("[Tekmetric Backfill] Full backfill error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

@@ -34,14 +34,16 @@ async function triggerJobHistoryBackfill(shopId: number) {
         : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
       
       fetch(`${baseUrl}/api/cron/tekmetric-backfill`, {
-        method: "GET",
+        method: "POST",
         headers: {
           Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({ shopId }),
       }).catch(err => {
         console.log(`[Tekmetric Settings] Backfill auto-trigger note: ${err.message}`);
       });
-      console.log(`[Tekmetric Settings] Auto-triggered backfill for shop ${shopId}`);
+      console.log(`[Tekmetric Settings] Auto-triggered full backfill for shop ${shopId}`);
     } catch (e) {
       // fire-and-forget, cron worker will pick it up regardless
     }
