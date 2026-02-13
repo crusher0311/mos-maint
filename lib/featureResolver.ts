@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
+export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
@@ -14,6 +14,7 @@ export interface FeatureSettings {
   keytags: boolean;
   auto_booking: boolean;
   part_xref: boolean;
+  labor_rates: boolean;
 }
 
 export interface ShopBilling {
@@ -44,6 +45,7 @@ const DEFAULT_FEATURES: FeatureSettings = {
   keytags: false,
   auto_booking: false,
   part_xref: false,
+  labor_rates: false,
 };
 
 const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
@@ -60,6 +62,8 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "auto_booking": "auto_booking",
   "part-xref": "part_xref",
   "part_xref": "part_xref",
+  "labor-rates": "labor_rates",
+  "labor_rates": "labor_rates",
 };
 
 const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
@@ -71,6 +75,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: false,
     auto_booking: false,
     part_xref: false,
+    labor_rates: false,
   },
   starter: {
     maintenance: true,
@@ -80,6 +85,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: false,
     auto_booking: false,
     part_xref: false,
+    labor_rates: false,
   },
   plus: {
     maintenance: true,
@@ -89,6 +95,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: false,
     auto_booking: false,
     part_xref: false,
+    labor_rates: false,
   },
   elite: {
     maintenance: true,
@@ -98,6 +105,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: true,
     auto_booking: true,
     part_xref: true,
+    labor_rates: true,
   },
   professional: {
     maintenance: true,
@@ -107,6 +115,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: true,
     auto_booking: true,
     part_xref: true,
+    labor_rates: true,
   },
   enterprise: {
     maintenance: true,
@@ -116,6 +125,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: true,
     auto_booking: true,
     part_xref: true,
+    labor_rates: true,
   },
   demo: {
     maintenance: true,
@@ -125,6 +135,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     keytags: true,
     auto_booking: true,
     part_xref: true,
+    labor_rates: true,
   },
 };
 
@@ -149,6 +160,7 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
       keytags: false,
       auto_booking: false,
       part_xref: false,
+      labor_rates: false,
     };
 
     for (const pf of platformFeatures) {
@@ -202,6 +214,7 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     keytags: shopFeatures.keytags ?? enterpriseFeatures.keytags ?? planFeatures.keytags,
     auto_booking: shopFeatures.auto_booking ?? enterpriseFeatures.auto_booking ?? planFeatures.auto_booking,
     part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
+    labor_rates: shopFeatures.labor_rates ?? enterpriseFeatures.labor_rates ?? planFeatures.labor_rates,
   };
   
   const billing: ShopBilling = {
@@ -331,5 +344,6 @@ export function getFeatureList(): { key: FeatureKey; name: string; description: 
     { key: "keytags", name: "Keytags", description: "Print customer/vehicle info on Dymo labels for key identification" },
     { key: "auto_booking", name: "Auto Booking", description: "Automated appointment booking for oil change reminders" },
     { key: "part_xref", name: "Part Cross-Reference", description: "Cross-reference parts across manufacturers" },
+    { key: "labor_rates", name: "Labor Rate Rules", description: "Auto-apply labor rates based on vehicle, customer, and job criteria" },
   ];
 }

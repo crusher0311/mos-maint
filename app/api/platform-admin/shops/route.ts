@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import bcrypt from "bcryptjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -220,5 +221,102 @@ export async function GET() {
   } catch (err: any) {
     console.error("Platform shops error:", err);
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json({ error: "Forbidden - platform admin access required" }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const { shopName, ownerEmail, ownerPassword, ownerName, plan, status, vinLimit, features } = body;
+
+    if (!shopName || !ownerEmail || !ownerPassword) {
+      return NextResponse.json({ error: "Shop name, owner email, and password are required" }, { status: 400 });
+    }
+
+    const db = await getDb();
+
+    const existingUser = await db.collection("users").findOne({ email: ownerEmail.toLowerCase().trim() });
+    if (existingUser) {
+      return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
+    }
+
+    const counter = await db.collection("counters").findOneAndUpdate(
+      { _id: "shopId" as any },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: "after" }
+    );
+    let newShopId = counter?.seq || counter?.value?.seq;
+    if (!newShopId || newShopId < 1001) {
+      const lastShop = await db.collection("shops")
+        .find({}, { projection: { shopId: 1 } })
+        .sort({ shopId: -1 })
+        .limit(1)
+        .toArray();
+      const maxId = (lastShop.length > 0 && typeof lastShop[0].shopId === 'number') 
+        ? lastShop[0].shopId : 1000;
+      newShopId = maxId + 1;
+      await db.collection("counters").updateOne(
+        { _id: "shopId" as any },
+        { $set: { seq: newShopId } },
+        { upsert: true }
+      );
+    }
+
+    const now = new Date();
+    const shopDoc = {
+      shopId: newShopId,
+      name: shopName.trim(),
+      billing: {
+        plan: plan || "trial",
+        status: status || "trial",
+      },
+      trialVinLimit: vinLimit ? Number(vinLimit) : 10,
+      enabledFeatures: features || { maintenance: true },
+      createdAt: now,
+      updatedAt: now,
+      createdBy: session.email,
+    };
+
+    await db.collection("shops").insertOne(shopDoc);
+
+    const hashedPassword = await bcrypt.hash(ownerPassword, 10);
+    const userDoc = {
+      email: ownerEmail.toLowerCase().trim(),
+      password: hashedPassword,
+      name: ownerName?.trim() || ownerEmail.split("@")[0],
+      shopId: newShopId,
+      role: "admin",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await db.collection("users").insertOne(userDoc);
+
+    await db.collection("audit_logs").insertOne({
+      type: "shop_created",
+      shopId: newShopId,
+      shopName: shopName.trim(),
+      ownerEmail: ownerEmail.toLowerCase().trim(),
+      plan: plan || "trial",
+      adminEmail: session.email,
+      createdAt: now,
+    });
+
+    return NextResponse.json({ 
+      ok: true, 
+      shop: { shopId: newShopId, name: shopName.trim() },
+      message: `Shop "${shopName.trim()}" created with ID ${newShopId}`
+    });
+  } catch (err: any) {
+    console.error("Create shop error:", err);
+    return NextResponse.json({ error: err?.message || "Failed to create shop" }, { status: 500 });
   }
 }

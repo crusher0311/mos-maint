@@ -88,6 +88,60 @@ export default function PlatformShopsPage() {
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
   const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
   const [groupByEnterprise, setGroupByEnterprise] = useState(false);
+  const [showCreateShop, setShowCreateShop] = useState(false);
+  const [createShopData, setCreateShopData] = useState({
+    shopName: "",
+    ownerEmail: "",
+    ownerPassword: "",
+    ownerName: "",
+    plan: "trial",
+    status: "trial",
+    vinLimit: "10",
+    features: {
+      maintenance: true,
+      job_lookup: false,
+      common_failures: false,
+      oil_sticker: false,
+      keytags: false,
+      auto_booking: false,
+      part_xref: false,
+      labor_rates: false,
+    } as ShopFeatures,
+  });
+  const [createLoading, setCreateLoading] = useState(false);
+
+  const createShop = async () => {
+    if (!createShopData.shopName || !createShopData.ownerEmail || !createShopData.ownerPassword) {
+      alert("Shop name, owner email, and password are required");
+      return;
+    }
+    setCreateLoading(true);
+    try {
+      const res = await fetch("/api/platform-admin/shops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createShopData),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message);
+        setShowCreateShop(false);
+        setCreateShopData({
+          shopName: "", ownerEmail: "", ownerPassword: "", ownerName: "",
+          plan: "trial", status: "trial", vinLimit: "10",
+          features: { maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false, keytags: false, auto_booking: false, part_xref: false, labor_rates: false },
+        });
+        loadShops();
+      } else {
+        alert(data.error || "Failed to create shop");
+      }
+    } catch (err) {
+      console.error("Create shop error:", err);
+      alert("Failed to create shop");
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   const accessShop = async (shopId: number | string) => {
     if (impersonating) return;
@@ -371,6 +425,13 @@ export default function PlatformShopsPage() {
             className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
           >
             <RefreshCw className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setShowCreateShop(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#3c81c3] text-white hover:bg-[#2d6da8] rounded-lg font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Create Shop
           </button>
         </div>
       </div>
@@ -1146,6 +1207,164 @@ export default function PlatformShopsPage() {
               >
                 {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateShop && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateShop(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Create New Shop</h3>
+              <button onClick={() => setShowCreateShop(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Shop Name *</label>
+                <input
+                  type="text"
+                  value={createShopData.shopName}
+                  onChange={(e) => setCreateShopData({ ...createShopData, shopName: e.target.value })}
+                  placeholder="e.g. Joe's Auto Care"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Owner Name</label>
+                  <input
+                    type="text"
+                    value={createShopData.ownerName}
+                    onChange={(e) => setCreateShopData({ ...createShopData, ownerName: e.target.value })}
+                    placeholder="John Doe"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Owner Email *</label>
+                  <input
+                    type="email"
+                    value={createShopData.ownerEmail}
+                    onChange={(e) => setCreateShopData({ ...createShopData, ownerEmail: e.target.value })}
+                    placeholder="owner@shop.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Password *</label>
+                <input
+                  type="text"
+                  value={createShopData.ownerPassword}
+                  onChange={(e) => setCreateShopData({ ...createShopData, ownerPassword: e.target.value })}
+                  placeholder="Temporary password for the owner"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Plan</label>
+                  <select
+                    value={createShopData.plan}
+                    onChange={(e) => {
+                      const plan = e.target.value;
+                      const newData = { ...createShopData, plan };
+                      if (plan === "enterprise" || plan === "demo") {
+                        newData.status = plan === "demo" ? "demo" : "active";
+                        newData.vinLimit = "999999";
+                        newData.features = {
+                          maintenance: true, job_lookup: true, common_failures: true,
+                          oil_sticker: true, keytags: true, auto_booking: true,
+                          part_xref: true, labor_rates: true,
+                        };
+                      }
+                      setCreateShopData(newData);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                  >
+                    <option value="trial">Trial</option>
+                    <option value="starter">Starter</option>
+                    <option value="professional">Professional</option>
+                    <option value="enterprise">Enterprise</option>
+                    <option value="demo">Demo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Status</label>
+                  <select
+                    value={createShopData.status}
+                    onChange={(e) => setCreateShopData({ ...createShopData, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                  >
+                    <option value="trial">Trial</option>
+                    <option value="active">Active</option>
+                    <option value="demo">Demo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">VIN Limit</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={createShopData.vinLimit}
+                    onChange={(e) => setCreateShopData({ ...createShopData, vinLimit: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Feature Toggles</h4>
+                <div className="space-y-1.5">
+                  {[
+                    { key: "maintenance", label: "Maintenance Tracking" },
+                    { key: "job_lookup", label: "Job Lookup" },
+                    { key: "common_failures", label: "Common Failures Advisor" },
+                    { key: "oil_sticker", label: "Oil Sticker" },
+                    { key: "keytags", label: "Keytags" },
+                    { key: "auto_booking", label: "Auto Booking" },
+                    { key: "part_xref", label: "Part Cross-Reference" },
+                    { key: "labor_rates", label: "Labor Rate Rules" },
+                  ].map(feature => (
+                    <label key={feature.key} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createShopData.features[feature.key as keyof ShopFeatures] === true}
+                        onChange={(e) => setCreateShopData({
+                          ...createShopData,
+                          features: { ...createShopData.features, [feature.key]: e.target.checked },
+                        })}
+                        className="w-4 h-4 text-[#3c81c3] border-gray-300 rounded focus:ring-[#3c81c3]"
+                      />
+                      <span className="text-sm text-gray-700">{feature.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <button
+                onClick={() => setShowCreateShop(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createShop}
+                disabled={createLoading || !createShopData.shopName || !createShopData.ownerEmail || !createShopData.ownerPassword}
+                className="px-4 py-2 bg-[#3c81c3] text-white rounded-lg hover:bg-[#2d6da8] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {createLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create Shop
               </button>
             </div>
           </div>
