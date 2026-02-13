@@ -86,9 +86,17 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       (h) => h.name.toLowerCase() === "x-auth-token"
     );
     if (tokenHeader && tokenHeader.value) {
+      const isNewToken = !smsTokens.tekmetric;
       smsTokens.tekmetric = tokenHeader.value;
       chrome.storage.session.set({ tekmetricToken: tokenHeader.value });
       console.log("[Tekmetric] Auth token captured");
+
+      // If we just got the token and have a pending context, try auto-apply
+      if (isNewToken && laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
+        autoApplyLaborRate(currentSmsContext).catch(err => {
+          console.warn("[LaborRate] Deferred auto-apply error:", err.message);
+        });
+      }
     }
   },
   {
@@ -666,7 +674,18 @@ function findMatchingRule(rules, vehicleData) {
 }
 
 async function autoApplyLaborRate(context) {
-  if (!mosApiToken || !smsTokens.tekmetric || !context?.roId) return;
+  if (!mosApiToken || !context?.roId) return;
+
+  // Currently only supports Tekmetric
+  if (context.provider && context.provider !== 'tekmetric') {
+    console.log("[LaborRate] Auto-apply only supported for Tekmetric, skipping:", context.provider);
+    return;
+  }
+
+  if (!smsTokens.tekmetric) {
+    console.log("[LaborRate] Waiting for Tekmetric token, will retry when captured");
+    return;
+  }
 
   const rules = await fetchLaborRateRules();
   if (rules.length === 0) {
