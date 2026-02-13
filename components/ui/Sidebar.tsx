@@ -79,6 +79,7 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   if (pathname?.startsWith("/dashboard/settings/branding") || 
       pathname?.startsWith("/dashboard/settings/stickers") ||
       pathname?.startsWith("/dashboard/settings/keytags") ||
+      pathname?.startsWith("/dashboard/settings/labor-rates") ||
       pathname?.startsWith("/dashboard/settings/preferences")) {
     sections.add("Preferences");
   }
@@ -195,6 +196,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       if ((pathname.startsWith("/dashboard/settings/branding") || 
            pathname.startsWith("/dashboard/settings/stickers") ||
            pathname.startsWith("/dashboard/settings/keytags") ||
+           pathname.startsWith("/dashboard/settings/labor-rates") ||
            pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
         changed = true;
@@ -288,7 +290,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
             { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
-            { name: "Keytags", href: "/dashboard/settings/keytags", featureId: "keytags" }
+            { name: "Keytags", href: "/dashboard/settings/keytags", featureId: "keytags" },
+            { name: "Labor Rate Rules", href: "/dashboard/settings/labor-rates" }
           ]
         },
         ...(hasEnterpriseBilling ? [] : [{ name: "Billing", href: "/dashboard/settings/billing" }]),
@@ -296,7 +299,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
-        { name: "Labor Rate Rules", href: "/dashboard/settings/labor-rates" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
         { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
