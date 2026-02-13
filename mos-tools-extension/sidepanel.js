@@ -184,6 +184,16 @@ function setupEventListeners() {
       }
       switchTab('sticker');
     }
+    if (message.action === 'LABOR_RATE_APPLIED') {
+      if (message.success) {
+        showNotification(
+          `Labor rate updated: "${message.ruleName}" → $${message.rate.toFixed(2)}/hr (was $${message.previousRate.toFixed(2)}/hr)`,
+          'success'
+        );
+      } else {
+        showNotification(`Labor rate error: ${message.error}`, 'error');
+      }
+    }
   });
 }
 

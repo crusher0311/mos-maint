@@ -17,6 +17,13 @@ const smsTokens = {
 let tekmetricShopId = null;
 let tekmetricBaseUrl = null;
 
+// Labor rate rules cache
+let laborRateRules = [];
+let laborRateRulesLastFetch = 0;
+const LABOR_RULES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+let laborRateAutoApply = true; // Default on
+let lastAppliedRoId = null; // Prevent duplicate applications
+
 // ==================== PERSISTENCE ====================
 // Restore MOS auth on startup
 chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser'], (result) => {
@@ -27,6 +34,13 @@ chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser'], (result) => {
   if (result.mosApiUrl) {
     mosApiUrl = result.mosApiUrl;
     console.log("[MOS] Restored API URL:", mosApiUrl);
+  }
+});
+
+// Restore labor rate auto-apply setting
+chrome.storage.local.get(['laborRateAutoApply'], (result) => {
+  if (result.laborRateAutoApply !== undefined) {
+    laborRateAutoApply = result.laborRateAutoApply;
   }
 });
 
@@ -150,6 +164,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       context: currentSmsContext 
     }).catch(() => {});
     
+    // Auto-apply labor rate if enabled and we have a new RO
+    if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
+      autoApplyLaborRate(currentSmsContext).catch(err => {
+        console.warn("[LaborRate] Auto-apply error:", err.message);
+      });
+    }
+    
     sendResponse({ success: true });
     return false;
   }
@@ -192,6 +213,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       baseUrl: tekmetricBaseUrl
     });
     return false;
+  }
+
+  // -------------------- Labor Rate Rules --------------------
+  if (message.action === "GET_LABOR_RATE_RULES") {
+    fetchLaborRateRules()
+      .then(rules => sendResponse({ success: true, rules }))
+      .catch(err => sendResponse({ success: false, error: err.message, rules: [] }));
+    return true;
+  }
+
+  if (message.action === "SET_LABOR_RATE_AUTO_APPLY") {
+    laborRateAutoApply = !!message.enabled;
+    chrome.storage.local.set({ laborRateAutoApply });
+    console.log("[LaborRate] Auto-apply:", laborRateAutoApply ? "enabled" : "disabled");
+    sendResponse({ success: true, enabled: laborRateAutoApply });
+    return false;
+  }
+
+  if (message.action === "GET_LABOR_RATE_AUTO_APPLY") {
+    sendResponse({ enabled: laborRateAutoApply });
+    return false;
+  }
+
+  if (message.action === "APPLY_LABOR_RATE_NOW") {
+    if (!currentSmsContext?.roId) {
+      sendResponse({ success: false, error: "No repair order context" });
+      return false;
+    }
+    lastAppliedRoId = null; // Reset so it can re-apply
+    autoApplyLaborRate(currentSmsContext)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
   }
 
   // -------------------- Sticker Printing --------------------
@@ -537,6 +591,183 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     sticker: data.sticker,
     oilType: overrideInterval ? 'custom' : requestBody.intervalType
   };
+}
+
+// ==================== LABOR RATE RULES ====================
+async function fetchLaborRateRules(forceRefresh = false) {
+  if (!mosApiToken) return [];
+
+  const now = Date.now();
+  if (!forceRefresh && laborRateRules.length > 0 && (now - laborRateRulesLastFetch) < LABOR_RULES_CACHE_TTL) {
+    return laborRateRules;
+  }
+
+  try {
+    const data = await handleMosApiRequest('/api/extension/labor-rates');
+    laborRateRules = data.rules || [];
+    laborRateRulesLastFetch = now;
+    console.log(`[LaborRate] Fetched ${laborRateRules.length} rules`);
+    return laborRateRules;
+  } catch (err) {
+    console.error("[LaborRate] Failed to fetch rules:", err);
+    return laborRateRules; // Return cached if available
+  }
+}
+
+function matchRuleCondition(condition, vehicleData) {
+  const { type, values } = condition;
+  if (!values || values.length === 0) return true; // Empty values = always match
+
+  switch (type) {
+    case 'make': {
+      const vehicleMake = (vehicleData.make || '').toLowerCase();
+      return values.some(v => v.toLowerCase() === vehicleMake);
+    }
+    case 'fuelType': {
+      const fuel = (vehicleData.fuelType || '').toLowerCase();
+      return values.some(v => v.toLowerCase() === fuel);
+    }
+    case 'jobCategory': {
+      const jobCategories = (vehicleData.jobCategories || []).map(c => c.toLowerCase());
+      return values.some(v => jobCategories.includes(v.toLowerCase()));
+    }
+    case 'customTag': {
+      const tags = (vehicleData.tags || []).map(t => t.toLowerCase());
+      return values.some(v => tags.includes(v.toLowerCase()));
+    }
+    default:
+      return false;
+  }
+}
+
+function findMatchingRule(rules, vehicleData) {
+  // Rules are already sorted by priority (highest first from server)
+  const sorted = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+  for (const rule of sorted) {
+    if (!rule.conditions || rule.conditions.length === 0) {
+      // No conditions = matches everything (default rule)
+      return rule;
+    }
+
+    const matchMode = rule.matchMode || 'all';
+    let matches;
+
+    if (matchMode === 'all') {
+      matches = rule.conditions.every(cond => matchRuleCondition(cond, vehicleData));
+    } else {
+      matches = rule.conditions.some(cond => matchRuleCondition(cond, vehicleData));
+    }
+
+    if (matches) return rule;
+  }
+
+  return null;
+}
+
+async function autoApplyLaborRate(context) {
+  if (!mosApiToken || !smsTokens.tekmetric || !context?.roId) return;
+
+  const rules = await fetchLaborRateRules();
+  if (rules.length === 0) {
+    console.log("[LaborRate] No rules configured, skipping");
+    return;
+  }
+
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return;
+
+  // Fetch full RO details from Tekmetric to get vehicle fuelType and job info
+  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  let roData;
+  try {
+    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`, {
+      headers: {
+        'x-auth-token': smsTokens.tekmetric,
+        'content-type': 'application/json'
+      }
+    });
+    if (!res.ok) {
+      console.warn("[LaborRate] Failed to fetch RO details:", res.status);
+      return;
+    }
+    roData = await res.json();
+  } catch (err) {
+    console.warn("[LaborRate] Error fetching RO:", err.message);
+    return;
+  }
+
+  // Build vehicle data for matching
+  const vehicle = roData.vehicle || {};
+  const vehicleData = {
+    make: vehicle.make || context.vehicle?.make || '',
+    year: vehicle.year || context.vehicle?.year || null,
+    model: vehicle.model || context.vehicle?.model || '',
+    fuelType: vehicle.fuelType || vehicle.fuelTypeName || '',
+    jobCategories: (roData.jobs || []).map(j => j.category || j.type || '').filter(Boolean),
+    tags: [] // Custom tags from shop settings could be added later
+  };
+
+  console.log("[LaborRate] Matching against vehicle:", vehicleData.make, vehicleData.fuelType);
+
+  const matchedRule = findMatchingRule(rules, vehicleData);
+  if (!matchedRule) {
+    console.log("[LaborRate] No matching rule found");
+    lastAppliedRoId = context.roId;
+    return;
+  }
+
+  // Convert rate from dollars to cents for Tekmetric
+  const rateInCents = Math.round(matchedRule.rate * 100);
+  const currentRate = roData.laborRate || 0;
+
+  if (rateInCents === currentRate) {
+    console.log(`[LaborRate] Rate already matches ($${matchedRule.rate}/hr), skipping`);
+    lastAppliedRoId = context.roId;
+    return;
+  }
+
+  // Update the RO labor rate via Tekmetric API
+  try {
+    const updateRes = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`, {
+      method: 'PATCH',
+      headers: {
+        'x-auth-token': smsTokens.tekmetric,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ laborRate: rateInCents })
+    });
+
+    if (!updateRes.ok) {
+      const errText = await updateRes.text();
+      console.error("[LaborRate] Failed to update rate:", updateRes.status, errText);
+      // Notify sidepanel of error
+      chrome.runtime.sendMessage({
+        action: "LABOR_RATE_APPLIED",
+        success: false,
+        error: `Failed to update rate: ${updateRes.status}`
+      }).catch(() => {});
+      return { success: false, error: `Update failed: ${updateRes.status}` };
+    }
+
+    lastAppliedRoId = context.roId;
+    console.log(`[LaborRate] Applied "${matchedRule.name}" - $${matchedRule.rate}/hr to RO #${context.roNumber || context.roId}`);
+
+    // Notify sidepanel of success
+    chrome.runtime.sendMessage({
+      action: "LABOR_RATE_APPLIED",
+      success: true,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      previousRate: currentRate / 100,
+      roNumber: context.roNumber || context.roId
+    }).catch(() => {});
+
+    return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate };
+  } catch (err) {
+    console.error("[LaborRate] Error updating rate:", err);
+    return { success: false, error: err.message };
+  }
 }
 
 console.log("[MOS Tools] Background service worker loaded");
