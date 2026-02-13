@@ -88,8 +88,8 @@ export const FEATURES: FeatureConfig[] = [
     name: "Labor Rate Rules",
     description: "Automatically apply labor rates based on vehicle, customer, and job criteria",
     icon: "DollarSign",
-    requiresSMS: false,
-    smsProviders: [],
+    requiresSMS: true,
+    smsProviders: ["tekmetric", "protractor"],
   },
 ];
 
