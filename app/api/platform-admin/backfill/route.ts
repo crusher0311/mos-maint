@@ -100,8 +100,9 @@ export async function POST(req: NextRequest) {
     const { shopId, action } = await req.json();
     const db = await getDb();
 
-    if (action === "resume_all_incomplete") {
-      console.log("[Platform Admin] Finding all incomplete backfills (Protractor + Tekmetric)...");
+    if (action === "resume_all_incomplete" || action === "reset_all_tekmetric") {
+      const forceReset = action === "reset_all_tekmetric";
+      console.log(`[Platform Admin] Finding all ${forceReset ? '' : 'incomplete '}backfills (Protractor + Tekmetric)...`);
       
       const allIntegrationShops = await db.collection("shops")
         .find({
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
       for (const shop of allIntegrationShops) {
         const type = detectIntegrationType(shop);
         if (type === "protractor") protractorShops.push(shop);
-        else if (type === "tekmetric" && !shop.tekmetricBackfillComplete) tekmetricShops.push(shop);
+        else if (type === "tekmetric") tekmetricShops.push(shop);
       }
       
       const allBackfillProgress = await db.collection("backfill_progress")
@@ -151,19 +152,34 @@ export async function POST(req: NextRequest) {
       
       const incompleteProtractor = protractorShops.filter((s: any) => !actuallyCompleteProtractorIds.has(s.shopId));
       
-      const tekmetricBackfillProgress = await db.collection("tekmetric_backfill_progress")
-        .find({})
-        .toArray();
-      const completeTekmetricIds = new Set<number>();
-      for (const progress of tekmetricBackfillProgress) {
-        if (progress.completed && progress.logicVersion === 2) {
-          completeTekmetricIds.add(progress.shopId);
+      let incompleteTekmetric: any[];
+      if (forceReset) {
+        for (const shop of tekmetricShops) {
+          await db.collection("tekmetric_backfill_progress").deleteOne({ shopId: shop.shopId });
+          await db.collection("shops").updateOne(
+            { shopId: shop.shopId },
+            { $unset: { tekmetricBackfillComplete: "", tekmetricBackfillCompletedAt: "" } }
+          );
         }
+        incompleteTekmetric = tekmetricShops;
+        console.log(`[Platform Admin] Force-reset ${tekmetricShops.length} Tekmetric backfill progress records`);
+      } else {
+        const tekmetricBackfillProgress = await db.collection("tekmetric_backfill_progress")
+          .find({})
+          .toArray();
+        const completeTekmetricIds = new Set<number>();
+        for (const progress of tekmetricBackfillProgress) {
+          if (progress.completed && progress.logicVersion === 2) {
+            completeTekmetricIds.add(progress.shopId);
+          }
+        }
+        incompleteTekmetric = tekmetricShops.filter((s: any) => 
+          !completeTekmetricIds.has(s.shopId) && !s.tekmetricBackfillComplete
+        );
       }
-      const incompleteTekmetric = tekmetricShops.filter((s: any) => !completeTekmetricIds.has(s.shopId));
       
       console.log(`[Platform Admin] Found ${incompleteProtractor.length} incomplete Protractor backfills (${actuallyCompleteProtractorIds.size} complete)`);
-      console.log(`[Platform Admin] Found ${incompleteTekmetric.length} incomplete Tekmetric backfills (${completeTekmetricIds.size} complete)`);
+      console.log(`[Platform Admin] Found ${incompleteTekmetric.length} ${forceReset ? 'reset' : 'incomplete'} Tekmetric backfills`);
       
       const resumedProtractor: number[] = [];
       const resumedTekmetric: number[] = [];
@@ -196,7 +212,7 @@ export async function POST(req: NextRequest) {
       
       return NextResponse.json({
         ok: true,
-        message: `Resumed ${totalResumed} backfills (${resumedProtractor.length} Protractor, ${resumedTekmetric.length} Tekmetric)`,
+        message: `${forceReset ? 'Reset & restarted' : 'Resumed'} ${totalResumed} backfills (${resumedProtractor.length} Protractor, ${resumedTekmetric.length} Tekmetric)`,
         protractorShopIds: resumedProtractor,
         tekmetricShopIds: resumedTekmetric,
         totalResumed
