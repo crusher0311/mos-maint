@@ -1,0 +1,64 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+background.js:115 [MOS] Side panel opens on action click
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: GET_MOS_AUTH
+background.js:138 [MOS] Message received: GET_SMS_CONTEXT
+background.js:138 [MOS] Message received: MOS_LOGOUT
+background.js:138 [MOS] Message received: MOS_LOGIN
+Access to fetch at 'https://qa.mos.tools/api/extension/auth' from origin 'chrome-extension://hllmbhcnoggpanbjjbldcoebpabljknn' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: Redirect is not allowed for a preflight request.
+background.js:333 [MOS] Login error: TypeError: Failed to fetch
+    at handleMosLogin (background.js:309:28)
+    at background.js:142:5
+handleMosLogin @ background.js:333
+background.js:138 [MOS] Message received: MOS_LOGIN
+Access to fetch at 'https://qa.mos.tools/api/extension/auth' from origin 'chrome-extension://hllmbhcnoggpanbjjbldcoebpabljknn' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: Redirect is not allowed for a preflight request.
+background.js:333 [MOS] Login error: TypeError: Failed to fetch
+    at handleMosLogin (background.js:309:28)
+    at background.js:142:5
+handleMosLogin @ background.js:333
+background.js:138 [MOS] Message received: MOS_LOGIN
+Access to fetch at 'https://qa.mos.tools/api/extension/auth' from origin 'chrome-extension://hllmbhcnoggpanbjjbldcoebpabljknn' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: Redirect is not allowed for a preflight request.
+background.js:333 [MOS] Login error: TypeError: Failed to fetch
+    at handleMosLogin (background.js:309:28)
+    at background.js:142:5
+handleMosLogin @ background.js:333
+background.js:138 [MOS] Message received: MOS_LOGIN
+Access to fetch at 'https://qa.mos.tools/api/extension/auth' from origin 'chrome-extension://hllmbhcnoggpanbjjbldcoebpabljknn' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: Redirect is not allowed for a preflight request.
+background.js:333 [MOS] Login error: TypeError: Failed to fetch
+    at handleMosLogin (background.js:309:28)
+    at background.js:142:5
+handleMosLogin @ background.js:333
+background.js:138 [MOS] Message received: MOS_LOGIN
+Access to fetch at 'https://qa.mos.tools/api/extension/auth' from origin 'chrome-extension://hllmbhcnoggpanbjjbldcoebpabljknn' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: Redirect is not allowed for a preflight request.
+background.js:333 [MOS] Login error: TypeError: Failed to fetch
+    at handleMosLogin (background.js:309:28)
+    at background.js:142:5
+handleMosLogin @ background.js:333
