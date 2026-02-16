@@ -133,10 +133,9 @@ function setupEventListeners() {
   // Logout
   elements.logoutBtn.addEventListener('click', handleLogout);
   
-  // Tab navigation
+  // Tab navigation - allow clicking locked tabs to show upgrade overlay
   elements.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.classList.contains('disabled')) return;
       switchTab(btn.dataset.tab);
     });
   });
@@ -235,7 +234,60 @@ function switchTab(tab) {
     panel.classList.toggle('active', panel.id === `tab-${tab}`);
   });
   
-  // Load tab data
+  const featureMap = {
+    'plan': 'maintenance',
+    'failures': 'common_failures',
+    'lookup': 'job_lookup',
+    'canned': null,
+    'sticker': 'oil_sticker'
+  };
+  const featureKey = featureMap[tab];
+  const hasAccess = featureKey ? shopFeatures[featureKey] : true;
+  
+  const panel = document.getElementById(`tab-${tab}`);
+  if (panel) {
+    let overlay = panel.querySelector('.upgrade-overlay');
+    if (!hasAccess) {
+      if (!overlay) {
+        const featureNames = {
+          'plan': 'Maintenance Recommendations',
+          'failures': 'Common Failures Advisor',
+          'lookup': 'Job Lookup / History Writer',
+          'sticker': 'Oil Sticker & Keytag Printing'
+        };
+        const featureName = featureNames[tab] || tab;
+        overlay = document.createElement('div');
+        overlay.className = 'upgrade-overlay';
+        overlay.innerHTML = `
+          <div class="upgrade-overlay-content">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--gray-300); margin-bottom: 12px;">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <p class="upgrade-title">${featureName}</p>
+            <p class="upgrade-message">This feature is not included in your current plan.</p>
+            <p class="upgrade-cta">Contact your administrator or upgrade your subscription to unlock this feature.</p>
+          </div>
+        `;
+        panel.prepend(overlay);
+      }
+      overlay.classList.remove('hidden');
+      Array.from(panel.children).forEach(child => {
+        if (!child.classList.contains('upgrade-overlay')) {
+          child.style.display = 'none';
+        }
+      });
+      return;
+    } else {
+      if (overlay) overlay.classList.add('hidden');
+      Array.from(panel.children).forEach(child => {
+        if (!child.classList.contains('upgrade-overlay')) {
+          child.style.display = '';
+        }
+      });
+    }
+  }
+  
   if (tab === 'plan' && currentContext) {
     loadPlan();
   } else if (tab === 'failures' && currentContext) {
@@ -243,9 +295,7 @@ function switchTab(tab) {
   } else if (tab === 'canned' && currentContext) {
     loadCannedJobs();
   } else if (tab === 'sticker') {
-    // Show keytag section immediately with current context data (don't wait for sticker API)
     loadKeytagSection();
-    // Then load sticker config in background
     loadStickerConfig();
   }
 }
@@ -325,9 +375,11 @@ function updateTabAccessibility() {
     'plan': 'maintenance',
     'failures': 'common_failures',
     'lookup': 'job_lookup',
-    'canned': null,  // Canned jobs always available (integration-based, not plan-gated)
+    'canned': null,
     'sticker': 'oil_sticker'
   };
+  
+  let firstAvailableTab = null;
   
   elements.tabBtns.forEach(btn => {
     const tab = btn.dataset.tab;
@@ -337,19 +389,19 @@ function updateTabAccessibility() {
     if (hasAccess) {
       btn.classList.remove('disabled');
       btn.removeAttribute('data-tooltip');
+      if (!firstAvailableTab) firstAvailableTab = tab;
     } else {
       btn.classList.add('disabled');
-      btn.setAttribute('data-tooltip', 'Upgrade to access');
+      btn.setAttribute('data-tooltip', 'Upgrade to unlock');
     }
   });
   
-  // If current tab is disabled, switch to first available tab
-  const currentTabBtn = document.querySelector(`.tab-btn[data-tab="${currentTab}"]`);
-  if (currentTabBtn && currentTabBtn.classList.contains('disabled')) {
-    const firstAvailable = document.querySelector('.tab-btn:not(.disabled)');
-    if (firstAvailable) {
-      switchTab(firstAvailable.dataset.tab);
-    }
+  const currentFeatureKey = featureMap[currentTab];
+  const currentHasAccess = currentFeatureKey ? shopFeatures[currentFeatureKey] : true;
+  if (!currentHasAccess && firstAvailableTab) {
+    switchTab(firstAvailableTab);
+  } else {
+    switchTab(currentTab);
   }
 }
 
