@@ -4,6 +4,7 @@
 let isAuthenticated = false;
 let currentContext = null;
 let currentTab = 'plan';
+let userDefaultTab = null;
 // Removed SMS toggle - now using MOS Enriched only
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
@@ -107,14 +108,18 @@ const elements = {
 
 // ==================== INITIALIZATION ====================
 async function init() {
-  // Check auth status
   const authStatus = await sendMessage({ action: 'GET_MOS_AUTH' });
   
   if (authStatus.isAuthenticated) {
     isAuthenticated = true;
+
+    if (authStatus.defaultExtensionTab) {
+      userDefaultTab = authStatus.defaultExtensionTab;
+      currentTab = userDefaultTab;
+    }
+
     showMainState();
     
-    // Get initial context
     const contextStatus = await sendMessage({ action: 'GET_SMS_CONTEXT' });
     if (contextStatus.context) {
       updateContext(contextStatus.context);
@@ -396,12 +401,22 @@ function updateTabAccessibility() {
     }
   });
   
-  const currentFeatureKey = featureMap[currentTab];
-  const currentHasAccess = currentFeatureKey ? shopFeatures[currentFeatureKey] : true;
-  if (!currentHasAccess && firstAvailableTab) {
+  let targetTab = currentTab;
+  
+  if (userDefaultTab) {
+    const defaultFeatureKey = featureMap[userDefaultTab];
+    const defaultHasAccess = defaultFeatureKey ? shopFeatures[defaultFeatureKey] : true;
+    if (defaultHasAccess) {
+      targetTab = userDefaultTab;
+    }
+  }
+  
+  const targetFeatureKey = featureMap[targetTab];
+  const targetHasAccess = targetFeatureKey ? shopFeatures[targetFeatureKey] : true;
+  if (!targetHasAccess && firstAvailableTab) {
     switchTab(firstAvailableTab);
   } else {
-    switchTab(currentTab);
+    switchTab(targetTab);
   }
 }
 
@@ -427,9 +442,14 @@ async function handleLogin(e) {
     
     if (result.success) {
       isAuthenticated = true;
+
+      if (result.user?.defaultExtensionTab) {
+        userDefaultTab = result.user.defaultExtensionTab;
+        currentTab = userDefaultTab;
+      }
+
       showMainState();
       
-      // Get context after login
       const contextStatus = await sendMessage({ action: 'GET_SMS_CONTEXT' });
       if (contextStatus.context) {
         updateContext(contextStatus.context);

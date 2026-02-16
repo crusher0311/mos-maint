@@ -113,7 +113,8 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name,
         shopId: user.shopId,
-        role: user.role
+        role: user.role,
+        defaultExtensionTab: user.defaultExtensionTab || null
       }
     }, { headers: corsHeaders });
   } catch (error: any) {

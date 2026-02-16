@@ -3,32 +3,383 @@
 <head>
   <title>MOS Tools Settings</title>
   <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .settings-container {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .settings-header {
       display: flex;
       align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-      background: #f9fafb;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .settings-header img {
+      width: 32px;
+      height: 32px;
+    }
+
+    .settings-header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .settings-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .card-header {
+      padding: 20px 24px 0;
+    }
+
+    .card-header h2 {
+      font-size: 15px;
+      font-weight: 600;
       color: #374151;
+      margin-bottom: 4px;
     }
-    .container {
+
+    .card-header p {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .card-body {
+      padding: 16px 24px 24px;
+    }
+
+    .form-group {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    .form-select {
+      width: 100%;
+      padding: 10px 36px 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #1f2937;
+      background: white;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .form-select:hover {
+      border-color: #9ca3af;
+    }
+
+    .form-select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-select option:disabled {
+      color: #9ca3af;
+    }
+
+    .status-message {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .status-message.success {
+      display: flex;
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .status-message.error {
+      display: flex;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .status-message.loading {
+      display: flex;
+      background: #f0f9ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .not-logged-in {
       text-align: center;
-      padding: 40px;
+      padding: 48px 24px;
     }
-    p { font-size: 15px; color: #6b7280; margin-top: 12px; }
-    a { color: #3B82F6; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+
+    .not-logged-in svg {
+      color: #9ca3af;
+      margin-bottom: 16px;
+    }
+
+    .not-logged-in h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+    }
+
+    .not-logged-in p {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .settings-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      text-decoration: none;
+      color: #374151;
+      transition: background 0.15s;
+    }
+
+    .settings-link:hover {
+      background: #f9fafb;
+    }
+
+    .settings-link-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .settings-link-content svg {
+      color: #6b7280;
+      flex-shrink: 0;
+    }
+
+    .settings-link-text h3 {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .settings-link-text p {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .settings-link .arrow {
+      color: #9ca3af;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Redirecting to MOS Tools Settings...</h2>
-    <p>If you are not redirected, <a href="https://mos.tools/dashboard/settings/stickers" target="_blank">click here</a>.</p>
+  <div class="settings-container">
+    <div class="settings-header">
+      <img src="icons/icon48.png" alt="MOS Tools">
+      <h1>MOS Tools Settings</h1>
+    </div>
+
+    <div id="not-logged-in" class="settings-card" style="display: none;">
+      <div class="not-logged-in">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <h2>Not Signed In</h2>
+        <p>Open the MOS Tools side panel and sign in to access settings.</p>
+      </div>
+    </div>
+
+    <div id="settings-content" style="display: none;">
+      <div class="settings-card">
+        <div class="card-header">
+          <h2>Default Tab</h2>
+          <p>Choose which tab opens first when you launch the extension.</p>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label" for="default-tab">Default tab on startup</label>
+            <select id="default-tab" class="form-select">
+              <option value="">Auto (first available)</option>
+              <option value="plan">Maintenance Recommendations</option>
+              <option value="failures">Common Failures Advisor</option>
+              <option value="lookup">Job Lookup / History Writer</option>
+              <option value="canned">Canned Jobs</option>
+              <option value="sticker">Oil Sticker & Keytag</option>
+            </select>
+          </div>
+          <div id="status-message" class="status-message"></div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <a href="https://mos.tools/dashboard/settings/stickers" target="_blank" class="settings-link">
+          <div class="settings-link-content">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="20" rx="2"/>
+              <path d="M7 12h10M7 8h10M7 16h6"/>
+            </svg>
+            <div class="settings-link-text">
+              <h3>Sticker & Keytag Settings</h3>
+              <p>Customize your sticker design on the MOS dashboard</p>
+            </div>
+          </div>
+          <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </a>
+      </div>
+    </div>
   </div>
+
   <script>
-    window.location.href = 'https://mos.tools/dashboard/settings/stickers';
+    const tabSelect = document.getElementById('default-tab');
+    const statusMessage = document.getElementById('status-message');
+    const notLoggedIn = document.getElementById('not-logged-in');
+    const settingsContent = document.getElementById('settings-content');
+
+    const featureTabMap = {
+      'plan': 'maintenance',
+      'failures': 'common_failures',
+      'lookup': 'job_lookup',
+      'canned': null,
+      'sticker': 'oil_sticker'
+    };
+
+    let currentFeatures = {};
+    let saveTimeout = null;
+
+    async function init() {
+      const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
+
+      if (!authStatus.isAuthenticated) {
+        notLoggedIn.style.display = 'block';
+        settingsContent.style.display = 'none';
+        return;
+      }
+
+      notLoggedIn.style.display = 'none';
+      settingsContent.style.display = 'block';
+
+      if (authStatus.defaultExtensionTab) {
+        tabSelect.value = authStatus.defaultExtensionTab;
+      }
+
+      loadFeatures();
+
+      tabSelect.addEventListener('change', () => {
+        clearTimeout(saveTimeout);
+        showStatus('Saving...', 'loading');
+        saveTimeout = setTimeout(() => saveDefaultTab(tabSelect.value), 300);
+      });
+    }
+
+    async function loadFeatures() {
+      try {
+        const stored = await chrome.storage.local.get(['mosUser']);
+        const shopId = stored.mosUser?.shopId;
+        if (!shopId) return;
+
+        const result = await chrome.runtime.sendMessage({
+          action: 'MOS_API_REQUEST',
+          endpoint: `/api/extension/features?shopId=${shopId}`
+        });
+
+        if (result && result.features) {
+          currentFeatures = result.features;
+          updateSelectOptions();
+        }
+      } catch (err) {
+        console.error('[Options] Error loading features:', err);
+      }
+    }
+
+    function updateSelectOptions() {
+      Array.from(tabSelect.options).forEach(option => {
+        if (!option.value) return;
+        const featureKey = featureTabMap[option.value];
+        const hasAccess = featureKey ? currentFeatures[featureKey] : true;
+
+        if (!hasAccess) {
+          option.disabled = true;
+          option.textContent = option.textContent.replace(/ \(locked\)$/, '') + ' (locked)';
+        } else {
+          option.disabled = false;
+          option.textContent = option.textContent.replace(/ \(locked\)$/, '');
+        }
+      });
+
+      if (tabSelect.selectedOptions[0]?.disabled) {
+        tabSelect.value = '';
+      }
+    }
+
+    async function saveDefaultTab(tab) {
+      try {
+        const result = await chrome.runtime.sendMessage({
+          action: 'SAVE_DEFAULT_TAB',
+          tab: tab || null
+        });
+
+        if (result.success) {
+          showStatus('Saved successfully', 'success');
+        } else {
+          throw new Error(result.error || 'Failed to save');
+        }
+      } catch (err) {
+        console.error('[Options] Save error:', err);
+        showStatus('Failed to save. Please try again.', 'error');
+      }
+    }
+
+    function showStatus(message, type) {
+      statusMessage.className = `status-message ${type}`;
+      const icons = {
+        success: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+        error: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+        loading: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+      };
+      statusMessage.innerHTML = `${icons[type] || ''}<span>${message}</span>`;
+
+      if (type === 'success') {
+        setTimeout(() => { statusMessage.className = 'status-message'; }, 3000);
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>

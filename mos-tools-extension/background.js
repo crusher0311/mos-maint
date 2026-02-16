@@ -153,11 +153,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_MOS_AUTH") {
-    sendResponse({
-      isAuthenticated: !!mosApiToken,
-      apiUrl: mosApiUrl
+    chrome.storage.local.get(['mosUser'], (result) => {
+      sendResponse({
+        isAuthenticated: !!mosApiToken,
+        apiUrl: mosApiUrl,
+        defaultExtensionTab: result.mosUser?.defaultExtensionTab || null
+      });
     });
-    return false;
+    return true;
   }
 
   // -------------------- SMS Context --------------------
@@ -221,6 +224,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       baseUrl: tekmetricBaseUrl
     });
     return false;
+  }
+
+  // -------------------- Default Tab Preference --------------------
+  if (message.action === "SAVE_DEFAULT_TAB") {
+    handleMosApiRequest('/api/extension/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultExtensionTab: message.tab })
+    }).then(result => {
+      chrome.storage.local.get(['mosUser'], (stored) => {
+        const user = stored.mosUser || {};
+        user.defaultExtensionTab = message.tab;
+        chrome.storage.local.set({ mosUser: user });
+      });
+      sendResponse({ success: true, defaultExtensionTab: message.tab });
+    }).catch(err => {
+      sendResponse({ success: false, error: err.message });
+    });
+    return true;
   }
 
   // -------------------- Labor Rate Rules --------------------
