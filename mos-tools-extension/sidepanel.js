@@ -117,6 +117,7 @@ const elements = {
   ratesForm: document.getElementById('rates-form'),
   rateFormName: document.getElementById('rate-form-name'),
   rateFormMakes: document.getElementById('rate-form-makes'),
+  rateFormCategories: document.getElementById('rate-form-categories'),
   rateFormRate: document.getElementById('rate-form-rate'),
   rateFormPriority: document.getElementById('rate-form-priority'),
   rateFormCancel: document.getElementById('rate-form-cancel'),
@@ -1504,7 +1505,11 @@ function renderLaborRateRules() {
     const makes = (rule.conditions || [])
       .filter(c => c.type === 'make')
       .flatMap(c => c.values || []);
+    const categories = (rule.conditions || [])
+      .filter(c => c.type === 'jobCategory')
+      .flatMap(c => c.values || []);
     const makesText = makes.length > 0 ? makes.join(', ') : 'All vehicles';
+    const categoriesText = categories.length > 0 ? categories.join(', ') : '';
     const color = rule.color || '#3B82F6';
 
     return `
@@ -1516,6 +1521,7 @@ function renderLaborRateRules() {
             <span class="rate-group-amount">$${Number(rule.rate).toFixed(2)}/hr</span>
           </div>
           <div class="rate-group-makes">${escapeHtml(makesText)}</div>
+          ${categoriesText ? `<div class="rate-group-categories"><span class="rate-group-tag">Jobs:</span> ${escapeHtml(categoriesText)}</div>` : ''}
           ${rule.priority ? `<div class="rate-group-priority">Priority: ${rule.priority}</div>` : ''}
           <div class="rate-group-actions">
             <button class="rate-group-edit-btn" data-rule-id="${escapeHtml(rule.id)}" title="Edit">
@@ -1555,7 +1561,11 @@ function showRateForm(editRule = null) {
     const makes = (editRule.conditions || [])
       .filter(c => c.type === 'make')
       .flatMap(c => c.values || []);
+    const categories = (editRule.conditions || [])
+      .filter(c => c.type === 'jobCategory')
+      .flatMap(c => c.values || []);
     elements.rateFormMakes.value = makes.join(', ');
+    elements.rateFormCategories.value = categories.join(', ');
     elements.rateFormRate.value = editRule.rate || '';
     elements.rateFormPriority.value = editRule.priority || 0;
     elements.rateFormEditId.value = editRule.id;
@@ -1568,6 +1578,7 @@ function showRateForm(editRule = null) {
   } else {
     elements.rateFormName.value = '';
     elements.rateFormMakes.value = '';
+    elements.rateFormCategories.value = '';
     elements.rateFormRate.value = '';
     elements.rateFormPriority.value = '0';
     elements.rateFormEditId.value = '';
@@ -1588,6 +1599,7 @@ function hideRateForm() {
 async function handleSaveRateGroup() {
   const name = elements.rateFormName.value.trim();
   const makesRaw = elements.rateFormMakes.value.trim();
+  const categoriesRaw = elements.rateFormCategories.value.trim();
   const rate = parseFloat(elements.rateFormRate.value) || 0;
   const priority = parseInt(elements.rateFormPriority.value) || 0;
   const editId = elements.rateFormEditId.value;
@@ -1606,9 +1618,14 @@ async function handleSaveRateGroup() {
   }
 
   const makes = makesRaw ? makesRaw.split(',').map(m => m.trim()).filter(Boolean) : [];
-  const conditions = makes.length > 0
-    ? [{ type: 'make', label: 'Vehicle Makes', values: makes }]
-    : [];
+  const categories = categoriesRaw ? categoriesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const conditions = [];
+  if (makes.length > 0) {
+    conditions.push({ type: 'make', label: 'Vehicle Makes', values: makes });
+  }
+  if (categories.length > 0) {
+    conditions.push({ type: 'jobCategory', label: 'Job Categories', values: categories });
+  }
 
   const ruleData = {
     name,
