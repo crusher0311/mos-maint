@@ -1161,70 +1161,309 @@ body {
   cursor: not-allowed;
 }
 
-.rates-list {
-  padding: 8px 12px;
-}
-
-.rate-rule-card {
-  background: white;
-  border: 1px solid var(--gray-100);
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  transition: box-shadow 0.15s;
-}
-
-.rate-rule-card:hover {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
-.rate-rule-header {
+.rates-section-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
 }
 
-.rate-rule-name {
+.rates-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rates-add-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.rates-form {
+  margin: 0 12px 12px;
+  padding: 16px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-100);
+  border-radius: 10px;
+}
+
+.rates-form-field {
+  margin-bottom: 12px;
+}
+
+.rates-form-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-500);
+  letter-spacing: 0.03em;
+  margin-bottom: 5px;
+}
+
+.rates-form-field input[type="text"],
+.rates-form-field input[type="number"] {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: white;
+  color: var(--gray-800);
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.rates-form-field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+}
+
+.rates-form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.rates-form-rate {
+  flex: 1;
+}
+
+.rates-form-color {
+  flex: 1;
+}
+
+.rate-input-wrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: white;
+  overflow: hidden;
+}
+
+.rate-input-wrap:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+}
+
+.rate-input-prefix {
+  padding: 8px 0 8px 10px;
+  font-size: 13px;
+  color: var(--gray-400);
+  font-weight: 500;
+}
+
+.rate-input-suffix {
+  padding: 8px 10px 8px 0;
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+.rate-input-wrap input {
+  border: none !important;
+  box-shadow: none !important;
+  padding: 8px 4px !important;
+  flex: 1;
+  min-width: 0;
+}
+
+.rate-color-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.rate-color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+  outline: none;
+}
+
+.rate-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.rate-color-swatch.active {
+  border-color: var(--gray-800);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--gray-300);
+}
+
+.rates-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.btn-rate-cancel {
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-600);
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rate-cancel:hover {
+  background: var(--gray-50);
+}
+
+.btn-rate-save {
+  padding: 7px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rate-save:hover {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.btn-rate-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rates-list {
+  padding: 4px 12px 8px;
+}
+
+.rate-group-card {
+  display: flex;
+  background: white;
+  border: 1px solid var(--gray-100);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+
+.rate-group-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.rate-group-color-bar {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.rate-group-body {
+  flex: 1;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.rate-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.rate-group-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--gray-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rate-rule-amount {
+.rate-group-amount {
   font-size: 14px;
   font-weight: 700;
   color: var(--primary);
   white-space: nowrap;
+  margin-left: 8px;
 }
 
-.rate-rule-conditions {
+.rate-group-makes {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rate-group-priority {
+  font-size: 10px;
+  color: var(--gray-400);
+  margin-bottom: 4px;
+}
+
+.rate-group-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  gap: 8px;
+}
+
+.rate-group-edit-btn,
+.rate-group-delete-btn {
+  display: flex;
   align-items: center;
-}
-
-.rate-condition-tag {
-  display: inline-block;
+  gap: 3px;
+  padding: 3px 8px;
   font-size: 11px;
-  padding: 2px 8px;
-  background: var(--gray-50);
-  color: var(--gray-600);
+  font-weight: 500;
+  border: none;
   border-radius: 4px;
-  border: 1px solid var(--gray-100);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
 }
 
-.rate-match-mode {
-  font-size: 10px;
-  color: var(--gray-400);
-  font-style: italic;
+.rate-group-edit-btn {
+  color: var(--primary);
 }
 
-.rate-rule-priority {
-  font-size: 10px;
+.rate-group-edit-btn:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.rate-group-delete-btn {
   color: var(--gray-400);
-  margin-top: 6px;
+}
+
+.rate-group-delete-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.rates-empty-hint {
+  text-align: center;
+  padding: 20px 16px;
+  color: var(--gray-400);
+  font-size: 13px;
+}
+
+.rates-empty-hint p {
+  margin: 0;
 }
 
 .panel-empty-hint {

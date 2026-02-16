@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MOS Tools",
-  "version": "1.12.2",
+  "version": "1.12.3",
   "description": "Maintenance planning and job management for automotive shops",
   "permissions": [
     "storage",

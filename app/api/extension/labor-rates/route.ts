@@ -44,6 +44,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Rules array required" }, { status: 400, headers: CORS_HEADERS });
   }
 
+  const validColors = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#6B7280'];
   const sanitized = rules.map((r: any) => ({
     id: r.id || new ObjectId().toHexString(),
     name: r.name || "Untitled Rule",
@@ -56,6 +57,7 @@ export async function PUT(req: NextRequest) {
       values: Array.isArray(c.values) ? c.values : [],
     })),
     matchMode: r.matchMode === "any" ? "any" : "all",
+    color: validColors.includes(r.color) ? r.color : '#3B82F6',
     createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
     updatedAt: new Date(),
   }));

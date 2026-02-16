@@ -108,12 +108,22 @@ const elements = {
   
   // Labor Rates
   ratesLoading: document.getElementById('rates-loading'),
-  ratesContent: document.getElementById('rates-content'),
-  ratesEmpty: document.getElementById('rates-empty'),
+  ratesMain: document.getElementById('rates-main'),
   ratesList: document.getElementById('rates-list'),
   ratesAutoApplyToggle: document.getElementById('rates-auto-apply-toggle'),
   ratesApplyNowBtn: document.getElementById('rates-apply-now-btn'),
-  ratesError: document.getElementById('rates-error')
+  ratesError: document.getElementById('rates-error'),
+  ratesAddBtn: document.getElementById('rates-add-btn'),
+  ratesForm: document.getElementById('rates-form'),
+  rateFormName: document.getElementById('rate-form-name'),
+  rateFormMakes: document.getElementById('rate-form-makes'),
+  rateFormRate: document.getElementById('rate-form-rate'),
+  rateFormPriority: document.getElementById('rate-form-priority'),
+  rateFormCancel: document.getElementById('rate-form-cancel'),
+  rateFormSave: document.getElementById('rate-form-save'),
+  rateFormSaveText: document.getElementById('rate-form-save-text'),
+  rateFormEditId: document.getElementById('rate-form-edit-id'),
+  ratesEmptyHint: document.getElementById('rates-empty-hint')
 };
 
 // ==================== INITIALIZATION ====================
@@ -198,6 +208,22 @@ function setupEventListeners() {
   if (elements.ratesApplyNowBtn) {
     elements.ratesApplyNowBtn.addEventListener('click', handleApplyLaborRateNow);
   }
+  if (elements.ratesAddBtn) {
+    elements.ratesAddBtn.addEventListener('click', () => showRateForm());
+  }
+  if (elements.rateFormCancel) {
+    elements.rateFormCancel.addEventListener('click', hideRateForm);
+  }
+  if (elements.rateFormSave) {
+    elements.rateFormSave.addEventListener('click', handleSaveRateGroup);
+  }
+  document.querySelectorAll('.rate-color-swatch').forEach(swatch => {
+    swatch.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.rate-color-swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+    });
+  });
   
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
@@ -1431,10 +1457,11 @@ async function handleAddCannedJob(job) {
 }
 
 // ==================== LABOR RATES ====================
+let currentLaborRateRules = [];
+
 async function loadLaborRates() {
   elements.ratesLoading.classList.remove('hidden');
-  elements.ratesContent.classList.add('hidden');
-  elements.ratesEmpty.classList.add('hidden');
+  elements.ratesMain.classList.add('hidden');
   elements.ratesError.classList.add('hidden');
 
   try {
@@ -1444,53 +1471,218 @@ async function loadLaborRates() {
     const result = await sendMessage({ action: 'GET_LABOR_RATE_RULES' });
     elements.ratesLoading.classList.add('hidden');
 
-    if (result.success && result.rules && result.rules.length > 0) {
-      renderLaborRateRules(result.rules);
-      elements.ratesContent.classList.remove('hidden');
-    } else if (result.success) {
-      elements.ratesEmpty.classList.remove('hidden');
+    if (result.success) {
+      currentLaborRateRules = result.rules || [];
+      renderLaborRateRules();
+      elements.ratesMain.classList.remove('hidden');
     } else {
       elements.ratesError.textContent = result.error || 'Failed to load rules';
       elements.ratesError.classList.remove('hidden');
-      elements.ratesEmpty.classList.remove('hidden');
+      elements.ratesMain.classList.remove('hidden');
     }
   } catch (err) {
     console.error('[MOS] Error loading labor rates:', err);
     elements.ratesLoading.classList.add('hidden');
-    elements.ratesError.textContent = err.message || 'Failed to load labor rate rules';
+    elements.ratesError.textContent = err.message || 'Failed to load labor rate groups';
     elements.ratesError.classList.remove('hidden');
-    elements.ratesEmpty.classList.remove('hidden');
+    elements.ratesMain.classList.remove('hidden');
   }
 }
 
-function renderLaborRateRules(rules) {
-  const sorted = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+function renderLaborRateRules() {
+  const sorted = [...currentLaborRateRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
   
-  elements.ratesList.innerHTML = sorted.map((rule, idx) => {
-    const conditionTags = (rule.conditions || []).map(c => {
-      const label = c.label || c.type || 'Condition';
-      const values = (c.values || []).join(', ');
-      return `<span class="rate-condition-tag">${escapeHtml(label)}: ${escapeHtml(values)}</span>`;
-    }).join('');
+  if (sorted.length === 0) {
+    elements.ratesList.innerHTML = '';
+    elements.ratesEmptyHint.classList.remove('hidden');
+    return;
+  }
+  
+  elements.ratesEmptyHint.classList.add('hidden');
 
-    const matchMode = rule.matchMode === 'any' ? 'Match any' : 'Match all';
+  elements.ratesList.innerHTML = sorted.map(rule => {
+    const makes = (rule.conditions || [])
+      .filter(c => c.type === 'make')
+      .flatMap(c => c.values || []);
+    const makesText = makes.length > 0 ? makes.join(', ') : 'All vehicles';
+    const color = rule.color || '#3B82F6';
 
     return `
-      <div class="rate-rule-card">
-        <div class="rate-rule-header">
-          <span class="rate-rule-name">${escapeHtml(rule.name)}</span>
-          <span class="rate-rule-amount">$${Number(rule.rate).toFixed(2)}/hr</span>
-        </div>
-        ${(rule.conditions || []).length > 0 ? `
-          <div class="rate-rule-conditions">
-            ${conditionTags}
-            <span class="rate-match-mode">${matchMode}</span>
+      <div class="rate-group-card" data-rule-id="${escapeHtml(rule.id)}">
+        <div class="rate-group-color-bar" style="background:${color}"></div>
+        <div class="rate-group-body">
+          <div class="rate-group-header">
+            <span class="rate-group-name">${escapeHtml(rule.name)}</span>
+            <span class="rate-group-amount">$${Number(rule.rate).toFixed(2)}/hr</span>
           </div>
-        ` : '<div class="rate-rule-conditions"><span class="rate-condition-tag">All vehicles</span></div>'}
-        ${rule.priority ? `<div class="rate-rule-priority">Priority: ${rule.priority}</div>` : ''}
+          <div class="rate-group-makes">${escapeHtml(makesText)}</div>
+          ${rule.priority ? `<div class="rate-group-priority">Priority: ${rule.priority}</div>` : ''}
+          <div class="rate-group-actions">
+            <button class="rate-group-edit-btn" data-rule-id="${escapeHtml(rule.id)}" title="Edit">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Edit
+            </button>
+            <button class="rate-group-delete-btn" data-rule-id="${escapeHtml(rule.id)}" title="Delete">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Delete
+            </button>
+          </div>
+        </div>
       </div>
     `;
   }).join('');
+
+  elements.ratesList.querySelectorAll('.rate-group-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleEditRateGroup(btn.dataset.ruleId));
+  });
+  elements.ratesList.querySelectorAll('.rate-group-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleDeleteRateGroup(btn.dataset.ruleId));
+  });
+}
+
+function showRateForm(editRule = null) {
+  elements.ratesForm.classList.remove('hidden');
+  elements.ratesAddBtn.classList.add('hidden');
+
+  if (editRule) {
+    elements.rateFormName.value = editRule.name || '';
+    const makes = (editRule.conditions || [])
+      .filter(c => c.type === 'make')
+      .flatMap(c => c.values || []);
+    elements.rateFormMakes.value = makes.join(', ');
+    elements.rateFormRate.value = editRule.rate || '';
+    elements.rateFormPriority.value = editRule.priority || 0;
+    elements.rateFormEditId.value = editRule.id;
+    elements.rateFormSaveText.textContent = 'Update Group';
+
+    const color = editRule.color || '#3B82F6';
+    document.querySelectorAll('.rate-color-swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color === color);
+    });
+  } else {
+    elements.rateFormName.value = '';
+    elements.rateFormMakes.value = '';
+    elements.rateFormRate.value = '';
+    elements.rateFormPriority.value = '0';
+    elements.rateFormEditId.value = '';
+    elements.rateFormSaveText.textContent = 'Add Group';
+    document.querySelectorAll('.rate-color-swatch').forEach(s => s.classList.remove('active'));
+    document.querySelector('.rate-color-swatch')?.classList.add('active');
+  }
+
+  elements.rateFormName.focus();
+}
+
+function hideRateForm() {
+  elements.ratesForm.classList.add('hidden');
+  elements.ratesAddBtn.classList.remove('hidden');
+  elements.rateFormEditId.value = '';
+}
+
+async function handleSaveRateGroup() {
+  const name = elements.rateFormName.value.trim();
+  const makesRaw = elements.rateFormMakes.value.trim();
+  const rate = parseFloat(elements.rateFormRate.value) || 0;
+  const priority = parseInt(elements.rateFormPriority.value) || 0;
+  const editId = elements.rateFormEditId.value;
+  const activeColor = document.querySelector('.rate-color-swatch.active');
+  const color = activeColor ? activeColor.dataset.color : '#3B82F6';
+
+  if (!name) {
+    showNotification('Please enter a group name', 'error');
+    elements.rateFormName.focus();
+    return;
+  }
+  if (rate <= 0) {
+    showNotification('Please enter a valid labor rate', 'error');
+    elements.rateFormRate.focus();
+    return;
+  }
+
+  const makes = makesRaw ? makesRaw.split(',').map(m => m.trim()).filter(Boolean) : [];
+  const conditions = makes.length > 0
+    ? [{ type: 'make', label: 'Vehicle Makes', values: makes }]
+    : [];
+
+  const ruleData = {
+    name,
+    rate,
+    priority,
+    conditions,
+    matchMode: 'all',
+    color,
+  };
+
+  let updatedRules;
+  if (editId) {
+    updatedRules = currentLaborRateRules.map(r =>
+      r.id === editId ? { ...r, ...ruleData, updatedAt: new Date().toISOString() } : r
+    );
+  } else {
+    ruleData.id = 'temp_' + Date.now();
+    ruleData.createdAt = new Date().toISOString();
+    updatedRules = [...currentLaborRateRules, ruleData];
+  }
+
+  elements.rateFormSave.disabled = true;
+  elements.rateFormSaveText.textContent = 'Saving...';
+
+  try {
+    const result = await sendMessage({ action: 'SAVE_LABOR_RATE_RULES', rules: updatedRules });
+    if (result.success && result.rules) {
+      currentLaborRateRules = result.rules;
+      renderLaborRateRules();
+      hideRateForm();
+      showNotification(editId ? 'Group updated' : 'Group added', 'success');
+    } else if (result.success) {
+      currentLaborRateRules = updatedRules;
+      renderLaborRateRules();
+      hideRateForm();
+      showNotification(editId ? 'Group updated' : 'Group added', 'success');
+    } else {
+      showNotification(result.error || 'Failed to save', 'error');
+    }
+  } catch (err) {
+    showNotification(err.message || 'Failed to save labor rate group', 'error');
+  } finally {
+    elements.rateFormSave.disabled = false;
+    elements.rateFormSaveText.textContent = editId ? 'Update Group' : 'Add Group';
+  }
+}
+
+function handleEditRateGroup(ruleId) {
+  const rule = currentLaborRateRules.find(r => r.id === ruleId);
+  if (rule) {
+    showRateForm(rule);
+  }
+}
+
+async function handleDeleteRateGroup(ruleId) {
+  const rule = currentLaborRateRules.find(r => r.id === ruleId);
+  if (!rule) return;
+
+  if (!confirm(`Delete "${rule.name}"? This cannot be undone.`)) return;
+
+  const updatedRules = currentLaborRateRules.filter(r => r.id !== ruleId);
+
+  try {
+    const result = await sendMessage({ action: 'SAVE_LABOR_RATE_RULES', rules: updatedRules });
+    if (result.success) {
+      currentLaborRateRules = result.rules || updatedRules;
+      renderLaborRateRules();
+      showNotification(`"${rule.name}" deleted`, 'info');
+    } else {
+      showNotification(result.error || 'Failed to delete', 'error');
+    }
+  } catch (err) {
+    showNotification(err.message || 'Failed to delete group', 'error');
+  }
 }
 
 async function handleApplyLaborRateNow() {

@@ -214,9 +214,10 @@
         <div id="tab-rates" class="tab-panel hidden">
           <div id="rates-loading" class="panel-loading hidden">
             <div class="spinner-small"></div>
-            <span>Loading labor rate rules...</span>
+            <span>Loading labor rate groups...</span>
           </div>
-          <div id="rates-content" class="hidden">
+
+          <div id="rates-main" class="hidden">
             <div class="rates-header">
               <div class="rates-auto-apply">
                 <label class="toggle-label">
@@ -234,16 +235,69 @@
                 Apply Now
               </button>
             </div>
+
+            <div class="rates-section-title">
+              <span>Labor Rate Groups</span>
+              <button id="rates-add-btn" class="rates-add-btn" title="Add New Group">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add New Group
+              </button>
+            </div>
+
+            <div id="rates-form" class="rates-form hidden">
+              <div class="rates-form-field">
+                <label>GROUP NAME</label>
+                <input type="text" id="rate-form-name" placeholder="e.g., Luxury Cars, European Models" autocomplete="off">
+              </div>
+              <div class="rates-form-field">
+                <label>VEHICLE MAKES</label>
+                <input type="text" id="rate-form-makes" placeholder="BMW, Lexus, Mercedes (comma-separated)" autocomplete="off">
+              </div>
+              <div class="rates-form-row">
+                <div class="rates-form-field rates-form-rate">
+                  <label>LABOR RATE ($/HR)</label>
+                  <div class="rate-input-wrap">
+                    <span class="rate-input-prefix">$</span>
+                    <input type="number" id="rate-form-rate" placeholder="0.00" min="0" step="0.01">
+                    <span class="rate-input-suffix">/hr</span>
+                  </div>
+                </div>
+                <div class="rates-form-field rates-form-color">
+                  <label>GROUP COLOR</label>
+                  <div class="rate-color-picker">
+                    <button class="rate-color-swatch active" data-color="#3B82F6" style="background:#3B82F6" title="Blue"></button>
+                    <button class="rate-color-swatch" data-color="#10B981" style="background:#10B981" title="Green"></button>
+                    <button class="rate-color-swatch" data-color="#F59E0B" style="background:#F59E0B" title="Amber"></button>
+                    <button class="rate-color-swatch" data-color="#EF4444" style="background:#EF4444" title="Red"></button>
+                    <button class="rate-color-swatch" data-color="#8B5CF6" style="background:#8B5CF6" title="Purple"></button>
+                    <button class="rate-color-swatch" data-color="#EC4899" style="background:#EC4899" title="Pink"></button>
+                    <button class="rate-color-swatch" data-color="#6B7280" style="background:#6B7280" title="Gray"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="rates-form-field">
+                <label>PRIORITY (higher = checked first)</label>
+                <input type="number" id="rate-form-priority" placeholder="0" min="0" step="1" value="0">
+              </div>
+              <div class="rates-form-actions">
+                <button id="rate-form-cancel" class="btn-rate-cancel">Cancel</button>
+                <button id="rate-form-save" class="btn-rate-save">
+                  <span id="rate-form-save-text">Add Group</span>
+                </button>
+              </div>
+              <input type="hidden" id="rate-form-edit-id" value="">
+            </div>
+
             <div id="rates-list" class="rates-list"></div>
+
+            <div id="rates-empty-hint" class="rates-empty-hint hidden">
+              <p>No labor rate groups yet. Add your first group above.</p>
+            </div>
           </div>
-          <div id="rates-empty" class="panel-empty hidden">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #9ca3af; margin-bottom: 8px;">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-            <p>No labor rate rules configured.</p>
-            <p class="panel-empty-hint">Set up rules in your <a href="https://mos.tools/dashboard/settings/labor-rates" target="_blank">MOS dashboard</a>.</p>
-          </div>
+
           <p id="rates-error" class="error-text hidden" style="padding: 0 16px;"></p>
         </div>
 

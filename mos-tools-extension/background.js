@@ -266,6 +266,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "SAVE_LABOR_RATE_RULES") {
+    handleMosApiRequest('/api/extension/labor-rates', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules: message.rules })
+    }).then(result => {
+      if (result.ok === false) {
+        sendResponse({ success: false, error: result.error || 'Failed to save rules' });
+        return;
+      }
+      laborRateRules = result.rules || [];
+      laborRateRulesLastFetch = Date.now();
+      sendResponse({ success: true, rules: laborRateRules });
+    }).catch(err => {
+      sendResponse({ success: false, error: err.message });
+    });
+    return true;
+  }
+
   if (message.action === "APPLY_LABOR_RATE_NOW") {
     if (!currentSmsContext?.roId) {
       sendResponse({ success: false, error: "No repair order context" });
