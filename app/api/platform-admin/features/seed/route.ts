@@ -109,9 +109,21 @@ const DEFAULT_FEATURES = [
     includedInTiers: [],
     bundledWith: "maintenance",
   },
-  // UTILITY FEATURES
   {
     order: 10,
+    name: "Labor Rate Rules",
+    slug: "labor_rate_rules",
+    description: "Automatically apply labor rate adjustments based on vehicle make, fuel type, job type, and customer type. Rules are applied in real-time via the Chrome Extension.",
+    category: "addon",
+    status: "active",
+    icon: "DollarSign",
+    compatibleSMS: ["tekmetric"],
+    includedInTiers: ["plus", "elite", "enterprise"],
+    requiresFeature: "chrome_extension",
+  },
+  // UTILITY FEATURES
+  {
+    order: 11,
     name: "Chrome Extension",
     slug: "chrome_extension",
     description: "Browser extension for quick access to MOS features from any tab",

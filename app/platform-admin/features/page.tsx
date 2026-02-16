@@ -22,7 +22,8 @@ import {
   Database,
   MessageSquare,
   FileText,
-  Chrome
+  Chrome,
+  DollarSign
 } from "lucide-react";
 
 interface PlatformFeature {
@@ -45,7 +46,7 @@ interface PlatformFeature {
 }
 
 const ICON_MAP: Record<string, any> = {
-  Package, Wrench, Search, Tag, Calendar, RefreshCw, Droplet, AlertTriangle, Database, MessageSquare, FileText, Chrome
+  Package, Wrench, Search, Tag, Calendar, RefreshCw, Droplet, AlertTriangle, Database, MessageSquare, FileText, Chrome, DollarSign
 };
 
 const SMS_OPTIONS = [
@@ -65,7 +66,7 @@ const TIER_OPTIONS = [
 ];
 
 const ICON_OPTIONS = [
-  "Package", "Wrench", "Search", "Tag", "Calendar", "RefreshCw", "Droplet", "AlertTriangle", "Database", "MessageSquare", "FileText", "Chrome"
+  "Package", "Wrench", "Search", "Tag", "Calendar", "RefreshCw", "Droplet", "AlertTriangle", "Database", "MessageSquare", "FileText", "Chrome", "DollarSign"
 ];
 
 export default function FeaturesManagementPage() {
