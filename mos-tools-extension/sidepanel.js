@@ -16,7 +16,8 @@ let shopFeatures = {
   oil_sticker: false,
   keytags: false,
   auto_booking: false,
-  part_xref: false
+  part_xref: false,
+  labor_rates: false
 };
 
 // ==================== DOM ELEMENTS ====================
@@ -103,7 +104,16 @@ const elements = {
   keytagRo: document.getElementById('keytag-ro'),
   keytagMileage: document.getElementById('keytag-mileage'),
   keytagPrintBtn: document.getElementById('keytag-print-btn'),
-  keytagError: document.getElementById('keytag-error')
+  keytagError: document.getElementById('keytag-error'),
+  
+  // Labor Rates
+  ratesLoading: document.getElementById('rates-loading'),
+  ratesContent: document.getElementById('rates-content'),
+  ratesEmpty: document.getElementById('rates-empty'),
+  ratesList: document.getElementById('rates-list'),
+  ratesAutoApplyToggle: document.getElementById('rates-auto-apply-toggle'),
+  ratesApplyNowBtn: document.getElementById('rates-apply-now-btn'),
+  ratesError: document.getElementById('rates-error')
 };
 
 // ==================== INITIALIZATION ====================
@@ -177,6 +187,18 @@ function setupEventListeners() {
     elements.keytagPrintBtn.addEventListener('click', handleKeytagPrint);
   }
   
+  // Labor Rates
+  if (elements.ratesAutoApplyToggle) {
+    elements.ratesAutoApplyToggle.addEventListener('change', async () => {
+      const enabled = elements.ratesAutoApplyToggle.checked;
+      await sendMessage({ action: 'SET_LABOR_RATE_AUTO_APPLY', enabled });
+      showNotification(`Auto-apply ${enabled ? 'enabled' : 'disabled'}`, 'info');
+    });
+  }
+  if (elements.ratesApplyNowBtn) {
+    elements.ratesApplyNowBtn.addEventListener('click', handleApplyLaborRateNow);
+  }
+  
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
@@ -244,6 +266,7 @@ function switchTab(tab) {
     'failures': 'common_failures',
     'lookup': 'job_lookup',
     'canned': null,
+    'rates': 'labor_rates',
     'sticker': 'oil_sticker'
   };
   const featureKey = featureMap[tab];
@@ -258,6 +281,7 @@ function switchTab(tab) {
           'plan': 'Maintenance Recommendations',
           'failures': 'Common Failures Advisor',
           'lookup': 'Job Lookup / History Writer',
+          'rates': 'Labor Rate Rules',
           'sticker': 'Oil Sticker & Keytag Printing'
         };
         const featureName = featureNames[tab] || tab;
@@ -299,6 +323,8 @@ function switchTab(tab) {
     loadCommonFailures();
   } else if (tab === 'canned' && currentContext) {
     loadCannedJobs();
+  } else if (tab === 'rates') {
+    loadLaborRates();
   } else if (tab === 'sticker') {
     loadKeytagSection();
     loadStickerConfig();
@@ -381,6 +407,7 @@ function updateTabAccessibility() {
     'failures': 'common_failures',
     'lookup': 'job_lookup',
     'canned': null,
+    'rates': 'labor_rates',
     'sticker': 'oil_sticker'
   };
   
@@ -1400,6 +1427,106 @@ async function handleAddCannedJob(job) {
     // MOS enriched job - convert to custom job
     console.log('[MOS] Adding as generic job (no tekmetricId)');
     await handleAddJob(job);
+  }
+}
+
+// ==================== LABOR RATES ====================
+async function loadLaborRates() {
+  elements.ratesLoading.classList.remove('hidden');
+  elements.ratesContent.classList.add('hidden');
+  elements.ratesEmpty.classList.add('hidden');
+  elements.ratesError.classList.add('hidden');
+
+  try {
+    const autoApplyResult = await sendMessage({ action: 'GET_LABOR_RATE_AUTO_APPLY' });
+    elements.ratesAutoApplyToggle.checked = !!autoApplyResult.enabled;
+
+    const result = await sendMessage({ action: 'GET_LABOR_RATE_RULES' });
+    elements.ratesLoading.classList.add('hidden');
+
+    if (result.success && result.rules && result.rules.length > 0) {
+      renderLaborRateRules(result.rules);
+      elements.ratesContent.classList.remove('hidden');
+    } else if (result.success) {
+      elements.ratesEmpty.classList.remove('hidden');
+    } else {
+      elements.ratesError.textContent = result.error || 'Failed to load rules';
+      elements.ratesError.classList.remove('hidden');
+      elements.ratesEmpty.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error('[MOS] Error loading labor rates:', err);
+    elements.ratesLoading.classList.add('hidden');
+    elements.ratesError.textContent = err.message || 'Failed to load labor rate rules';
+    elements.ratesError.classList.remove('hidden');
+    elements.ratesEmpty.classList.remove('hidden');
+  }
+}
+
+function renderLaborRateRules(rules) {
+  const sorted = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  
+  elements.ratesList.innerHTML = sorted.map((rule, idx) => {
+    const conditionTags = (rule.conditions || []).map(c => {
+      const label = c.label || c.type || 'Condition';
+      const values = (c.values || []).join(', ');
+      return `<span class="rate-condition-tag">${escapeHtml(label)}: ${escapeHtml(values)}</span>`;
+    }).join('');
+
+    const matchMode = rule.matchMode === 'any' ? 'Match any' : 'Match all';
+
+    return `
+      <div class="rate-rule-card">
+        <div class="rate-rule-header">
+          <span class="rate-rule-name">${escapeHtml(rule.name)}</span>
+          <span class="rate-rule-amount">$${Number(rule.rate).toFixed(2)}/hr</span>
+        </div>
+        ${(rule.conditions || []).length > 0 ? `
+          <div class="rate-rule-conditions">
+            ${conditionTags}
+            <span class="rate-match-mode">${matchMode}</span>
+          </div>
+        ` : '<div class="rate-rule-conditions"><span class="rate-condition-tag">All vehicles</span></div>'}
+        ${rule.priority ? `<div class="rate-rule-priority">Priority: ${rule.priority}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function handleApplyLaborRateNow() {
+  if (!currentContext?.roId) {
+    showNotification('Navigate to a repair order first', 'error');
+    return;
+  }
+
+  elements.ratesApplyNowBtn.disabled = true;
+  elements.ratesApplyNowBtn.innerHTML = `
+    <div class="spinner-tiny"></div>
+    Applying...
+  `;
+
+  try {
+    const result = await sendMessage({ action: 'APPLY_LABOR_RATE_NOW' });
+    if (result.success) {
+      showNotification(
+        `Labor rate updated: "${result.ruleName}" → $${result.rate.toFixed(2)}/hr`,
+        'success'
+      );
+    } else if (result.noMatch) {
+      showNotification('No matching rule for this vehicle', 'info');
+    } else {
+      showNotification(result.error || 'Failed to apply labor rate', 'error');
+    }
+  } catch (err) {
+    showNotification(err.message || 'Failed to apply labor rate', 'error');
+  } finally {
+    elements.ratesApplyNowBtn.disabled = false;
+    elements.ratesApplyNowBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      Apply Now
+    `;
   }
 }
 

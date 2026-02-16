@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-const VALID_TABS = ["plan", "failures", "lookup", "canned", "sticker"];
+const VALID_TABS = ["plan", "failures", "lookup", "canned", "rates", "sticker"];
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });

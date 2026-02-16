@@ -115,8 +115,14 @@
           </svg>
           <span>Canned</span>
         </button>
+        <button class="tab-btn" data-tab="rates" data-feature="labor_rates" title="Labor Rate Rules">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+          <span>Rates</span>
+        </button>
         <button class="tab-btn" data-tab="sticker" data-feature="oil_sticker" title="Oil Sticker">
-          <!-- Printer icon (matches dashboard) -->
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
             <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
@@ -202,6 +208,43 @@
             <p>No canned jobs found.</p>
           </div>
           <ul id="canned-list" class="job-list hidden"></ul>
+        </div>
+
+        <!-- Labor Rates tab -->
+        <div id="tab-rates" class="tab-panel hidden">
+          <div id="rates-loading" class="panel-loading hidden">
+            <div class="spinner-small"></div>
+            <span>Loading labor rate rules...</span>
+          </div>
+          <div id="rates-content" class="hidden">
+            <div class="rates-header">
+              <div class="rates-auto-apply">
+                <label class="toggle-label">
+                  <span class="toggle-text">Auto-apply on RO open</span>
+                  <div class="toggle-switch">
+                    <input type="checkbox" id="rates-auto-apply-toggle">
+                    <span class="toggle-slider"></span>
+                  </div>
+                </label>
+              </div>
+              <button id="rates-apply-now-btn" class="btn-apply-now" title="Apply matching rule to current RO">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Apply Now
+              </button>
+            </div>
+            <div id="rates-list" class="rates-list"></div>
+          </div>
+          <div id="rates-empty" class="panel-empty hidden">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #9ca3af; margin-bottom: 8px;">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+            <p>No labor rate rules configured.</p>
+            <p class="panel-empty-hint">Set up rules in your <a href="https://mos.tools/dashboard/settings/labor-rates" target="_blank">MOS dashboard</a>.</p>
+          </div>
+          <p id="rates-error" class="error-text hidden" style="padding: 0 16px;"></p>
         </div>
 
         <!-- Sticker tab (renamed to Print) -->

@@ -1,0 +1,93 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [MOS] Side panel opens on action click
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [LaborRate] Failed to fetch rules: 
+fetchLaborRateRules @ background.js:642
+ [LaborRate] No rules configured, skipping
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: GET_MOS_AUTH
+background.js:138 [MOS] Message received: GET_SMS_CONTEXT
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:537 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:566 [MOS] Updated RO number from API: 4277
+sidepanel.js:571 [MOS] Updated customer name from API: Joshua Landon
+sidepanel.js:537 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:566 [MOS] Updated RO number from API: 4277
+sidepanel.js:571 [MOS] Updated customer name from API: Joshua Landon
+background.js:138 [MOS] Message received: MOS_LOGOUT
+background.js:138 [MOS] Message received: MOS_LOGIN
+background.js:352 [MOS] Login successful: bcrusha@carexpertsok.com
+background.js:138 [MOS] Message received: GET_SMS_CONTEXT
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:537 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:566 [MOS] Updated RO number from API: 4277
+sidepanel.js:571 [MOS] Updated customer name from API: Joshua Landon
+sidepanel.js:537 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:566 [MOS] Updated RO number from API: 4277
+sidepanel.js:571 [MOS] Updated customer name from API: Joshua Landon
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:537 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:566 [MOS] Updated RO number from API: 4277
+sidepanel.js:571 [MOS] Updated customer name from API: Joshua Landon
+background.js:138 [MOS] Message received: MOS_API_REQUEST
