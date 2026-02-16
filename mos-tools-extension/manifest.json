@@ -52,7 +52,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png"],
+      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png"],
       "matches": ["https://shop.tekmetric.com/*", "https://sandbox.tekmetric.com/*", "https://cba.tekmetric.com/*"]
     }
   ]
