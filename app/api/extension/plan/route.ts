@@ -678,6 +678,27 @@ export async function GET(request: NextRequest) {
       if (vehicle) {
         mileage = mileage || vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage;
       }
+
+      if (!vehicle || !vehicle.year || !vehicle.make || !vehicle.model) {
+        try {
+          const { decodeVinLocal } = await import("@/lib/integrations/dataone-local");
+          const decoded = await decodeVinLocal(vin.toUpperCase());
+          if (decoded.ok && decoded.decoded) {
+            const d = decoded.decoded;
+            vehicle = {
+              ...(vehicle || {}),
+              vin: vin.toUpperCase(),
+              year: vehicle?.year || d.year,
+              make: vehicle?.make || d.make,
+              model: vehicle?.model || d.model,
+              engine: vehicle?.engine || d.engine_name,
+            };
+            console.log(`[Extension] VIN decoded: ${d.year} ${d.make} ${d.model}`);
+          }
+        } catch (e) {
+          console.warn('[Extension] VIN decode fallback failed:', e);
+        }
+      }
     }
 
     let mileageEstimated = false;

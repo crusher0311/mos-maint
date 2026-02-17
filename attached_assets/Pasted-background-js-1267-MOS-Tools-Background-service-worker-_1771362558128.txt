@@ -1,0 +1,46 @@
+background.js:1267 [MOS Tools] Background service worker loaded
+background.js:35 [MOS] Restored API token from storage
+background.js:39 [MOS] Restored API URL: https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev
+background.js:138 [MOS] Side panel opens on action click
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:102 [Tekmetric] Shop ID captured: 14245
+background.js:740 [LaborRate] Fetched 5 rules
+background.js:888 [LaborRate] Loaded 4 jobs with labor from estimate
+background.js:920 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:957 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","test 3"] customer: Brandon Crusha phones: 1
+background.js:968 [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+background.js:1193 [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+background.js:1196 [LaborRate] Rate already matches ($209.95/hr), skipping
+background.js:1001 [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+background.js:1091 [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+background.js:1109 [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+background.js:1091 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1099 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1160 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1001 [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+background.js:1091 [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+background.js:1091 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1109 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1099 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1160 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1001 [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+background.js:1109 [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+background.js:1091 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+background.js:1091 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+background.js:1099 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1160 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:161 [MOS] Message received: GET_MOS_AUTH
+background.js:161 [MOS] Message received: GET_SMS_CONTEXT
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:728 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:754 [MOS] Updated RO number from API: 32
+sidepanel.js:759 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:728 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:754 [MOS] Updated RO number from API: 32
+sidepanel.js:759 [MOS] Updated customer name from API: Brandon Crusha
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
