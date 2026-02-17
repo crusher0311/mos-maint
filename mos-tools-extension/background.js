@@ -818,76 +818,63 @@ async function autoApplyLaborRate(context) {
     return;
   }
 
-  // Fetch jobs separately — the RO endpoint may not include them
+  // Fetch estimate data — this is the endpoint Tekmetric uses to load jobs with labor
+  let estimateData = null;
+  try {
+    const estRes = await fetch(`${baseUrl}/api/repair-order/${context.roId}/estimate`, {
+      headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+    });
+    if (estRes.ok) {
+      estimateData = await estRes.json();
+      const estPayload = estimateData.data || estimateData;
+      const estKeys = Object.keys(estPayload);
+      console.log(`[LaborRate] Estimate data keys (${estKeys.length}):`, estKeys.join(', '));
+
+      // Look for jobs in estimate data
+      const jobsArr = estPayload.jobs || estPayload.jobList || estPayload.items || [];
+      if (Array.isArray(jobsArr) && jobsArr.length > 0) {
+        roData.jobs = jobsArr;
+        console.log(`[LaborRate] Got ${jobsArr.length} jobs from estimate endpoint`);
+        for (const j of jobsArr) {
+          const labor = j.labor || [];
+          console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} labor: ${labor.length} entries`);
+          if (labor.length > 0) {
+            console.log(`[LaborRate]     Labor:`, labor.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
+          }
+        }
+      } else {
+        console.log(`[LaborRate] Estimate endpoint returned no jobs array. Logging structure...`);
+        for (const k of estKeys) {
+          const val = estPayload[k];
+          if (Array.isArray(val)) {
+            console.log(`[LaborRate]   ${k}: array[${val.length}]${val.length > 0 ? ' first keys: [' + Object.keys(val[0]).join(',') + ']' : ''}`);
+          } else if (val && typeof val === 'object') {
+            console.log(`[LaborRate]   ${k}: object keys: [${Object.keys(val).join(',')}]`);
+          }
+        }
+      }
+    } else {
+      console.log(`[LaborRate] Estimate endpoint returned ${estRes.status}`);
+    }
+  } catch (err) {
+    console.warn("[LaborRate] Error fetching estimate:", err.message);
+  }
+
+  // Fallback: fetch jobs from jobs list endpoint
   if (!roData.jobs || roData.jobs.length === 0) {
     try {
       const jobsRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`, {
-        headers: {
-          'x-auth-token': smsTokens.tekmetric,
-          'content-type': 'application/json'
-        }
+        headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
       });
       if (jobsRes.ok) {
         const jobsBody = await jobsRes.json();
         roData.jobs = jobsBody.content || jobsBody.data || jobsBody || [];
         if (Array.isArray(roData.jobs)) {
-          console.log(`[LaborRate] Fetched ${roData.jobs.length} jobs separately for RO`);
+          console.log(`[LaborRate] Fetched ${roData.jobs.length} jobs from jobs list (no labor data)`);
         }
-      } else {
-        console.warn("[LaborRate] Failed to fetch jobs:", jobsRes.status);
       }
     } catch (err) {
       console.warn("[LaborRate] Error fetching jobs:", err.message);
-    }
-  }
-
-  // For each job, ensure we have labor lines loaded
-  if (Array.isArray(roData.jobs)) {
-    for (const j of roData.jobs) {
-      const existingLabor = j.labor || j.laborEntries || j.laborItems || [];
-      console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} keys: [${Object.keys(j).join(',')}]`);
-
-      if (existingLabor.length === 0 && j.id) {
-        // Fetch full job detail with labor entries
-        // Try internal singular endpoint first, then internal plural, then public v1 API
-        const endpoints = [
-          { url: `${baseUrl}/api/shop/${shopId}/job/${j.id}`, auth: 'x-auth-token' },
-          { url: `${baseUrl}/api/shop/${shopId}/jobs/${j.id}`, auth: 'x-auth-token' },
-          { url: `${baseUrl}/api/v1/jobs/${j.id}`, auth: 'x-auth-token' }
-        ];
-
-        for (const ep of endpoints) {
-          if ((j.labor || []).length > 0) break;
-          try {
-            const jRes = await fetch(ep.url, {
-              headers: { [ep.auth]: smsTokens.tekmetric, 'content-type': 'application/json' }
-            });
-            const label = ep.url.split('/api/')[1];
-            if (jRes.ok) {
-              const jDetail = await jRes.json();
-              const jobData = jDetail.data || jDetail;
-              const laborArr = jobData.labor || jobData.laborEntries || jobData.laborItems || [];
-              console.log(`[LaborRate]     ${label}: ${laborArr.length} labor entries`);
-              if (laborArr.length > 0) {
-                j.labor = laborArr;
-                j._fullDetail = jobData;
-                console.log(`[LaborRate]     Labor:`, laborArr.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
-              }
-            } else {
-              console.log(`[LaborRate]     ${label}: ${jRes.status}`);
-            }
-          } catch (e) {
-            console.warn(`[LaborRate]     Error:`, e.message);
-          }
-        }
-
-        if ((j.labor || []).length === 0) {
-          console.log(`[LaborRate]     No labor lines found for job "${j.name}"`);
-        }
-      } else if (existingLabor.length > 0) {
-        j.labor = existingLabor;
-        console.log(`[LaborRate]     Has ${existingLabor.length} labor entries inline`);
-      }
     }
   }
 

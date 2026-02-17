@@ -1,0 +1,50 @@
+tekmetric-content.js:4 [MOS Tools] Tekmetric content script loaded
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:325 [MOS Tools] Context detected: RO 295818536 Object
+tekmetric-content.js:1005 [MOS Tools] Floating button injected
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+estimate:1 <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes">
+main-8Wj8VdPb.js:268 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
+/api/shop/14245/parts-tech/proxy:1  Failed to load resource: the server responded with a status of 403 ()
+main-8Wj8VdPb.js:274 Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:533 [MOS Tools] Print button injected
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: Object
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
