@@ -1003,30 +1003,39 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
 
     if (!anyLaborNeedsUpdate) continue;
 
-    // Update labor rates via PATCH /api/shop/{shopId}/labor/{laborId}
-    for (const labor of laborEntries) {
-      const currentRate = labor.rate || 0;
-      if (currentRate === rateInCents) continue;
+    // Update labor rates by POSTing the entire job with modified labor entries
+    // (Tekmetric saves job+labor together via POST /api/shop/{shopId}/job)
+    const updatedLabor = laborEntries.map(l => ({
+      ...l,
+      rate: rateInCents
+    }));
 
-      try {
-        console.log(`[LaborRate] Updating labor "${labor.name}" on job "${job.name}" from $${currentRate/100}/hr → $${rateInCents/100}/hr`);
+    const jobPayload = {
+      ...job,
+      labor: updatedLabor
+    };
 
-        const res = await fetch(`${baseUrl}/api/shop/${shopId}/labor/${labor.id}`, {
-          method: 'PATCH',
-          headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
-          body: JSON.stringify({ rate: rateInCents })
-        });
+    try {
+      const laborNames = laborEntries.filter(l => (l.rate || 0) !== rateInCents).map(l => l.name).join(', ');
+      console.log(`[LaborRate] Updating job "${job.name}" labor (${laborNames}) to $${rateInCents/100}/hr via POST /job`);
 
-        if (res.ok) {
-          updatedCount++;
-          if (!updatedJobNames.includes(job.name)) updatedJobNames.push(job.name);
-          console.log(`[LaborRate] Updated labor "${labor.name}" to $${rateInCents/100}/hr`);
-        } else {
-          console.error(`[LaborRate] Failed to update labor ${labor.id}: ${res.status}`);
-        }
-      } catch (err) {
-        console.error(`[LaborRate] Error updating labor ${labor.id}:`, err.message);
+      const res = await fetch(`${baseUrl}/api/shop/${shopId}/job`, {
+        method: 'POST',
+        headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
+        body: JSON.stringify(jobPayload)
+      });
+
+      if (res.ok) {
+        const resData = await res.json();
+        updatedCount += updatedLabor.length;
+        if (!updatedJobNames.includes(job.name)) updatedJobNames.push(job.name);
+        console.log(`[LaborRate] Updated ${updatedLabor.length} labor line(s) on job "${job.name}" to $${rateInCents/100}/hr`);
+      } else {
+        const errText = await res.text();
+        console.error(`[LaborRate] Failed to update job "${job.name}": ${res.status}`, errText.substring(0, 300));
       }
+    } catch (err) {
+      console.error(`[LaborRate] Error updating job "${job.name}":`, err.message);
     }
   }
 
