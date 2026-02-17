@@ -66,6 +66,7 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "part_xref": "part_xref",
   "labor-rates": "labor_rates",
   "labor_rates": "labor_rates",
+  "labor_rate_rules": "labor_rates",
   "concern-assistant": "concern_assistant",
   "concern_assistant": "concern_assistant",
 };
