@@ -861,12 +861,15 @@ export async function GET(request: NextRequest) {
       ? Date.now() - new Date(analysisData.analyzedAt).getTime()
       : Infinity;
     const maxAge = 24 * 60 * 60 * 1000;
+    const hasRecommendations = analysisData?.recommendations?.length > 0;
 
     // Also re-run if showInspectItems preference changed
     const cachedShowInspect = analysisData?.showInspectItems ?? true;
     const prefsChanged = cachedShowInspect !== showInspectItems;
     
-    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged) {
+    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, prefsChanged=${prefsChanged}`);
+    
+    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations) {
       try {
         const startTime = Date.now();
         
