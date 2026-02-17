@@ -960,7 +960,7 @@ async function autoApplyLaborRate(context) {
       console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
       const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, baseUrl);
       if (jobResult?.success) appliedAny = true;
-      break; // Only apply highest priority matching per-job rule
+      // Continue checking other per-job rules — each rule applies to its own category's jobs
     }
   } else if (perJobRules.length > 0) {
     console.log("[LaborRate] Per-job rules exist but no job categories found on RO");
