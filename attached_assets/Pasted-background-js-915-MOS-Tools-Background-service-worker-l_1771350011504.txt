@@ -1,0 +1,82 @@
+background.js:915 [MOS Tools] Background service worker loaded
+background.js:32 [MOS] Restored API token from storage
+background.js:36 [MOS] Restored API URL: https://mos.tools
+background.js:115 [MOS] Side panel opens on action click
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: SET_SMS_CONTEXT
+background.js:170 [MOS] SMS context updated: Object
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:679 [LaborRate] Fetched 2 rules
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:814 [LaborRate] Raw vehicle data from Tekmetric: {"make":"Ford","model":"F-350 Super Duty","subModel":"Lariat","year":2011,"engine":null,"engineDescription":"6.7L 8Cyl DIESEL Turbocharged"}
+background.js:853 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel customer: Brandon Crusha phones: 1
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:896 [LaborRate] Applied "Ford" - $195.95/hr to RO #295818536
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: GET_MOS_AUTH
+background.js:138 [MOS] Message received: GET_SMS_CONTEXT
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:138 [MOS] Message received: GET_LABOR_RATE_RULES
+sidepanel.js:718 [MOS] Updated RO number from API: 32
+sidepanel.js:723 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:718 [MOS] Updated RO number from API: 32
+sidepanel.js:723 [MOS] Updated customer name from API: Brandon Crusha
+background.js:138 [MOS] Message received: APPLY_LABOR_RATE_NOW
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:814 [LaborRate] Raw vehicle data from Tekmetric: {"make":"Ford","model":"F-350 Super Duty","subModel":"Lariat","year":2011,"engine":null,"engineDescription":"6.7L 8Cyl DIESEL Turbocharged"}
+background.js:853 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel customer: Brandon Crusha phones: 1
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:896 [LaborRate] Applied "Ford" - $195.95/hr to RO #295818536
