@@ -87,7 +87,7 @@ export async function updateArticle(id: string, updates: Partial<KnowledgeArticl
     { $set: { ...updates, updatedAt: new Date() } }
   );
   
-  return result.modifiedCount > 0;
+  return result.matchedCount > 0;
 }
 
 export async function deleteArticle(id: string): Promise<boolean> {

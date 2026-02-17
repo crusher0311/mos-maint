@@ -25,7 +25,8 @@ import {
   X,
   Package,
   Grid3X3,
-  Megaphone
+  Megaphone,
+  BookOpen
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -420,6 +421,22 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 </li>
               </ul>
             )}
+          </li>
+
+          {/* Knowledge Base */}
+          <li>
+            <Link
+              href="/platform-admin/knowledge-base"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin/knowledge-base")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <BookOpen className="w-5 h-5" />
+              <span>Knowledge Base</span>
+            </Link>
           </li>
 
           {/* Settings with Features */}
