@@ -71,16 +71,16 @@ CREATE TABLE IF NOT EXISTS dataone_veh_trim_styles (
 -- Maintenance Definitions
 CREATE TABLE IF NOT EXISTS dataone_def_maintenance (
   maintenance_id SERIAL PRIMARY KEY,
-  maintenance_category VARCHAR(128) NOT NULL DEFAULT '',
-  maintenance_name TEXT NOT NULL DEFAULT '',
-  maintenance_notes TEXT NOT NULL DEFAULT ''
+  maintenance_category VARCHAR(128),
+  maintenance_name TEXT,
+  maintenance_notes TEXT
 );
 
 -- Maintenance Schedule (OEM naming)
 CREATE TABLE IF NOT EXISTS dataone_def_maintenance_schedule (
   maintenance_schedule_id SERIAL PRIMARY KEY,
-  schedule_name VARCHAR(255) NOT NULL DEFAULT '',
-  schedule_description TEXT NOT NULL DEFAULT ''
+  schedule_name VARCHAR(255),
+  schedule_description TEXT
 );
 
 -- Maintenance Intervals
@@ -95,8 +95,8 @@ CREATE TABLE IF NOT EXISTS dataone_def_maintenance_interval (
 -- Operating Parameters (dusty conditions, towing, etc.)
 CREATE TABLE IF NOT EXISTS dataone_def_maintenance_operating_parameter (
   maintenance_operating_parameter_id SERIAL PRIMARY KEY,
-  operating_parameter TEXT NOT NULL DEFAULT '',
-  operating_parameter_notes TEXT NOT NULL DEFAULT ''
+  operating_parameter TEXT,
+  operating_parameter_notes TEXT
 );
 
 -- Computer Codes (dashboard indicators)
@@ -108,15 +108,15 @@ CREATE TABLE IF NOT EXISTS dataone_def_maintenance_computer_code (
 -- Maintenance Events
 CREATE TABLE IF NOT EXISTS dataone_def_maintenance_event (
   maintenance_event_id SERIAL PRIMARY KEY,
-  event VARCHAR(255) NOT NULL DEFAULT ''
+  event VARCHAR(255)
 );
 
 -- VIN to Maintenance Lookup (~40M rows)
 CREATE TABLE IF NOT EXISTS dataone_lkp_vin_maintenance (
   vin_maintenance_id SERIAL PRIMARY KEY,
   squish VARCHAR(16) NOT NULL DEFAULT '',
-  trans_notes VARCHAR(255) NOT NULL DEFAULT '',
-  trim_notes TEXT NOT NULL DEFAULT '',
+  trans_notes VARCHAR(255),
+  trim_notes TEXT,
   maintenance_schedule_id INTEGER NOT NULL DEFAULT 0,
   maintenance_id INTEGER NOT NULL DEFAULT 0
 );
@@ -150,9 +150,9 @@ CREATE TABLE IF NOT EXISTS dataone_lkp_ymm_maintenance (
   year SMALLINT NOT NULL DEFAULT 0,
   make VARCHAR(24) NOT NULL DEFAULT '',
   model VARCHAR(32) NOT NULL DEFAULT '',
-  eng_notes VARCHAR(128) NOT NULL DEFAULT '',
-  trans_notes VARCHAR(255) NOT NULL DEFAULT '',
-  trim_notes TEXT NOT NULL DEFAULT '',
+  eng_notes VARCHAR(128),
+  trans_notes VARCHAR(255),
+  trim_notes TEXT,
   maintenance_schedule_id INTEGER NOT NULL DEFAULT 0,
   maintenance_id INTEGER NOT NULL DEFAULT 0
 );
@@ -182,26 +182,26 @@ CREATE INDEX IF NOT EXISTS idx_lkp_ymm_maint_event_cc_ymm_maint_id ON dataone_lk
 -- NHTSA Recall Definitions
 CREATE TABLE IF NOT EXISTS dataone_def_nhtsa_recall (
   nhtsa_recall_id INTEGER PRIMARY KEY,
-  nhtsa_campaign_number VARCHAR(16) NOT NULL DEFAULT '',
-  mfr_campaign_number VARCHAR(32) NOT NULL DEFAULT '',
-  component_description VARCHAR(256) NOT NULL DEFAULT '',
-  report_manufacturer VARCHAR(64) NOT NULL DEFAULT '',
+  nhtsa_campaign_number TEXT,
+  mfr_campaign_number TEXT,
+  component_description TEXT,
+  report_manufacturer TEXT,
   manufacturing_start_date DATE,
   manufacturing_end_date DATE,
-  recall_type_code VARCHAR(4) NOT NULL DEFAULT '',
+  recall_type_code TEXT,
   potential_units_affected INTEGER NOT NULL DEFAULT 0,
   owner_notification_date DATE,
-  recall_initiator VARCHAR(4) NOT NULL DEFAULT '',
-  product_manufacturer VARCHAR(64) NOT NULL DEFAULT '',
+  recall_initiator TEXT,
+  product_manufacturer TEXT,
   report_received_date DATE,
   record_creation_date DATE,
-  regulation_part_number VARCHAR(4) NOT NULL DEFAULT '',
-  fmvvs_number VARCHAR(16) NOT NULL DEFAULT '',
-  defect_summary TEXT NOT NULL DEFAULT '',
-  consequence_summary TEXT NOT NULL DEFAULT '',
-  corrective_action_summary TEXT NOT NULL DEFAULT '',
-  notes TEXT NOT NULL DEFAULT '',
-  recalled_component_id VARCHAR(32) NOT NULL DEFAULT ''
+  regulation_part_number TEXT,
+  fmvvs_number TEXT,
+  defect_summary TEXT,
+  consequence_summary TEXT,
+  corrective_action_summary TEXT,
+  notes TEXT,
+  recalled_component_id TEXT
 );
 
 -- Vehicle to NHTSA Recall Lookup
@@ -226,9 +226,9 @@ CREATE INDEX IF NOT EXISTS idx_lkp_veh_model_number_vehicle_id ON dataone_lkp_ve
 -- Vehicle Specifications
 CREATE TABLE IF NOT EXISTS dataone_def_specification (
   specification_id INTEGER PRIMARY KEY,
-  specification_category VARCHAR(32) NOT NULL DEFAULT '',
-  specification_name VARCHAR(32) NOT NULL DEFAULT '',
-  specification_value VARCHAR(32) NOT NULL DEFAULT '',
+  specification_category VARCHAR(32),
+  specification_name VARCHAR(32),
+  specification_value VARCHAR(32),
   is_ancillary VARCHAR(1) NOT NULL DEFAULT 'N'
 );
 

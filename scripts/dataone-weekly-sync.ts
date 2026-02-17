@@ -111,8 +111,11 @@ async function importCoreTables(sql: postgres.Sql): Promise<void> {
     try {
       await sql.unsafe(`TRUNCATE ${table} RESTART IDENTITY`);
       
+      const copyCmd = `\\COPY ${table}(${columns}) FROM '${csvPath}' WITH (FORMAT csv, HEADER true, QUOTE '"', NULL '')`;
+      const tmpSqlFile = path.join(WORK_DIR, `_copy_${table}.sql`);
+      fs.writeFileSync(tmpSqlFile, copyCmd);
       execSync(
-        `psql "$DATABASE_URL" -c "\\COPY ${table}(${columns}) FROM '${csvPath}' WITH CSV HEADER QUOTE '\"' ESCAPE '\"'"`,
+        `psql "$DATABASE_URL" -f "${tmpSqlFile}"`,
         { stdio: "pipe" }
       );
       
@@ -120,6 +123,18 @@ async function importCoreTables(sql: postgres.Sql): Promise<void> {
       console.log(`  ${table}: ${result[0].c.toLocaleString()} rows`);
     } catch (err: any) {
       console.error(`  Error importing ${table}: ${err.message}`);
+      
+      if (err.message.includes("not-null constraint") || err.message.includes("violates not-null")) {
+        console.log(`  Retrying ${table} via stream import to handle NULLs...`);
+        try {
+          execSync(`npx tsx scripts/dataone-stream-import.ts ${csv.replace('.csv', '')}`, {
+            stdio: "inherit",
+            timeout: 300000
+          });
+        } catch (retryErr: any) {
+          console.error(`  Stream retry also failed for ${table}: ${retryErr.message}`);
+        }
+      }
     }
   }
 }
@@ -135,7 +150,7 @@ async function importLargeTables(): Promise<void> {
     }
     
     try {
-      execSync(`npx tsx scripts/dataone-stream-import.ts ${table}`, { 
+      execSync(`npx tsx scripts/dataone-stream-import.ts ${table} --force`, { 
         stdio: "inherit",
         timeout: 600000
       });

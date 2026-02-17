@@ -131,10 +131,15 @@ async function streamImportTable(sql: postgres.Sql, tableName: string): Promise<
     return 0;
   }
   
+  const forceReimport = process.argv.includes("--force");
   const existingCount = await sql.unsafe(`SELECT COUNT(*) as count FROM ${mapping.table}`);
-  if (existingCount[0].count > 0) {
-    console.log(`${mapping.table} already has ${existingCount[0].count} rows, skipping`);
+  if (existingCount[0].count > 0 && !forceReimport) {
+    console.log(`${mapping.table} already has ${existingCount[0].count} rows, skipping (use --force to reimport)`);
     return existingCount[0].count;
+  }
+  if (existingCount[0].count > 0 && forceReimport) {
+    console.log(`${mapping.table} has ${existingCount[0].count} rows, truncating for reimport...`);
+    await sql.unsafe(`TRUNCATE ${mapping.table} RESTART IDENTITY`);
   }
   
   console.log(`Streaming ${tableName} to ${mapping.table}...`);
