@@ -10,7 +10,7 @@ export default async function PlatformAdminLoginPage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <Image 
-            src="/mos-icon.png" 
+            src="/mos-logo.png" 
             alt="MOS Tools" 
             width={48} 
             height={48} 

@@ -220,7 +220,7 @@ export default function PublicApiDocsPage() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Image src="/mos-icon.png" alt="MOS Tools" width={40} height={40} className="rounded-lg" />
+              <Image src="/mos-logo.png" alt="MOS Tools" width={40} height={40} className="rounded-lg" />
               <div>
                 <h1 className="text-xl font-bold">MOS API</h1>
                 <p className="text-white/70 text-sm">Developer Documentation</p>
