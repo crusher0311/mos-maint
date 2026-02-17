@@ -372,7 +372,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("[MOS Tools] Labor rate updated", softRefresh ? "(soft refresh)" : "(full refresh)");
 
     if (softRefresh) {
-      showToast(message.toastMessage || 'Labor rate updated', 'success');
+      showToast(message.toastMessage || 'Labor rate updated — refreshing...', 'success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
       sendResponse({ success: true });
       return false;
     }
