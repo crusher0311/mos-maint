@@ -831,25 +831,35 @@ export async function GET(request: NextRequest) {
       // Helper to convert cached item to extension format
       const convertItem = (item: any) => ({
         service: item.title || item.key,
+        name: item.title || item.key,
         category: item.category || 'General',
+        interval: item.intervalMiles,
         intervalMiles: item.intervalMiles,
         intervalMonths: item.intervalMonths,
         intervalText: formatIntervalText(item.intervalMiles, item.intervalMonths),
+        intervalSource: item.usingShopInterval ? 'shop' : 'oem',
+        dueAt: item.dueAtMiles,
         dueMileage: item.dueAtMiles,
         dueDate: item.dueAtDate,
+        milesToGo: item.milesToGo ?? null,
+        last: item.last ? {
+          source: item.last.source || 'unknown',
+          miles: item.last.miles || null,
+          date: item.last.date || null
+        } : null,
         lastPerformed: item.last ? {
           mileage: item.last.miles,
           date: item.last.date,
           source: item.last.source
         } : null,
+        lastPerformedBy: item.last?.source || null,
+        lastPerformedMileage: item.last?.miles || null,
         source: item.source || 'oem',
         serviceKey: item.serviceKey,
         bump: item.bump,
         usingShopInterval: item.usingShopInterval,
-        // Include Protractor deferred work matching
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
-        // Include declined service info
         declined: item.declined || null
       });
       
