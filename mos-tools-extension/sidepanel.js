@@ -460,7 +460,7 @@ function switchTab(tab) {
   } else if (tab === 'sticker' && currentContext?.roId) {
     loadKeytagSection();
     loadStickerConfig();
-  } else if (tab === 'specs' && currentContext?.vin) {
+  } else if (tab === 'specs') {
     loadVehicleSpecs();
   }
 }
@@ -512,7 +512,7 @@ function updateContext(context) {
         loadCommonFailures();
       } else if (currentTab === 'canned') {
         loadCannedJobs();
-      } else if (currentTab === 'specs' && context.vin) {
+      } else if (currentTab === 'specs') {
         loadVehicleSpecs();
       }
     } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
@@ -700,7 +700,6 @@ function renderPlan(data) {
     if (v.year && v.make && v.model) {
       const displayText = `${v.year} ${v.make} ${v.model}`;
       elements.vehicleDisplay.textContent = displayText;
-      // Update context with vehicle data from API for job lookup search
       if (currentContext) {
         currentContext.vehicle = {
           year: v.year,
@@ -713,6 +712,10 @@ function renderPlan(data) {
       }
     } else if (v.vin) {
       elements.vehicleDisplay.textContent = `VIN: ${v.vin.slice(-6)}`;
+    }
+    if (v.vin && currentContext) {
+      currentContext.vin = v.vin.toUpperCase();
+      console.log('[MOS] Updated VIN from API:', currentContext.vin);
     }
   }
   if (data.mileage) {
@@ -2365,12 +2368,18 @@ function showNotification(message, type = 'info') {
 let specsCache = {};
 
 async function loadVehicleSpecs() {
-  const vin = currentContext?.vin;
-  if (!vin) return;
-
   const specsLoading = document.getElementById('specs-loading');
   const specsEmpty = document.getElementById('specs-empty');
   const specsContent = document.getElementById('specs-content');
+
+  const vin = currentContext?.vin;
+  if (!vin) {
+    specsLoading.classList.add('hidden');
+    specsContent.classList.add('hidden');
+    specsEmpty.classList.remove('hidden');
+    specsEmpty.querySelector('p').textContent = 'VIN not available yet. Open the Plan tab first to load vehicle data, then come back here.';
+    return;
+  }
 
   if (specsCache[vin]) {
     renderSpecs(specsCache[vin]);
