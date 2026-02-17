@@ -934,6 +934,9 @@ async function autoApplyLaborRate(context) {
     console.log("[LaborRate] No RO-level rule matched");
   }
 
+  // Track which jobs were handled by per-job category rules
+  const jobsHandledByPerJobRules = new Set();
+
   // Apply all matching per-job rules (category-based rules)
   if (perJobRules.length > 0 && vehicleData.jobCategories.length > 0) {
     const sorted = [...perJobRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
@@ -959,11 +962,68 @@ async function autoApplyLaborRate(context) {
 
       console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
       const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, baseUrl);
-      if (jobResult?.success) appliedAny = true;
-      // Continue checking other per-job rules — each rule applies to its own category's jobs
+      if (jobResult?.success) {
+        appliedAny = true;
+        if (jobResult.handledJobIds) {
+          jobResult.handledJobIds.forEach(id => jobsHandledByPerJobRules.add(id));
+        }
+      }
     }
   } else if (perJobRules.length > 0) {
     console.log("[LaborRate] Per-job rules exist but no job categories found on RO");
+  }
+
+  // If RO-level rule has "applyToAllLabor" enabled, update unmatched jobs' labor to the RO rate
+  if (matchedRoRule && matchedRoRule.applyToAllLabor) {
+    const roRateInCents = Math.round(matchedRoRule.rate * 100);
+    const jobs = roData.jobs || [];
+    const shopId = context.shopId || tekmetricShopId;
+    let unmatchedUpdated = 0;
+
+    for (const job of jobs) {
+      if (jobsHandledByPerJobRules.has(job.id)) continue;
+
+      const laborEntries = job.labor || job.laborEntries || job.laborItems || [];
+      if (laborEntries.length === 0) continue;
+
+      let anyNeedsUpdate = false;
+      for (const labor of laborEntries) {
+        if ((labor.rate || 0) !== roRateInCents) {
+          anyNeedsUpdate = true;
+          break;
+        }
+      }
+
+      if (!anyNeedsUpdate) {
+        console.log(`[LaborRate] Job "${job.name}" labor already at RO rate $${matchedRoRule.rate}/hr`);
+        continue;
+      }
+
+      const updatedLabor = laborEntries.map(l => ({ ...l, rate: roRateInCents }));
+      const jobPayload = { ...job, labor: updatedLabor };
+
+      try {
+        console.log(`[LaborRate] Updating unmatched job "${job.name}" labor to RO rate $${matchedRoRule.rate}/hr`);
+        const res = await fetch(`${baseUrl}/api/shop/${shopId}/job`, {
+          method: 'POST',
+          headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
+          body: JSON.stringify(jobPayload)
+        });
+        if (res.ok) {
+          unmatchedUpdated++;
+          console.log(`[LaborRate] Updated job "${job.name}" labor to $${matchedRoRule.rate}/hr`);
+        } else {
+          console.error(`[LaborRate] Failed to update job "${job.name}":`, res.status);
+        }
+      } catch (err) {
+        console.error(`[LaborRate] Error updating job "${job.name}":`, err);
+      }
+    }
+
+    if (unmatchedUpdated > 0) {
+      console.log(`[LaborRate] Applied RO rate to ${unmatchedUpdated} unmatched job(s)`);
+      appliedAny = true;
+    }
   }
 
   if (!appliedAny && !matchedRoRule) {
@@ -983,6 +1043,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
   let updatedCount = 0;
   let skippedCount = 0;
   const updatedJobNames = [];
+  const handledJobIds = [];
 
   for (const job of jobs) {
     const jobCat = (job.jobCategoryName || job.jobCategory?.name || job.jobCategory || job.category || job.type || '').toLowerCase();
@@ -992,6 +1053,8 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
       console.log(`[LaborRate] Job "${job.name}" category "${jobCat || 'none'}" does not match rule categories [${categoryValues.join(',')}]`);
       continue;
     }
+
+    if (job.id) handledJobIds.push(job.id);
 
     const laborEntries = job.labor || job.laborEntries || job.laborItems || [];
     if (laborEntries.length === 0) {
@@ -1057,7 +1120,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
 
   if (updatedCount === 0 && skippedCount > 0) {
     console.log(`[LaborRate] All matching labor lines already at target rate, skipped ${skippedCount}`);
-    return { success: true, noChange: true };
+    return { success: true, noChange: true, handledJobIds };
   }
 
   if (updatedCount > 0) {
@@ -1080,11 +1143,11 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
       }
     });
 
-    return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate, updatedCount };
+    return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate, updatedCount, handledJobIds };
   }
 
   console.log("[LaborRate] No matching jobs/labor found for category rule");
-  return { success: false, error: "No matching jobs found for category" };
+  return { success: false, error: "No matching jobs found for category", handledJobIds };
 }
 
 async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl) {
