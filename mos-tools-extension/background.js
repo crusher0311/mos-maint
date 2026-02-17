@@ -703,7 +703,10 @@ function matchRuleCondition(condition, vehicleData) {
     }
     case 'jobCategory': {
       const jobCategories = (vehicleData.jobCategories || []).map(c => c.toLowerCase());
-      return values.some(v => jobCategories.includes(v.toLowerCase()));
+      return values.some(v => {
+        const lower = v.toLowerCase();
+        return jobCategories.some(jc => jc.includes(lower) || lower.includes(jc));
+      });
     }
     case 'customer': {
       const customerName = (vehicleData.customerName || '').toLowerCase();
@@ -844,13 +847,16 @@ async function autoApplyLaborRate(context) {
     year: vehicle.year || context.vehicle?.year || null,
     model: vehicle.model || vehicle.subModel || context.vehicle?.model || '',
     fuelType: derivedFuelType,
-    jobCategories: (roData.jobs || []).map(j => j.category || j.type || '').filter(Boolean),
+    jobCategories: (roData.jobs || []).map(j => {
+      const cat = j.jobCategoryName || j.jobCategory?.name || j.jobCategory || j.category || j.type || j.name || '';
+      return typeof cat === 'string' ? cat : '';
+    }).filter(Boolean),
     customerName,
     customerPhones,
     roData: roData
   };
 
-  console.log("[LaborRate] Matching against vehicle:", vehicleData.year, vehicleData.make, vehicleData.model, "fuel:", vehicleData.fuelType, "customer:", customerName, "phones:", customerPhones.length);
+  console.log("[LaborRate] Matching against vehicle:", vehicleData.year, vehicleData.make, vehicleData.model, "fuel:", vehicleData.fuelType, "categories:", JSON.stringify(vehicleData.jobCategories), "customer:", customerName, "phones:", customerPhones.length);
 
   const matchedRule = findMatchingRule(rules, vehicleData);
   if (!matchedRule) {
@@ -858,6 +864,8 @@ async function autoApplyLaborRate(context) {
     lastAppliedRoId = context.roId;
     return;
   }
+
+  console.log(`[LaborRate] Matched rule: "${matchedRule.name}" (priority ${matchedRule.priority}) → $${matchedRule.rate}/hr`);
 
   // Tekmetric stores labor rate in cents
   const rateInCents = Math.round(matchedRule.rate * 100);
