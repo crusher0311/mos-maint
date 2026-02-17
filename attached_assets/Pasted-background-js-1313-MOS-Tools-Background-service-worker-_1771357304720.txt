@@ -1,0 +1,63 @@
+background.js:1313 [MOS Tools] Background service worker loaded
+background.js:35 [MOS] Restored API token from storage
+background.js:39 [MOS] Restored API URL: https://mos.tools
+background.js:138 [MOS] Side panel opens on action click
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:102 [Tekmetric] Shop ID captured: 14245
+background.js:786 [LaborRate] Fetched 5 rules
+background.js:934 [LaborRate] Loaded 4 jobs with labor from estimate
+background.js:966 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:1003 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","test 3"] customer: Brandon Crusha phones: 1
+background.js:1014 [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+background.js:1239 [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+background.js:1242 [LaborRate] Rate already matches ($209.95/hr), skipping
+background.js:1047 [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+background.js:1137 [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+background.js:1155 [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+background.js:1137 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1145 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1206 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1047 [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+background.js:1137 [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+background.js:1137 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1155 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1145 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1206 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1047 [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+background.js:1155 [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+background.js:1137 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+background.js:1137 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+background.js:1145 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1206 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:161 [MOS] Message received: GET_MOS_AUTH
+background.js:161 [MOS] Message received: GET_SMS_CONTEXT
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:734 [MOS] Updated RO number from API: 32
+sidepanel.js:739 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:734 [MOS] Updated RO number from API: 32
+sidepanel.js:739 [MOS] Updated customer name from API: Brandon Crusha
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: INSERT_CONCERN
+background.js:327 [Concern] INSERT_CONCERN handler started
+background.js:328 [Concern] currentSmsContext: {
+  "provider": "tekmetric",
+  "shopId": "14245",
+  "roId": "295818536",
+  "roNumber": null,
+  "vin": null,
+  "vehicle": null,
+  "vehicleDisplay": null,
+  "customer": null,
+  "customerName": null,
+  "mileage": null
+}
+background.js:329 [Concern] smsTokens.tekmetric exists: true
+background.js:330 [Concern] message.text length: 419
+background.js:347 [Concern] Fetching RO #295818536 from https://shop.tekmetric.com
+background.js:352 [Concern] RO fetch status: 404
+background.js:355 [Concern] RO fetch failed: 404 {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ background.js:355

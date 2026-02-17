@@ -342,11 +342,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const roId = currentSmsContext.roId;
-        const baseUrl = currentSmsContext.smsBaseUrl || 'https://shop.tekmetric.com';
+        const shopId = currentSmsContext.shopId;
+        const baseUrl = currentSmsContext.smsBaseUrl || tekmetricBaseUrl || 'https://shop.tekmetric.com';
 
-        console.log(`[Concern] Fetching RO #${roId} from ${baseUrl}`);
-        const roRes = await fetch(`${baseUrl}/api/repair-order/${roId}`, {
-          headers: { 'x-auth-token': smsTokens.tekmetric }
+        if (!shopId) {
+          console.error('[Concern] No shopId in currentSmsContext');
+          sendResponse({ success: false, error: 'No shop ID available' });
+          return;
+        }
+
+        console.log(`[Concern] Fetching RO #${roId} from shop ${shopId} at ${baseUrl}`);
+        const roRes = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${roId}`, {
+          headers: {
+            'x-auth-token': smsTokens.tekmetric,
+            'content-type': 'application/json'
+          }
         });
 
         console.log(`[Concern] RO fetch status: ${roRes.status}`);
