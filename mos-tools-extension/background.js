@@ -73,6 +73,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       }
     } catch (e) {}
     
+    // Debug: log all Tekmetric PUT/PATCH/POST API calls (to capture how UI updates labor)
+    if (details.url.includes('/api/') && (details.method === 'PUT' || details.method === 'PATCH' || details.method === 'POST')) {
+      console.log(`[Tekmetric API] ${details.method} ${details.url}`);
+    }
+
     // Capture shop ID from URL
     const shopMatch = details.url.match(/\/(?:token\/)?shop\/(\d+)/);
     if (shopMatch) {
