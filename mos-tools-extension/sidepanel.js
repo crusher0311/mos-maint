@@ -476,6 +476,10 @@ function updateContext(context) {
     if (prevContext.mileage && !context.mileage) currentContext.mileage = prevContext.mileage;
     if (prevContext.roNumber && !context.roNumber) currentContext.roNumber = prevContext.roNumber;
     if (prevContext.customerName && !context.customerName) currentContext.customerName = prevContext.customerName;
+    if (prevContext.customerId && !context.customerId) currentContext.customerId = prevContext.customerId;
+    if (prevContext.vehicleId && !context.vehicleId) currentContext.vehicleId = prevContext.vehicleId;
+    if (prevContext.customerPhone && !context.customerPhone) currentContext.customerPhone = prevContext.customerPhone;
+    if (prevContext.customerEmail && !context.customerEmail) currentContext.customerEmail = prevContext.customerEmail;
   }
   
   if (context && (context.roId || context.shopId)) {

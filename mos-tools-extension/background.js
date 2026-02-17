@@ -707,6 +707,20 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     requestBody.intervalType = detectOilType(context.vehicle);
     console.log(`[MOS] Auto-detected oil type: ${requestBody.intervalType} for ${context.vehicle?.make || 'unknown'}`);
   }
+
+  // Add customer/vehicle data for auto booking
+  if (context.customerName) requestBody.customerName = context.customerName;
+  if (context.customerId) requestBody.customerId = context.customerId;
+  if (context.customerPhone) requestBody.customerPhone = context.customerPhone;
+  if (context.customerEmail) requestBody.customerEmail = context.customerEmail;
+  if (context.vin) requestBody.vin = context.vin;
+  if (context.roNumber) requestBody.roNumber = context.roNumber;
+  if (context.vehicleId) requestBody.vehicleId = context.vehicleId;
+  if (context.vehicle) {
+    if (context.vehicle.year) requestBody.vehicleYear = context.vehicle.year;
+    if (context.vehicle.make) requestBody.vehicleMake = context.vehicle.make;
+    if (context.vehicle.model) requestBody.vehicleModel = context.vehicle.model;
+  }
   
   // Call the sticker API
   const response = await fetch(`${mosApiUrl}/api/extension/sticker`, {

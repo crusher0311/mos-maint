@@ -17,8 +17,12 @@ function detectContext() {
     vin: null,
     vehicle: null,
     vehicleDisplay: null,
+    vehicleId: null,
     customer: null,
     customerName: null,
+    customerId: null,
+    customerPhone: null,
+    customerEmail: null,
     mileage: null
   };
 
@@ -244,41 +248,57 @@ function detectContext() {
       }
     }
 
-    // ============ EXTRACT CUSTOMER NAME ============
-    // Strategy 1: Look for Tekmetric-specific customer elements
-    const customerSelectors = [
-      '[data-testid*="customer-name"]',
-      '[data-testid*="customerName"]',
-      '[data-testid*="customer"]',
-      '[class*="CustomerName"]',
-      '[class*="customer-name"]',
-      '[class*="customerInfo"]',
-      '[class*="customer-info"]',
-      'a[href*="/customers/"]'
-    ];
-    
-    for (const sel of customerSelectors) {
-      const elements = document.querySelectorAll(sel);
-      for (const el of elements) {
-        const text = el.textContent?.trim() || '';
-        // Look for a name pattern (2-3 words starting with capitals)
-        const nameMatch = text.match(/^([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})$/);
-        if (nameMatch && nameMatch[1].length > 3 && nameMatch[1].length < 50) {
-          context.customerName = nameMatch[1];
+    // ============ EXTRACT CUSTOMER NAME & ID ============
+    // Strategy 1: Look for customer links with ID in href
+    const customerLinks = document.querySelectorAll('a[href*="/customers/"]');
+    for (const link of customerLinks) {
+      const href = link.getAttribute('href') || '';
+      const idMatch = href.match(/\/customers\/(\d+)/);
+      const text = link.textContent?.trim() || '';
+      if (idMatch && idMatch[1]) {
+        context.customerId = idMatch[1];
+        if (text.length > 3 && text.length < 50 && /^[A-Z][a-zA-Z'-]+\s+[A-Z]/.test(text)) {
+          context.customerName = text;
           context.customer = { name: context.customerName };
-          console.log('[MOS Tools] Customer name extracted via selector:', sel, context.customerName);
-          break;
+          console.log('[MOS Tools] Customer extracted via link:', context.customerName, 'ID:', context.customerId);
         }
       }
-      if (context.customerName) break;
+      if (context.customerName && context.customerId) break;
+    }
+
+    // Strategy 2: Look for Tekmetric-specific customer elements
+    if (!context.customerName) {
+      const customerSelectors = [
+        '[data-testid*="customer-name"]',
+        '[data-testid*="customerName"]',
+        '[data-testid*="customer"]',
+        '[class*="CustomerName"]',
+        '[class*="customer-name"]',
+        '[class*="customerInfo"]',
+        '[class*="customer-info"]'
+      ];
+      
+      for (const sel of customerSelectors) {
+        const elements = document.querySelectorAll(sel);
+        for (const el of elements) {
+          const text = el.textContent?.trim() || '';
+          const nameMatch = text.match(/^([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})$/);
+          if (nameMatch && nameMatch[1].length > 3 && nameMatch[1].length < 50) {
+            context.customerName = nameMatch[1];
+            context.customer = { name: context.customerName };
+            console.log('[MOS Tools] Customer name extracted via selector:', sel, context.customerName);
+            break;
+          }
+        }
+        if (context.customerName) break;
+      }
     }
     
-    // Strategy 2: Look for customer link in breadcrumb or header
+    // Strategy 3: Look for customer link in breadcrumb or header (name only)
     if (!context.customerName) {
-      const customerLinks = document.querySelectorAll('a[href*="/customer"]');
-      for (const link of customerLinks) {
+      const allCustomerLinks = document.querySelectorAll('a[href*="/customer"]');
+      for (const link of allCustomerLinks) {
         const text = link.textContent?.trim() || '';
-        // Must look like a name (not "View Customer" etc)
         if (text.length > 3 && text.length < 40 && /^[A-Z][a-zA-Z'-]+\s+[A-Z]/.test(text)) {
           context.customerName = text;
           context.customer = { name: context.customerName };
@@ -288,7 +308,7 @@ function detectContext() {
       }
     }
     
-    // Strategy 3: Search page text for "Customer:" or "Owner:" label
+    // Strategy 4: Search page text for "Customer:" or "Owner:" label
     if (!context.customerName) {
       const customerPatterns = [
         /Customer[:\s]+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})/,
@@ -304,6 +324,38 @@ function detectContext() {
           break;
         }
       }
+    }
+
+    // ============ EXTRACT VEHICLE ID ============
+    // Look for vehicle links with ID in href
+    const vehicleLinks = document.querySelectorAll('a[href*="/vehicles/"]');
+    for (const link of vehicleLinks) {
+      const href = link.getAttribute('href') || '';
+      const vIdMatch = href.match(/\/vehicles\/(\d+)/);
+      if (vIdMatch && vIdMatch[1]) {
+        context.vehicleId = vIdMatch[1];
+        console.log('[MOS Tools] Vehicle ID extracted via link:', context.vehicleId);
+        break;
+      }
+    }
+
+    // ============ EXTRACT CUSTOMER PHONE & EMAIL ============
+    // Look for phone number patterns on the page
+    const phoneMatch = pageText.match(/(?:\(\d{3}\)\s*\d{3}[-.]?\d{4}|\d{3}[-.]?\d{3}[-.]?\d{4})/);
+    if (phoneMatch) {
+      context.customerPhone = phoneMatch[0].replace(/[^\d]/g, '');
+      if (context.customerPhone.length === 10) {
+        console.log('[MOS Tools] Customer phone extracted');
+      } else {
+        context.customerPhone = null;
+      }
+    }
+
+    // Look for email patterns
+    const emailMatch = pageText.match(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/);
+    if (emailMatch) {
+      context.customerEmail = emailMatch[0];
+      console.log('[MOS Tools] Customer email extracted');
     }
 
   } catch (err) {
