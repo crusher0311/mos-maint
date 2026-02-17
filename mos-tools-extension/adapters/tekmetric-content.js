@@ -371,15 +371,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const softRefresh = message.soft || false;
     console.log("[MOS Tools] Labor rate updated", softRefresh ? "(soft refresh)" : "(full refresh)");
 
-    if (softRefresh) {
-      showToast(message.toastMessage || 'Labor rate updated — refreshing...', 'success');
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
-      sendResponse({ success: true });
-      return false;
-    }
-
     const overlay = document.createElement("div");
     overlay.id = "mos-labor-rate-overlay";
     Object.assign(overlay.style, {
