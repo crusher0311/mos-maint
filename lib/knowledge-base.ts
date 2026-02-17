@@ -53,7 +53,7 @@ export async function searchArticles(query: string, limit: number = 5): Promise<
   
   const searchRegex = searchTerms.map(term => new RegExp(term, "i"));
   
-  return db.collection<KnowledgeArticle>("knowledge_articles")
+  const candidates = await db.collection<KnowledgeArticle>("knowledge_articles")
     .find({
       $or: [
         { title: { $in: searchRegex } },
@@ -63,9 +63,43 @@ export async function searchArticles(query: string, limit: number = 5): Promise<
         { category: { $in: searchRegex } }
       ]
     })
-    .sort({ helpfulCount: -1, viewCount: -1 })
-    .limit(limit)
+    .limit(limit * 3)
     .toArray();
+
+  const scored = candidates.map(article => {
+    let score = 0;
+    const lowerQuery = query.toLowerCase();
+    const titleLower = article.title.toLowerCase();
+    const problemLower = article.problem.toLowerCase();
+
+    if (titleLower.includes(lowerQuery)) score += 10;
+
+    for (const term of searchTerms) {
+      if (titleLower.includes(term)) score += 5;
+      if (problemLower.includes(term)) score += 3;
+      if (article.solution.toLowerCase().includes(term)) score += 2;
+      if (article.tags.some(t => t.toLowerCase() === term)) score += 4;
+    }
+
+    score += Math.min(article.helpfulCount * 2, 10);
+    score += Math.min(article.viewCount * 0.1, 5);
+
+    return { article, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.article);
+}
+
+export async function incrementViewCounts(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const db = await getDb();
+  const objectIds = ids.filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+  if (objectIds.length === 0) return;
+  await db.collection("knowledge_articles").updateMany(
+    { _id: { $in: objectIds } },
+    { $inc: { viewCount: 1 } }
+  );
 }
 
 export async function getAllArticles(limit: number = 50, skip: number = 0): Promise<KnowledgeArticle[]> {

@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 import { ObjectId } from "mongodb";
-import { searchArticles, KnowledgeArticle } from "./knowledge-base";
+import { searchArticles, incrementViewCounts, KnowledgeArticle } from "./knowledge-base";
 import OpenAI from "openai";
 
 const openai = new OpenAI();
@@ -79,37 +79,47 @@ export async function generateAIResponse(
   
   const knowledgeContext = relevantArticles.length > 0
     ? relevantArticles.map((article, i) => 
-        `[Article ${i + 1}]: "${article.title}"\nProblem: ${article.problem}\nSolution: ${article.solution}`
+        `--- Article ${i + 1}: "${article.title}" [Category: ${article.category}] ---\nProblem: ${article.problem}\nSolution: ${article.solution}\nTags: ${article.tags.join(", ")}`
       ).join("\n\n")
-    : "No relevant knowledge base articles found.";
+    : "";
   
-  const conversationHistory = sessionHistory.slice(-6).map(msg => ({
+  const conversationHistory = sessionHistory.slice(-8).map(msg => ({
     role: msg.role as "user" | "assistant",
     content: msg.content
   }));
   
   conversationHistory.push({ role: "user", content: userMessage });
   
-  const systemPrompt = `You are a helpful support assistant for MOS Maintenance, an automotive maintenance management platform. Your job is to help users with their questions about the platform.
+  const systemPrompt = `You are the AI support assistant for MOS Maintenance (also known as "My Oil Sticker"), an automotive maintenance management platform used by auto repair shops. You help service advisors, shop owners, and technicians get the most out of the platform.
 
-KNOWLEDGE BASE (use this to answer questions):
+${relevantArticles.length > 0 ? `KNOWLEDGE BASE ARTICLES (use these as your primary source of truth):
 ${knowledgeContext}
 
-GUIDELINES:
-1. Be friendly, helpful, and concise
-2. If you find relevant information in the knowledge base, use it to answer
-3. If you can't find an answer, say so and offer to create a support ticket
-4. Keep responses short and actionable
-5. If the user seems frustrated or the issue is complex, suggest creating a support ticket
-6. Never make up information - only use what's in the knowledge base or general platform knowledge
+CITATION RULES:
+- When your answer comes from a knowledge base article, naturally weave the information into your response
+- If the article has specific steps, present them as a numbered list
+- If multiple articles are relevant, combine their information coherently
+- Prefer knowledge base information over general knowledge` : "No knowledge base articles matched this question."}
 
-PLATFORM OVERVIEW:
-- MOS Maintenance helps auto shops manage vehicle maintenance
-- Features include: maintenance recommendations, oil stickers, keytags, job history lookup, common failures advisor
-- Integrates with shop management systems like Tekmetric and Protractor
-- Users can manage their shop settings, view vehicles, and generate stickers
+RESPONSE GUIDELINES:
+1. Be friendly, professional, and concise — these are busy auto shop professionals
+2. Give direct, actionable answers. Lead with the solution, then explain if needed
+3. Use simple language — avoid technical jargon unless the user uses it first
+4. For step-by-step instructions, use numbered lists
+5. If the question is about a specific feature (stickers, keytags, maintenance plans, etc.), give practical how-to guidance
+6. If you genuinely don't know the answer or it's not in the knowledge base, say so honestly and suggest creating a support ticket for human help
+7. Never make up features, settings, or procedures that don't exist
+8. If the user seems frustrated or has a billing/account issue, proactively suggest escalating to the support team
 
-If the user wants to escalate to human support, let them know they can create a support ticket.`;
+PLATFORM CONTEXT:
+- MOS Maintenance helps auto shops manage vehicle maintenance recommendations, oil change stickers, keytags, and service history
+- It integrates with shop management systems: Tekmetric and Protractor
+- Features include: Vehicle Health Intelligence (maintenance plans), oil stickers with QR codes, keytag printing, job history lookup, common failures advisor, labor rate rules, customer concern assistant, canned job management
+- There is a Chrome Extension that works alongside Tekmetric for quick access to these features
+- Billing is VIN-based with monthly subscriptions through Stripe
+- Users can manage multi-shop setups with enterprise features
+
+Keep responses under 200 words unless detailed steps are needed. Always be helpful and solution-oriented.`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -118,16 +128,21 @@ If the user wants to escalate to human support, let them know they can create a 
         { role: "system", content: systemPrompt },
         ...conversationHistory
       ],
-      max_tokens: 500,
-      temperature: 0.7
+      max_tokens: 600,
+      temperature: 0.5
     });
 
     const response = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Would you like to create a support ticket?";
     
-    return {
-      response,
-      articleIds: relevantArticles.map(a => a._id!.toString())
-    };
+    const articleIds = relevantArticles.map(a => a._id!.toString());
+    
+    if (articleIds.length > 0) {
+      incrementViewCounts(articleIds).catch(err => 
+        console.error("[Support Chat] Failed to increment view counts:", err)
+      );
+    }
+    
+    return { response, articleIds };
   } catch (error) {
     console.error("AI chat error:", error);
     return {
