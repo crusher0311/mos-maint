@@ -505,7 +505,14 @@ export async function GET(request: NextRequest) {
             ]
           },
           displayVin: "$vin",
-          displayMiles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] },
+          displayMiles: {
+            $let: {
+              vars: {
+                rawMiles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] }
+              },
+              in: { $cond: [{ $gt: ["$$rawMiles", 0] }, "$$rawMiles", null] }
+            }
+          },
           displayRo: "$workOrderNumber",
           workOrderGuid: "$workOrderGuid",
           dviDone: { $literal: false },
@@ -513,7 +520,14 @@ export async function GET(request: NextRequest) {
           af: {
             status: { $ifNull: ["$workflowStage", "In Progress"] },
             createdAt: "$fetchedAt",
-            miles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] }
+            miles: {
+              $let: {
+                vars: {
+                  rawMiles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] }
+                },
+                in: { $cond: [{ $gt: ["$$rawMiles", 0] }, "$$rawMiles", null] }
+              }
+            }
           },
           vehicle: {
             year: { $ifNull: ["$vehicle.year", null] },

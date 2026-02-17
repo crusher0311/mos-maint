@@ -974,6 +974,9 @@ export async function upsertProtractorWorkOrderSnapshot(
     });
   }
   
+  const rawOdometer = workOrder.InUsage ?? workOrder.Odometer ?? null;
+  const odometer = rawOdometer && rawOdometer > 0 ? rawOdometer : null;
+
   await db.collection("protractor_work_orders").updateOne(
     { shopId, workOrderId: workOrder.ID },
     {
@@ -989,7 +992,7 @@ export async function upsertProtractorWorkOrderSnapshot(
         contactId: workOrder.ContactID ?? null,
         contactName,
         companyName,
-        odometer: workOrder.InUsage ?? workOrder.Odometer ?? null,
+        odometer,
         workflowStage: workOrder.WorkflowStage ?? null,
         completed: workOrder.Completed ?? false,
         scheduledTime: workOrder.ScheduledTime ?? null,
@@ -1010,6 +1013,30 @@ export async function upsertProtractorWorkOrderSnapshot(
     },
     { upsert: true }
   );
+
+  if (vin && workOrder.ServiceItem) {
+    const si = workOrder.ServiceItem;
+    const vehicleMileage = odometer || (si.Usage && si.Usage > 0 ? si.Usage : null) || (si.Odometer && si.Odometer > 0 ? si.Odometer : null);
+    await db.collection("protractor_vehicles").updateOne(
+      { shopId, vin },
+      {
+        $set: {
+          shopId,
+          vin,
+          year: si.Year ?? null,
+          make: si.Make ?? null,
+          model: si.Model ?? null,
+          mileage: vehicleMileage,
+          odometer: vehicleMileage,
+          protractorId: si.ID ?? null,
+          licensePlate: si.LicensePlate ?? null,
+          updatedAt: now,
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
+  }
 }
 
 export async function upsertProtractorInvoiceSnapshot(
