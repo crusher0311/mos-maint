@@ -693,6 +693,10 @@ function matchRuleCondition(condition, vehicleData) {
       const vehicleMake = (vehicleData.make || '').toLowerCase();
       return values.some(v => v.toLowerCase() === vehicleMake);
     }
+    case 'model': {
+      const vehicleModel = (vehicleData.model || '').toLowerCase();
+      return values.some(v => vehicleModel.includes(v.toLowerCase()));
+    }
     case 'fuelType': {
       const fuel = (vehicleData.fuelType || '').toLowerCase();
       return values.some(v => v.toLowerCase() === fuel);
@@ -807,24 +811,46 @@ async function autoApplyLaborRate(context) {
   // Build vehicle data for matching
   const vehicle = roData.vehicle || {};
   const customer = roData.customer || {};
+  console.log("[LaborRate] Raw vehicle data from Tekmetric:", JSON.stringify({
+    make: vehicle.make, model: vehicle.model, subModel: vehicle.subModel,
+    year: vehicle.year, fuelType: vehicle.fuelType, fuelTypeName: vehicle.fuelTypeName,
+    engine: vehicle.engine, engineDescription: vehicle.engineDescription,
+    vehicleType: vehicle.vehicleType, driveType: vehicle.driveType
+  }));
   const customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
     || context.customerName || '';
   const customerPhones = [
     customer.phone, customer.phoneNumber, customer.cellPhone, customer.mobilePhone,
     ...(customer.phones || []).map(p => typeof p === 'string' ? p : p?.number || '')
   ].filter(Boolean);
+
+  // Derive fuel type: use explicit field first, then detect from engine description
+  let derivedFuelType = vehicle.fuelType || vehicle.fuelTypeName || '';
+  if (!derivedFuelType) {
+    const engineDesc = (vehicle.engine || vehicle.engineDescription || '').toLowerCase();
+    if (engineDesc.includes('diesel') || engineDesc.includes('tdi') || engineDesc.includes('duramax') || engineDesc.includes('powerstroke') || engineDesc.includes('cummins')) {
+      derivedFuelType = 'Diesel';
+    } else if (engineDesc.includes('electric') || engineDesc.includes(' ev') || engineDesc.includes('bev')) {
+      derivedFuelType = 'Electric';
+    } else if (engineDesc.includes('hybrid') || engineDesc.includes('phev')) {
+      derivedFuelType = 'Hybrid';
+    } else if (engineDesc.includes('flex') || engineDesc.includes('e85')) {
+      derivedFuelType = 'Flex Fuel';
+    }
+  }
+
   const vehicleData = {
     make: vehicle.make || context.vehicle?.make || '',
     year: vehicle.year || context.vehicle?.year || null,
-    model: vehicle.model || context.vehicle?.model || '',
-    fuelType: vehicle.fuelType || vehicle.fuelTypeName || '',
+    model: vehicle.model || vehicle.subModel || context.vehicle?.model || '',
+    fuelType: derivedFuelType,
     jobCategories: (roData.jobs || []).map(j => j.category || j.type || '').filter(Boolean),
     customerName,
     customerPhones,
     roData: roData
   };
 
-  console.log("[LaborRate] Matching against vehicle:", vehicleData.make, vehicleData.fuelType, "customer:", customerName, "phones:", customerPhones.length);
+  console.log("[LaborRate] Matching against vehicle:", vehicleData.year, vehicleData.make, vehicleData.model, "fuel:", vehicleData.fuelType, "customer:", customerName, "phones:", customerPhones.length);
 
   const matchedRule = findMatchingRule(rules, vehicleData);
   if (!matchedRule) {

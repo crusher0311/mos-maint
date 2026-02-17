@@ -125,6 +125,7 @@ const elements = {
   ratesForm: document.getElementById('rates-form'),
   rateFormName: document.getElementById('rate-form-name'),
   rateFormMakes: document.getElementById('rate-form-makes'),
+  rateFormModels: document.getElementById('rate-form-models'),
   rateFormCategories: document.getElementById('rate-form-categories'),
   rateFormFuelType: document.getElementById('rate-form-fuel-type'),
   rateFormRate: document.getElementById('rate-form-rate'),
@@ -1602,6 +1603,9 @@ function renderLaborRateRules() {
     const makes = (rule.conditions || [])
       .filter(c => c.type === 'make')
       .flatMap(c => c.values || []);
+    const models = (rule.conditions || [])
+      .filter(c => c.type === 'model')
+      .flatMap(c => c.values || []);
     const categories = (rule.conditions || [])
       .filter(c => c.type === 'jobCategory')
       .flatMap(c => c.values || []);
@@ -1609,6 +1613,7 @@ function renderLaborRateRules() {
       .filter(c => c.type === 'fuelType')
       .flatMap(c => c.values || []);
     const makesText = makes.length > 0 ? makes.join(', ') : 'All vehicles';
+    const modelsText = models.length > 0 ? models.join(', ') : '';
     const categoriesText = categories.length > 0 ? categories.join(', ') : '';
     const fuelText = fuelTypes.length > 0 ? fuelTypes.join(', ') : '';
     const color = rule.color || '#3B82F6';
@@ -1622,6 +1627,7 @@ function renderLaborRateRules() {
             <span class="rate-group-amount">$${Number(rule.rate).toFixed(2)}/hr</span>
           </div>
           <div class="rate-group-makes">${escapeHtml(makesText)}</div>
+          ${modelsText ? `<div class="rate-group-categories"><span class="rate-group-tag">Models:</span> ${escapeHtml(modelsText)}</div>` : ''}
           ${fuelText ? `<div class="rate-group-categories"><span class="rate-group-tag">Fuel:</span> ${escapeHtml(fuelText)}</div>` : ''}
           ${categoriesText ? `<div class="rate-group-categories"><span class="rate-group-tag">Jobs:</span> ${escapeHtml(categoriesText)}</div>` : ''}
           ${rule.priority ? `<div class="rate-group-priority">Priority: ${rule.priority}</div>` : ''}
@@ -1663,6 +1669,9 @@ function showRateForm(editRule = null) {
     const makes = (editRule.conditions || [])
       .filter(c => c.type === 'make')
       .flatMap(c => c.values || []);
+    const models = (editRule.conditions || [])
+      .filter(c => c.type === 'model')
+      .flatMap(c => c.values || []);
     const categories = (editRule.conditions || [])
       .filter(c => c.type === 'jobCategory')
       .flatMap(c => c.values || []);
@@ -1670,6 +1679,7 @@ function showRateForm(editRule = null) {
       .filter(c => c.type === 'fuelType')
       .flatMap(c => c.values || []);
     elements.rateFormMakes.value = makes.join(', ');
+    elements.rateFormModels.value = models.join(', ');
     elements.rateFormFuelType.value = fuelTypes[0] || '';
     elements.rateFormCategories.value = categories.join(', ');
     elements.rateFormRate.value = editRule.rate || '';
@@ -1684,6 +1694,7 @@ function showRateForm(editRule = null) {
   } else {
     elements.rateFormName.value = '';
     elements.rateFormMakes.value = '';
+    elements.rateFormModels.value = '';
     elements.rateFormFuelType.value = '';
     elements.rateFormCategories.value = '';
     elements.rateFormRate.value = '';
@@ -1725,11 +1736,16 @@ async function handleSaveRateGroup() {
   }
 
   const makes = makesRaw ? makesRaw.split(',').map(m => m.trim()).filter(Boolean) : [];
+  const modelsRaw = elements.rateFormModels.value.trim();
+  const models = modelsRaw ? modelsRaw.split(',').map(m => m.trim()).filter(Boolean) : [];
   const categories = categoriesRaw ? categoriesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
   const fuelType = elements.rateFormFuelType.value.trim();
   const conditions = [];
   if (makes.length > 0) {
     conditions.push({ type: 'make', label: 'Vehicle Makes', values: makes });
+  }
+  if (models.length > 0) {
+    conditions.push({ type: 'model', label: 'Vehicle Models', values: models });
   }
   if (fuelType) {
     conditions.push({ type: 'fuelType', label: 'Fuel Type', values: [fuelType] });

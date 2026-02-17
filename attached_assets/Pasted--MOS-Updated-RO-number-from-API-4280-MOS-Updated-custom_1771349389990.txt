@@ -1,0 +1,360 @@
+ [MOS] Updated RO number from API: 4280
+ [MOS] Updated customer name from API: Brian Edwards
+ [MOS] Updated RO number from API: 4280
+ [MOS] Updated customer name from API: Brian Edwards
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [Tekmetric] Restored session token
+ [MOS] Side panel opens on action click
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [LaborRate] Fetched 0 rules
+ [LaborRate] No rules configured, skipping
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [LaborRate] Fetched 0 rules
+ [LaborRate] No rules configured, skipping
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Failed to fetch rules: 
+fetchLaborRateRules @ background.js:682
+ [LaborRate] No rules configured, skipping
+ [MOS] Error loading plan: 
+loadPlan @ sidepanel.js:613
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated RO number from API: 32
+ [MOS] Updated customer name from API: Brandon Crusha
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 0 rules
+ [MOS] Message received: SAVE_LABOR_RATE_RULES
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Matching against vehicle: Ford  customer: Brandon Crusha phones: 1
+ [LaborRate] No matching rule found
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated RO number from API: 32
+ [MOS] Updated customer name from API: Brandon Crusha
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SAVE_LABOR_RATE_RULES
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:138 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: APPLY_LABOR_RATE_NOW
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:827 [LaborRate] Matching against vehicle: Ford  customer: Brandon Crusha phones: 1
+background.js:81 [Tekmetric] Shop ID captured: 14245
+background.js:92 [Tekmetric] Auth token captured
+background.js:870 [LaborRate] Applied "Ford" - $195.95/hr to RO #295818536
