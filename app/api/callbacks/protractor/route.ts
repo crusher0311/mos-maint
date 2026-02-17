@@ -45,9 +45,79 @@ async function processCallbackEvent(
       if (result.ok && result.workOrder) {
         await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
         console.log(`[Protractor Callback] Processed work order ${objectId}`);
+
+        // Upsert vehicle snapshot for immediate dashboard display
+        const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+        if (vin && result.workOrder.ServiceItem) {
+          await upsertProtractorVehicleSnapshot(shopId, vin, result.workOrder.ServiceItem);
+
+          // Update vehicles collection for active tracking
+          const vehicle = result.workOrder.ServiceItem;
+          const currentOdometer = result.workOrder.InUsage ?? (vehicle as any).Usage ?? result.workOrder.Odometer ?? (vehicle as any).Odometer;
+
+          const workOrderSource = {
+            provider: "protractor",
+            workOrderId: String(result.workOrder.ID),
+            workOrderNumber: result.workOrder.WorkOrderNumber,
+            status: result.workOrder.WorkflowStage || "Open",
+            addedAt: new Date(),
+          };
+
+          const existingVehicle = await db.collection("vehicles").findOne({
+            $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+            vin,
+          });
+
+          if (existingVehicle) {
+            const existingSources = existingVehicle.status?.sources || [];
+            const sourceIndex = existingSources.findIndex(
+              (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder.ID)
+            );
+
+            let updatedSources;
+            if (sourceIndex >= 0) {
+              updatedSources = [...existingSources];
+              updatedSources[sourceIndex] = workOrderSource;
+            } else {
+              updatedSources = [...existingSources, workOrderSource];
+            }
+
+            await db.collection("vehicles").updateOne(
+              { _id: existingVehicle._id },
+              {
+                $set: {
+                  year: (vehicle as any).Year ?? existingVehicle.year,
+                  make: (vehicle as any).Make ?? existingVehicle.make,
+                  model: (vehicle as any).Model ?? existingVehicle.model,
+                  lastMileage: currentOdometer ?? existingVehicle.lastMileage,
+                  updatedAt: new Date(),
+                  "status.active": !result.workOrder.Completed,
+                  "status.sources": updatedSources,
+                  "status.updatedAt": new Date(),
+                },
+              }
+            );
+          } else if (!result.workOrder.Completed) {
+            await db.collection("vehicles").insertOne({
+              shopId: String(shopId),
+              vin,
+              year: (vehicle as any).Year,
+              make: (vehicle as any).Make,
+              model: (vehicle as any).Model,
+              lastMileage: currentOdometer,
+              protractorId: (vehicle as any).ID,
+              status: {
+                active: true,
+                sources: [workOrderSource],
+                updatedAt: new Date(),
+              },
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
+        }
         
         if (result.workOrder.Completed) {
-          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
           if (vin) {
             const savedWO = await db.collection("protractor_work_orders").findOne({
               shopId,
@@ -253,6 +323,107 @@ export async function POST(request: NextRequest) {
 
     const normalizedStatus = (status || "").toUpperCase();
     const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
+
+    // For NEW/OPEN work orders, immediately fetch from Protractor and upsert
+    // so they appear on the dashboard right away (not just after daily cron)
+    if (!isClosed && workOrderId) {
+      const shopId = Number(shop.shopId);
+      console.log(`[Protractor Callback] New/open work order ${workOrderId} with status: ${status} (shop: ${shopId}) - fetching immediately`);
+
+      try {
+        const result = await fetchWorkOrderById(shopId, workOrderId);
+        if (result.ok && result.workOrder) {
+          await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+          console.log(`[Protractor Callback] Upserted work order ${workOrderId} for immediate dashboard display`);
+
+          // Also upsert vehicle snapshot if VIN is available
+          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+          if (vin && result.workOrder.ServiceItem) {
+            await upsertProtractorVehicleSnapshot(shopId, vin, result.workOrder.ServiceItem);
+            console.log(`[Protractor Callback] Upserted vehicle ${vin} for shop ${shopId}`);
+          }
+
+          // Also update the vehicles collection so it stays in sync
+          if (vin) {
+            const vehicle = result.workOrder.ServiceItem;
+            const currentOdometer = result.workOrder.InUsage ?? vehicle?.Usage ?? result.workOrder.Odometer ?? vehicle?.Odometer;
+
+            const workOrderSource = {
+              provider: "protractor",
+              workOrderId: String(result.workOrder.ID),
+              workOrderNumber: result.workOrder.WorkOrderNumber,
+              status: result.workOrder.WorkflowStage || status || "Open",
+              addedAt: new Date(),
+            };
+
+            const existingVehicle = await db.collection("vehicles").findOne({
+              $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+              vin,
+            });
+
+            if (existingVehicle) {
+              const existingSources = existingVehicle.status?.sources || [];
+              const sourceIndex = existingSources.findIndex(
+                (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder.ID)
+              );
+
+              let updatedSources;
+              if (sourceIndex >= 0) {
+                updatedSources = [...existingSources];
+                updatedSources[sourceIndex] = workOrderSource;
+              } else {
+                updatedSources = [...existingSources, workOrderSource];
+              }
+
+              await db.collection("vehicles").updateOne(
+                { _id: existingVehicle._id },
+                {
+                  $set: {
+                    year: vehicle?.Year ?? existingVehicle.year,
+                    make: vehicle?.Make ?? existingVehicle.make,
+                    model: vehicle?.Model ?? existingVehicle.model,
+                    license: vehicle?.LicensePlate ?? existingVehicle.license,
+                    lastMileage: currentOdometer ?? existingVehicle.lastMileage,
+                    updatedAt: new Date(),
+                    protractorId: vehicle?.ID ?? existingVehicle.protractorId,
+                    "status.active": true,
+                    "status.sources": updatedSources,
+                    "status.updatedAt": new Date(),
+                  },
+                }
+              );
+            } else {
+              await db.collection("vehicles").insertOne({
+                shopId: String(shopId),
+                vin,
+                year: vehicle?.Year,
+                make: vehicle?.Make,
+                model: vehicle?.Model,
+                license: vehicle?.LicensePlate,
+                lastMileage: currentOdometer,
+                protractorId: vehicle?.ID,
+                status: {
+                  active: true,
+                  sources: [workOrderSource],
+                  updatedAt: new Date(),
+                },
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              });
+            }
+          }
+
+          await db.collection("protractor_callback_events").updateOne(
+            { workOrderId, processed: false },
+            { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
+          );
+        } else {
+          console.log(`[Protractor Callback] Failed to fetch work order ${workOrderId}: ${result.error}`);
+        }
+      } catch (fetchErr: any) {
+        console.error(`[Protractor Callback] Error fetching new work order ${workOrderId}:`, fetchErr.message);
+      }
+    }
 
     if (isClosed) {
       console.log(`[Protractor Callback] Work order ${workOrderId} closed with status: ${status} (shop: ${shop.shopId})`);
