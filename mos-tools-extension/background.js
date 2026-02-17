@@ -811,6 +811,30 @@ async function autoApplyLaborRate(context) {
     return;
   }
 
+  // Fetch jobs separately — the RO endpoint may not include them
+  if (!roData.jobs || roData.jobs.length === 0) {
+    try {
+      const jobsRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`, {
+        headers: {
+          'x-auth-token': smsTokens.tekmetric,
+          'content-type': 'application/json'
+        }
+      });
+      if (jobsRes.ok) {
+        const jobsBody = await jobsRes.json();
+        roData.jobs = jobsBody.content || jobsBody.data || jobsBody || [];
+        if (Array.isArray(roData.jobs)) {
+          console.log(`[LaborRate] Fetched ${roData.jobs.length} jobs separately for RO`);
+          roData.jobs.forEach(j => console.log(`[LaborRate]   Job: "${j.name}" category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} labor: ${(j.labor || j.laborEntries || j.laborItems || []).length} lines`));
+        }
+      } else {
+        console.warn("[LaborRate] Failed to fetch jobs:", jobsRes.status);
+      }
+    } catch (err) {
+      console.warn("[LaborRate] Error fetching jobs:", err.message);
+    }
+  }
+
   // Build vehicle data for matching
   const vehicle = roData.vehicle || {};
   const customer = roData.customer || {};
@@ -858,26 +882,59 @@ async function autoApplyLaborRate(context) {
 
   console.log("[LaborRate] Matching against vehicle:", vehicleData.year, vehicleData.make, vehicleData.model, "fuel:", vehicleData.fuelType, "categories:", JSON.stringify(vehicleData.jobCategories), "customer:", customerName, "phones:", customerPhones.length);
 
-  const matchedRule = findMatchingRule(rules, vehicleData);
-  if (!matchedRule) {
-    console.log("[LaborRate] No matching rule found");
-    lastAppliedRoId = context.roId;
-    return;
-  }
+  // Separate rules into per-job (has jobCategory condition) and RO-level (no jobCategory)
+  const perJobRules = rules.filter(r => (r.conditions || []).some(c => c.type === 'jobCategory'));
+  const roLevelRules = rules.filter(r => !(r.conditions || []).some(c => c.type === 'jobCategory'));
 
-  console.log(`[LaborRate] Matched rule: "${matchedRule.name}" (priority ${matchedRule.priority}) → $${matchedRule.rate}/hr`);
+  let appliedAny = false;
 
-  // Tekmetric stores labor rate in cents
-  const rateInCents = Math.round(matchedRule.rate * 100);
-
-  // Check if this rule has a jobCategory condition — if so, update per-job labor lines only
-  const hasJobCategoryCondition = (matchedRule.conditions || []).some(c => c.type === 'jobCategory');
-
-  if (hasJobCategoryCondition) {
-    return await applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl);
+  // Apply best matching RO-level rule (make/model/fuel/customer rules)
+  const matchedRoRule = findMatchingRule(roLevelRules, vehicleData);
+  if (matchedRoRule) {
+    console.log(`[LaborRate] Matched RO-level rule: "${matchedRoRule.name}" (priority ${matchedRoRule.priority}) → $${matchedRoRule.rate}/hr`);
+    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, context, baseUrl);
+    if (roResult?.success) appliedAny = true;
   } else {
-    return await applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl);
+    console.log("[LaborRate] No RO-level rule matched");
   }
+
+  // Apply all matching per-job rules (category-based rules)
+  if (perJobRules.length > 0 && vehicleData.jobCategories.length > 0) {
+    const sorted = [...perJobRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    for (const rule of sorted) {
+      const matchMode = rule.matchMode || 'all';
+      const nonCatConditions = (rule.conditions || []).filter(c => c.type !== 'jobCategory');
+      const catConditions = (rule.conditions || []).filter(c => c.type === 'jobCategory');
+
+      // Check non-category conditions first (make, model, fuel, etc.)
+      let nonCatMatch = true;
+      if (nonCatConditions.length > 0) {
+        if (matchMode === 'all') {
+          nonCatMatch = nonCatConditions.every(cond => matchRuleCondition(cond, vehicleData));
+        } else {
+          nonCatMatch = nonCatConditions.some(cond => matchRuleCondition(cond, vehicleData));
+        }
+      }
+      if (!nonCatMatch) continue;
+
+      // Check category conditions
+      const catMatch = catConditions.some(cond => matchRuleCondition(cond, vehicleData));
+      if (!catMatch) continue;
+
+      console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
+      const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, baseUrl);
+      if (jobResult?.success) appliedAny = true;
+      break; // Only apply highest priority matching per-job rule
+    }
+  } else if (perJobRules.length > 0) {
+    console.log("[LaborRate] Per-job rules exist but no job categories found on RO");
+  }
+
+  if (!appliedAny && !matchedRoRule) {
+    console.log("[LaborRate] No matching rules found");
+  }
+
+  lastAppliedRoId = context.roId;
 }
 
 async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl) {
