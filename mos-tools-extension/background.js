@@ -825,7 +825,25 @@ async function autoApplyLaborRate(context) {
         roData.jobs = jobsBody.content || jobsBody.data || jobsBody || [];
         if (Array.isArray(roData.jobs)) {
           console.log(`[LaborRate] Fetched ${roData.jobs.length} jobs separately for RO`);
-          roData.jobs.forEach(j => console.log(`[LaborRate]   Job: "${j.name}" category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} labor: ${(j.labor || j.laborEntries || j.laborItems || []).length} lines`));
+          for (const j of roData.jobs) {
+            const laborCount = (j.labor || j.laborEntries || j.laborItems || []).length;
+            console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} labor: ${laborCount} lines`);
+            if (laborCount === 0 && j.id) {
+              try {
+                const jDetailRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs/${j.id}`, {
+                  headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+                });
+                if (jDetailRes.ok) {
+                  const jDetail = await jDetailRes.json();
+                  j.labor = jDetail.labor || jDetail.laborEntries || jDetail.laborItems || [];
+                  j.parts = j.parts || jDetail.parts || jDetail.partItems || [];
+                  console.log(`[LaborRate]     Fetched ${j.labor.length} labor lines for job "${j.name}":`, j.labor.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
+                }
+              } catch (e) {
+                console.warn(`[LaborRate]     Failed to fetch job ${j.id} details:`, e.message);
+              }
+            }
+          }
         }
       } else {
         console.warn("[LaborRate] Failed to fetch jobs:", jobsRes.status);
