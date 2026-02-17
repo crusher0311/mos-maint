@@ -312,6 +312,13 @@
                 <label>PRIORITY (higher = checked first)</label>
                 <input type="number" id="rate-form-priority" placeholder="0" min="0" step="1" value="0">
               </div>
+              <div class="rates-form-field" id="rate-form-apply-all-wrap" style="display:none;">
+                <label class="rate-checkbox-label">
+                  <input type="checkbox" id="rate-form-apply-all-labor">
+                  <span>Apply this rate to all job labor lines (not just new ones)</span>
+                </label>
+                <span class="rates-form-hint">When enabled, jobs without a specific category rule will also get this rate applied to their labor</span>
+              </div>
               <div class="rates-form-actions">
                 <button id="rate-form-cancel" class="btn-rate-cancel">Cancel</button>
                 <button id="rate-form-save" class="btn-rate-save">

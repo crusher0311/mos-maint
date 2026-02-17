@@ -130,6 +130,8 @@ const elements = {
   rateFormFuelType: document.getElementById('rate-form-fuel-type'),
   rateFormRate: document.getElementById('rate-form-rate'),
   rateFormPriority: document.getElementById('rate-form-priority'),
+  rateFormApplyAllWrap: document.getElementById('rate-form-apply-all-wrap'),
+  rateFormApplyAllLabor: document.getElementById('rate-form-apply-all-labor'),
   rateFormCancel: document.getElementById('rate-form-cancel'),
   rateFormSave: document.getElementById('rate-form-save'),
   rateFormSaveText: document.getElementById('rate-form-save-text'),
@@ -1630,6 +1632,7 @@ function renderLaborRateRules() {
           ${modelsText ? `<div class="rate-group-categories"><span class="rate-group-tag">Models:</span> ${escapeHtml(modelsText)}</div>` : ''}
           ${fuelText ? `<div class="rate-group-categories"><span class="rate-group-tag">Fuel:</span> ${escapeHtml(fuelText)}</div>` : ''}
           ${categoriesText ? `<div class="rate-group-categories"><span class="rate-group-tag">Jobs:</span> ${escapeHtml(categoriesText)}</div>` : ''}
+          ${rule.applyToAllLabor ? `<div class="rate-group-categories"><span class="rate-group-tag" style="color:#10B981;">Applies to all job labor</span></div>` : ''}
           ${rule.priority ? `<div class="rate-group-priority">Priority: ${rule.priority}</div>` : ''}
           <div class="rate-group-actions">
             <button class="rate-group-edit-btn" data-rule-id="${escapeHtml(rule.id)}" title="Edit">
@@ -1686,6 +1689,10 @@ function showRateForm(editRule = null) {
     elements.rateFormPriority.value = editRule.priority || 0;
     elements.rateFormEditId.value = editRule.id;
     elements.rateFormSaveText.textContent = 'Update Group';
+    elements.rateFormApplyAllLabor.checked = !!editRule.applyToAllLabor;
+
+    const isRoLevel = categories.length === 0;
+    elements.rateFormApplyAllWrap.style.display = isRoLevel ? '' : 'none';
 
     const color = editRule.color || '#3B82F6';
     document.querySelectorAll('.rate-color-swatch').forEach(s => {
@@ -1701,11 +1708,21 @@ function showRateForm(editRule = null) {
     elements.rateFormPriority.value = '0';
     elements.rateFormEditId.value = '';
     elements.rateFormSaveText.textContent = 'Add Group';
+    elements.rateFormApplyAllLabor.checked = false;
+    elements.rateFormApplyAllWrap.style.display = '';
     document.querySelectorAll('.rate-color-swatch').forEach(s => s.classList.remove('active'));
     document.querySelector('.rate-color-swatch')?.classList.add('active');
   }
 
+  updateApplyAllVisibility();
+  elements.rateFormCategories.removeEventListener('input', updateApplyAllVisibility);
+  elements.rateFormCategories.addEventListener('input', updateApplyAllVisibility);
   elements.rateFormName.focus();
+}
+
+function updateApplyAllVisibility() {
+  const hasCategories = elements.rateFormCategories.value.trim().length > 0;
+  elements.rateFormApplyAllWrap.style.display = hasCategories ? 'none' : '';
 }
 
 function hideRateForm() {
@@ -1754,6 +1771,8 @@ async function handleSaveRateGroup() {
     conditions.push({ type: 'jobCategory', label: 'Job Categories', values: categories });
   }
 
+  const applyToAllLabor = categories.length === 0 && elements.rateFormApplyAllLabor.checked;
+
   const ruleData = {
     name,
     rate,
@@ -1761,6 +1780,7 @@ async function handleSaveRateGroup() {
     conditions,
     matchMode: 'all',
     color,
+    applyToAllLabor,
   };
 
   let updatedRules;

@@ -1446,6 +1446,22 @@ body {
   margin-top: 4px;
 }
 
+.rate-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--gray-200);
+}
+
+.rate-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue-500, #3B82F6);
+  cursor: pointer;
+}
+
 .rate-group-actions {
   display: flex;
   gap: 8px;
