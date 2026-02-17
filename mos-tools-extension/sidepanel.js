@@ -458,17 +458,26 @@ function updateContext(context) {
 }
 
 async function fetchShopFeatures() {
-  if (!currentContext || !currentContext.shopId) return;
+  if (!currentContext || !currentContext.shopId) {
+    console.warn('[MOS] fetchShopFeatures: no context or shopId', currentContext);
+    return;
+  }
   
+  console.log('[MOS] fetchShopFeatures: calling for shopId', currentContext.shopId);
   try {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
     });
     
+    console.log('[MOS] fetchShopFeatures result:', JSON.stringify(result));
     if (result && result.features) {
       shopFeatures = result.features;
       updateTabAccessibility();
+    } else if (result && result.error) {
+      console.error('[MOS] Features API error:', result.error);
+    } else {
+      console.warn('[MOS] Features API returned unexpected result:', result);
     }
   } catch (err) {
     console.error('[MOS] Error fetching features:', err);
