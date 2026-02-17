@@ -926,6 +926,13 @@ async function autoApplyLaborRate(context) {
       roNumber: context.roNumber || context.roId
     }).catch(() => {});
 
+    // Tell the Tekmetric tab to refresh so the updated rate is visible
+    chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI" }).catch(() => {});
+      }
+    });
+
     return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate };
   } catch (err) {
     console.error("[LaborRate] Error updating rate:", err);

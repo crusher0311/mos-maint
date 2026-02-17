@@ -361,6 +361,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === "REFRESH_LABOR_RATE_UI") {
+    console.log("[MOS Tools] Labor rate updated, refreshing page");
+    showToast("Labor rate updated", "success");
+    setTimeout(() => {
+      window.location.reload();
+    }, 1200);
+    sendResponse({ success: true });
+    return false;
+  }
+
   // Handle print request from side panel
   if (message.action === "PRINT_STICKER_FROM_PANEL") {
     console.log("[MOS Tools] Printing sticker from side panel");
