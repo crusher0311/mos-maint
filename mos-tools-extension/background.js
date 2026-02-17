@@ -859,9 +859,10 @@ async function autoApplyLaborRate(context) {
     return;
   }
 
-  // Convert rate from dollars to cents for Tekmetric
+  // Tekmetric stores labor rate in cents
   const rateInCents = Math.round(matchedRule.rate * 100);
   const currentRate = roData.laborRate || 0;
+  console.log(`[LaborRate] Current rate on RO: ${currentRate} (${currentRate/100}/hr), target: ${rateInCents} (${matchedRule.rate}/hr)`);
 
   if (rateInCents === currentRate) {
     console.log(`[LaborRate] Rate already matches ($${matchedRule.rate}/hr), skipping`);
@@ -880,10 +881,11 @@ async function autoApplyLaborRate(context) {
       body: JSON.stringify({ laborRate: rateInCents })
     });
 
+    const updateBody = await updateRes.text();
+    console.log(`[LaborRate] Update response: ${updateRes.status}`, updateBody.substring(0, 500));
+
     if (!updateRes.ok) {
-      const errText = await updateRes.text();
-      console.error("[LaborRate] Failed to update rate:", updateRes.status, errText);
-      // Notify sidepanel of error
+      console.error("[LaborRate] Failed to update rate:", updateRes.status, updateBody);
       chrome.runtime.sendMessage({
         action: "LABOR_RATE_APPLIED",
         success: false,
@@ -893,7 +895,7 @@ async function autoApplyLaborRate(context) {
     }
 
     lastAppliedRoId = context.roId;
-    console.log(`[LaborRate] Applied "${matchedRule.name}" - $${matchedRule.rate}/hr to RO #${context.roNumber || context.roId}`);
+    console.log(`[LaborRate] Applied "${matchedRule.name}" - $${matchedRule.rate}/hr (${rateInCents} cents) to RO #${context.roNumber || context.roId}`);
 
     // Notify sidepanel of success
     chrome.runtime.sendMessage({
