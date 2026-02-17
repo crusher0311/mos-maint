@@ -1,0 +1,33 @@
+<!-- options.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Labor Rate Groups</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 700px; margin: auto; }
+    .group { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+    .group h3 { margin-top: 0; }
+    .group p { margin: 4px 0; }
+    input, button { padding: 6px; margin: 4px 0; width: 100%; box-sizing: border-box; }
+    .btn-row { display: flex; gap: 10px; margin-top: 6px; }
+    .btn-row button { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>Labor Rate Groups</h1>
+
+  <div id="groupsContainer"></div>
+
+  <h2 id="formTitle">Add New Group</h2>
+  <input type="text" id="groupName" placeholder="Group Name (e.g. Luxury Cars)">
+  <input type="text" id="makes" placeholder="Makes (comma-separated, e.g. BMW,Lexus)">
+  <input type="number" id="laborRate" placeholder="Labor Rate ($)" min="0">
+  <div class="btn-row">
+    <button id="saveGroupBtn">Add Group</button>
+    <button id="cancelEditBtn" style="display:none;">Cancel</button>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

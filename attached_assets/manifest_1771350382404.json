@@ -1,0 +1,35 @@
+{
+    "manifest_version": 3,
+    "name": "Labor Rate Updater",
+    "version": "1.0",
+    "description": "Automatically updates labor rate based on vehicle manufacturer.",
+    "permissions": [
+      "storage",
+      "webRequest",
+      "tabs"
+    ],
+    "host_permissions": [
+      "https://sandbox.tekmetric.com/*",
+      "https://shop.tekmetric.com/*",
+      "https://cba.tekmetric.com/*",
+      "https://*.tekmetric.com/*"
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": [
+          "https://sandbox.tekmetric.com/*",
+          "https://shop.tekmetric.com/*", 
+          "https://cba.tekmetric.com/*",
+          "https://*.tekmetric.com/*"
+        ],
+        "js": ["content.js"],
+        "run_at": "document_idle"
+      }
+    ],
+    "options_page": "options.html"
+  }
+  
+  
