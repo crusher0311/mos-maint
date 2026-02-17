@@ -462,13 +462,33 @@ async function pushAppointmentToSMS(
         console.log(`[Auto Booking] Could not find Tekmetric vehicle ID for ${booking.vin || booking.vehicleId}`);
         // Fall through to Protractor if available
       } else {
+        let vYear = booking.vehicleYear;
+        let vMake = booking.vehicleMake;
+        let vModel = booking.vehicleModel;
+        
+        if (!vYear && !vMake && !vModel && tekmetricVehicleId) {
+          try {
+            const { getVehicle } = await import("@/lib/tekmetric");
+            const vData = await getVehicle(tekmetricVehicleId, tekmetricShopId);
+            if (vData) {
+              vYear = vData.year;
+              vMake = vData.make;
+              vModel = vData.model;
+              console.log(`[Auto Booking] Enriched vehicle from API: ${vYear} ${vMake} ${vModel}`);
+            }
+          } catch (e: any) {
+            console.log(`[Auto Booking] Could not enrich vehicle details: ${e.message}`);
+          }
+        }
+        
+        const vehicleDesc = [vYear, vMake, vModel].filter(Boolean).join(' ') || 'Vehicle';
         const appointment = await createAppointment({
           shopId: Number(shop.tekmetric.shopId),
           customerId: tekmetricCustomerId,
           vehicleId: tekmetricVehicleId,
           startTime: startTimeStr,
           endTime: endTimeStr,
-          title: `[MOS Auto Book] Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}`,
+          title: `[MOS Auto Book] Oil Change - ${vehicleDesc}`,
           description: `Scheduled by MOS - ${booking.serviceType}`,
           color: "blue",
           dropoffTime: startTimeStr,
@@ -516,7 +536,7 @@ async function pushAppointmentToSMS(
         vehicleId: protractorVehicleId,
         scheduledTime: startTimeStr,
         duration: appointmentDuration,
-        notes: `[Appointment Type] Drop-off Vehicle - Oil Change - ${booking.vehicleYear} ${booking.vehicleMake} ${booking.vehicleModel}. Auto-booked via MOS.`,
+        notes: `[Appointment Type] Drop-off Vehicle - Oil Change - ${[booking.vehicleYear, booking.vehicleMake, booking.vehicleModel].filter(Boolean).join(' ') || 'Vehicle'}. Auto-booked via MOS.`,
       });
       
       if (result.ok && result.appointmentId) {

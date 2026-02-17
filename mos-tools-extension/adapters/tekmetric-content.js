@@ -249,6 +249,23 @@ function detectContext() {
     }
 
     // ============ EXTRACT CUSTOMER NAME & ID ============
+    const UI_TEXT_BLACKLIST = new Set([
+      'add concern', 'view customer', 'edit customer', 'new customer',
+      'add note', 'add service', 'view vehicle', 'edit vehicle',
+      'create ro', 'new ro', 'add job', 'add part', 'save changes',
+      'mark arrived', 'drop off', 'pick up', 'view details',
+      'service history', 'repair order', 'view all', 'see more',
+      'learn more', 'get started', 'sign out', 'log out',
+      'close modal', 'cancel changes', 'delete customer',
+    ]);
+    
+    function isLikelyName(text) {
+      if (!text || text.length < 4 || text.length > 50) return false;
+      if (UI_TEXT_BLACKLIST.has(text.toLowerCase())) return false;
+      if (/^(add|view|edit|new|create|delete|remove|save|cancel|close|mark|drop|pick|sign|log)\s/i.test(text)) return false;
+      return /^[A-Z][a-zA-Z'-]+\s+[A-Z]/.test(text);
+    }
+    
     // Strategy 1: Look for customer links with ID in href
     const customerLinks = document.querySelectorAll('a[href*="/customers/"]');
     for (const link of customerLinks) {
@@ -257,7 +274,7 @@ function detectContext() {
       const text = link.textContent?.trim() || '';
       if (idMatch && idMatch[1]) {
         context.customerId = idMatch[1];
-        if (text.length > 3 && text.length < 50 && /^[A-Z][a-zA-Z'-]+\s+[A-Z]/.test(text)) {
+        if (isLikelyName(text)) {
           context.customerName = text;
           context.customer = { name: context.customerName };
           console.log('[MOS Tools] Customer extracted via link:', context.customerName, 'ID:', context.customerId);
@@ -283,7 +300,7 @@ function detectContext() {
         for (const el of elements) {
           const text = el.textContent?.trim() || '';
           const nameMatch = text.match(/^([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){1,2})$/);
-          if (nameMatch && nameMatch[1].length > 3 && nameMatch[1].length < 50) {
+          if (nameMatch && isLikelyName(nameMatch[1])) {
             context.customerName = nameMatch[1];
             context.customer = { name: context.customerName };
             console.log('[MOS Tools] Customer name extracted via selector:', sel, context.customerName);
@@ -299,7 +316,7 @@ function detectContext() {
       const allCustomerLinks = document.querySelectorAll('a[href*="/customer"]');
       for (const link of allCustomerLinks) {
         const text = link.textContent?.trim() || '';
-        if (text.length > 3 && text.length < 40 && /^[A-Z][a-zA-Z'-]+\s+[A-Z]/.test(text)) {
+        if (isLikelyName(text)) {
           context.customerName = text;
           context.customer = { name: context.customerName };
           console.log('[MOS Tools] Customer name extracted via customer link:', context.customerName);
@@ -317,7 +334,7 @@ function detectContext() {
       
       for (const pattern of customerPatterns) {
         const match = pageText.match(pattern);
-        if (match && match[1]) {
+        if (match && match[1] && isLikelyName(match[1].trim())) {
           context.customerName = match[1].trim();
           context.customer = { name: context.customerName };
           console.log('[MOS Tools] Customer name extracted via label pattern:', context.customerName);
