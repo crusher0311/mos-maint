@@ -71,7 +71,7 @@ async function processCallbackEvent(
           if (existingVehicle) {
             const existingSources = existingVehicle.status?.sources || [];
             const sourceIndex = existingSources.findIndex(
-              (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder.ID)
+              (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder!.ID)
             );
 
             let updatedSources;
@@ -91,7 +91,7 @@ async function processCallbackEvent(
                   model: (vehicle as any).Model ?? existingVehicle.model,
                   lastMileage: currentOdometer ?? existingVehicle.lastMileage,
                   updatedAt: new Date(),
-                  "status.active": !result.workOrder.Completed,
+                  "status.active": !result.workOrder!.Completed,
                   "status.sources": updatedSources,
                   "status.updatedAt": new Date(),
                 },
@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
             if (existingVehicle) {
               const existingSources = existingVehicle.status?.sources || [];
               const sourceIndex = existingSources.findIndex(
-                (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder.ID)
+                (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder!.ID)
               );
 
               let updatedSources;
