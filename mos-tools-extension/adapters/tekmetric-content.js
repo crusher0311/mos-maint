@@ -1021,118 +1021,26 @@ function openSidePanel() {
 }
 
 // ==================== INITIALIZATION ====================
-// ==================== CATEGORY CHANGE OBSERVER ====================
-let categoryObserver = null;
-let lastKnownCategories = new Map();
-let categoryCheckDebounce = null;
+// ==================== CATEGORY CHANGE DETECTION ====================
+let categoryChangeDebounce = null;
 
 function startCategoryChangeObserver() {
-  if (categoryObserver) return;
+  window.addEventListener('mos-category-changed', (e) => {
+    const { jobId, categoryCode, categoryName } = e.detail || {};
+    console.log(`[MOS Tools] Category change detected via network: job ${jobId} → ${categoryName} (${categoryCode})`);
 
-  function scanCurrentCategories() {
-    const cats = new Map();
-    const jobSections = document.querySelectorAll('[class*="job"], [class*="Job"], [data-testid*="job"]');
-    
-    if (jobSections.length === 0) {
-      const allText = document.body?.innerText || '';
-      const catMatches = allText.match(/ADD CATEGORY|(?:Category|category)[:\s]+(\w[\w\s]*)/gi) || [];
-      return cats;
-    }
-
-    jobSections.forEach((section, idx) => {
-      const text = section.textContent || '';
-      const hasAddCategory = text.includes('ADD CATEGORY');
-      const catBadge = section.querySelector('[class*="category"], [class*="Category"], [class*="badge"], [data-testid*="category"]');
-      const catText = catBadge ? catBadge.textContent?.trim() : '';
-      
-      const jobNameEl = section.querySelector('[class*="jobName"], [class*="job-name"], h3, h4, [class*="title"]');
-      const jobName = jobNameEl ? jobNameEl.textContent?.trim() : `job-${idx}`;
-      
-      cats.set(jobName, hasAddCategory ? '' : (catText || ''));
-    });
-    return cats;
-  }
-
-  function checkForCategoryChanges() {
-    if (categoryCheckDebounce) clearTimeout(categoryCheckDebounce);
-    categoryCheckDebounce = setTimeout(() => {
-      const current = scanCurrentCategories();
-      if (current.size === 0 && lastKnownCategories.size === 0) return;
-      
-      let changed = false;
-      for (const [jobName, cat] of current) {
-        const prev = lastKnownCategories.get(jobName);
-        if (prev !== undefined && prev !== cat && cat !== '') {
-          console.log(`[MOS Tools] Category changed on "${jobName}": "${prev || '(none)'}" → "${cat}"`);
-          changed = true;
-          chrome.runtime.sendMessage({
-            action: "CATEGORY_CHANGED",
-            jobName: jobName,
-            newCategory: cat,
-            previousCategory: prev
-          }).catch(() => {});
-        }
-      }
-      
-      if (!changed && current.size > 0 && lastKnownCategories.size > 0) {
-        const currentCatStr = JSON.stringify([...current.entries()].sort());
-        const prevCatStr = JSON.stringify([...lastKnownCategories.entries()].sort());
-        if (currentCatStr !== prevCatStr) {
-          for (const [jobName, cat] of current) {
-            if (!lastKnownCategories.has(jobName) && cat) {
-              console.log(`[MOS Tools] New job with category detected: "${jobName}" → "${cat}"`);
-              changed = true;
-            }
-          }
-          if (changed) {
-            chrome.runtime.sendMessage({
-              action: "CATEGORY_CHANGED",
-              jobName: "multiple",
-              newCategory: "changed"
-            }).catch(() => {});
-          }
-        }
-      }
-      
-      lastKnownCategories = current;
-    }, 1500);
-  }
-
-  categoryObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'childList' || mutation.type === 'characterData') {
-        const target = mutation.target;
-        const text = target?.textContent || '';
-        if (text.includes('CATEGORY') || 
-            target?.className?.toString().toLowerCase().includes('category') ||
-            target?.className?.toString().toLowerCase().includes('badge') ||
-            target?.className?.toString().toLowerCase().includes('dropdown') ||
-            target?.className?.toString().toLowerCase().includes('select')) {
-          checkForCategoryChanges();
-          return;
-        }
-        if (mutation.addedNodes.length > 0) {
-          for (const node of mutation.addedNodes) {
-            if (node.textContent && (node.textContent.includes('CATEGORY') || 
-                node.className?.toString().toLowerCase().includes('category'))) {
-              checkForCategoryChanges();
-              return;
-            }
-          }
-        }
-      }
-    }
+    if (categoryChangeDebounce) clearTimeout(categoryChangeDebounce);
+    categoryChangeDebounce = setTimeout(() => {
+      chrome.runtime.sendMessage({
+        action: "CATEGORY_CHANGED",
+        jobId: jobId,
+        jobName: jobId,
+        newCategory: categoryName || categoryCode
+      }).catch(() => {});
+    }, 1000);
   });
 
-  const jobsContainer = document.querySelector('[class*="estimate"], [class*="Estimate"], [class*="jobs"], [class*="Jobs"], main, [role="main"]') || document.body;
-  categoryObserver.observe(jobsContainer, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
-
-  lastKnownCategories = scanCurrentCategories();
-  console.log('[MOS Tools] Category change observer started, tracking', lastKnownCategories.size, 'jobs');
+  console.log('[MOS Tools] Category change listener registered (network-based)');
 }
 
 function init() {

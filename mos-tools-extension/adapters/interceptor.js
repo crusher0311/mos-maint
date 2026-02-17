@@ -10,6 +10,21 @@
         try {
           var bodyStr = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
           console.log('[MOS Intercept] Body:', bodyStr.substring(0, 2000));
+
+          if (method === 'PATCH' && url.match(/\/api\/job\/\d+/)) {
+            var parsed = JSON.parse(bodyStr);
+            if (parsed.jobCategoryCode || parsed.jobCategoryName) {
+              console.log('[MOS Intercept] Job category change detected:', parsed.jobCategoryName || parsed.jobCategoryCode);
+              var jobIdMatch = url.match(/\/api\/job\/(\d+)/);
+              window.dispatchEvent(new CustomEvent('mos-category-changed', {
+                detail: {
+                  jobId: jobIdMatch ? jobIdMatch[1] : null,
+                  categoryCode: parsed.jobCategoryCode || '',
+                  categoryName: parsed.jobCategoryName || ''
+                }
+              }));
+            }
+          }
         } catch(e) {}
       }
       if (opts.headers) {
@@ -36,7 +51,23 @@
       console.log('[MOS Intercept XHR] ' + this._mosMethod + ' ' + this._mosUrl);
       if (body) {
         try {
-          console.log('[MOS Intercept XHR] Body:', (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 2000));
+          var bodyStr = (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 2000);
+          console.log('[MOS Intercept XHR] Body:', bodyStr);
+
+          if (this._mosMethod === 'PATCH' && this._mosUrl && this._mosUrl.match(/\/api\/job\/\d+/)) {
+            var parsed = JSON.parse(typeof body === 'string' ? body : JSON.stringify(body));
+            if (parsed.jobCategoryCode || parsed.jobCategoryName) {
+              console.log('[MOS Intercept XHR] Job category change detected:', parsed.jobCategoryName || parsed.jobCategoryCode);
+              var jobIdMatch = this._mosUrl.match(/\/api\/job\/(\d+)/);
+              window.dispatchEvent(new CustomEvent('mos-category-changed', {
+                detail: {
+                  jobId: jobIdMatch ? jobIdMatch[1] : null,
+                  categoryCode: parsed.jobCategoryCode || '',
+                  categoryName: parsed.jobCategoryName || ''
+                }
+              }));
+            }
+          }
         } catch(e) {}
       }
     }

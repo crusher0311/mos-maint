@@ -1,0 +1,18 @@
+curl ^"https://shop.tekmetric.com/api/job/909389887^" ^
+  -X ^"PATCH^" ^
+  -H ^"accept: application/json^" ^
+  -H ^"accept-language: en-US,en;q=0.9^" ^
+  -H ^"content-type: application/json^" ^
+  -b ^"_ga=GA1.2.1262566790.1761759404; __stripe_mid=3116fb36-6388-4c79-b8f3-a5bf6c03d9414f1522; mp_93abc6809d9e9b7b3f727c19b8d10312_mixpanel=^%^7B^%^22distinct_id^%^22^%^3A180023^%^2C^%^22^%^24device_id^%^22^%^3A^%^22cd927828-de72-4e41-94ba-d198d816ccaf^%^22^%^2C^%^22^%^24initial_referrer^%^22^%^3A^%^22https^%^3A^%^2F^%^2Fshop.tekmetric.com^%^2Flogout^%^22^%^2C^%^22^%^24initial_referring_domain^%^22^%^3A^%^22shop.tekmetric.com^%^22^%^2C^%^22__mps^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpso^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpus^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpa^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpu^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpr^%^22^%^3A^%^5B^%^5D^%^2C^%^22__mpap^%^22^%^3A^%^5B^%^5D^%^2C^%^22^%^24user_id^%^22^%^3A180023^%^7D; _gid=GA1.2.1101050181.1771278745; __stripe_sid=5aa47ed1-abd7-46ed-933b-02dd2c3a7445ba1ddb; _gat=1; _ga_N4QPY5HCYY=GS2.2.s1771343272^$o64^$g1^$t1771363714^$j60^$l0^$h0; AWSALB=dCnaS/PPIWb7zVQcEcaP64UOm5N3QADzlzLplcbaqDsHkKe0eT4xM+m75ccG0y6gfchTQV8vFOjYLjexV92KE1EcVw6cKj56j7VEObniI2/KLu8DwceJMgeY9r6+; AWSALBCORS=dCnaS/PPIWb7zVQcEcaP64UOm5N3QADzlzLplcbaqDsHkKe0eT4xM+m75ccG0y6gfchTQV8vFOjYLjexV92KE1EcVw6cKj56j7VEObniI2/KLu8DwceJMgeY9r6+^" ^
+  -H ^"origin: https://shop.tekmetric.com^" ^
+  -H ^"priority: u=1, i^" ^
+  -H ^"referer: https://shop.tekmetric.com/admin/shop/14245/repair-orders/255022827/estimate^" ^
+  -H ^"sec-ch-ua: ^\^"Not(A:Brand^\^";v=^\^"8^\^", ^\^"Chromium^\^";v=^\^"144^\^", ^\^"Google Chrome^\^";v=^\^"144^\^"^" ^
+  -H ^"sec-ch-ua-mobile: ?0^" ^
+  -H ^"sec-ch-ua-platform: ^\^"Windows^\^"^" ^
+  -H ^"sec-fetch-dest: empty^" ^
+  -H ^"sec-fetch-mode: cors^" ^
+  -H ^"sec-fetch-site: same-origin^" ^
+  -H ^"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36^" ^
+  -H ^"x-auth-token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJiY3J1c2hhQGNhcmV4cGVydHNvay5jb20iLCJ1c2VySWQiOiIxODAwMjMiLCJzaG9wSWQiOiIxNDI0NSIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjE1MDIiLCIxMDAiLCIxMDEiLCIxNTAxIiwiMjAwIiwiMTAyIiwiMTUwMCIsIjIwMSIsIjMwMCIsIjE0MDAiLCIxMDMiLCIyMDIiLCIzMDEiLCI0MDAiLCIyMDMiLCIzMDIiLCI0MDEiLCIxMzAwIiwiMTIwMSIsIjExMDIiLCI1MDAiLCI2MDAiLCIyMDQiLCIxMjAwIiwiNTAxIiwiNDAyIiwiMTEwMSIsIjcwMCIsIjExMDAiLCI2MDEiLCI1MDIiLCIyMDUiLCI0MDMiLCI4MDAiLCI1MDMiLCI2MDIiLCIyMDYiLCI5MDAiLCI1MDQiLCI2MDMiLCIyMDciLCI4MDEiLCI1MDUiLCI4MDIiLCI1MDYiXSwiZW1wbG95ZWVJZCI6IjI3MDE5OSIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wMi0xN1QyMToyODozNC44NTYwMjc1MjhaIiwic2VxdWVuY2VJZCI6IjI2ZjRkODNkLTlmZDUtNDVmNS05NzYzLTNkZTI4MmEyYmZkNyIsImV4cCI6MTc3MTQyMTMxNH0.7tIOvWoKUdDGKrSHpojy-ZnZVpRtnWejJcZOBA-ZMps^" ^
+  --data-raw ^"^{^\^"jobCategoryCode^\^":^\^"maint^\^",^\^"jobCategoryName^\^":^\^"maintenance^\^"^}^"
