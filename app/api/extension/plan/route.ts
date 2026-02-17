@@ -329,15 +329,23 @@ async function runOnDemandAnalysis(
     console.log(`[Extension] OEM data: ${oemResult.count} items, source: ${oemResult.source}`);
     
     if (oemResult.ok && oemResult.items?.length > 0) {
+      let skippedNoInterval = 0;
+      let skippedInspect = 0;
+      let skippedExcluded = 0;
+      
       for (const item of oemResult.items) {
         const oemIntervalMiles = item.miles || 0;
         const oemIntervalMonths = item.months || null;
         
-        // Skip items with no mileage interval
-        if (!oemIntervalMiles) continue;
+        // Skip items with no mileage AND no month interval
+        if (!oemIntervalMiles && !oemIntervalMonths) {
+          skippedNoInterval++;
+          continue;
+        }
         
         // Filter inspect items if preference is set
         if (!showInspectItems && isInspectItem(item.maintenance_name)) {
+          skippedInspect++;
           continue;
         }
         
@@ -346,6 +354,7 @@ async function runOnDemandAnalysis(
         
         // Skip excluded services
         if (serviceKey && shopIntervals[serviceKey]?.excluded) {
+          skippedExcluded++;
           continue;
         }
         
@@ -369,28 +378,52 @@ async function runOnDemandAnalysis(
           }
         }
         
-        // Calculate nextDueMileage based on actual last performed mileage when available
+        // Calculate nextDueMileage and status
         let nextDueMileage: number;
-        if (lastPerformed.mileage && lastPerformed.mileage > 0) {
-          // Use actual service history: next due = last performed + interval
-          nextDueMileage = lastPerformed.mileage + intervalMiles;
-        } else if (currentMileage > 0) {
-          // Fallback: assume service was done at interval multiples from 0
-          const intervalsPassed = Math.floor(currentMileage / intervalMiles);
-          nextDueMileage = (intervalsPassed + 1) * intervalMiles;
-        } else {
-          nextDueMileage = intervalMiles;
-        }
-        const milesToGo = currentMileage > 0 ? nextDueMileage - currentMileage : intervalMiles;
-        
-        // Determine status based on milesToGo
+        let milesToGo: number;
         let status: string;
-        if (currentMileage > 0 && milesToGo <= 0) {
-          status = "overdue";
-        } else if (currentMileage > 0 && milesToGo <= SOON_MILES) {
-          status = "due_soon";
+
+        if (intervalMiles > 0) {
+          // Mileage-based calculation
+          if (lastPerformed.mileage && lastPerformed.mileage > 0) {
+            nextDueMileage = lastPerformed.mileage + intervalMiles;
+          } else if (currentMileage > 0) {
+            const intervalsPassed = Math.floor(currentMileage / intervalMiles);
+            nextDueMileage = (intervalsPassed + 1) * intervalMiles;
+          } else {
+            nextDueMileage = intervalMiles;
+          }
+          milesToGo = currentMileage > 0 ? nextDueMileage - currentMileage : intervalMiles;
+          
+          if (currentMileage > 0 && milesToGo <= 0) {
+            status = "overdue";
+          } else if (currentMileage > 0 && milesToGo <= SOON_MILES) {
+            status = "due_soon";
+          } else {
+            status = "upcoming";
+          }
         } else {
-          status = "upcoming";
+          // Month-only interval — use date-based calculation
+          nextDueMileage = 0;
+          milesToGo = 0;
+          
+          if (lastPerformed.date && intervalMonths) {
+            const lastDate = new Date(lastPerformed.date);
+            const nextDueDate = new Date(lastDate);
+            nextDueDate.setMonth(nextDueDate.getMonth() + intervalMonths);
+            const now = new Date();
+            const daysUntilDue = Math.floor((nextDueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            
+            if (daysUntilDue <= 0) {
+              status = "overdue";
+            } else if (daysUntilDue <= 90) {
+              status = "due_soon";
+            } else {
+              status = "upcoming";
+            }
+          } else {
+            status = "upcoming";
+          }
         }
         
         // Format interval text based on source
@@ -419,6 +452,7 @@ async function runOnDemandAnalysis(
           status
         });
       }
+      console.log(`[Extension] OEM processing: ${recommendations.length} recs, skipped: noInterval=${skippedNoInterval}, inspect=${skippedInspect}, excluded=${skippedExcluded}`);
     }
   } catch (e) {
     console.warn('[Extension] OEM data fetch failed:', e);

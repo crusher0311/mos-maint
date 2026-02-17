@@ -1,0 +1,237 @@
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: SET_SMS_CONTEXT
+background.js:170 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '14956', roId: '302217793', roNumber: null, vin: null, …}
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:679 [LaborRate] Fetched 0 rules
+background.js:780 [LaborRate] No rules configured, skipping
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+sidepanel.js:668 [MOS] Updated RO number from API: 4280
+sidepanel.js:673 [MOS] Updated customer name from API: Brian Edwards
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+sidepanel.js:668 [MOS] Updated RO number from API: 4280
+sidepanel.js:673 [MOS] Updated customer name from API: Brian Edwards
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: SET_SMS_CONTEXT
+background.js:170 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '14956', roId: '302217793', roNumber: null, vin: null, …}
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:138 [MOS] Message received: MOS_API_REQUEST
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [LaborRate] Fetched 0 rules
+ [LaborRate] No rules configured, skipping
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated RO number from API: 4280
+ [MOS] Updated customer name from API: Brian Edwards
+ [MOS] Updated RO number from API: 4280
+ [MOS] Updated customer name from API: Brian Edwards
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: {provider: 'tekmetric', shopId: '14956', roId: '302217793', roNumber: null, vin: null, …}
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [LaborRate] Fetched 0 rules
+ [LaborRate] No rules configured, skipping
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Updated RO number from API: 4280
+ [MOS] Updated customer name from API: Brian Edwards
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Updated RO number from API: 4280
+ [MOS] Updated customer name from API: Brian Edwards
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: {provider: 'tekmetric', shopId: '14956', roId: '303430593', roNumber: '4287', vin: 'JM1BK32F091210238', …}
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Auth token captured
+ [LaborRate] Fetched 0 rules
+ [LaborRate] No rules configured, skipping
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14956
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated RO number from API: 4287
+ [MOS] Updated customer name from API: Charlie Brown
+ [MOS] Updated RO number from API: 4287
+ [MOS] Updated customer name from API: Charlie Brown
