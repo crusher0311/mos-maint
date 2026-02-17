@@ -324,94 +324,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "INSERT_CONCERN") {
     (async () => {
       try {
-        console.log('[Concern] INSERT_CONCERN handler started');
-        console.log('[Concern] currentSmsContext:', JSON.stringify(currentSmsContext, null, 2));
-        console.log('[Concern] smsTokens.tekmetric exists:', !!smsTokens.tekmetric);
-        console.log('[Concern] message.text length:', message.text?.length);
-
         if (!currentSmsContext?.roId) {
-          console.error('[Concern] No roId in currentSmsContext');
-          sendResponse({ success: false, error: 'No repair order context - roId missing' });
+          sendResponse({ success: false, error: 'No repair order context' });
           return;
         }
-
         if (!smsTokens.tekmetric) {
-          console.error('[Concern] No Tekmetric auth token available');
           sendResponse({ success: false, error: 'No Tekmetric auth token' });
           return;
         }
 
         const roId = currentSmsContext.roId;
-        const shopId = currentSmsContext.shopId;
         const baseUrl = currentSmsContext.smsBaseUrl || tekmetricBaseUrl || 'https://shop.tekmetric.com';
-
-        if (!shopId) {
-          console.error('[Concern] No shopId in currentSmsContext');
-          sendResponse({ success: false, error: 'No shop ID available' });
-          return;
-        }
-
-        console.log(`[Concern] Fetching RO #${roId} from shop ${shopId} at ${baseUrl}`);
-        const roRes = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${roId}`, {
-          headers: {
-            'x-auth-token': smsTokens.tekmetric,
-            'content-type': 'application/json'
-          }
-        });
-
-        console.log(`[Concern] RO fetch status: ${roRes.status}`);
-        if (!roRes.ok) {
-          const errBody = await roRes.text();
-          console.error(`[Concern] RO fetch failed: ${roRes.status}`, errBody.substring(0, 300));
-          sendResponse({ success: false, error: `Failed to fetch RO: ${roRes.status}` });
-          return;
-        }
-
-        const roData = await roRes.json();
-        console.log('[Concern] RO data keys:', Object.keys(roData));
-        console.log('[Concern] Current notes:', roData.notes ? roData.notes.substring(0, 100) : '(empty)');
-        console.log('[Concern] laborRate:', roData.laborRate);
-        console.log('[Concern] serviceWriterId:', roData.serviceWriterId);
-
-        const existingNotes = roData.notes || '';
         const concernText = message.text;
-        const newNotes = existingNotes
-          ? `${existingNotes}\n\n--- Customer Concern ---\n${concernText}`
-          : `--- Customer Concern ---\n${concernText}`;
 
-        const summaryPayload = {
-          laborRate: roData.laborRate,
-          appointmentOption: roData.appointmentOption,
-          customerTimeIn: roData.customerTimeIn,
-          customerTimeOut: roData.customerTimeOut,
-          defaultTechnicianId: roData.defaultTechnicianId,
-          keytag: roData.keytag,
-          leadSource: roData.leadSource,
-          notes: newNotes,
-          poNumber: roData.poNumber,
-          referrerId: roData.referrerId,
-          referrerName: roData.referrerName,
-          saveCustomerParts: roData.saveCustomerParts,
-          serviceWriterId: roData.serviceWriterId
-        };
+        console.log(`[Concern] Adding customer concern to RO #${roId}`);
 
-        console.log('[Concern] Summary payload:', JSON.stringify(summaryPayload, null, 2));
-        console.log(`[Concern] PUT ${baseUrl}/api/repair-order/${roId}/summary`);
-
-        const updateRes = await fetch(`${baseUrl}/api/repair-order/${roId}/summary`, {
-          method: 'PUT',
+        const res = await fetch(`${baseUrl}/api/repair-orders/${roId}/customer-concerns`, {
+          method: 'POST',
           headers: {
-            'x-auth-token': smsTokens.tekmetric,
-            'content-type': 'application/json'
+            'accept': 'application/json',
+            'content-type': 'application/json',
+            'x-auth-token': smsTokens.tekmetric
           },
-          body: JSON.stringify(summaryPayload)
+          body: JSON.stringify({ concern: concernText })
         });
 
-        console.log(`[Concern] Update response status: ${updateRes.status}`);
-        const responseBody = await updateRes.text();
-        console.log(`[Concern] Update response body: ${responseBody.substring(0, 500)}`);
+        const resBody = await res.text();
+        console.log(`[Concern] Response: ${res.status}`, resBody.substring(0, 300));
 
-        if (updateRes.ok) {
+        if (res.ok) {
           console.log(`[Concern] Successfully added concern to RO #${roId}`);
           sendResponse({ success: true });
 
@@ -419,16 +360,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           for (const tab of tabs) {
             chrome.tabs.sendMessage(tab.id, {
               action: 'SHOW_TOAST',
-              message: 'Customer concern added to RO notes',
+              message: 'Customer concern added to repair order',
               type: 'success'
             }).catch(() => {});
           }
         } else {
-          console.error(`[Concern] Failed to update RO: ${updateRes.status}`, responseBody.substring(0, 300));
-          sendResponse({ success: false, error: `Failed to update RO: ${updateRes.status} - ${responseBody.substring(0, 100)}` });
+          console.error(`[Concern] Failed: ${res.status}`, resBody.substring(0, 200));
+          sendResponse({ success: false, error: `Failed: ${res.status}` });
         }
       } catch (err) {
-        console.error('[Concern] Error injecting concern:', err.message, err.stack);
+        console.error('[Concern] Error:', err.message);
         sendResponse({ success: false, error: err.message });
       }
     })();
