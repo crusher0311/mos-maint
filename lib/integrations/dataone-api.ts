@@ -337,19 +337,22 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     const cached = await cacheCollection.findOne({ squish });
     
     if (cached && cached.expiresAt > now && cached.vehicle) {
-      // Cache hit with vehicle info - return cached data
-      console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
-      return {
-        ok: cached.data.ok,
-        vin,
-        squish,
-        count: cached.data.count,
-        items: cached.data.items,
-        vehicle: cached.vehicle,
-        error: cached.data.error,
-        source: "cache",
-        cachedAt: cached.fetchedAt,
-      };
+      const cachedHasIntervals = cached.data.items?.some((item: any) => item.miles || item.months);
+      if (cachedHasIntervals || cached.data.count === 0) {
+        console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
+        return {
+          ok: cached.data.ok,
+          vin,
+          squish,
+          count: cached.data.count,
+          items: cached.data.items,
+          vehicle: cached.vehicle,
+          error: cached.data.error,
+          source: "cache",
+          cachedAt: cached.fetchedAt,
+        };
+      }
+      console.log(`[DataOne Cache] HIT but cached data has ${cached.data.count} items with NO intervals for squish ${squish}, re-fetching...`);
     }
     
     // If cache hit but missing vehicle info, mark for re-fetch
@@ -374,7 +377,37 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       engine: decoded.decoded.engine_name,
     } : undefined;
     
-    // Store in cache (even if local query returned no data)
+    // Check if local data has intervals - if items exist but none have miles/months, fall back to API
+    const hasUsableIntervals = localResult.items.some(item => item.miles || item.months);
+    let finalItems = localResult.items;
+    let finalCount = localResult.count;
+    let finalOk = localResult.ok;
+    let finalError = localResult.error;
+    let dataSource: "cache" | "api" = "cache";
+    
+    if (localResult.ok && localResult.count > 0 && !hasUsableIntervals) {
+      console.log(`[DataOne Cache] Local data has ${localResult.count} items but NO intervals, falling back to external API...`);
+      try {
+        const apiResult = await getMaintenanceSchedule(vin);
+        if (apiResult.ok && apiResult.items.length > 0) {
+          const apiHasIntervals = apiResult.items.some(item => item.miles || item.months);
+          if (apiHasIntervals) {
+            console.log(`[DataOne Cache] API returned ${apiResult.count} items WITH intervals for squish ${squish}`);
+            finalItems = apiResult.items;
+            finalCount = apiResult.count;
+            finalOk = apiResult.ok;
+            finalError = apiResult.error;
+            dataSource = "api";
+          } else {
+            console.log(`[DataOne Cache] API also returned no intervals for squish ${squish}, using local data`);
+          }
+        }
+      } catch (apiErr) {
+        console.warn(`[DataOne Cache] API fallback failed for squish ${squish}:`, apiErr);
+      }
+    }
+    
+    // Store in cache
     const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
     
     await cacheCollection.updateOne(
@@ -384,31 +417,31 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
           squish,
           vin,
           data: {
-            ok: localResult.ok,
-            count: localResult.count,
-            items: localResult.items,
-            error: localResult.error,
+            ok: finalOk,
+            count: finalCount,
+            items: finalItems,
+            error: finalError,
           },
           vehicle: vehicleInfo,
           fetchedAt: now,
           expiresAt,
-          source: "cache",
+          source: dataSource,
         },
       },
       { upsert: true }
     );
     
-    console.log(`[DataOne Cache] Stored ${localResult.count} items for squish ${squish} from local DB, expires ${expiresAt.toISOString()}`);
+    console.log(`[DataOne Cache] Stored ${finalCount} items for squish ${squish} from ${dataSource}, expires ${expiresAt.toISOString()}`);
     
     return {
-      ok: localResult.ok,
+      ok: finalOk,
       vin,
       squish,
-      count: localResult.count,
-      items: localResult.items,
+      count: finalCount,
+      items: finalItems,
       vehicle: vehicleInfo,
-      error: localResult.error,
-      source: "cache",
+      error: finalError,
+      source: dataSource,
     };
   } catch (error) {
     console.error("[DataOne Cache] Error:", error);
