@@ -843,48 +843,41 @@ async function autoApplyLaborRate(context) {
       console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} keys: [${Object.keys(j).join(',')}]`);
 
       if (existingLabor.length === 0 && j.id) {
-        // Try singular /job/{id} endpoint (Tekmetric uses singular for full details)
+        // Fetch full job detail with labor entries
+        // Try internal singular endpoint first, then internal plural, then public v1 API
         const endpoints = [
-          `${baseUrl}/api/shop/${shopId}/job/${j.id}`,
-          `${baseUrl}/api/shop/${shopId}/jobs/${j.id}`
+          { url: `${baseUrl}/api/shop/${shopId}/job/${j.id}`, auth: 'x-auth-token' },
+          { url: `${baseUrl}/api/shop/${shopId}/jobs/${j.id}`, auth: 'x-auth-token' },
+          { url: `${baseUrl}/api/v1/jobs/${j.id}`, auth: 'x-auth-token' }
         ];
 
-        for (const endpoint of endpoints) {
+        for (const ep of endpoints) {
           if ((j.labor || []).length > 0) break;
           try {
-            const jRes = await fetch(endpoint, {
-              headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+            const jRes = await fetch(ep.url, {
+              headers: { [ep.auth]: smsTokens.tekmetric, 'content-type': 'application/json' }
             });
+            const label = ep.url.split('/api/')[1];
             if (jRes.ok) {
               const jDetail = await jRes.json();
-              const allKeys = Object.keys(jDetail);
-              const laborKeys = allKeys.filter(k => k.toLowerCase().includes('labor') || k.toLowerCase().includes('part'));
-              console.log(`[LaborRate]     ${endpoint.split('/api/')[1]} keys (${allKeys.length} total), labor/part related: [${laborKeys.join(',')}]`);
-              for (const lk of laborKeys) {
-                const val = jDetail[lk];
-                if (Array.isArray(val) && val.length > 0) {
-                  console.log(`[LaborRate]       ${lk}: ${val.length} items, first item keys: [${Object.keys(val[0]).join(',')}]`);
-                  console.log(`[LaborRate]       ${lk}[0]:`, JSON.stringify(val[0]).substring(0, 300));
-                } else if (Array.isArray(val)) {
-                  console.log(`[LaborRate]       ${lk}: empty array`);
-                } else {
-                  console.log(`[LaborRate]       ${lk}: ${typeof val} = ${JSON.stringify(val).substring(0, 100)}`);
-                }
+              const jobData = jDetail.data || jDetail;
+              const laborArr = jobData.labor || jobData.laborEntries || jobData.laborItems || [];
+              console.log(`[LaborRate]     ${label}: ${laborArr.length} labor entries`);
+              if (laborArr.length > 0) {
+                j.labor = laborArr;
+                j._fullDetail = jobData;
+                console.log(`[LaborRate]     Labor:`, laborArr.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
               }
-              j.labor = jDetail.labor || jDetail.laborEntries || jDetail.laborItems || jDetail.laborLines || [];
-              j.parts = j.parts || jDetail.parts || jDetail.partItems || jDetail.partEntries || [];
             } else {
-              console.log(`[LaborRate]     ${endpoint.split('/api/')[1]} returned ${jRes.status}`);
+              console.log(`[LaborRate]     ${label}: ${jRes.status}`);
             }
           } catch (e) {
-            console.warn(`[LaborRate]     Error fetching ${endpoint.split('/api/')[1]}:`, e.message);
+            console.warn(`[LaborRate]     Error:`, e.message);
           }
         }
 
-        if ((j.labor || []).length > 0) {
-          console.log(`[LaborRate]     Found ${j.labor.length} labor lines:`, j.labor.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
-        } else {
-          console.log(`[LaborRate]     No labor lines found for job "${j.name}" after trying all endpoints`);
+        if ((j.labor || []).length === 0) {
+          console.log(`[LaborRate]     No labor lines found for job "${j.name}"`);
         }
       } else if (existingLabor.length > 0) {
         j.labor = existingLabor;
@@ -1018,41 +1011,76 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
       continue;
     }
 
+    const shopId = context.shopId || tekmetricShopId;
+    let anyLaborNeedsUpdate = false;
+
     for (const labor of laborEntries) {
       const currentRate = labor.rate || 0;
       if (currentRate === rateInCents) {
         console.log(`[LaborRate] Labor "${labor.name}" on job "${job.name}" already at $${rateInCents/100}/hr, skipping`);
         skippedCount++;
-        continue;
+      } else {
+        anyLaborNeedsUpdate = true;
       }
+    }
 
-      const laborPayload = {
-        ...labor,
-        rate: rateInCents
-      };
+    if (!anyLaborNeedsUpdate) continue;
+
+    // Strategy 1: Try updating individual labor entries via PUT /labor/{id}
+    let strategy1Worked = false;
+    for (const labor of laborEntries) {
+      const currentRate = labor.rate || 0;
+      if (currentRate === rateInCents) continue;
 
       try {
         console.log(`[LaborRate] Updating labor "${labor.name}" (id: ${labor.id}) on job "${job.name}" from $${currentRate/100}/hr → $${rateInCents/100}/hr`);
+        const laborPayload = { ...labor, rate: rateInCents };
 
-        const updateRes = await fetch(`${baseUrl}/api/shop/${context.shopId || tekmetricShopId}/labor/${labor.id}`, {
+        const updateRes = await fetch(`${baseUrl}/api/shop/${shopId}/labor/${labor.id}`, {
           method: 'PUT',
-          headers: {
-            'x-auth-token': smsTokens.tekmetric,
-            'content-type': 'application/json'
-          },
+          headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
           body: JSON.stringify(laborPayload)
         });
 
         if (updateRes.ok) {
           updatedCount++;
+          strategy1Worked = true;
           if (!updatedJobNames.includes(job.name)) updatedJobNames.push(job.name);
-          console.log(`[LaborRate] Updated labor "${labor.name}" on job "${job.name}" to $${rateInCents/100}/hr`);
+          console.log(`[LaborRate] Updated labor "${labor.name}" via /labor/${labor.id}`);
         } else {
-          const errText = await updateRes.text();
-          console.error(`[LaborRate] Failed to update labor ${labor.id}:`, updateRes.status, errText.substring(0, 300));
+          console.log(`[LaborRate] PUT /labor/${labor.id} returned ${updateRes.status}`);
         }
       } catch (err) {
         console.error(`[LaborRate] Error updating labor ${labor.id}:`, err.message);
+      }
+    }
+
+    // Strategy 2: If individual labor update failed, try PUT entire job with modified labor
+    if (!strategy1Worked && job._fullDetail) {
+      try {
+        const updatedLabor = (job._fullDetail.labor || []).map(l => ({
+          ...l,
+          rate: rateInCents
+        }));
+        const jobPayload = { ...job._fullDetail, labor: updatedLabor };
+        console.log(`[LaborRate] Trying PUT /job/${job.id} with modified labor entries`);
+
+        const jobUpdateRes = await fetch(`${baseUrl}/api/shop/${shopId}/job/${job.id}`, {
+          method: 'PUT',
+          headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
+          body: JSON.stringify(jobPayload)
+        });
+
+        if (jobUpdateRes.ok) {
+          updatedCount += updatedLabor.length;
+          if (!updatedJobNames.includes(job.name)) updatedJobNames.push(job.name);
+          console.log(`[LaborRate] Updated ${updatedLabor.length} labor entries via PUT /job/${job.id}`);
+        } else {
+          const errText = await jobUpdateRes.text();
+          console.error(`[LaborRate] PUT /job/${job.id} returned ${jobUpdateRes.status}:`, errText.substring(0, 300));
+        }
+      } catch (err) {
+        console.error(`[LaborRate] Error updating job ${job.id}:`, err.message);
       }
     }
   }
