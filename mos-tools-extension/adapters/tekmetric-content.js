@@ -1088,20 +1088,8 @@ function init() {
   startCategoryChangeObserver();
 }
 
-// ==================== CONCERN API INTERCEPTOR (MAIN WORLD) ====================
-(function injectMainWorldInterceptor() {
-  const script = document.createElement('script');
-  script.src = chrome.runtime.getURL('adapters/interceptor.js');
-  script.onload = () => {
-    script.remove();
-    console.log('[MOS Tools] Main world interceptor loaded successfully');
-  };
-  script.onerror = (e) => {
-    console.error('[MOS Tools] Failed to load interceptor:', e);
-  };
-  (document.head || document.documentElement).appendChild(script);
-  console.log('[MOS Tools] Main world network interceptor injected via script src');
-})();
+// NOTE: Main world interceptor (interceptor.js) is now injected via manifest.json
+// at document_start in MAIN world for reliable fetch/XHR interception.
 
 // ==================== CONCERN INJECTION ====================
 function injectConcernText(text) {
