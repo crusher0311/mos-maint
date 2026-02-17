@@ -204,7 +204,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.warn("[LaborRate] Auto-apply error:", err.message);
       });
     }
-    
+
+    sendResponse({ success: true });
+    return false;
+  }
+
+  if (message.action === "CATEGORY_CHANGED") {
+    console.log("[LaborRate] Job category changed:", message.jobName, "→", message.newCategory);
+    if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId) {
+      lastAppliedRoId = null;
+      autoApplyLaborRate(currentSmsContext).catch(err => {
+        console.warn("[LaborRate] Category change re-apply error:", err.message);
+      });
+    }
     sendResponse({ success: true });
     return false;
   }
@@ -946,7 +958,7 @@ async function autoApplyLaborRate(context) {
     model: vehicle.model || vehicle.subModel || context.vehicle?.model || '',
     fuelType: derivedFuelType,
     jobCategories: (roData.jobs || []).map(j => {
-      const cat = j.jobCategoryName || j.jobCategory?.name || j.jobCategory || j.category || j.type || j.name || '';
+      const cat = j.jobCategoryName || j.jobCategory?.name || j.jobCategory || j.category || j.type || '';
       return typeof cat === 'string' ? cat : '';
     }).filter(Boolean),
     customerName,
