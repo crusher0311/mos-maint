@@ -213,7 +213,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("[LaborRate] Job category changed:", message.jobName, "→", message.newCategory);
     if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId) {
       lastAppliedRoId = null;
-      autoApplyLaborRate(currentSmsContext).catch(err => {
+      autoApplyLaborRate(currentSmsContext, { softRefresh: true }).catch(err => {
         console.warn("[LaborRate] Category change re-apply error:", err.message);
       });
     }
@@ -841,7 +841,7 @@ function findMatchingRule(rules, vehicleData) {
   return null;
 }
 
-async function autoApplyLaborRate(context) {
+async function autoApplyLaborRate(context, options = {}) {
   if (!mosApiToken || !context?.roId) return;
 
   // Currently only supports Tekmetric
@@ -978,7 +978,7 @@ async function autoApplyLaborRate(context) {
   const matchedRoRule = findMatchingRule(roLevelRules, vehicleData);
   if (matchedRoRule) {
     console.log(`[LaborRate] Matched RO-level rule: "${matchedRoRule.name}" (priority ${matchedRoRule.priority}) → $${matchedRoRule.rate}/hr`);
-    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, context, baseUrl);
+    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, context, baseUrl, options);
     if (roResult?.success) appliedAny = true;
   } else {
     console.log("[LaborRate] No RO-level rule matched");
@@ -1011,7 +1011,7 @@ async function autoApplyLaborRate(context) {
       if (!catMatch) continue;
 
       console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
-      const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, baseUrl);
+      const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, baseUrl, options);
       if (jobResult?.success) {
         appliedAny = true;
         if (jobResult.handledJobIds) {
@@ -1083,7 +1083,7 @@ async function autoApplyLaborRate(context) {
   lastAppliedRoId = context.roId;
 }
 
-async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl) {
+async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl, options = {}) {
   const categoryValues = (matchedRule.conditions || [])
     .filter(c => c.type === 'jobCategory')
     .flatMap(c => c.values || [])
@@ -1191,9 +1191,11 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
       roNumber: context.roNumber || context.roId
     }).catch(() => {});
 
+    const softRefresh = options.softRefresh || false;
+    const toastMsg = `${matchedRule.name}: $${matchedRule.rate}/hr applied to ${updatedJobNames.join(', ')}`;
     chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
       for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI" }).catch(() => {});
+        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI", soft: softRefresh, toastMessage: toastMsg }).catch(() => {});
       }
     });
 
@@ -1204,7 +1206,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
   return { success: false, error: "No matching jobs found for category", handledJobIds };
 }
 
-async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl) {
+async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl, options = {}) {
   const currentRate = roData.laborRate || 0;
   console.log(`[LaborRate] Current rate on RO: ${currentRate} (${currentRate/100}/hr), target: ${rateInCents} (${matchedRule.rate}/hr)`);
 
@@ -1267,9 +1269,11 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, bas
       roNumber: context.roNumber || context.roId
     }).catch(() => {});
 
+    const softRefresh = options.softRefresh || false;
+    const toastMsg = `${matchedRule.name}: $${matchedRule.rate}/hr applied to RO`;
     chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
       for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI" }).catch(() => {});
+        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI", soft: softRefresh, toastMessage: toastMsg }).catch(() => {});
       }
     });
 
