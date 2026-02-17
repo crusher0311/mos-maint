@@ -1053,64 +1053,65 @@ function init() {
   });
 }
 
-// ==================== CONCERN INJECTION ====================
-function injectConcernText(text) {
-  const selectors = [
-    'textarea[name*="concern"]',
-    'textarea[name*="complaint"]',
-    'textarea[placeholder*="concern"]',
-    'textarea[placeholder*="complaint"]',
-    'textarea[placeholder*="Concern"]',
-    'textarea[placeholder*="Complaint"]',
-    'textarea[data-testid*="concern"]',
-    'textarea[data-testid*="complaint"]',
-    'textarea[aria-label*="concern"]',
-    'textarea[aria-label*="Concern"]',
-    '.customer-concern textarea',
-    '.concern-textarea',
-    '[class*="concern"] textarea',
-    '[class*="complaint"] textarea'
-  ];
-
-  let textarea = null;
-  for (const sel of selectors) {
-    textarea = document.querySelector(sel);
-    if (textarea) break;
-  }
-
-  if (!textarea) {
-    const allTextareas = document.querySelectorAll('textarea');
-    for (const ta of allTextareas) {
-      const label = ta.closest('label') || ta.closest('.form-group')?.querySelector('label');
-      if (label && /concern|complaint/i.test(label.textContent)) {
-        textarea = ta;
-        break;
+// ==================== CONCERN API INTERCEPTOR ====================
+(function interceptConcernAPI() {
+  const origFetch = window.fetch;
+  window.fetch = function(...args) {
+    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+    const opts = args[1] || {};
+    if (/concern|complaint|issue/i.test(url) && opts.method && opts.method !== 'GET') {
+      console.log('[MOS Intercept] Concern-related API call detected:');
+      console.log('[MOS Intercept] URL:', url);
+      console.log('[MOS Intercept] Method:', opts.method);
+      console.log('[MOS Intercept] Headers:', JSON.stringify(Object.fromEntries(new Headers(opts.headers || {}).entries())));
+      if (opts.body) {
+        try {
+          console.log('[MOS Intercept] Body:', typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
+        } catch(e) {
+          console.log('[MOS Intercept] Body (raw):', opts.body);
+        }
       }
     }
-  }
-
-  if (!textarea) {
-    const allTextareas = document.querySelectorAll('textarea');
-    if (allTextareas.length === 1) {
-      textarea = allTextareas[0];
+    if (/repair-order/i.test(url) && opts.method && opts.method !== 'GET') {
+      console.log('[MOS Intercept] RO mutation detected:');
+      console.log('[MOS Intercept] URL:', url);
+      console.log('[MOS Intercept] Method:', opts.method);
+      if (opts.body) {
+        try {
+          console.log('[MOS Intercept] Body:', typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
+        } catch(e) {}
+      }
     }
-  }
+    return origFetch.apply(this, args);
+  };
 
-  if (textarea) {
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 'value'
-    ).set;
-    nativeInputValueSetter.call(textarea, text);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    textarea.dispatchEvent(new Event('change', { bubbles: true }));
-    textarea.focus();
-    showToast('Customer concern injected into RO', 'success');
-    return true;
-  }
+  const origXHR = XMLHttpRequest.prototype.open;
+  const origXHRSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+    this._mosUrl = url;
+    this._mosMethod = method;
+    return origXHR.call(this, method, url, ...rest);
+  };
+  XMLHttpRequest.prototype.send = function(body) {
+    if (this._mosUrl && /concern|complaint|issue/i.test(this._mosUrl) && this._mosMethod !== 'GET') {
+      console.log('[MOS Intercept XHR] Concern-related:', this._mosMethod, this._mosUrl);
+      if (body) console.log('[MOS Intercept XHR] Body:', body);
+    }
+    if (this._mosUrl && /repair-order/i.test(this._mosUrl) && this._mosMethod !== 'GET') {
+      console.log('[MOS Intercept XHR] RO mutation:', this._mosMethod, this._mosUrl);
+      if (body) console.log('[MOS Intercept XHR] Body:', body);
+    }
+    return origXHRSend.call(this, body);
+  };
 
-  showToast('Could not find concern field. Text copied to clipboard.', 'warning');
+  console.log('[MOS Tools] Network interceptor installed for concern API discovery');
+})();
+
+// ==================== CONCERN INJECTION ====================
+function injectConcernText(text) {
+  showToast('Concern text copied to clipboard. Use interceptor logs to find API.', 'info');
   navigator.clipboard.writeText(text).catch(() => {});
-  return false;
+  return true;
 }
 
 // Wait for page to be ready
