@@ -1047,7 +1047,7 @@ export async function GET(request: NextRequest) {
         year: vehicle.year,
         make: vehicle.make,
         model: vehicle.model,
-        vin: vehicle.vin
+        vin: vehicle.vin || vin?.toUpperCase() || null
       } : vin ? { vin: vin.toUpperCase() } : null,
       mileage,
       mileageEstimated,
