@@ -16,13 +16,12 @@
             if (parsed.jobCategoryCode || parsed.jobCategoryName) {
               console.log('[MOS Intercept] Job category change detected:', parsed.jobCategoryName || parsed.jobCategoryCode);
               var jobIdMatch = url.match(/\/api\/job\/(\d+)/);
-              window.dispatchEvent(new CustomEvent('mos-category-changed', {
-                detail: {
-                  jobId: jobIdMatch ? jobIdMatch[1] : null,
-                  categoryCode: parsed.jobCategoryCode || '',
-                  categoryName: parsed.jobCategoryName || ''
-                }
-              }));
+              window.postMessage({
+                type: 'MOS_CATEGORY_CHANGED',
+                jobId: jobIdMatch ? jobIdMatch[1] : null,
+                categoryCode: parsed.jobCategoryCode || '',
+                categoryName: parsed.jobCategoryName || ''
+              }, '*');
             }
           }
         } catch(e) {}
@@ -59,13 +58,12 @@
             if (parsed.jobCategoryCode || parsed.jobCategoryName) {
               console.log('[MOS Intercept XHR] Job category change detected:', parsed.jobCategoryName || parsed.jobCategoryCode);
               var jobIdMatch = this._mosUrl.match(/\/api\/job\/(\d+)/);
-              window.dispatchEvent(new CustomEvent('mos-category-changed', {
-                detail: {
-                  jobId: jobIdMatch ? jobIdMatch[1] : null,
-                  categoryCode: parsed.jobCategoryCode || '',
-                  categoryName: parsed.jobCategoryName || ''
-                }
-              }));
+              window.postMessage({
+                type: 'MOS_CATEGORY_CHANGED',
+                jobId: jobIdMatch ? jobIdMatch[1] : null,
+                categoryCode: parsed.jobCategoryCode || '',
+                categoryName: parsed.jobCategoryName || ''
+              }, '*');
             }
           }
         } catch(e) {}

@@ -1,0 +1,37 @@
+background.js:1287 [MOS Tools] Background service worker loaded
+background.js:35 [MOS] Restored API token from storage
+background.js:39 [MOS] Restored API URL: https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev
+background.js:138 [MOS] Side panel opens on action click
+background.js:102 [Tekmetric] Shop ID captured: 14245
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:752 [LaborRate] Fetched 5 rules
+background.js:900 [LaborRate] Loaded 3 jobs with labor from estimate
+background.js:932 [LaborRate] Vehicle: 2021 Chevrolet Silverado 1500
+background.js:969 [LaborRate] Matching against vehicle: 2021 Chevrolet Silverado 1500 fuel:  categories: ["maintenance","maintenance"] customer: Jay Demore phones: 1
+background.js:984 [LaborRate] No RO-level rule matched
+background.js:1013 [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+background.js:1125 [LaborRate] Labor "Change engine oil and filter.  Check and top off under hood fluids.  Perform general visual inspection.
+" on job "6K Lube Oil And Filter" already at $100/hr, skipping
+background.js:1102 [LaborRate] Job "Test Job" has no category, skipping per-job rule
+background.js:1125 [LaborRate] Labor "R&R Spark Plugs" on job "Spark Plugs" already at $100/hr, skipping
+background.js:1176 [LaborRate] All matching labor lines already at target rate, skipped 2
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:161 [MOS] Message received: GET_MOS_AUTH
+background.js:161 [MOS] Message received: GET_SMS_CONTEXT
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:721 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:728 [MOS] Updated VIN from API: 3GCUYEED2MG329819
+sidepanel.js:754 [MOS] Updated RO number from API: 1
+sidepanel.js:759 [MOS] Updated customer name from API: Jay Demore
+background.js:161 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:161 [MOS] Message received: GET_LABOR_RATE_RULES
+sidepanel.js:721 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:728 [MOS] Updated VIN from API: 3GCUYEED2MG329819
+sidepanel.js:754 [MOS] Updated RO number from API: 1
+sidepanel.js:759 [MOS] Updated customer name from API: Jay Demore

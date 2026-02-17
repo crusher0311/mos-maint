@@ -1033,19 +1033,21 @@ function openSidePanel() {
 let categoryChangeDebounce = null;
 
 function startCategoryChangeObserver() {
-  window.addEventListener('mos-category-changed', (e) => {
-    const { jobId, categoryCode, categoryName } = e.detail || {};
-    console.log(`[MOS Tools] Category change detected via network: job ${jobId} → ${categoryName} (${categoryCode})`);
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'MOS_CATEGORY_CHANGED') {
+      const { jobId, categoryCode, categoryName } = e.data;
+      console.log(`[MOS Tools] Category change detected via network: job ${jobId} → ${categoryName} (${categoryCode})`);
 
-    if (categoryChangeDebounce) clearTimeout(categoryChangeDebounce);
-    categoryChangeDebounce = setTimeout(() => {
-      chrome.runtime.sendMessage({
-        action: "CATEGORY_CHANGED",
-        jobId: jobId,
-        jobName: jobId,
-        newCategory: categoryName || categoryCode
-      }).catch(() => {});
-    }, 1000);
+      if (categoryChangeDebounce) clearTimeout(categoryChangeDebounce);
+      categoryChangeDebounce = setTimeout(() => {
+        chrome.runtime.sendMessage({
+          action: "CATEGORY_CHANGED",
+          jobId: jobId,
+          jobName: jobId,
+          newCategory: categoryName || categoryCode
+        }).catch(() => {});
+      }, 1500);
+    }
   });
 
   console.log('[MOS Tools] Category change listener registered (network-based)');
