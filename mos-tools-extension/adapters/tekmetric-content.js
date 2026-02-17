@@ -1053,58 +1053,53 @@ function init() {
   });
 }
 
-// ==================== CONCERN API INTERCEPTOR ====================
-(function interceptConcernAPI() {
-  const origFetch = window.fetch;
-  window.fetch = function(...args) {
-    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-    const opts = args[1] || {};
-    if (/concern|complaint|issue/i.test(url) && opts.method && opts.method !== 'GET') {
-      console.log('[MOS Intercept] Concern-related API call detected:');
-      console.log('[MOS Intercept] URL:', url);
-      console.log('[MOS Intercept] Method:', opts.method);
-      console.log('[MOS Intercept] Headers:', JSON.stringify(Object.fromEntries(new Headers(opts.headers || {}).entries())));
-      if (opts.body) {
-        try {
-          console.log('[MOS Intercept] Body:', typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
-        } catch(e) {
-          console.log('[MOS Intercept] Body (raw):', opts.body);
+// ==================== CONCERN API INTERCEPTOR (MAIN WORLD) ====================
+(function injectMainWorldInterceptor() {
+  const script = document.createElement('script');
+  script.textContent = `
+    (function() {
+      const origFetch = window.fetch;
+      window.fetch = function(...args) {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+        const opts = args[1] || {};
+        const method = opts.method || 'GET';
+        if (method !== 'GET') {
+          console.log('[MOS Intercept] ' + method + ' ' + url);
+          if (opts.body) {
+            try {
+              var bodyStr = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
+              console.log('[MOS Intercept] Body:', bodyStr.substring(0, 1000));
+            } catch(e) {}
+          }
         }
-      }
-    }
-    if (/repair-order/i.test(url) && opts.method && opts.method !== 'GET') {
-      console.log('[MOS Intercept] RO mutation detected:');
-      console.log('[MOS Intercept] URL:', url);
-      console.log('[MOS Intercept] Method:', opts.method);
-      if (opts.body) {
-        try {
-          console.log('[MOS Intercept] Body:', typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body));
-        } catch(e) {}
-      }
-    }
-    return origFetch.apply(this, args);
-  };
+        return origFetch.apply(this, args);
+      };
 
-  const origXHR = XMLHttpRequest.prototype.open;
-  const origXHRSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-    this._mosUrl = url;
-    this._mosMethod = method;
-    return origXHR.call(this, method, url, ...rest);
-  };
-  XMLHttpRequest.prototype.send = function(body) {
-    if (this._mosUrl && /concern|complaint|issue/i.test(this._mosUrl) && this._mosMethod !== 'GET') {
-      console.log('[MOS Intercept XHR] Concern-related:', this._mosMethod, this._mosUrl);
-      if (body) console.log('[MOS Intercept XHR] Body:', body);
-    }
-    if (this._mosUrl && /repair-order/i.test(this._mosUrl) && this._mosMethod !== 'GET') {
-      console.log('[MOS Intercept XHR] RO mutation:', this._mosMethod, this._mosUrl);
-      if (body) console.log('[MOS Intercept XHR] Body:', body);
-    }
-    return origXHRSend.call(this, body);
-  };
+      var origOpen = XMLHttpRequest.prototype.open;
+      var origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        this._mosUrl = url;
+        this._mosMethod = method;
+        return origOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function(body) {
+        if (this._mosMethod && this._mosMethod !== 'GET') {
+          console.log('[MOS Intercept XHR] ' + this._mosMethod + ' ' + this._mosUrl);
+          if (body) {
+            try {
+              console.log('[MOS Intercept XHR] Body:', (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 1000));
+            } catch(e) {}
+          }
+        }
+        return origSend.apply(this, arguments);
+      };
 
-  console.log('[MOS Tools] Network interceptor installed for concern API discovery');
+      console.log('[MOS Intercept] Main world interceptor installed');
+    })();
+  `;
+  (document.head || document.documentElement).appendChild(script);
+  script.remove();
+  console.log('[MOS Tools] Main world network interceptor injected');
 })();
 
 // ==================== CONCERN INJECTION ====================
