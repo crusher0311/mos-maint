@@ -266,6 +266,17 @@
                 <input type="text" id="rate-form-makes" placeholder="BMW, Lexus, Mercedes (comma-separated)" autocomplete="off">
               </div>
               <div class="rates-form-field">
+                <label>FUEL TYPE</label>
+                <select id="rate-form-fuel-type">
+                  <option value="">Any fuel type</option>
+                  <option value="Diesel">Diesel only</option>
+                  <option value="Gas">Gas only</option>
+                  <option value="Electric">Electric only</option>
+                  <option value="Hybrid">Hybrid only</option>
+                  <option value="Flex Fuel">Flex Fuel only</option>
+                </select>
+              </div>
+              <div class="rates-form-field">
                 <label>JOB CATEGORIES</label>
                 <input type="text" id="rate-form-categories" placeholder="Maintenance, Diagnostics, Tires (comma-separated)" autocomplete="off">
                 <span class="rates-form-hint">Leave blank to apply to all job types</span>

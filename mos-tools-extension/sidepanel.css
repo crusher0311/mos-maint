@@ -1212,6 +1212,7 @@ body {
   margin-bottom: 5px;
 }
 
+.rates-form-field select,
 .rates-form-field input[type="text"],
 .rates-form-field input[type="number"] {
   width: 100%;
@@ -1226,9 +1227,15 @@ body {
   box-sizing: border-box;
 }
 
-.rates-form-field input:focus {
+.rates-form-field input:focus,
+.rates-form-field select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+}
+
+.rates-form-field select {
+  cursor: pointer;
+  appearance: auto;
 }
 
 .rates-form-row {
