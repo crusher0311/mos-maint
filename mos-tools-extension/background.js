@@ -806,6 +806,8 @@ async function autoApplyLaborRate(context) {
       return;
     }
     roData = await res.json();
+    console.log("[LaborRate] RO data keys:", Object.keys(roData).join(', '));
+    if (roData.jobs) console.log(`[LaborRate] RO includes ${roData.jobs.length} jobs inline`);
   } catch (err) {
     console.warn("[LaborRate] Error fetching RO:", err.message);
     return;
@@ -825,31 +827,68 @@ async function autoApplyLaborRate(context) {
         roData.jobs = jobsBody.content || jobsBody.data || jobsBody || [];
         if (Array.isArray(roData.jobs)) {
           console.log(`[LaborRate] Fetched ${roData.jobs.length} jobs separately for RO`);
-          for (const j of roData.jobs) {
-            const laborCount = (j.labor || j.laborEntries || j.laborItems || []).length;
-            console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} labor: ${laborCount} lines`);
-            if (laborCount === 0 && j.id) {
-              try {
-                const jDetailRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs/${j.id}`, {
-                  headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
-                });
-                if (jDetailRes.ok) {
-                  const jDetail = await jDetailRes.json();
-                  j.labor = jDetail.labor || jDetail.laborEntries || jDetail.laborItems || [];
-                  j.parts = j.parts || jDetail.parts || jDetail.partItems || [];
-                  console.log(`[LaborRate]     Fetched ${j.labor.length} labor lines for job "${j.name}":`, j.labor.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
-                }
-              } catch (e) {
-                console.warn(`[LaborRate]     Failed to fetch job ${j.id} details:`, e.message);
-              }
-            }
-          }
         }
       } else {
         console.warn("[LaborRate] Failed to fetch jobs:", jobsRes.status);
       }
     } catch (err) {
       console.warn("[LaborRate] Error fetching jobs:", err.message);
+    }
+  }
+
+  // For each job, ensure we have labor lines loaded
+  if (Array.isArray(roData.jobs)) {
+    for (const j of roData.jobs) {
+      const existingLabor = j.labor || j.laborEntries || j.laborItems || [];
+      console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} keys: [${Object.keys(j).join(',')}]`);
+
+      if (existingLabor.length === 0 && j.id) {
+        // Try fetching labor entries for this job directly
+        try {
+          const laborRes = await fetch(`${baseUrl}/api/shop/${shopId}/labor?jobId=${j.id}`, {
+            headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+          });
+          if (laborRes.ok) {
+            const laborBody = await laborRes.json();
+            const laborList = laborBody.content || laborBody.data || (Array.isArray(laborBody) ? laborBody : []);
+            if (laborList.length > 0) {
+              j.labor = laborList;
+              console.log(`[LaborRate]     Fetched ${laborList.length} labor entries via /labor?jobId:`, laborList.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
+            } else {
+              console.log(`[LaborRate]     /labor?jobId returned 0 entries, keys:`, Object.keys(laborBody).join(','));
+            }
+          } else {
+            console.log(`[LaborRate]     /labor?jobId returned ${laborRes.status}`);
+          }
+        } catch (e) {
+          console.warn(`[LaborRate]     Error fetching labor for job ${j.id}:`, e.message);
+        }
+
+        // Fallback: try individual job detail endpoint
+        if ((j.labor || []).length === 0) {
+          try {
+            const jDetailRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs/${j.id}`, {
+              headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+            });
+            if (jDetailRes.ok) {
+              const jDetail = await jDetailRes.json();
+              const detailKeys = Object.keys(jDetail).join(',');
+              console.log(`[LaborRate]     Job detail keys: [${detailKeys}]`);
+              j.labor = jDetail.labor || jDetail.laborEntries || jDetail.laborItems || [];
+              if (j.labor.length > 0) {
+                console.log(`[LaborRate]     Found ${j.labor.length} labor lines in job detail`);
+              } else {
+                console.log(`[LaborRate]     Job detail also has 0 labor lines`);
+              }
+            }
+          } catch (e) {
+            console.warn(`[LaborRate]     Failed to fetch job detail:`, e.message);
+          }
+        }
+      } else if (existingLabor.length > 0) {
+        j.labor = existingLabor;
+        console.log(`[LaborRate]     Has ${existingLabor.length} labor entries inline`);
+      }
     }
   }
 
