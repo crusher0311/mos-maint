@@ -1011,8 +1011,8 @@ async function autoApplyLaborRate(context) {
     console.log("[LaborRate] Per-job rules exist but no job categories found on RO");
   }
 
-  // If RO-level rule has "applyToAllLabor" enabled, update unmatched jobs' labor to the RO rate
-  if (matchedRoRule && matchedRoRule.applyToAllLabor) {
+  // Apply RO-level rate to jobs not handled by per-job rules (no category or unmatched category)
+  if (matchedRoRule && (matchedRoRule.applyToAllLabor || perJobRules.length > 0)) {
     const roRateInCents = Math.round(matchedRoRule.rate * 100);
     const jobs = roData.jobs || [];
     const shopId = context.shopId || tekmetricShopId;
