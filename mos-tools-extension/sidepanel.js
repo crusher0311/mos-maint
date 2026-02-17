@@ -288,10 +288,24 @@ function setupEventListeners() {
     }
     if (message.action === 'LABOR_RATE_APPLIED') {
       if (message.success) {
-        showNotification(
-          `Labor rate updated: "${message.ruleName}" → $${message.rate.toFixed(2)}/hr (was $${message.previousRate.toFixed(2)}/hr)`,
-          'success'
-        );
+        const rate = typeof message.rate === 'number' ? message.rate.toFixed(2) : message.rate;
+        if (message.perJob) {
+          showNotification(
+            `Labor rate updated: "${message.ruleName}" → $${rate}/hr on ${message.jobNames?.join(', ') || 'jobs'}`,
+            'success'
+          );
+        } else if (message.previousRate != null) {
+          const prevRate = typeof message.previousRate === 'number' ? message.previousRate.toFixed(2) : message.previousRate;
+          showNotification(
+            `Labor rate updated: "${message.ruleName}" → $${rate}/hr (was $${prevRate}/hr)`,
+            'success'
+          );
+        } else {
+          showNotification(
+            `Labor rate updated: "${message.ruleName}" → $${rate}/hr`,
+            'success'
+          );
+        }
       } else {
         showNotification(`Labor rate error: ${message.error}`, 'error');
       }
