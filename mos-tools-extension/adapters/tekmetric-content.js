@@ -1056,50 +1056,16 @@ function init() {
 // ==================== CONCERN API INTERCEPTOR (MAIN WORLD) ====================
 (function injectMainWorldInterceptor() {
   const script = document.createElement('script');
-  script.textContent = `
-    (function() {
-      const origFetch = window.fetch;
-      window.fetch = function(...args) {
-        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
-        const opts = args[1] || {};
-        const method = opts.method || 'GET';
-        if (method !== 'GET') {
-          console.log('[MOS Intercept] ' + method + ' ' + url);
-          if (opts.body) {
-            try {
-              var bodyStr = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
-              console.log('[MOS Intercept] Body:', bodyStr.substring(0, 1000));
-            } catch(e) {}
-          }
-        }
-        return origFetch.apply(this, args);
-      };
-
-      var origOpen = XMLHttpRequest.prototype.open;
-      var origSend = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open = function(method, url) {
-        this._mosUrl = url;
-        this._mosMethod = method;
-        return origOpen.apply(this, arguments);
-      };
-      XMLHttpRequest.prototype.send = function(body) {
-        if (this._mosMethod && this._mosMethod !== 'GET') {
-          console.log('[MOS Intercept XHR] ' + this._mosMethod + ' ' + this._mosUrl);
-          if (body) {
-            try {
-              console.log('[MOS Intercept XHR] Body:', (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 1000));
-            } catch(e) {}
-          }
-        }
-        return origSend.apply(this, arguments);
-      };
-
-      console.log('[MOS Intercept] Main world interceptor installed');
-    })();
-  `;
+  script.src = chrome.runtime.getURL('adapters/interceptor.js');
+  script.onload = () => {
+    script.remove();
+    console.log('[MOS Tools] Main world interceptor loaded successfully');
+  };
+  script.onerror = (e) => {
+    console.error('[MOS Tools] Failed to load interceptor:', e);
+  };
   (document.head || document.documentElement).appendChild(script);
-  script.remove();
-  console.log('[MOS Tools] Main world network interceptor injected');
+  console.log('[MOS Tools] Main world network interceptor injected via script src');
 })();
 
 // ==================== CONCERN INJECTION ====================
