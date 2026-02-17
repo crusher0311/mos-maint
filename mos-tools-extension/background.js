@@ -1086,9 +1086,13 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
   for (const job of jobs) {
     const jobCat = (job.jobCategoryName || job.jobCategory?.name || job.jobCategory || job.category || job.type || '').toLowerCase();
 
+    if (!jobCat) {
+      console.log(`[LaborRate] Job "${job.name}" has no category, skipping per-job rule`);
+      continue;
+    }
     const matches = categoryValues.some(cv => jobCat.includes(cv) || cv.includes(jobCat));
     if (!matches) {
-      console.log(`[LaborRate] Job "${job.name}" category "${jobCat || 'none'}" does not match rule categories [${categoryValues.join(',')}]`);
+      console.log(`[LaborRate] Job "${job.name}" category "${jobCat}" does not match rule categories [${categoryValues.join(',')}]`);
       continue;
     }
 
