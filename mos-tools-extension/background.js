@@ -23,6 +23,9 @@ let laborRateRulesLastFetch = 0;
 const LABOR_RULES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let laborRateAutoApply = true; // Default on
 let lastAppliedRoId = null; // Prevent duplicate applications
+let ownJobPostInFlight = false; // Track our own POST /job calls to avoid loops
+let lastJobCount = 0; // Track job count to detect new jobs
+let laborReapplyTimer = null; // Debounce timer for re-applying after new jobs
 
 // ==================== PERSISTENCE ====================
 // Restore MOS auth on startup
@@ -73,6 +76,22 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       }
     } catch (e) {}
     
+    // Detect when Tekmetric UI adds/modifies a job — re-apply labor rates
+    if (!ownJobPostInFlight && laborRateAutoApply && currentSmsContext?.roId) {
+      const isJobPost = details.method === 'POST' && /\/api\/shop\/\d+\/job\b/.test(details.url);
+      if (isJobPost) {
+        console.log("[LaborRate] New job detected on RO, will re-apply rules");
+        if (laborReapplyTimer) clearTimeout(laborReapplyTimer);
+        laborReapplyTimer = setTimeout(() => {
+          lastAppliedRoId = null; // Reset so it re-applies on same RO
+          lastJobCount = 0;
+          autoApplyLaborRate(currentSmsContext).catch(err => {
+            console.warn("[LaborRate] Re-apply after new job error:", err.message);
+          });
+        }, 2000); // Wait 2s for Tekmetric to finish saving
+      }
+    }
+
     // Capture shop ID from URL
     const shopMatch = details.url.match(/\/(?:token\/)?shop\/(\d+)/);
     if (shopMatch) {
@@ -1008,11 +1027,13 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
       const laborNames = laborEntries.filter(l => (l.rate || 0) !== rateInCents).map(l => l.name).join(', ');
       console.log(`[LaborRate] Updating job "${job.name}" labor (${laborNames}) to $${rateInCents/100}/hr via POST /job`);
 
+      ownJobPostInFlight = true;
       const res = await fetch(`${baseUrl}/api/shop/${shopId}/job`, {
         method: 'POST',
         headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
         body: JSON.stringify(jobPayload)
       });
+      ownJobPostInFlight = false;
 
       if (res.ok) {
         const resData = await res.json();
@@ -1024,6 +1045,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
         console.error(`[LaborRate] Failed to update job "${job.name}": ${res.status}`, errText.substring(0, 300));
       }
     } catch (err) {
+      ownJobPostInFlight = false;
       console.error(`[LaborRate] Error updating job "${job.name}":`, err.message);
     }
   }
