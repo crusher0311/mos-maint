@@ -1,0 +1,182 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [MOS] Side panel opens on action click
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/job-board-group-by?view=column&board=ACTIVE&groupBy=ROSTATUS
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/repair-order/295818536
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/transparency-settings
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/estimate
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/repair-orders/295818536/customer-concerns
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/repair-orders/295818536/technician-concerns
+ [Tekmetric] Auth token captured
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/jobs/job-history?vehicleIds=139046186&archived=false&repairOrderStatusId=5%2C6&jobStatus=DECLINED&linkedCustomers=
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/favorite-jobs
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/repair-orders/295818536/technician-concerns/sort-type
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/profit/labor
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/tekmotor/v2/96695/search?search=&isSmartJob=true&subModelId=696&vehicleId=155588&engineConfigId=18204
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/canned-jobs?search=&size=20
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [Tekmetric API] GET https://shop.tekmetric.com/api/tekmotor/v2/96695/search?search=&isSmartJob=true&subModelId=696&vehicleId=155588&engineConfigId=18204
+ [Tekmetric] Auth token captured
+ [LaborRate] Fetched 2 rules
+ [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/repair-order/295818536
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [LaborRate] RO data keys: id, repairOrderNumber, shop, repairOrderStatus, repairOrderLabel, repairOrderCustomLabel, color, customer, vehicle, laborRate, taxRate, authorized, authorizedDate, completedDate, postedDate, archivedDate, nonce, estimateShareType, estimateShareDate, inspectionShareType, inspectionShareDate, invoiceShareType, invoiceShareDate, milesIn, milesOut, odometerInop, keytag, notes, progress, laborTime, completedLaborTime, numSublets, completedSublets, amountPaid, balanceDue, defaultTechnicianId, defaultTechnicianAccountFullName, serviceWriterId, serviceWriterAccountFullName, taxFees, customerTimeIn, customerTimeOut, saveCustomerParts, version, migratedRo, leadSource, referrerId, referrerName, utmId, appointmentOption, poNumber, creditedAmount, usedCreditAmount, jobs, autoIntegrateFleetInfo
+ [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/estimate
+ [Tekmetric] Auth token captured
+ [LaborRate] Estimate data keys (19): discountTotal, taxes, taxesBeforeCapping, feesTotal, parts, labor, sublet, taxRate, jobTotal, jobs, sublets, discounts, fees, unbilledParts, authorizedTotal, taxDetails, shopTekmessageInUse, subTotal, total
+ [LaborRate] Got 3 jobs from estimate endpoint
+ [LaborRate]   Job: "CEL" (id: 1022006367) category: test labor: 1 entries
+ [LaborRate]     Labor: "CEL Test" $135/hr (id:813818773)
+ [LaborRate]   Job: "Diag CEL" (id: 1055560544) category: diagnostics labor: 1 entries
+ [LaborRate]     Labor: "testing" $135/hr (id:839616490)
+ [LaborRate]   Job: "test" (id: 1055570135) category: diagnostics labor: 1 entries
+ [LaborRate]     Labor: "1" $135/hr (id:839627197)
+ [LaborRate] Raw vehicle data from Tekmetric: {"make":"Ford","model":"F-350 Super Duty","subModel":"Lariat","year":2011,"engine":null,"engineDescription":"6.7L 8Cyl DIESEL Turbocharged"}
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","diagnostics"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "Ford" (priority 9) → $195.95/hr
+ [LaborRate] Current rate on RO: 13500 (135/hr), target: 19595 (195.95/hr)
+ [LaborRate] Sending PUT to /api/repair-order/295818536/summary with laborRate: 19595 ($195.95/hr)
+ [Tekmetric API] PUT https://shop.tekmetric.com/api/repair-order/295818536/summary
+ [Tekmetric] Auth token captured
+ [LaborRate] Update response: 200 {"type":"SUCCESS","message":"Repair Order updated","data":{"id":295818536,"repairOrderNumber":32,"shop":{"id":14245,"name":"Service Solutions Garage","nickname":"","phone":"4138962771","email":"","website":null,"color":null,"taxId":null,"licenseNumber":null,"dateCreated":null,"address":{"id":83161405,"address1":"12004 Southwest 26th Street","address2":"","city":"Yukon","state":"OK","zip":"73099","fullAddress":"12004 Southwest 26th Street, Yukon, OK 73099","streetAddress":"12004 Southwest 26th St
+ [LaborRate] Applied "Ford" - $195.95/hr (19595 cents) to RO #032
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Updating labor "testing" (id: 839616490) on job "Diag CEL" from $135/hr → $299.95/hr
+ [Tekmetric API] PUT https://shop.tekmetric.com/api/shop/14245/labor/839616490
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+ [LaborRate] PUT /labor/839616490 returned 405
+ [LaborRate] Updating labor "1" (id: 839627197) on job "test" from $135/hr → $299.95/hr
+ [Tekmetric API] PUT https://shop.tekmetric.com/api/shop/14245/labor/839627197
+ [Tekmetric] Shop ID captured: 14245
+ [Tekmetric] Auth token captured
+background.js:1043 [LaborRate] PUT /labor/839627197 returned 405
+background.js:1110 [LaborRate] No matching jobs/labor found for category rule
+background.js:97 [Tekmetric] Auth token captured
+background.js:143 [MOS] Message received: SET_SMS_CONTEXT
+background.js:175 [MOS] SMS context updated: Object
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:97 [Tekmetric] Auth token captured
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/repair-order/295818536
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/transparency-settings
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/estimate
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/repair-orders/295818536/customer-concerns
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/repair-orders/295818536/technician-concerns
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/jobs/job-history?vehicleIds=139046186&archived=false&repairOrderStatusId=5%2C6&jobStatus=DECLINED&linkedCustomers=
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/favorite-jobs
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/repair-orders/295818536/technician-concerns/sort-type
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/repair-order/295818536/profit/labor
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/tekmotor/v2/96695/search?search=&isSmartJob=true&subModelId=696&vehicleId=155588&engineConfigId=18204
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/shop/14245/canned-jobs?search=&size=20
+background.js:86 [Tekmetric] Shop ID captured: 14245
+background.js:97 [Tekmetric] Auth token captured
+background.js:78 [Tekmetric API] GET https://shop.tekmetric.com/api/tekmotor/v2/96695/search?search=&isSmartJob=true&subModelId=696&vehicleId=155588&engineConfigId=18204
+background.js:97 [Tekmetric] Auth token captured
+background.js:143 [MOS] Message received: GET_MOS_AUTH
+background.js:143 [MOS] Message received: GET_SMS_CONTEXT
+background.js:143 [MOS] Message received: MOS_API_REQUEST
+background.js:143 [MOS] Message received: MOS_API_REQUEST
+background.js:143 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:718 [MOS] Updated RO number from API: 32
+sidepanel.js:723 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:718 [MOS] Updated RO number from API: 32
+sidepanel.js:723 [MOS] Updated customer name from API: Brandon Crusha
