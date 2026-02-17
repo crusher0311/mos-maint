@@ -73,6 +73,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       }
     } catch (e) {}
     
+    // Debug: log all Tekmetric API URLs related to jobs/labor/estimate
+    if (details.url.includes('/api/') && /job|labor|estimate|repair-order/i.test(details.url)) {
+      console.log(`[Tekmetric API] ${details.method} ${details.url}`);
+    }
+
     // Capture shop ID from URL
     const shopMatch = details.url.match(/\/(?:token\/)?shop\/(\d+)/);
     if (shopMatch) {

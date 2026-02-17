@@ -1,0 +1,121 @@
+Job
+Returns a Job by ID
+Request Headers
+Authorization	Bearer access_token
+Request Parameters
+id
+Integer	job ID
+GET
+/api/v1/jobs/{id}
+Example Request
+curl -X GET 'https://sandbox.tekmetric.com/api/v1/jobs/1084138' \
+-H "Authorization: Bearer dd824dda-c02c-478a-aa84-cd9fdb217c15"
+Example Response
+{
+  "id": 1084138,
+  "repairOrderId": 869586,
+  "vehicleId": 516457,
+  "customerId": 361186,
+  "name": "Diagnostic Inspection",
+  "authorized": true,
+  "authorizedDate": "2019-02-25T16:12:17",
+  "selected": true,
+  "technicianId": 100,
+  "note": "Code 2343 - will need airbag replacement",
+  "jobCategoryName": "Heating & Air Conditioning",
+  "partsTotal": 25997,
+  "laborTotal": 13000,
+  "discountTotal": 1650,
+  "feeTotal": 4900,
+  "subtotal": 42247,
+  "archived": false,
+  "createdDate": "2019-02-27T10:31:59Z",
+  "updatedDate": "2019-02-28T10:32:28Z",
+  "completedDate": "2019-02-28T11:35:28Z",
+  "labor": [
+    {
+      "id": 2563821,
+      "name": "Diagnostic Inspection",
+      "rate": 13000,
+      "hours": 1,
+      "complete": false
+    }
+  ],
+  "parts": [
+    {
+      "id": 2735929,
+      "quantity": 1,
+      "brand": "AutoCraft Gold",
+      "name": "Battery",
+      "partNumber": "#35-2",
+      "description": "Group size 35, 640 CCA",
+      "cost": 15999,
+      "retail": 23997,
+      "model": null,
+      "width": null,
+      "ratio": null,
+      "diameter": null,
+      "constructionType": null,
+      "loadIndex": null,
+      "speedRating": null,
+      "partType": {
+        "id": 1,
+        "code": "PART",
+        "name": "Part"
+      }
+    },
+    {
+      "id": 2735928,
+      "quantity": 1,
+      "brand": "Cooper",
+      "name": null,
+      "partNumber": null,
+      "description": null,
+      "cost": 1000,
+      "retail": 2000,
+      "model": "Tire",
+      "width": "105",
+      "ratio": 45,
+      "diameter": 17,
+      "constructionType": "",
+      "loadIndex": "",
+      "speedRating": "",
+      "partType": {
+        "id": 2,
+        "code": "TIRE",
+        "name": "Tire"
+      },
+      "dotNumbers": [
+        "12345678",
+        "ASDF5678"
+      ]
+    }
+  ],
+  "fees": [
+    {
+      "id": 685613,
+      "name": "Percentage Job Fee",
+      "total": 3900
+    },
+    {
+      "id": 685612,
+      "name": "Fixed Job Fee",
+      "total": 1000
+    }
+  ],
+  "discounts": [
+    {
+      "id": 125750,
+      "name": "Percentage Job Discount",
+      "total": 650
+    },
+    {
+      "id": 125748,
+      "name": "Fixed Job Discount",
+      "total": 1000
+    }
+  ],
+  "laborHours": 0.2,
+  "loggedHours": 0.67,
+  "sort": 1
+}
