@@ -22,11 +22,16 @@ function detectContext() {
     mileage: null
   };
 
-  // Extract shop ID and RO ID from URL
-  const urlMatch = url.match(/\/(?:admin\/)?shop\/(\d+)\/repair-orders\/(\d+)/);
-  if (urlMatch) {
-    context.shopId = urlMatch[1];
-    context.roId = urlMatch[2];
+  // Extract shop ID from URL (always available on any shop page)
+  const shopMatch = url.match(/\/(?:admin\/)?shop\/(\d+)/);
+  if (shopMatch) {
+    context.shopId = shopMatch[1];
+  }
+  
+  // Extract RO ID from URL (only on repair order pages)
+  const roMatch = url.match(/\/(?:admin\/)?shop\/\d+\/repair-orders\/(\d+)/);
+  if (roMatch) {
+    context.roId = roMatch[1];
   }
   
   // ============ EXTRACT RO NUMBER ============
@@ -312,13 +317,12 @@ function detectContext() {
 function updateContext() {
   const context = detectContext();
   
-  // Only send update if context changed
   const contextStr = JSON.stringify(context);
   if (contextStr !== JSON.stringify(lastContext)) {
     lastContext = context;
     
-    if (context.roId) {
-      console.log("[MOS Tools] RO context detected:", context);
+    if (context.shopId) {
+      console.log("[MOS Tools] Context detected:", context.roId ? `RO ${context.roId}` : 'shop-level', context);
       chrome.runtime.sendMessage({ 
         action: "SET_SMS_CONTEXT", 
         context 

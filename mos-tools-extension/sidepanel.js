@@ -321,6 +321,8 @@ function showMainState() {
   showSupportFab();
 }
 
+const RO_INDEPENDENT_TABS = ['rates', 'concern'];
+
 function switchTab(tab) {
   currentTab = tab;
   
@@ -391,15 +393,52 @@ function switchTab(tab) {
     }
   }
   
-  if (tab === 'plan' && currentContext) {
+  const needsRo = !RO_INDEPENDENT_TABS.includes(tab);
+  if (needsRo && (!currentContext || !currentContext.roId)) {
+    let roOverlay = panel.querySelector('.ro-required-overlay');
+    if (!roOverlay) {
+      roOverlay = document.createElement('div');
+      roOverlay.className = 'ro-required-overlay';
+      roOverlay.innerHTML = `
+        <div class="upgrade-overlay-content">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--gray-300); margin-bottom: 12px;">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <p class="upgrade-title">Repair Order Required</p>
+          <p class="upgrade-message">Open a repair order in Tekmetric to use this feature.</p>
+        </div>
+      `;
+      panel.prepend(roOverlay);
+    }
+    roOverlay.classList.remove('hidden');
+    Array.from(panel.children).forEach(child => {
+      if (!child.classList.contains('ro-required-overlay') && !child.classList.contains('upgrade-overlay')) {
+        child.style.display = 'none';
+      }
+    });
+    return;
+  } else {
+    const roOverlay = panel.querySelector('.ro-required-overlay');
+    if (roOverlay) roOverlay.classList.add('hidden');
+    Array.from(panel.children).forEach(child => {
+      if (!child.classList.contains('ro-required-overlay') && !child.classList.contains('upgrade-overlay')) {
+        child.style.display = '';
+      }
+    });
+  }
+
+  if (tab === 'plan' && currentContext?.roId) {
     loadPlan();
-  } else if (tab === 'failures' && currentContext) {
+  } else if (tab === 'failures' && currentContext?.roId) {
     loadCommonFailures();
-  } else if (tab === 'canned' && currentContext) {
+  } else if (tab === 'canned' && currentContext?.roId) {
     loadCannedJobs();
   } else if (tab === 'rates') {
     loadLaborRates();
-  } else if (tab === 'sticker') {
+  } else if (tab === 'sticker' && currentContext?.roId) {
     loadKeytagSection();
     loadStickerConfig();
   }
@@ -408,48 +447,55 @@ function switchTab(tab) {
 function updateContext(context) {
   currentContext = context;
   
-  if (context && context.roId) {
+  if (context && (context.roId || context.shopId)) {
     elements.noContext.classList.add('hidden');
     elements.hasContext.classList.remove('hidden');
     
-    // Display vehicle info
-    if (context.vehicle) {
-      elements.vehicleDisplay.textContent = 
-        `${context.vehicle.year} ${context.vehicle.make} ${context.vehicle.model}`;
-    } else {
-      elements.vehicleDisplay.textContent = 'Vehicle';
-    }
-    
-    // Display user-friendly RO number if available, otherwise fall back to internal ID
-    elements.roDisplay.textContent = `RO #${context.roNumber || context.roId}`;
-    
-    if (context.mileage) {
-      elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} mi`;
-      elements.mileageDisplay.classList.remove('hidden');
-      if (context.mileageEstimated) {
-        elements.mileageDisplay.classList.add('mileage-estimated');
-        const details = context.mileageEstimateDetails;
-        elements.mileageDisplay.title = details
-          ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} mi on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} mi/day`
-          : 'Estimated from CARFAX service history';
+    if (context.roId) {
+      if (context.vehicle) {
+        elements.vehicleDisplay.textContent = 
+          `${context.vehicle.year} ${context.vehicle.make} ${context.vehicle.model}`;
       } else {
-        elements.mileageDisplay.classList.remove('mileage-estimated');
-        elements.mileageDisplay.title = '';
+        elements.vehicleDisplay.textContent = 'Vehicle';
+      }
+      elements.roDisplay.textContent = `RO #${context.roNumber || context.roId}`;
+      
+      if (context.mileage) {
+        elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} mi`;
+        elements.mileageDisplay.classList.remove('hidden');
+        if (context.mileageEstimated) {
+          elements.mileageDisplay.classList.add('mileage-estimated');
+          const details = context.mileageEstimateDetails;
+          elements.mileageDisplay.title = details
+            ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} mi on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} mi/day`
+            : 'Estimated from CARFAX service history';
+        } else {
+          elements.mileageDisplay.classList.remove('mileage-estimated');
+          elements.mileageDisplay.title = '';
+        }
+      } else {
+        elements.mileageDisplay.classList.add('hidden');
       }
     } else {
+      elements.vehicleDisplay.textContent = '';
+      elements.roDisplay.textContent = '';
       elements.mileageDisplay.classList.add('hidden');
     }
     
-    // Fetch features for this shop
     fetchShopFeatures();
     
-    // Load tab data
-    if (currentTab === 'plan') {
-      loadPlan();
-    } else if (currentTab === 'failures') {
-      loadCommonFailures();
-    } else if (currentTab === 'canned') {
-      loadCannedJobs();
+    if (context.roId) {
+      if (currentTab === 'plan') {
+        loadPlan();
+      } else if (currentTab === 'failures') {
+        loadCommonFailures();
+      } else if (currentTab === 'canned') {
+        loadCannedJobs();
+      }
+    } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
+      switchTab(currentTab);
+    } else {
+      switchTab(RO_INDEPENDENT_TABS[0]);
     }
   } else {
     elements.noContext.classList.remove('hidden');
@@ -458,26 +504,19 @@ function updateContext(context) {
 }
 
 async function fetchShopFeatures() {
-  if (!currentContext || !currentContext.shopId) {
-    console.warn('[MOS] fetchShopFeatures: no context or shopId', currentContext);
-    return;
-  }
+  if (!currentContext || !currentContext.shopId) return;
   
-  console.log('[MOS] fetchShopFeatures: calling for shopId', currentContext.shopId);
   try {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
     });
     
-    console.log('[MOS] fetchShopFeatures result:', JSON.stringify(result));
     if (result && result.features) {
       shopFeatures = result.features;
       updateTabAccessibility();
     } else if (result && result.error) {
       console.error('[MOS] Features API error:', result.error);
-    } else {
-      console.warn('[MOS] Features API returned unexpected result:', result);
     }
   } catch (err) {
     console.error('[MOS] Error fetching features:', err);
