@@ -324,24 +324,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "INSERT_CONCERN") {
     (async () => {
       try {
+        console.log('[Concern] INSERT_CONCERN handler started');
+        console.log('[Concern] currentSmsContext:', JSON.stringify(currentSmsContext, null, 2));
+        console.log('[Concern] smsTokens.tekmetric exists:', !!smsTokens.tekmetric);
+        console.log('[Concern] message.text length:', message.text?.length);
+
         if (!currentSmsContext?.roId) {
-          sendResponse({ success: false, error: 'No repair order context' });
+          console.error('[Concern] No roId in currentSmsContext');
+          sendResponse({ success: false, error: 'No repair order context - roId missing' });
+          return;
+        }
+
+        if (!smsTokens.tekmetric) {
+          console.error('[Concern] No Tekmetric auth token available');
+          sendResponse({ success: false, error: 'No Tekmetric auth token' });
           return;
         }
 
         const roId = currentSmsContext.roId;
         const baseUrl = currentSmsContext.smsBaseUrl || 'https://shop.tekmetric.com';
 
+        console.log(`[Concern] Fetching RO #${roId} from ${baseUrl}`);
         const roRes = await fetch(`${baseUrl}/api/repair-order/${roId}`, {
           headers: { 'x-auth-token': smsTokens.tekmetric }
         });
 
+        console.log(`[Concern] RO fetch status: ${roRes.status}`);
         if (!roRes.ok) {
+          const errBody = await roRes.text();
+          console.error(`[Concern] RO fetch failed: ${roRes.status}`, errBody.substring(0, 300));
           sendResponse({ success: false, error: `Failed to fetch RO: ${roRes.status}` });
           return;
         }
 
         const roData = await roRes.json();
+        console.log('[Concern] RO data keys:', Object.keys(roData));
+        console.log('[Concern] Current notes:', roData.notes ? roData.notes.substring(0, 100) : '(empty)');
+        console.log('[Concern] laborRate:', roData.laborRate);
+        console.log('[Concern] serviceWriterId:', roData.serviceWriterId);
+
         const existingNotes = roData.notes || '';
         const concernText = message.text;
         const newNotes = existingNotes
@@ -364,7 +385,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           serviceWriterId: roData.serviceWriterId
         };
 
-        console.log(`[Concern] Updating RO #${roId} notes via API`);
+        console.log('[Concern] Summary payload:', JSON.stringify(summaryPayload, null, 2));
+        console.log(`[Concern] PUT ${baseUrl}/api/repair-order/${roId}/summary`);
+
         const updateRes = await fetch(`${baseUrl}/api/repair-order/${roId}/summary`, {
           method: 'PUT',
           headers: {
@@ -373,6 +396,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           },
           body: JSON.stringify(summaryPayload)
         });
+
+        console.log(`[Concern] Update response status: ${updateRes.status}`);
+        const responseBody = await updateRes.text();
+        console.log(`[Concern] Update response body: ${responseBody.substring(0, 500)}`);
 
         if (updateRes.ok) {
           console.log(`[Concern] Successfully added concern to RO #${roId}`);
@@ -387,12 +414,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }).catch(() => {});
           }
         } else {
-          const errText = await updateRes.text();
-          console.error(`[Concern] Failed to update RO: ${updateRes.status}`, errText.substring(0, 200));
-          sendResponse({ success: false, error: `Failed to update RO: ${updateRes.status}` });
+          console.error(`[Concern] Failed to update RO: ${updateRes.status}`, responseBody.substring(0, 300));
+          sendResponse({ success: false, error: `Failed to update RO: ${updateRes.status} - ${responseBody.substring(0, 100)}` });
         }
       } catch (err) {
-        console.error('[Concern] Error injecting concern:', err);
+        console.error('[Concern] Error injecting concern:', err.message, err.stack);
         sendResponse({ success: false, error: err.message });
       }
     })();
