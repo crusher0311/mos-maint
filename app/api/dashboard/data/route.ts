@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 import { getBatchQuickSpecs } from "@/lib/integrations/dataone-local";
+import { fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { Db } from "mongodb";
 
 async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
@@ -15,9 +16,32 @@ async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
   if (noMileageVins.length === 0) return;
 
   try {
-    const carfaxDocs = await db.collection("carfax_reports")
+    let carfaxDocs = await db.collection("carfax_reports")
       .find({ shopId, vin: { $in: noMileageVins }, ok: true })
       .toArray();
+
+    const coveredVins = new Set(carfaxDocs.map((d: any) => d.vin));
+    const missingVins = noMileageVins.filter((v: string) => !coveredVins.has(v));
+
+    if (missingVins.length > 0) {
+      const fetchPromises = missingVins.slice(0, 5).map(async (vin: string) => {
+        try {
+          const result = await fetchCarfaxWithCache(shopId, vin);
+          if (result.ok) {
+            console.log(`[Dashboard] Fetched CARFAX for ${vin}: ${result.serviceRecords?.length || 0} records`);
+            return { shopId, vin, ...result, ok: true, serviceRecords: result.serviceRecords || [] };
+          }
+        } catch (e: any) {
+          console.error(`[Dashboard] CARFAX fetch error for ${vin}:`, e.message);
+        }
+        return null;
+      });
+
+      const fetched = (await Promise.all(fetchPromises)).filter(Boolean) as any[];
+      if (fetched.length > 0) {
+        carfaxDocs = [...carfaxDocs, ...fetched];
+      }
+    }
 
     const fiveYearsAgo = new Date();
     fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
