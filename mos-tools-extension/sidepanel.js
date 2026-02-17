@@ -466,7 +466,17 @@ function switchTab(tab) {
 }
 
 function updateContext(context) {
+  const prevContext = currentContext;
   currentContext = context;
+  
+  if (prevContext && context && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
+    if (prevContext.vehicle && !context.vehicle) currentContext.vehicle = prevContext.vehicle;
+    if (prevContext.vehicleDisplay && !context.vehicleDisplay) currentContext.vehicleDisplay = prevContext.vehicleDisplay;
+    if (prevContext.vin && !context.vin) currentContext.vin = prevContext.vin;
+    if (prevContext.mileage && !context.mileage) currentContext.mileage = prevContext.mileage;
+    if (prevContext.roNumber && !context.roNumber) currentContext.roNumber = prevContext.roNumber;
+    if (prevContext.customerName && !context.customerName) currentContext.customerName = prevContext.customerName;
+  }
   
   if (context && (context.roId || context.shopId)) {
     elements.noContext.classList.add('hidden');
