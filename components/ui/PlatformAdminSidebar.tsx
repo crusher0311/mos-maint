@@ -100,7 +100,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Image 
-              src="/mos-icon.png" 
+              src="/mos-logo.png" 
               alt="MOS Tools" 
               width={40} 
               height={40} 

@@ -40,7 +40,7 @@ export function PlatformAdminLayoutClient({
         </button>
         <div className="flex items-center gap-2 ml-3">
           <Image 
-            src="/mos-icon.png" 
+            src="/mos-logo.png" 
             alt="MOS Tools" 
             width={32} 
             height={32} 
