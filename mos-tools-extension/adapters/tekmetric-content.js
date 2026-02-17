@@ -363,10 +363,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "REFRESH_LABOR_RATE_UI") {
     console.log("[MOS Tools] Labor rate updated, refreshing page");
-    showToast("Labor rate updated", "success");
+    const overlay = document.createElement("div");
+    overlay.id = "mos-labor-rate-overlay";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100vw",
+      height: "100vh",
+      background: "rgba(0,0,0,0.7)",
+      color: "white",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: "999999",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    });
+    overlay.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="24" r="22" stroke="#3B82F6" stroke-width="3"/>
+          <path d="M14 24L22 32L34 16" stroke="#3B82F6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span style="font-size:1.5em;font-weight:600;">Labor Rate Updated</span>
+      </div>
+      <span style="font-size:1.1em;opacity:0.8;">Refreshing page...</span>
+    `;
+    document.body.appendChild(overlay);
     setTimeout(() => {
       window.location.reload();
-    }, 1200);
+    }, 1500);
     sendResponse({ success: true });
     return false;
   }
