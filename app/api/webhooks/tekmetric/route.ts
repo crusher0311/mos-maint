@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
 import { getVehicle, getCustomer } from "@/lib/tekmetric";
+import { invalidateCachedPlan } from "@/lib/plan-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -188,6 +189,31 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+      
+      // Invalidate cached VHI plan so next view gets fresh data
+      try {
+        const shop = await db.collection("shops").findOne(
+          { "tekmetric.shopId": tekmetricShopId },
+          { projection: { shopId: 1 } }
+        );
+        
+        if (shop) {
+          // Get VIN from existing cache or fetch it
+          const cachedWO = await db.collection("tekmetric_work_orders").findOne(
+            { workOrderId: String(roId) },
+            { projection: { vin: 1 } }
+          );
+          
+          const vin = cachedWO?.vin;
+          
+          if (vin) {
+            await invalidateCachedPlan(db, vin, Number(shop.shopId));
+            console.log(`[Tekmetric Webhook] Invalidated plan cache for VIN ${vin} (shop ${shop.shopId})`);
+          }
+        }
+      } catch (err: any) {
+        console.error(`[Tekmetric Webhook] Plan cache invalidation failed for RO #${roNumber}:`, err.message);
+      }
     }
     
     if (isInspectionComplete) {
@@ -212,6 +238,20 @@ export async function POST(req: NextRequest) {
           }
         );
         console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`);
+        
+        // Invalidate plan cache since DVI results affect recommendations
+        try {
+          const woForDvi = await db.collection("tekmetric_work_orders").findOne(
+            { workOrderId: String(repairOrderId) },
+            { projection: { vin: 1, shopId: 1 } }
+          );
+          if (woForDvi?.vin && woForDvi?.shopId) {
+            await invalidateCachedPlan(db, woForDvi.vin, Number(woForDvi.shopId));
+            console.log(`[Tekmetric Webhook] Invalidated plan cache for DVI complete on VIN ${woForDvi.vin}`);
+          }
+        } catch (err: any) {
+          console.error(`[Tekmetric Webhook] DVI plan cache invalidation failed:`, err.message);
+        }
       }
     }
     
@@ -240,7 +280,7 @@ export async function POST(req: NextRequest) {
     });
     
     await db.collection("dashboard_updates").updateOne(
-      { _id: "lastUpdate" },
+      { _id: "lastUpdate" } as any,
       { $set: { timestamp: Date.now() } },
       { upsert: true }
     );
