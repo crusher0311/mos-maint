@@ -16,10 +16,19 @@ export async function GET() {
     const userRecords = await db
       .collection("users")
       .find({ email: session.email.toLowerCase() })
-      .project({ shopId: 1 })
+      .project({ shopId: 1, shopIds: 1 })
       .toArray();
 
-    const shopIds = [...new Set(userRecords.map((u) => Number(u.shopId)))];
+    const allShopIds = new Set<number>();
+    for (const u of userRecords) {
+      if (u.shopId) allShopIds.add(Number(u.shopId));
+      if (Array.isArray(u.shopIds)) {
+        for (const sid of u.shopIds) {
+          allShopIds.add(Number(sid));
+        }
+      }
+    }
+    const shopIds = [...allShopIds];
 
     const shops = await db
       .collection("shops")

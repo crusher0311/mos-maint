@@ -20,10 +20,20 @@ export async function POST(req: Request) {
 
     const db = await getDb();
 
-    const userInShop = await db.collection("users").findOne({
+    let userInShop = await db.collection("users").findOne({
       email: session.email.toLowerCase(),
       shopId: shopId,
     });
+
+    if (!userInShop) {
+      const primaryUser = await db.collection("users").findOne({
+        email: session.email.toLowerCase(),
+        shopIds: { $in: [shopId, String(shopId)] },
+      });
+      if (primaryUser) {
+        userInShop = primaryUser;
+      }
+    }
 
     if (!userInShop) {
       return NextResponse.json(
