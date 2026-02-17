@@ -327,6 +327,123 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
+async function resolveBookingDataServerSide(
+  db: any,
+  shop: any,
+  vin: string,
+  provider: string,
+  extensionHints: Partial<StickerBookingData>
+): Promise<StickerBookingData> {
+  const result: StickerBookingData = {
+    vin,
+    roNumber: extensionHints.roNumber,
+  };
+
+  const tekmetricShopId = shop?.tekmetric?.shopId ? Number(shop.tekmetric.shopId) : null;
+
+  // Strategy 1: Look up from cached repair orders by VIN
+  if (tekmetricShopId && vin) {
+    try {
+      const ro = await db.collection("tekmetric_repair_orders").findOne(
+        { tekmetricShopId, "data.vehicle.vin": vin.toUpperCase() },
+        { sort: { "data.updatedDate": -1 } }
+      );
+
+      if (ro?.data) {
+        const customer = ro.data.customer;
+        const vehicle = ro.data.vehicle;
+
+        if (customer) {
+          result.customerId = String(customer.id);
+          const firstName = customer.firstName || "";
+          const lastName = customer.lastName || "";
+          result.customerName = `${firstName} ${lastName}`.trim() || undefined;
+          if (customer.phone && customer.phone.length >= 7) {
+            result.customerPhone = customer.phone.replace(/[^\d]/g, "");
+          }
+          if (customer.email) {
+            result.customerEmail = customer.email;
+          }
+        }
+
+        if (vehicle) {
+          result.vehicleId = String(vehicle.id);
+          result.vehicleYear = vehicle.year;
+          result.vehicleMake = vehicle.make;
+          result.vehicleModel = vehicle.model;
+        }
+
+        if (result.customerName && result.vehicleYear) {
+          console.log(`[Extension Sticker] Resolved booking data from cached RO: ${result.customerName}, ${result.vehicleYear} ${result.vehicleMake} ${result.vehicleModel}`);
+          return result;
+        }
+      }
+    } catch (e: any) {
+      console.log(`[Extension Sticker] RO cache lookup failed: ${e.message}`);
+    }
+  }
+
+  // Strategy 2: Look up vehicle from Tekmetric API by VIN
+  if (tekmetricShopId && vin && (!result.vehicleId || !result.customerName)) {
+    try {
+      const { getVehicles, getCustomer } = await import("@/lib/tekmetric");
+      const vehicleResult = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
+
+      if (vehicleResult.content && vehicleResult.content.length > 0) {
+        const match = vehicleResult.content.find((v: any) => v.vin?.toUpperCase() === vin.toUpperCase());
+        if (match) {
+          result.vehicleId = String(match.id);
+          result.vehicleYear = match.year;
+          result.vehicleMake = match.make;
+          result.vehicleModel = match.model;
+
+          if (match.customerId && !result.customerId) {
+            result.customerId = String(match.customerId);
+
+            try {
+              const customerData = await getCustomer(match.customerId);
+              if (customerData) {
+                const firstName = customerData.firstName || "";
+                const lastName = customerData.lastName || "";
+                result.customerName = `${firstName} ${lastName}`.trim() || undefined;
+                if (customerData.phone?.[0]?.number) {
+                  result.customerPhone = customerData.phone[0].number.replace(/[^\d]/g, "");
+                }
+                if (customerData.email) {
+                  result.customerEmail = customerData.email;
+                }
+              }
+            } catch (e: any) {
+              console.log(`[Extension Sticker] Customer API lookup failed: ${e.message}`);
+            }
+          }
+
+          console.log(`[Extension Sticker] Resolved booking data from Tekmetric API: ${result.customerName}, ${result.vehicleYear} ${result.vehicleMake} ${result.vehicleModel}`);
+          return result;
+        }
+      }
+    } catch (e: any) {
+      console.log(`[Extension Sticker] Tekmetric API lookup failed: ${e.message}`);
+    }
+  }
+
+  // Strategy 3: Fall back to extension-provided hints (cleaned)
+  if (!result.customerName && extensionHints.customerId) {
+    result.customerId = extensionHints.customerId;
+  }
+  if (!result.vehicleId && extensionHints.vehicleId) {
+    result.vehicleId = extensionHints.vehicleId;
+  }
+  if (!result.vehicleYear) result.vehicleYear = extensionHints.vehicleYear;
+  if (!result.vehicleMake) result.vehicleMake = extensionHints.vehicleMake;
+  if (!result.vehicleModel) result.vehicleModel = extensionHints.vehicleModel;
+  if (!result.customerPhone) result.customerPhone = extensionHints.customerPhone;
+  if (!result.customerEmail) result.customerEmail = extensionHints.customerEmail;
+
+  console.log(`[Extension Sticker] Booking data after all strategies: customer=${result.customerName || 'unknown'}, vehicle=${result.vehicleYear || '?'} ${result.vehicleMake || '?'} ${result.vehicleModel || '?'}`);
+  return result;
+}
+
 async function resolveMosShopId(
   db: any,
   authResult: any,
@@ -656,28 +773,25 @@ export async function POST(request: NextRequest) {
       unit,
     });
 
-    // Trigger auto booking if customer/vehicle data provided
+    // Trigger auto booking - resolve customer/vehicle data server-side
     let bookingResult: { queued: boolean; bookingId?: string; status?: string; error?: string } | null = null;
-    if (mosShopId && (customerName || customerId)) {
-      const bookingData: StickerBookingData = {
-        customerId,
-        customerName,
-        customerPhone,
-        customerEmail,
-        vehicleId,
-        vin,
-        vehicleYear,
-        vehicleMake,
-        vehicleModel,
-        roNumber,
-      };
-      bookingResult = await triggerAutoBookingFromSticker(
-        mosShopId,
-        nextServiceDate,
-        nextServiceMileage,
-        bookingData
+    if (mosShopId && vin) {
+      const bookingData = await resolveBookingDataServerSide(
+        db, shop, vin, provider,
+        { customerId, customerName, customerPhone, customerEmail, vehicleId, vehicleYear, vehicleMake, vehicleModel, roNumber }
       );
-      console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
+      
+      if (bookingData.customerName || bookingData.customerId) {
+        bookingResult = await triggerAutoBookingFromSticker(
+          mosShopId,
+          nextServiceDate,
+          nextServiceMileage,
+          bookingData
+        );
+        console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
+      } else {
+        console.log(`[Extension Sticker] Skipping auto booking - could not resolve customer for VIN ${vin}`);
+      }
     }
 
     const base64Image = image.toString("base64");
