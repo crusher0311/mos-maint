@@ -360,9 +360,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           for (const tab of tabs) {
             chrome.tabs.sendMessage(tab.id, {
               action: 'SHOW_TOAST',
-              message: 'Customer concern added to repair order',
+              message: 'Customer concern added — refreshing...',
               type: 'success'
             }).catch(() => {});
+            setTimeout(() => {
+              chrome.tabs.reload(tab.id).catch(() => {});
+            }, 1500);
           }
         } else {
           console.error(`[Concern] Failed: ${res.status}`, resBody.substring(0, 200));
