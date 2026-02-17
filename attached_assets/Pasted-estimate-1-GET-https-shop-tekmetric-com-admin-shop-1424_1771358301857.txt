@@ -1,0 +1,72 @@
+estimate:1  GET https://shop.tekmetric.com/admin/shop/14245/repair-orders/295818536/estimate 404 (Not Found)
+tekmetric-content.js:4 [MOS Tools] Tekmetric content script loaded
+tekmetric-content.js:1068 [MOS Tools] Main world network interceptor injected via script src
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: null, vin: null, …}
+tekmetric-content.js:325 [MOS Tools] Context detected: RO 295818536 {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: null, vin: null, …}
+tekmetric-content.js:1011 [MOS Tools] Floating button injected
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: null, vin: null, …}
+interceptor.js:46 [MOS Intercept] Main world interceptor active
+tekmetric-content.js:1062 [MOS Tools] Main world interceptor loaded successfully
+interceptor.js:8 [MOS Intercept] POST https://analytics.google.com/g/collect?v=2&tid=G-N4QPY5HCYY&gtm=45je62c0v9124079961za20g&_p=1771358282332&_gaz=1&gcd=13l3l3l3l2l1&npa=0&dma=0&ul=en-us&sr=1920x1080&cid=1262566790.1761759404&ir=1&uaa=x86&uab=64&uafvl=Not(A%253ABrand%3B8.0.0.0%7CChromium%3B144.0.7559.133%7CGoogle%2520Chrome%3B144.0.7559.133&uamb=0&uam=&uap=Windows&uapv=19.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=EBAIAGQ&_s=1&tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~115938465~115938468~116988315&dl=https%3A%2F%2Fshop.tekmetric.com%2Fadmin%2Fshop%2F14245%2Frepair-orders%2F295818536%2Festimate&dp=%2Fadmin%2Fshop%2F14245%2Frepair-orders%2F295818536%2Festimate&dt=Tekmetric&sid=1771343272&sct=64&seg=1&_tu=wAQ&en=page_view&_ee=1&tfd=617
+estimate:1 <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes">
+interceptor.js:36 [MOS Intercept XHR] POST https://data.pendo.io/data/guide.json/56cd1942-d0fa-4339-7208-ef71dd7ebf5e?id=23&v=2.311.2_prod-io&ct=1771358282835
+interceptor.js:39 [MOS Intercept XHR] Body: {"events":"eJy1Vmtzokgb_StTfh5H7mI-bQstonIJlxh3a4tCQEURkIvRvLX_fZ8mhowTra1KzVt-UJ7uPuc8p-nT_q9zjMu4ygo17Dx0lkFRlxv_j8AvolMeFVWZ7X4E2b7zveMHQVanVTON5hiOh1pdJPC0qaq8fOj1yk2W_6ii3T6qijggy3p-uI_TZqDXrOkVUe7HRTcrwqgoe8yAF2mRZ4VeVFbx3q8iAM2S8OlDUlonyfcOQPqhX_mdh1Yv-Rl_QXORJRE82qDpGyLyoBaXmm3gfZ5k5wgG3zgTP13X_ppMjlLPtTv_tIAt9zvope6c8wZ7bJhQJG1fUZOC7u-bKVFxjIPom50ldRVnaflN8QtC9jbLiSNosGNXflFdSqPIr-oiKkl5D-Vvk2xZwhh0vI_LkmB0Hv7qqLptYslRDd0bubMZTJBc2zE0bNnvhZGqI13Cnu1Yqok9JEmGqztXMzVs20jBULOwiVTLMywZW56FkXwHRUKm6qBrPvxsGhYBnhvW1FN1z7QMxQLod4zP4Mi2VUXH8k8EJlpoWHdsb-wOodw-XjA-YZvIctRGyRW8jGfYIR296_OQ5UkWllXHm6ma2hiA7LEnW2gOoxd42ZjNEPQCfmLbUTXUYDxhXTY-HG01WXjk6kT8J1XSzJCmXsOGdBkmGibWvYlBWrrSaRo2kQI18K5laMYABemeYyHYY8MmzjTutuwNuvym8M098AGoLrvwrv-m-65-IVZ1aM4xrMUv1K1_V8ukMdIV7DlYGhOLCEazea3JLfsHLtnoD1wiurFeh20nhnx2FVnNk-X81ItmzowFxrdfJRs9QZeG5c2gXbL4g3zozqaea15ceof5ACZn17Ox46i60oJ_sJnY0lR4Rw29VX7LD3t-Rdp6BxtAjorVnqJbyJ5iGa5pE1MM7b12Efj3dwijY1xk6T4iOdSBF4yYmRVrEjVduvl5CRmoN3FcBBs_rUjidR5WflJGkCgQ0Xl0Vcr9M8EsWYG6qqdZGqdVtC4gnsO3kaqoYaDBLktILZz6yyQC_suSMAloCgUk2KzoUMfFT2NBsf91OsTZLqridP3rQEmCjuRcO3BhBkS7jqtPxEEBKRlZ2RNztQKSO4fbIa1Qm99QgguFuET3exTTYyhGAL-OcC2BaigzP1ia_sF4eZGF3Tgj6R_4wSYKlToOSQz_dbkDuqHDhvCxn-Ti6BqrUyqs-NVEUccvAJj4ZeXmhCpEwEv3-5TI9UWaZmnh6o4Bggsgte0mj0NMU_VmVgkuirYHi9ac0lZ3f2iUM3p8WbyiZ2Ubu1IeHnelM0SHqcLdIeMZRqAYcXCHrC8fx4tlqVJIY14PMuuLw024q41s-_g1QFHs7l8XVOGVuLubscLCPh9HdlwGM3IAvgCIqTzEhydP5eAlZNyXbl0OV_7ziLfvAXL9PicO-tQdQEUzMrO7iwv-tEp4dfgs-Oc_DzUrc-7XFI5ztJXdxdBPisflmK2Hj3tnNWG3y1FwG5BheUGgBJ6_A_jbd1nj5UA4vVirqTlcTvHjev2MVEMcG8s7Lf-XQnMoej78ZXqmu-zZrGr6fBxO_OGkTB9__zs699bwxwBlZfLSFXBy6BtKeBp4eMRrtwH7PEsPBPi-A7h8KeJdly8ZHBXh-jC09WS-6UqsJpW_X33wmArFOeFmvrI6Sh6_Dsc5zqpNbt8E5EWBo3h2IIiQ5TcBo3yiDThOWaBl-qdVwl2H1RlfjTJhd1MhzQiDAU-JzD071vj0st4qdXdSb6tiOe0K6dh8KuVy_n8InCSZVy_JfsBiEcXs9Cxtp46TTDj9XlwKA0ZkqT597zin_kiZ8xy3WLgJM3odrYaLV805csH0i6evEvE0tfbK8nXlx9Iq3pzwOZMUS_cWX2v5PJ_xa4MfnNzJ6RWuWbjPlpX3PFjatzeMJJggDASO-wXw73_-BYWcM7I"}
+main-8Wj8VdPb.js:268 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
+main-8Wj8VdPb.js:274  POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy 403 (Forbidden)
+(anonymous) @ main-8Wj8VdPb.js:274
+Promise.then
+PE @ main-8Wj8VdPb.js:274
+t0 @ main-8Wj8VdPb.js:274
+NX @ main-8Wj8VdPb.js:274
+(anonymous) @ actions-DXV1PFpz.js:1
+(anonymous) @ main-8Wj8VdPb.js:194
+(anonymous) @ main-8Wj8VdPb.js:194
+u.useEffect.R @ index-C7VGh9DY.js:3
+Q2 @ main-8Wj8VdPb.js:102
+Ip @ main-8Wj8VdPb.js:102
+t4 @ main-8Wj8VdPb.js:102
+qc @ main-8Wj8VdPb.js:102
+gz @ main-8Wj8VdPb.js:102
+gs @ main-8Wj8VdPb.js:100
+(anonymous) @ main-8Wj8VdPb.js:102
+main-8Wj8VdPb.js:274 {type: 'ERROR', message: 'PartsTech account is not activated.', data: null, details: {…}, responseStatus: 403}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:539 [MOS Tools] Print button injected
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+estimate:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root flex items-center outline-none cursor-pointer h-11 rounded-lg p-3 text-label-normal bg-transparent hover:bg-v2-shade-50 [&.active-button]:bg-v2-shade-50 group-[.split-buttons]:border-x-v2-shade-0 visited:ring-0 focus:outline-ring active:ring-0 text-v2-shade-900 disabled:text-v2-shade-300 css-hkx3jt>
+Ancestor with aria-hidden: <div#root> <div id=​"root" aria-hidden=​"true">​…​</div>​
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
+tekmetric-content.js:61 [MOS Tools] RO# extracted via selector: h2 032
+tekmetric-content.js:198 [MOS Tools] Mileage extracted via selector: [class*="odometer"]
+tekmetric-content.js:269 [MOS Tools] Customer name extracted via selector: [data-testid*="customer"] Add Concern
+tekmetric-content.js:313 [MOS Tools] Detected context: {provider: 'tekmetric', shopId: '14245', roId: '295818536', roNumber: '032', vin: '1FT8W3BT0BEA08647', …}
