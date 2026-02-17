@@ -297,6 +297,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // -------------------- Concern Assistant --------------------
+  if (message.action === "INSERT_CONCERN") {
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs[0]?.id) {
+          await chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'INJECT_CONCERN_TEXT',
+            text: message.text
+          });
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'No active tab found' });
+        }
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   // -------------------- Sticker Printing --------------------
   if (message.action === "PRINT_STICKER_IMMEDIATE") {
     handleImmediateStickerPrint(message.context, sender.tab?.id, message.overrideInterval)

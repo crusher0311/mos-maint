@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
           oil_sticker: false,
           keytags: false,
           auto_booking: false,
-          part_xref: false
+          part_xref: false,
+          concern_assistant: false
         }
       }, { headers: corsHeaders });
     }

@@ -122,6 +122,15 @@
           </svg>
           <span>Rates</span>
         </button>
+        <button class="tab-btn" data-tab="concern" data-feature="concern_assistant" title="Concern Assistant">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            <path d="M8 10h.01"/>
+            <path d="M12 10h.01"/>
+            <path d="M16 10h.01"/>
+          </svg>
+          <span>Concern</span>
+        </button>
         <button class="tab-btn" data-tab="sticker" data-feature="oil_sticker" title="Oil Sticker">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -304,6 +313,89 @@
           </div>
 
           <p id="rates-error" class="error-text hidden" style="padding: 0 16px;"></p>
+        </div>
+
+        <!-- Concern Assistant tab -->
+        <div id="tab-concern" class="tab-panel hidden">
+          <div id="concern-loading" class="panel-loading hidden">
+            <div class="spinner-small"></div>
+            <span>Generating follow-up questions...</span>
+          </div>
+
+          <div id="concern-start" class="concern-section">
+            <div class="concern-intro">
+              <p>Describe the customer's concern, then get AI-generated follow-up questions to build a complete write-up.</p>
+            </div>
+            <div class="concern-form-field">
+              <label for="concern-input">Customer Concern</label>
+              <textarea id="concern-input" class="concern-textarea" rows="3" placeholder="e.g., Car makes a grinding noise when braking at low speed..."></textarea>
+            </div>
+            <button id="concern-submit-btn" class="btn-primary concern-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 12h8"/>
+                <path d="M12 8v8"/>
+              </svg>
+              Generate Follow-Up Questions
+            </button>
+          </div>
+
+          <div id="concern-conversation" class="concern-section hidden">
+            <div class="concern-original">
+              <label>Original Concern</label>
+              <p id="concern-original-text" class="concern-original-text"></p>
+            </div>
+            <div id="concern-questions" class="concern-questions"></div>
+            <div class="concern-actions">
+              <button id="concern-review-btn" class="btn-secondary concern-action-btn" title="Get more follow-up questions based on answers">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 2v6h-6"/>
+                  <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+                </svg>
+                More Questions
+              </button>
+              <button id="concern-finish-btn" class="btn-primary concern-action-btn" title="Clean up conversation into a professional write-up">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                Finish &amp; Clean Up
+              </button>
+            </div>
+          </div>
+
+          <div id="concern-result" class="concern-section hidden">
+            <div class="concern-result-header">
+              <label>Cleaned Write-Up</label>
+              <button id="concern-copy-btn" class="btn-icon-small" title="Copy to clipboard">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
+            </div>
+            <div id="concern-cleaned-text" class="concern-cleaned-text"></div>
+            <div class="concern-result-actions">
+              <button id="concern-inject-btn" class="btn-primary concern-action-btn" title="Send to repair order">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+                Send to RO
+              </button>
+              <button id="concern-new-btn" class="btn-secondary concern-action-btn" title="Start a new concern">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                New Concern
+              </button>
+            </div>
+          </div>
+
+          <p id="concern-error" class="error-text hidden" style="padding: 0 16px;"></p>
         </div>
 
         <!-- Sticker tab (renamed to Print) -->

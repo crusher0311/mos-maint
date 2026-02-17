@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates";
+export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates" | "concern_assistant";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
@@ -15,6 +15,7 @@ export interface FeatureSettings {
   auto_booking: boolean;
   part_xref: boolean;
   labor_rates: boolean;
+  concern_assistant: boolean;
 }
 
 export interface ShopBilling {
@@ -46,6 +47,7 @@ const DEFAULT_FEATURES: FeatureSettings = {
   auto_booking: false,
   part_xref: false,
   labor_rates: false,
+  concern_assistant: false,
 };
 
 const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
@@ -64,6 +66,8 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "part_xref": "part_xref",
   "labor-rates": "labor_rates",
   "labor_rates": "labor_rates",
+  "concern-assistant": "concern_assistant",
+  "concern_assistant": "concern_assistant",
 };
 
 const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
@@ -76,6 +80,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: false,
     part_xref: false,
     labor_rates: false,
+    concern_assistant: false,
   },
   starter: {
     maintenance: true,
@@ -86,6 +91,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: false,
     part_xref: false,
     labor_rates: false,
+    concern_assistant: false,
   },
   plus: {
     maintenance: true,
@@ -96,6 +102,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: false,
     part_xref: false,
     labor_rates: false,
+    concern_assistant: true,
   },
   elite: {
     maintenance: true,
@@ -106,6 +113,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: true,
     part_xref: true,
     labor_rates: true,
+    concern_assistant: true,
   },
   professional: {
     maintenance: true,
@@ -116,6 +124,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: true,
     part_xref: true,
     labor_rates: true,
+    concern_assistant: true,
   },
   enterprise: {
     maintenance: true,
@@ -126,6 +135,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: true,
     part_xref: true,
     labor_rates: true,
+    concern_assistant: true,
   },
   demo: {
     maintenance: true,
@@ -136,6 +146,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     auto_booking: true,
     part_xref: true,
     labor_rates: true,
+    concern_assistant: true,
   },
 };
 
@@ -161,6 +172,7 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
       auto_booking: false,
       part_xref: false,
       labor_rates: false,
+      concern_assistant: false,
     };
 
     for (const pf of platformFeatures) {
@@ -215,6 +227,7 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     auto_booking: shopFeatures.auto_booking ?? enterpriseFeatures.auto_booking ?? planFeatures.auto_booking,
     part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
     labor_rates: shopFeatures.labor_rates ?? enterpriseFeatures.labor_rates ?? planFeatures.labor_rates,
+    concern_assistant: shopFeatures.concern_assistant ?? enterpriseFeatures.concern_assistant ?? planFeatures.concern_assistant,
   };
   
   const billing: ShopBilling = {
@@ -345,5 +358,6 @@ export function getFeatureList(): { key: FeatureKey; name: string; description: 
     { key: "auto_booking", name: "Auto Booking", description: "Automated appointment booking for oil change reminders" },
     { key: "part_xref", name: "Part Cross-Reference", description: "Cross-reference parts across manufacturers" },
     { key: "labor_rates", name: "Labor Rate Rules", description: "Auto-apply labor rates based on vehicle, customer, and job criteria" },
+    { key: "concern_assistant", name: "Concern Assistant", description: "AI-powered customer concern intake with follow-up questions and RO injection" },
   ];
 }

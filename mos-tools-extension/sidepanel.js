@@ -17,7 +17,15 @@ let shopFeatures = {
   keytags: false,
   auto_booking: false,
   part_xref: false,
-  labor_rates: false
+  labor_rates: false,
+  concern_assistant: false
+};
+let concernState = {
+  concern: '',
+  conversationId: null,
+  questions: [],
+  exchanges: [],
+  cleanedText: ''
 };
 
 // ==================== DOM ELEMENTS ====================
@@ -124,7 +132,24 @@ const elements = {
   rateFormSave: document.getElementById('rate-form-save'),
   rateFormSaveText: document.getElementById('rate-form-save-text'),
   rateFormEditId: document.getElementById('rate-form-edit-id'),
-  ratesEmptyHint: document.getElementById('rates-empty-hint')
+  ratesEmptyHint: document.getElementById('rates-empty-hint'),
+
+  // Concern Assistant
+  concernLoading: document.getElementById('concern-loading'),
+  concernStart: document.getElementById('concern-start'),
+  concernConversation: document.getElementById('concern-conversation'),
+  concernResult: document.getElementById('concern-result'),
+  concernInput: document.getElementById('concern-input'),
+  concernSubmitBtn: document.getElementById('concern-submit-btn'),
+  concernOriginalText: document.getElementById('concern-original-text'),
+  concernQuestions: document.getElementById('concern-questions'),
+  concernReviewBtn: document.getElementById('concern-review-btn'),
+  concernFinishBtn: document.getElementById('concern-finish-btn'),
+  concernCleanedText: document.getElementById('concern-cleaned-text'),
+  concernCopyBtn: document.getElementById('concern-copy-btn'),
+  concernInjectBtn: document.getElementById('concern-inject-btn'),
+  concernNewBtn: document.getElementById('concern-new-btn'),
+  concernError: document.getElementById('concern-error')
 };
 
 // ==================== INITIALIZATION ====================
@@ -226,6 +251,26 @@ function setupEventListeners() {
     });
   });
   
+  // Concern Assistant
+  if (elements.concernSubmitBtn) {
+    elements.concernSubmitBtn.addEventListener('click', handleConcernSubmit);
+  }
+  if (elements.concernReviewBtn) {
+    elements.concernReviewBtn.addEventListener('click', handleConcernReview);
+  }
+  if (elements.concernFinishBtn) {
+    elements.concernFinishBtn.addEventListener('click', handleConcernFinish);
+  }
+  if (elements.concernCopyBtn) {
+    elements.concernCopyBtn.addEventListener('click', handleConcernCopy);
+  }
+  if (elements.concernInjectBtn) {
+    elements.concernInjectBtn.addEventListener('click', handleConcernInject);
+  }
+  if (elements.concernNewBtn) {
+    elements.concernNewBtn.addEventListener('click', handleConcernNew);
+  }
+
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
@@ -294,6 +339,7 @@ function switchTab(tab) {
     'lookup': 'job_lookup',
     'canned': null,
     'rates': 'labor_rates',
+    'concern': 'concern_assistant',
     'sticker': 'oil_sticker'
   };
   const featureKey = featureMap[tab];
@@ -309,6 +355,7 @@ function switchTab(tab) {
           'failures': 'Common Failures Advisor',
           'lookup': 'Job Lookup / History Writer',
           'rates': 'Labor Rate Rules',
+          'concern': 'Customer Concern Assistant',
           'sticker': 'Oil Sticker & Keytag Printing'
         };
         const featureName = featureNames[tab] || tab;
@@ -435,6 +482,7 @@ function updateTabAccessibility() {
     'lookup': 'job_lookup',
     'canned': null,
     'rates': 'labor_rates',
+    'concern': 'concern_assistant',
     'sticker': 'oil_sticker'
   };
   
@@ -2552,6 +2600,255 @@ function showSupportAlert(message, type = 'info') {
     alert.style.transition = 'opacity 0.3s';
     setTimeout(() => alert.remove(), 300);
   }, 4000);
+}
+
+// ==================== CONCERN ASSISTANT ====================
+async function handleConcernSubmit() {
+  const concern = elements.concernInput?.value?.trim();
+  if (!concern) {
+    showConcernError('Please describe the customer concern first.');
+    return;
+  }
+
+  hideConcernError();
+  elements.concernLoading.classList.remove('hidden');
+  elements.concernStart.classList.add('hidden');
+  elements.concernSubmitBtn.disabled = true;
+
+  try {
+    const response = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/concern-assistant',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'followup',
+          concern,
+          shopId: currentContext?.shopId || null,
+          vin: currentContext?.vin || null,
+          vehicleDisplay: currentContext?.vehicleDisplay || null
+        })
+      }
+    });
+
+    if (!response.ok) throw new Error(response.error || 'Failed to generate questions');
+
+    concernState.concern = concern;
+    concernState.conversationId = response.conversationId;
+    concernState.questions = response.questions || [];
+    concernState.exchanges = [];
+
+    renderConcernQuestions(concernState.questions);
+    elements.concernOriginalText.textContent = concern;
+    elements.concernLoading.classList.add('hidden');
+    elements.concernConversation.classList.remove('hidden');
+  } catch (err) {
+    elements.concernLoading.classList.add('hidden');
+    elements.concernStart.classList.remove('hidden');
+    elements.concernSubmitBtn.disabled = false;
+    showConcernError(err.message || 'Failed to generate follow-up questions');
+  }
+}
+
+function renderConcernQuestions(questions) {
+  const container = elements.concernQuestions;
+  container.innerHTML = '';
+
+  questions.forEach((q, i) => {
+    const existingExchange = concernState.exchanges.find(e => e.question === q);
+    const div = document.createElement('div');
+    div.className = 'concern-question-item';
+    div.innerHTML = `
+      <label class="concern-question-label">Q${i + 1}: ${escapeHtml(q)}</label>
+      <textarea class="concern-answer-input" data-question="${escapeHtml(q)}" rows="2" placeholder="Customer's response...">${existingExchange ? escapeHtml(existingExchange.response) : ''}</textarea>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function gatherAnsweredQuestions() {
+  const inputs = elements.concernQuestions.querySelectorAll('.concern-answer-input');
+  const answered = [];
+  inputs.forEach(input => {
+    const response = input.value.trim();
+    if (response) {
+      answered.push({
+        question: input.dataset.question,
+        response
+      });
+    }
+  });
+  return answered;
+}
+
+async function handleConcernReview() {
+  const answered = gatherAnsweredQuestions();
+  if (answered.length === 0) {
+    showConcernError('Please answer at least one follow-up question before requesting more.');
+    return;
+  }
+
+  hideConcernError();
+  concernState.exchanges = [...concernState.exchanges, ...answered.filter(a =>
+    !concernState.exchanges.some(e => e.question === a.question)
+  )];
+
+  elements.concernLoading.classList.remove('hidden');
+  elements.concernConversation.classList.add('hidden');
+
+  try {
+    const response = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/concern-assistant',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'review',
+          concern: concernState.concern,
+          answeredQuestions: concernState.exchanges,
+          conversationId: concernState.conversationId
+        })
+      }
+    });
+
+    if (!response.ok) throw new Error(response.error || 'Failed to get more questions');
+
+    const newQuestions = response.questions || [];
+    if (newQuestions.length === 0) {
+      showNotification('No additional questions needed. Ready to finish.', 'info');
+    } else {
+      concernState.questions = [...concernState.questions, ...newQuestions];
+    }
+
+    renderConcernQuestions([...concernState.questions.filter(q =>
+      !concernState.exchanges.some(e => e.question === q)
+    ), ...newQuestions]);
+
+    elements.concernLoading.classList.add('hidden');
+    elements.concernConversation.classList.remove('hidden');
+  } catch (err) {
+    elements.concernLoading.classList.add('hidden');
+    elements.concernConversation.classList.remove('hidden');
+    showConcernError(err.message || 'Failed to get more questions');
+  }
+}
+
+async function handleConcernFinish() {
+  const answered = gatherAnsweredQuestions();
+  concernState.exchanges = [...concernState.exchanges, ...answered.filter(a =>
+    !concernState.exchanges.some(e => e.question === a.question)
+  )];
+
+  if (concernState.exchanges.length === 0) {
+    showConcernError('Please answer at least one follow-up question before finishing.');
+    return;
+  }
+
+  hideConcernError();
+  elements.concernLoading.classList.remove('hidden');
+  elements.concernConversation.classList.add('hidden');
+
+  const conversationLines = [`Customer Concern: ${concernState.concern}`];
+  concernState.exchanges.forEach(e => {
+    conversationLines.push(`Service Advisor asks: ${e.question}`);
+    conversationLines.push(`Customer responds: ${e.response}`);
+  });
+
+  try {
+    const response = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/concern-assistant',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'cleanup',
+          conversationText: conversationLines.join('\n'),
+          conversationId: concernState.conversationId,
+          concern: concernState.concern,
+          exchanges: concernState.exchanges
+        })
+      }
+    });
+
+    if (!response.ok) throw new Error(response.error || 'Failed to clean up conversation');
+
+    concernState.cleanedText = response.cleanedText;
+    elements.concernCleanedText.textContent = response.cleanedText;
+
+    elements.concernLoading.classList.add('hidden');
+    elements.concernResult.classList.remove('hidden');
+  } catch (err) {
+    elements.concernLoading.classList.add('hidden');
+    elements.concernConversation.classList.remove('hidden');
+    showConcernError(err.message || 'Failed to clean up conversation');
+  }
+}
+
+function handleConcernCopy() {
+  const text = concernState.cleanedText;
+  if (!text) return;
+
+  navigator.clipboard.writeText(text).then(() => {
+    showNotification('Copied to clipboard!', 'success');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showNotification('Copied to clipboard!', 'success');
+  });
+}
+
+async function handleConcernInject() {
+  const text = concernState.cleanedText;
+  if (!text) return;
+
+  try {
+    await sendMessage({
+      action: 'INSERT_CONCERN',
+      text
+    });
+    showNotification('Concern sent to repair order!', 'success');
+  } catch (err) {
+    showConcernError('Failed to inject concern. Make sure you have a repair order open.');
+  }
+}
+
+function handleConcernNew() {
+  concernState = {
+    concern: '',
+    conversationId: null,
+    questions: [],
+    exchanges: [],
+    cleanedText: ''
+  };
+
+  elements.concernInput.value = '';
+  elements.concernQuestions.innerHTML = '';
+  elements.concernCleanedText.textContent = '';
+  elements.concernSubmitBtn.disabled = false;
+
+  elements.concernStart.classList.remove('hidden');
+  elements.concernConversation.classList.add('hidden');
+  elements.concernResult.classList.add('hidden');
+  elements.concernLoading.classList.add('hidden');
+  hideConcernError();
+}
+
+function showConcernError(msg) {
+  if (elements.concernError) {
+    elements.concernError.textContent = msg;
+    elements.concernError.classList.remove('hidden');
+  }
+}
+
+function hideConcernError() {
+  if (elements.concernError) {
+    elements.concernError.textContent = '';
+    elements.concernError.classList.add('hidden');
+  }
 }
 
 // ==================== START ====================

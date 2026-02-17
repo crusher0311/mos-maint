@@ -350,6 +350,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "INJECT_CONCERN_TEXT") {
+    console.log("[MOS Tools] Injecting concern text into RO");
+    const injected = injectConcernText(message.text);
+    sendResponse({ success: injected });
+    return false;
+  }
+
   // Handle print request from side panel
   if (message.action === "PRINT_STICKER_FROM_PANEL") {
     console.log("[MOS Tools] Printing sticker from side panel");
@@ -997,6 +1004,66 @@ function init() {
     updateContext();
     checkAndInjectButton();
   });
+}
+
+// ==================== CONCERN INJECTION ====================
+function injectConcernText(text) {
+  const selectors = [
+    'textarea[name*="concern"]',
+    'textarea[name*="complaint"]',
+    'textarea[placeholder*="concern"]',
+    'textarea[placeholder*="complaint"]',
+    'textarea[placeholder*="Concern"]',
+    'textarea[placeholder*="Complaint"]',
+    'textarea[data-testid*="concern"]',
+    'textarea[data-testid*="complaint"]',
+    'textarea[aria-label*="concern"]',
+    'textarea[aria-label*="Concern"]',
+    '.customer-concern textarea',
+    '.concern-textarea',
+    '[class*="concern"] textarea',
+    '[class*="complaint"] textarea'
+  ];
+
+  let textarea = null;
+  for (const sel of selectors) {
+    textarea = document.querySelector(sel);
+    if (textarea) break;
+  }
+
+  if (!textarea) {
+    const allTextareas = document.querySelectorAll('textarea');
+    for (const ta of allTextareas) {
+      const label = ta.closest('label') || ta.closest('.form-group')?.querySelector('label');
+      if (label && /concern|complaint/i.test(label.textContent)) {
+        textarea = ta;
+        break;
+      }
+    }
+  }
+
+  if (!textarea) {
+    const allTextareas = document.querySelectorAll('textarea');
+    if (allTextareas.length === 1) {
+      textarea = allTextareas[0];
+    }
+  }
+
+  if (textarea) {
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype, 'value'
+    ).set;
+    nativeInputValueSetter.call(textarea, text);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.dispatchEvent(new Event('change', { bubbles: true }));
+    textarea.focus();
+    showToast('Customer concern injected into RO', 'success');
+    return true;
+  }
+
+  showToast('Could not find concern field. Text copied to clipboard.', 'warning');
+  navigator.clipboard.writeText(text).catch(() => {});
+  return false;
 }
 
 // Wait for page to be ready
