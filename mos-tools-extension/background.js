@@ -870,15 +870,50 @@ async function autoApplyLaborRate(context) {
     return;
   }
 
+  // Fetch the shop's configured labor rates from Tekmetric to find matching rate ID
+  let shopLaborRates = [];
+  try {
+    const ratesRes = await fetch(`${baseUrl}/api/shop/${shopId}/labor-rate`, {
+      headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+    });
+    if (ratesRes.ok) {
+      const ratesData = await ratesRes.json();
+      shopLaborRates = Array.isArray(ratesData) ? ratesData : (ratesData.content || ratesData.laborRates || ratesData.data || []);
+      console.log(`[LaborRate] Shop has ${shopLaborRates.length} configured rates:`, shopLaborRates.map(r => `${r.name || r.laborRateName}: $${(r.rate || r.laborRate || 0) / 100} (id:${r.id})`).join(', '));
+    } else {
+      console.warn("[LaborRate] Could not fetch shop labor rates:", ratesRes.status);
+    }
+  } catch (err) {
+    console.warn("[LaborRate] Error fetching shop labor rates:", err.message);
+  }
+
+  // Find the shop labor rate that matches our target amount
+  let matchedShopRate = shopLaborRates.find(r => {
+    const shopRate = r.rate || r.laborRate || 0;
+    return shopRate === rateInCents;
+  });
+
+  // If no exact match, log available rates for debugging
+  if (!matchedShopRate && shopLaborRates.length > 0) {
+    console.warn(`[LaborRate] No shop rate matches $${matchedRule.rate}/hr (${rateInCents} cents). Available rates:`, JSON.stringify(shopLaborRates));
+  }
+
   // Update the RO labor rate via Tekmetric API
   try {
+    // Build update payload - try both laborRateId and laborRate approaches
+    const updatePayload = matchedShopRate 
+      ? { laborRate: { id: matchedShopRate.id } }
+      : { laborRate: rateInCents };
+    
+    console.log(`[LaborRate] Sending update:`, JSON.stringify(updatePayload));
+
     const updateRes = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`, {
       method: 'PATCH',
       headers: {
         'x-auth-token': smsTokens.tekmetric,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({ laborRate: rateInCents })
+      body: JSON.stringify(updatePayload)
     });
 
     const updateBody = await updateRes.text();
@@ -892,6 +927,23 @@ async function autoApplyLaborRate(context) {
         error: `Failed to update rate: ${updateRes.status}`
       }).catch(() => {});
       return { success: false, error: `Update failed: ${updateRes.status}` };
+    }
+
+    // Verify the update actually took effect
+    try {
+      const verifyRes = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`, {
+        headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
+      });
+      if (verifyRes.ok) {
+        const verifyData = await verifyRes.json();
+        const newRate = verifyData.laborRate || 0;
+        console.log(`[LaborRate] Verification: RO labor rate is now ${newRate} (${newRate/100}/hr), expected ${rateInCents} (${matchedRule.rate}/hr)`);
+        if (newRate !== rateInCents) {
+          console.warn("[LaborRate] Rate did NOT change! Update was accepted but rate unchanged.");
+        }
+      }
+    } catch (verifyErr) {
+      console.warn("[LaborRate] Could not verify rate update:", verifyErr.message);
     }
 
     lastAppliedRoId = context.roId;
