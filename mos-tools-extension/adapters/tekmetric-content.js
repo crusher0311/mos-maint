@@ -1040,7 +1040,7 @@ function startCategoryChangeObserver() {
           jobName: jobId,
           newCategory: categoryName || categoryCode
         }).catch(() => {});
-      }, 1500);
+      }, 500);
     }
   });
 
