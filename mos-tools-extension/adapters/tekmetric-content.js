@@ -880,7 +880,7 @@ function injectFloatingButton() {
   fab.title = 'Open MOS Tools';
   fab.type = 'button';
   
-  const imgUrl = chrome.runtime.getURL('icons/mos-logo.png');
+  const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
   fab.innerHTML = `<img src="${imgUrl}" alt="MOS Tools" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px;" />`;
   
   // Get saved position or default
