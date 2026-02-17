@@ -1,0 +1,38 @@
+background.js:889 [MOS Tools] Background service worker loaded
+background.js:32 [MOS] Restored API token from storage
+background.js:36 [MOS] Restored API URL: https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev
+background.js:51 [Tekmetric] Restored session token
+background.js:115 [MOS] Side panel opens on action click
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:81 [Tekmetric] Shop ID captured: 14956
+background.js:92 [Tekmetric] Auth token captured
+background.js:138 [MOS] Message received: GET_MOS_AUTH
+background.js:138 [MOS] Message received: GET_SMS_CONTEXT
+background.js:138 [MOS] Message received: MOS_LOGOUT
+background.js:138 [MOS] Message received: MOS_LOGIN
+background.js:392 [MOS] Login successful: bcrusha@carexpertsok.com
+background.js:138 [MOS] Message received: GET_SMS_CONTEXT
