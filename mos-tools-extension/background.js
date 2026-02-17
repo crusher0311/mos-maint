@@ -985,14 +985,17 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
   const updatedJobNames = [];
 
   for (const job of jobs) {
-    const jobCat = (job.jobCategoryName || job.jobCategory?.name || job.jobCategory || job.category || job.type || job.name || '').toLowerCase();
+    const jobCat = (job.jobCategoryName || job.jobCategory?.name || job.jobCategory || job.category || job.type || '').toLowerCase();
 
     const matches = categoryValues.some(cv => jobCat.includes(cv) || cv.includes(jobCat));
-    if (!matches) continue;
+    if (!matches) {
+      console.log(`[LaborRate] Job "${job.name}" category "${jobCat || 'none'}" does not match rule categories [${categoryValues.join(',')}]`);
+      continue;
+    }
 
     const laborEntries = job.labor || job.laborEntries || job.laborItems || [];
     if (laborEntries.length === 0) {
-      console.log(`[LaborRate] Job "${job.name}" matches category but has no labor lines`);
+      console.log(`[LaborRate] Job "${job.name}" matches category but has no labor lines yet`);
       continue;
     }
 
