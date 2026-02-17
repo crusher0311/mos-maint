@@ -73,11 +73,6 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       }
     } catch (e) {}
     
-    // Debug: log all Tekmetric PUT/PATCH/POST API calls (to capture how UI updates labor)
-    if (details.url.includes('/api/') && (details.method === 'PUT' || details.method === 'PATCH' || details.method === 'POST')) {
-      console.log(`[Tekmetric API] ${details.method} ${details.url}`);
-    }
-
     // Capture shop ID from URL
     const shopMatch = details.url.match(/\/(?:token\/)?shop\/(\d+)/);
     if (shopMatch) {
@@ -815,7 +810,6 @@ async function autoApplyLaborRate(context) {
       return;
     }
     roData = await res.json();
-    console.log("[LaborRate] RO data keys:", Object.keys(roData).join(', '));
     if (roData.jobs) console.log(`[LaborRate] RO includes ${roData.jobs.length} jobs inline`);
   } catch (err) {
     console.warn("[LaborRate] Error fetching RO:", err.message);
@@ -866,12 +860,7 @@ async function autoApplyLaborRate(context) {
   // Build vehicle data for matching
   const vehicle = roData.vehicle || {};
   const customer = roData.customer || {};
-  console.log("[LaborRate] Raw vehicle data from Tekmetric:", JSON.stringify({
-    make: vehicle.make, model: vehicle.model, subModel: vehicle.subModel,
-    year: vehicle.year, fuelType: vehicle.fuelType, fuelTypeName: vehicle.fuelTypeName,
-    engine: vehicle.engine, engineDescription: vehicle.engineDescription,
-    vehicleType: vehicle.vehicleType, driveType: vehicle.driveType
-  }));
+  console.log(`[LaborRate] Vehicle: ${vehicle.year} ${vehicle.make} ${vehicle.model}`);
   const customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
     || context.customerName || '';
   const customerPhones = [
@@ -1112,7 +1101,7 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, bas
     });
 
     const updateBody = await updateRes.text();
-    console.log(`[LaborRate] Update response: ${updateRes.status}`, updateBody.substring(0, 500));
+    console.log(`[LaborRate] RO update: ${updateRes.status}`);
 
     if (!updateRes.ok) {
       console.error("[LaborRate] Failed to update rate:", updateRes.status, updateBody);

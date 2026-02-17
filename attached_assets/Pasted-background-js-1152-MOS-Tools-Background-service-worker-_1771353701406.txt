@@ -1,0 +1,41 @@
+background.js:1152 [MOS Tools] Background service worker loaded
+background.js:32 [MOS] Restored API token from storage
+background.js:36 [MOS] Restored API URL: https://mos.tools
+background.js:124 [MOS] Side panel opens on action click
+background.js:147 [MOS] Message received: SET_SMS_CONTEXT
+background.js:179 [MOS] SMS context updated: Object
+background.js:88 [Tekmetric] Shop ID captured: 14245
+background.js:688 [LaborRate] Fetched 3 rules
+background.js:78 [Tekmetric API] POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy
+background.js:78 [Tekmetric API] POST https://shop.tekmetric.com/api/email/status
+background.js:818 [LaborRate] RO data keys: id, repairOrderNumber, shop, repairOrderStatus, repairOrderLabel, repairOrderCustomLabel, color, customer, vehicle, laborRate, taxRate, authorized, authorizedDate, completedDate, postedDate, archivedDate, nonce, estimateShareType, estimateShareDate, inspectionShareType, inspectionShareDate, invoiceShareType, invoiceShareDate, milesIn, milesOut, odometerInop, keytag, notes, progress, laborTime, completedLaborTime, numSublets, completedSublets, amountPaid, balanceDue, defaultTechnicianId, defaultTechnicianAccountFullName, serviceWriterId, serviceWriterAccountFullName, taxFees, customerTimeIn, customerTimeOut, saveCustomerParts, version, migratedRo, leadSource, referrerId, referrerName, utmId, appointmentOption, poNumber, creditedAmount, usedCreditAmount, jobs, autoIntegrateFleetInfo
+background.js:837 [LaborRate] Loaded 3 jobs with labor from estimate
+background.js:869 [LaborRate] Raw vehicle data from Tekmetric: {"make":"Ford","model":"F-350 Super Duty","subModel":"Lariat","year":2011,"engine":null,"engineDescription":"6.7L 8Cyl DIESEL Turbocharged"}
+background.js:911 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","diagnostics"] customer: Brandon Crusha phones: 1
+background.js:922 [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+background.js:1078 [LaborRate] Current rate on RO: 13500 (135/hr), target: 20995 (209.95/hr)
+background.js:1103 [LaborRate] Sending PUT to /api/repair-order/295818536/summary with laborRate: 20995 ($209.95/hr)
+background.js:78 [Tekmetric API] PUT https://shop.tekmetric.com/api/repair-order/295818536/summary
+background.js:1115 [LaborRate] Update response: 200 {"type":"SUCCESS","message":"Repair Order updated","data":{"id":295818536,"repairOrderNumber":32,"shop":{"id":14245,"name":"Service Solutions Garage","nickname":"","phone":"4138962771","email":"","website":null,"color":null,"taxId":null,"licenseNumber":null,"dateCreated":null,"address":{"id":83161405,"address1":"12004 Southwest 26th Street","address2":"","city":"Yukon","state":"OK","zip":"73099","fullAddress":"12004 Southwest 26th Street, Yukon, OK 73099","streetAddress":"12004 Southwest 26th St
+background.js:1128 [LaborRate] Applied "F-350" - $209.95/hr (20995 cents) to RO #295818536
+background.js:952 [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+background.js:1020 [LaborRate] Updating job "Diag CEL" labor (testing) to $299.95/hr via POST /job
+background.js:78 [Tekmetric API] POST https://shop.tekmetric.com/api/shop/14245/job
+background.js:1032 [LaborRate] Updated 1 labor line(s) on job "Diag CEL" to $299.95/hr
+background.js:1020 [LaborRate] Updating job "test" labor (1) to $299.95/hr via POST /job
+background.js:78 [Tekmetric API] POST https://shop.tekmetric.com/api/shop/14245/job
+background.js:1032 [LaborRate] Updated 1 labor line(s) on job "test" to $299.95/hr
+background.js:1050 [LaborRate] Applied "diag" to 2 labor line(s) on jobs: Diag CEL, test
+background.js:147 [MOS] Message received: SET_SMS_CONTEXT
+background.js:179 [MOS] SMS context updated: Object
+background.js:78 [Tekmetric API] POST https://shop.tekmetric.com/api/email/status
+background.js:78 [Tekmetric API] POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy
+background.js:147 [MOS] Message received: GET_MOS_AUTH
+background.js:147 [MOS] Message received: GET_SMS_CONTEXT
+background.js:147 [MOS] Message received: MOS_API_REQUEST
+background.js:147 [MOS] Message received: MOS_API_REQUEST
+background.js:147 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:718 [MOS] Updated RO number from API: 32
+sidepanel.js:723 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:718 [MOS] Updated RO number from API: 32
+sidepanel.js:723 [MOS] Updated customer name from API: Brandon Crusha
