@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
 import AddVehicleModal from "@/components/AddVehicleModal";
+import ConcernAssistantModal from "@/components/ConcernAssistantModal";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
 
@@ -22,7 +23,7 @@ type PaginationInfo = {
   hasPrevPage: boolean;
 };
 
-type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref";
+type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "concern_assistant";
 
 type QuickSpecs = {
   frontTireDescription?: string;
@@ -163,6 +164,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [concernAssistant, setConcernAssistant] = useState<{
+    vin: string;
+    vehicleDisplay: string;
+    workOrderId?: string;
+    workOrderNumber?: string;
+    contactId?: string;
+    serviceItemId?: string;
+    customerName?: string;
+  } | null>(null);
 
   const handleVehicleAdded = (row: any) => {
     setData(prev => ({
@@ -1264,6 +1274,32 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               <Key className="w-4 h-4" />
                             </span>
                           )}
+                          {data.enabledFeatures?.includes('concern_assistant') ? (
+                            <button
+                              onClick={() => {
+                                setConcernAssistant({
+                                  vin,
+                                  vehicleDisplay: r.displayVehicle || '',
+                                  workOrderId: r.workOrderGuid || undefined,
+                                  workOrderNumber: r.displayRo || undefined,
+                                  contactId: r.contactId || undefined,
+                                  serviceItemId: r.serviceItemId || undefined,
+                                  customerName: r.displayName || undefined,
+                                });
+                              }}
+                              className="p-1.5 rounded transition-colors text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                              title="Concern Assistant"
+                            >
+                              <MessageSquareText className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span
+                              className="p-1.5 text-gray-300 cursor-not-allowed"
+                              title="Concern Assistant not enabled for this shop"
+                            >
+                              <MessageSquareText className="w-4 h-4" />
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1540,6 +1576,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         isOpen={showAddVehicle}
         onClose={() => setShowAddVehicle(false)}
         onVehicleAdded={handleVehicleAdded}
+      />
+
+      <ConcernAssistantModal
+        isOpen={!!concernAssistant}
+        onClose={() => setConcernAssistant(null)}
+        vin={concernAssistant?.vin}
+        vehicleDisplay={concernAssistant?.vehicleDisplay}
+        workOrderId={concernAssistant?.workOrderId}
+        workOrderNumber={concernAssistant?.workOrderNumber}
+        contactId={concernAssistant?.contactId}
+        serviceItemId={concernAssistant?.serviceItemId}
+        customerName={concernAssistant?.customerName}
+        smsType={data.smsType}
       />
     </div>
   );

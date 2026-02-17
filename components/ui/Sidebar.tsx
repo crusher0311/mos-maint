@@ -26,8 +26,7 @@ import {
   RefreshCw,
   X,
   Printer,
-  CalendarCheck,
-  MessageSquareText
+  CalendarCheck
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
@@ -281,12 +280,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard/parts",
       icon: <RefreshCw className="w-5 h-5" />,
       featureId: "part_xref",
-    },
-    {
-      name: "Concern Assistant",
-      href: "/dashboard/concern-assistant",
-      icon: <MessageSquareText className="w-5 h-5" />,
-      featureId: "concern_assistant",
     },
     {
       name: "Settings",
