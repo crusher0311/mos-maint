@@ -121,9 +121,21 @@ const DEFAULT_FEATURES = [
     includedInTiers: ["plus", "elite", "enterprise"],
     requiresFeature: "chrome_extension",
   },
-  // UTILITY FEATURES
   {
     order: 11,
+    name: "Concern Assistant",
+    slug: "concern_assistant",
+    description: "AI-powered customer concern intake with follow-up questions, conversation review, and direct injection into repair order concern fields.",
+    category: "addon",
+    status: "active",
+    icon: "MessageSquare",
+    compatibleSMS: ["tekmetric", "protractor"],
+    includedInTiers: ["plus", "elite", "enterprise"],
+    requiresFeature: "chrome_extension",
+  },
+  // UTILITY FEATURES
+  {
+    order: 12,
     name: "Chrome Extension",
     slug: "chrome_extension",
     description: "Browser extension for quick access to MOS features from any tab",
