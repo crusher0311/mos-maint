@@ -1,0 +1,284 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [MOS] Side panel opens on action click
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [Tekmetric] Shop ID captured: 14245
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 5 rules
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Loaded 4 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","repair"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+ [LaborRate] Current rate on RO: 13500 (135/hr), target: 20995 (209.95/hr)
+ [LaborRate] Sending PUT to /api/repair-order/295818536/summary with laborRate: 20995 ($209.95/hr)
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] RO update: 200
+ [LaborRate] Applied "F-350" - $209.95/hr (20995 cents) to RO #032
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+ [LaborRate] Updating job "Diag CEL" labor (testing) to $299.95/hr via POST /job
+ [LaborRate] Updated 1 labor line(s) on job "Diag CEL" to $299.95/hr
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [diag]
+ [LaborRate] Applied "diag" to 1 labor line(s) on jobs: Diag CEL
+ [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Updating job "test 1" labor (test 1) to $100/hr via POST /job
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'toFixed')
+    at <URL>
+ [LaborRate] Updated 1 labor line(s) on job "test 1" to $100/hr
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [maint]
+ [LaborRate] Applied "Maintenance" to 1 labor line(s) on jobs: test 1
+ [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+ [LaborRate] Updating job "CEL" labor (CEL Test) to $1.99/hr via POST /job
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Updated 1 labor line(s) on job "CEL" to $1.99/hr
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [test]
+ [LaborRate] Applied "TEST" to 1 labor line(s) on jobs: CEL
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] Message received: SAVE_LABOR_RATE_RULES
+ [LaborRate] New job detected on RO, will re-apply rules
+ [LaborRate] Loaded 4 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","repair"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+ [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+ [LaborRate] Rate already matches ($209.95/hr), skipping
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [diag]
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [maint]
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+ [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [test]
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] New job detected on RO, will re-apply rules
+ [LaborRate] Loaded 4 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","repair"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+ [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+ [LaborRate] Rate already matches ($209.95/hr), skipping
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [diag]
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [maint]
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+ [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [test]
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] New job detected on RO, will re-apply rules
+ [LaborRate] Loaded 5 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","repair","New Job"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+ [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+ [LaborRate] Rate already matches ($209.95/hr), skipping
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [diag]
+ [LaborRate] Job "New Job" matches category but has no labor lines yet
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [maint]
+ [LaborRate] Job "New Job" matches category but has no labor lines yet
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+ [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [test]
+ [LaborRate] Job "New Job" matches category but has no labor lines yet
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] New job detected on RO, will re-apply rules
+ [LaborRate] Loaded 5 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","repair","Test 3"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+ [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+ [LaborRate] Rate already matches ($209.95/hr), skipping
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [diag]
+ [LaborRate] Updating job "Test 3" labor (test 3) to $299.95/hr via POST /job
+ [LaborRate] Updated 1 labor line(s) on job "Test 3" to $299.95/hr
+ [LaborRate] Applied "diag" to 1 labor line(s) on jobs: Test 3
+ [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [maint]
+ [LaborRate] Updating job "Test 3" labor (test 3) to $100/hr via POST /job
+ [LaborRate] Updated 1 labor line(s) on job "Test 3" to $100/hr
+ [LaborRate] Applied "Maintenance" to 1 labor line(s) on jobs: Test 3
+ [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+ [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [test]
+ [LaborRate] Updating job "Test 3" labor (test 3) to $1.99/hr via POST /job
+ [LaborRate] Updated 1 labor line(s) on job "Test 3" to $1.99/hr
+ [LaborRate] Applied "TEST" to 1 labor line(s) on jobs: Test 3
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] New job detected on RO, will re-apply rules
+ [LaborRate] Loaded 6 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","repair","maintenance","New Job"] customer: Brandon Crusha phones: 1
+ [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+ [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+ [LaborRate] Rate already matches ($209.95/hr), skipping
+ [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [diag]
+ [LaborRate] Job "Test 3" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "New Job" matches category but has no labor lines yet
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+ [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+ [LaborRate] Job "test 2" category "repair" does not match rule categories [maint]
+ [LaborRate] Updating job "Test 3" labor (test 3) to $100/hr via POST /job
+ [LaborRate] Updated 1 labor line(s) on job "Test 3" to $100/hr
+ [LaborRate] Job "New Job" matches category but has no labor lines yet
+background.js:1127 [LaborRate] Applied "Maintenance" to 1 labor line(s) on jobs: Test 3
+background.js:963 [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+background.js:1071 [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+background.js:1053 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+background.js:1053 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+background.js:1053 [LaborRate] Job "test 2" category "repair" does not match rule categories [test]
+background.js:1053 [LaborRate] Job "Test 3" category "maintenance" does not match rule categories [test]
+background.js:1061 [LaborRate] Job "New Job" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:161 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:83 [LaborRate] New job detected on RO, will re-apply rules
+background.js:850 [LaborRate] Loaded 4 jobs with labor from estimate
+background.js:882 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:919 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","New Job"] customer: Brandon Crusha phones: 1
+background.js:930 [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+background.js:1155 [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+background.js:1158 [LaborRate] Rate already matches ($209.95/hr), skipping
+background.js:963 [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+background.js:1053 [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+background.js:1071 [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+background.js:1053 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1061 [LaborRate] Job "New Job" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:963 [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+background.js:1053 [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+background.js:1053 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1071 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1061 [LaborRate] Job "New Job" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:963 [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+background.js:1071 [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+background.js:1053 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+background.js:1053 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+background.js:1061 [LaborRate] Job "New Job" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:83 [LaborRate] New job detected on RO, will re-apply rules
+background.js:850 [LaborRate] Loaded 4 jobs with labor from estimate
+background.js:882 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:919 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["test","diagnostics","maintenance","test 3"] customer: Brandon Crusha phones: 1
+background.js:930 [LaborRate] Matched RO-level rule: "F-350" (priority 10) → $209.95/hr
+background.js:1155 [LaborRate] Current rate on RO: 20995 (209.95/hr), target: 20995 (209.95/hr)
+background.js:1158 [LaborRate] Rate already matches ($209.95/hr), skipping
+background.js:963 [LaborRate] Matched per-job rule: "diag" (priority 100) → $299.95/hr
+background.js:1053 [LaborRate] Job "CEL" category "test" does not match rule categories [diag]
+background.js:1071 [LaborRate] Labor "testing" on job "Diag CEL" already at $299.95/hr, skipping
+background.js:1053 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1061 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:963 [LaborRate] Matched per-job rule: "Maintenance" (priority 99) → $100/hr
+background.js:1053 [LaborRate] Job "CEL" category "test" does not match rule categories [maint]
+background.js:1053 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1071 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1061 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:963 [LaborRate] Matched per-job rule: "TEST" (priority 98) → $1.99/hr
+background.js:1071 [LaborRate] Labor "CEL Test" on job "CEL" already at $1.99/hr, skipping
+background.js:1053 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [test]
+background.js:1053 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [test]
+background.js:1061 [LaborRate] Job "test 3" matches category but has no labor lines yet
+background.js:1122 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: MOS_API_REQUEST
+background.js:161 [MOS] Message received: INSERT_CONCERN
+background.js:161 [MOS] Message received: SET_SMS_CONTEXT
+background.js:193 [MOS] SMS context updated: Object
+background.js:161 [MOS] Message received: MOS_API_REQUEST

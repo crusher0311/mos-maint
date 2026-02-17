@@ -324,17 +324,75 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "INSERT_CONCERN") {
     (async () => {
       try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs[0]?.id) {
-          await chrome.tabs.sendMessage(tabs[0].id, {
-            action: 'INJECT_CONCERN_TEXT',
-            text: message.text
-          });
+        if (!currentSmsContext?.roId) {
+          sendResponse({ success: false, error: 'No repair order context' });
+          return;
+        }
+
+        const roId = currentSmsContext.roId;
+        const baseUrl = currentSmsContext.smsBaseUrl || 'https://shop.tekmetric.com';
+
+        const roRes = await fetch(`${baseUrl}/api/repair-order/${roId}`, {
+          headers: { 'x-auth-token': smsTokens.tekmetric }
+        });
+
+        if (!roRes.ok) {
+          sendResponse({ success: false, error: `Failed to fetch RO: ${roRes.status}` });
+          return;
+        }
+
+        const roData = await roRes.json();
+        const existingNotes = roData.notes || '';
+        const concernText = message.text;
+        const newNotes = existingNotes
+          ? `${existingNotes}\n\n--- Customer Concern ---\n${concernText}`
+          : `--- Customer Concern ---\n${concernText}`;
+
+        const summaryPayload = {
+          laborRate: roData.laborRate,
+          appointmentOption: roData.appointmentOption,
+          customerTimeIn: roData.customerTimeIn,
+          customerTimeOut: roData.customerTimeOut,
+          defaultTechnicianId: roData.defaultTechnicianId,
+          keytag: roData.keytag,
+          leadSource: roData.leadSource,
+          notes: newNotes,
+          poNumber: roData.poNumber,
+          referrerId: roData.referrerId,
+          referrerName: roData.referrerName,
+          saveCustomerParts: roData.saveCustomerParts,
+          serviceWriterId: roData.serviceWriterId
+        };
+
+        console.log(`[Concern] Updating RO #${roId} notes via API`);
+        const updateRes = await fetch(`${baseUrl}/api/repair-order/${roId}/summary`, {
+          method: 'PUT',
+          headers: {
+            'x-auth-token': smsTokens.tekmetric,
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify(summaryPayload)
+        });
+
+        if (updateRes.ok) {
+          console.log(`[Concern] Successfully added concern to RO #${roId}`);
           sendResponse({ success: true });
+
+          const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+          for (const tab of tabs) {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'SHOW_TOAST',
+              message: 'Customer concern added to RO notes',
+              type: 'success'
+            }).catch(() => {});
+          }
         } else {
-          sendResponse({ success: false, error: 'No active tab found' });
+          const errText = await updateRes.text();
+          console.error(`[Concern] Failed to update RO: ${updateRes.status}`, errText.substring(0, 200));
+          sendResponse({ success: false, error: `Failed to update RO: ${updateRes.status}` });
         }
       } catch (err) {
+        console.error('[Concern] Error injecting concern:', err);
         sendResponse({ success: false, error: err.message });
       }
     })();
