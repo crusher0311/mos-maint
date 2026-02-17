@@ -843,47 +843,48 @@ async function autoApplyLaborRate(context) {
       console.log(`[LaborRate]   Job: "${j.name}" (id: ${j.id}) category: ${j.jobCategoryName || j.jobCategory?.name || j.jobCategory || 'none'} keys: [${Object.keys(j).join(',')}]`);
 
       if (existingLabor.length === 0 && j.id) {
-        // Try fetching labor entries for this job directly
-        try {
-          const laborRes = await fetch(`${baseUrl}/api/shop/${shopId}/labor?jobId=${j.id}`, {
-            headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
-          });
-          if (laborRes.ok) {
-            const laborBody = await laborRes.json();
-            const laborList = laborBody.content || laborBody.data || (Array.isArray(laborBody) ? laborBody : []);
-            if (laborList.length > 0) {
-              j.labor = laborList;
-              console.log(`[LaborRate]     Fetched ${laborList.length} labor entries via /labor?jobId:`, laborList.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
-            } else {
-              console.log(`[LaborRate]     /labor?jobId returned 0 entries, keys:`, Object.keys(laborBody).join(','));
-            }
-          } else {
-            console.log(`[LaborRate]     /labor?jobId returned ${laborRes.status}`);
-          }
-        } catch (e) {
-          console.warn(`[LaborRate]     Error fetching labor for job ${j.id}:`, e.message);
-        }
+        // Try singular /job/{id} endpoint (Tekmetric uses singular for full details)
+        const endpoints = [
+          `${baseUrl}/api/shop/${shopId}/job/${j.id}`,
+          `${baseUrl}/api/shop/${shopId}/jobs/${j.id}`
+        ];
 
-        // Fallback: try individual job detail endpoint
-        if ((j.labor || []).length === 0) {
+        for (const endpoint of endpoints) {
+          if ((j.labor || []).length > 0) break;
           try {
-            const jDetailRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs/${j.id}`, {
+            const jRes = await fetch(endpoint, {
               headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
             });
-            if (jDetailRes.ok) {
-              const jDetail = await jDetailRes.json();
-              const detailKeys = Object.keys(jDetail).join(',');
-              console.log(`[LaborRate]     Job detail keys: [${detailKeys}]`);
-              j.labor = jDetail.labor || jDetail.laborEntries || jDetail.laborItems || [];
-              if (j.labor.length > 0) {
-                console.log(`[LaborRate]     Found ${j.labor.length} labor lines in job detail`);
-              } else {
-                console.log(`[LaborRate]     Job detail also has 0 labor lines`);
+            if (jRes.ok) {
+              const jDetail = await jRes.json();
+              const allKeys = Object.keys(jDetail);
+              const laborKeys = allKeys.filter(k => k.toLowerCase().includes('labor') || k.toLowerCase().includes('part'));
+              console.log(`[LaborRate]     ${endpoint.split('/api/')[1]} keys (${allKeys.length} total), labor/part related: [${laborKeys.join(',')}]`);
+              for (const lk of laborKeys) {
+                const val = jDetail[lk];
+                if (Array.isArray(val) && val.length > 0) {
+                  console.log(`[LaborRate]       ${lk}: ${val.length} items, first item keys: [${Object.keys(val[0]).join(',')}]`);
+                  console.log(`[LaborRate]       ${lk}[0]:`, JSON.stringify(val[0]).substring(0, 300));
+                } else if (Array.isArray(val)) {
+                  console.log(`[LaborRate]       ${lk}: empty array`);
+                } else {
+                  console.log(`[LaborRate]       ${lk}: ${typeof val} = ${JSON.stringify(val).substring(0, 100)}`);
+                }
               }
+              j.labor = jDetail.labor || jDetail.laborEntries || jDetail.laborItems || jDetail.laborLines || [];
+              j.parts = j.parts || jDetail.parts || jDetail.partItems || jDetail.partEntries || [];
+            } else {
+              console.log(`[LaborRate]     ${endpoint.split('/api/')[1]} returned ${jRes.status}`);
             }
           } catch (e) {
-            console.warn(`[LaborRate]     Failed to fetch job detail:`, e.message);
+            console.warn(`[LaborRate]     Error fetching ${endpoint.split('/api/')[1]}:`, e.message);
           }
+        }
+
+        if ((j.labor || []).length > 0) {
+          console.log(`[LaborRate]     Found ${j.labor.length} labor lines:`, j.labor.map(l => `"${l.name}" $${(l.rate||0)/100}/hr (id:${l.id})`).join(', '));
+        } else {
+          console.log(`[LaborRate]     No labor lines found for job "${j.name}" after trying all endpoints`);
         }
       } else if (existingLabor.length > 0) {
         j.labor = existingLabor;
