@@ -360,7 +360,8 @@ function switchTab(tab) {
     'canned': null,
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
-    'sticker': 'oil_sticker'
+    'sticker': 'oil_sticker',
+    'specs': null
   };
   const featureKey = featureMap[tab];
   const hasAccess = featureKey ? shopFeatures[featureKey] : true;
@@ -459,6 +460,8 @@ function switchTab(tab) {
   } else if (tab === 'sticker' && currentContext?.roId) {
     loadKeytagSection();
     loadStickerConfig();
+  } else if (tab === 'specs' && currentContext?.vin) {
+    loadVehicleSpecs();
   }
 }
 
@@ -509,6 +512,8 @@ function updateContext(context) {
         loadCommonFailures();
       } else if (currentTab === 'canned') {
         loadCannedJobs();
+      } else if (currentTab === 'specs' && context.vin) {
+        loadVehicleSpecs();
       }
     } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
       switchTab(currentTab);
@@ -549,7 +554,8 @@ function updateTabAccessibility() {
     'canned': null,
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
-    'sticker': 'oil_sticker'
+    'sticker': 'oil_sticker',
+    'specs': null
   };
   
   let firstAvailableTab = null;
@@ -638,6 +644,7 @@ async function handleLogout() {
   await sendMessage({ action: 'MOS_LOGOUT' });
   isAuthenticated = false;
   currentContext = null;
+  specsCache = {};
   hideSupportFab();
   closeSupportChat();
   supportMessages = [];
@@ -2352,6 +2359,197 @@ function showNotification(message, type = 'info') {
     notification.style.transition = 'opacity 0.3s';
     setTimeout(() => notification.remove(), 300);
   }, 3000);
+}
+
+// ==================== VEHICLE SPECS ====================
+let specsCache = {};
+
+async function loadVehicleSpecs() {
+  const vin = currentContext?.vin;
+  if (!vin) return;
+
+  const specsLoading = document.getElementById('specs-loading');
+  const specsEmpty = document.getElementById('specs-empty');
+  const specsContent = document.getElementById('specs-content');
+
+  if (specsCache[vin]) {
+    renderSpecs(specsCache[vin]);
+    return;
+  }
+
+  specsLoading.classList.remove('hidden');
+  specsEmpty.classList.add('hidden');
+  specsContent.classList.add('hidden');
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/specs?vin=${encodeURIComponent(vin)}`
+    });
+
+    specsLoading.classList.add('hidden');
+
+    if (result && result.ok) {
+      specsCache[vin] = result;
+      renderSpecs(result);
+    } else {
+      specsEmpty.classList.remove('hidden');
+      specsEmpty.querySelector('p').textContent = result?.error || 'No specifications found for this vehicle.';
+    }
+  } catch (err) {
+    console.error('[MOS] Error loading specs:', err);
+    specsLoading.classList.add('hidden');
+    specsEmpty.classList.remove('hidden');
+    specsEmpty.querySelector('p').textContent = 'Failed to load specifications.';
+  }
+}
+
+function renderSpecs(data) {
+  const specsContent = document.getElementById('specs-content');
+  const headerEl = document.getElementById('specs-vehicle-header');
+  const sectionsEl = document.getElementById('specs-sections');
+
+  specsContent.classList.remove('hidden');
+  document.getElementById('specs-empty').classList.add('hidden');
+
+  if (data.vehicleInfo) {
+    const vi = data.vehicleInfo;
+    headerEl.innerHTML = `
+      <div class="specs-title">${vi.year} ${vi.make} ${vi.model}</div>
+      <div class="specs-subtitle">${vi.trim || ''} ${vi.style || ''}</div>
+      <div class="specs-vin">VIN: ${data.vin}</div>
+    `;
+  } else {
+    headerEl.innerHTML = `<div class="specs-vin">VIN: ${data.vin}</div>`;
+  }
+
+  let html = '';
+
+  if (data.vehicleInfo) {
+    const vi = data.vehicleInfo;
+    const powertrain = [];
+    if (vi.engine) powertrain.push({ label: 'Engine', value: vi.engine });
+    if (vi.engineSize) powertrain.push({ label: 'Displacement', value: `${vi.engineSize}L` });
+    if (vi.engineCylinders) powertrain.push({ label: 'Cylinders', value: vi.engineCylinders });
+    if (vi.transmission) powertrain.push({ label: 'Transmission', value: vi.transmission });
+    if (vi.transType) powertrain.push({ label: 'Trans Type', value: vi.transType });
+    if (vi.driveType) powertrain.push({ label: 'Drive Type', value: vi.driveType });
+    if (vi.fuelType) powertrain.push({ label: 'Fuel Type', value: vi.fuelType });
+    if (vi.brakeSystem) powertrain.push({ label: 'Brake System', value: vi.brakeSystem });
+    if (powertrain.length > 0) {
+      html += renderSpecsSection('Powertrain', powertrain, 'engine');
+    }
+  }
+
+  const g = data.grouped || {};
+
+  if (g.wheelsAndTires && Object.keys(g.wheelsAndTires).length > 0) {
+    const items = [];
+    if (g.wheelsAndTires.frontTireDescription) items.push({ label: 'Front Tires', value: g.wheelsAndTires.frontTireDescription });
+    if (g.wheelsAndTires.rearTireDescription) items.push({ label: 'Rear Tires', value: g.wheelsAndTires.rearTireDescription });
+    if (g.wheelsAndTires.frontWheelDiameter) items.push({ label: 'Front Wheel', value: g.wheelsAndTires.frontWheelDiameter + '"' });
+    if (g.wheelsAndTires.rearWheelDiameter) items.push({ label: 'Rear Wheel', value: g.wheelsAndTires.rearWheelDiameter + '"' });
+    if (g.wheelsAndTires.frontWheelSize) items.push({ label: 'Front Wheel Size', value: g.wheelsAndTires.frontWheelSize });
+    if (g.wheelsAndTires.rearWheelSize) items.push({ label: 'Rear Wheel Size', value: g.wheelsAndTires.rearWheelSize });
+    if (g.wheelsAndTires.tireType) items.push({ label: 'Tire Type', value: g.wheelsAndTires.tireType });
+    if (items.length > 0) html += renderSpecsSection('Wheels & Tires', items, 'wheel');
+  }
+
+  if (g.brakes && Object.keys(g.brakes).length > 0) {
+    const items = [];
+    if (g.brakes.frontBrakeDiameter) items.push({ label: 'Front Brake', value: g.brakes.frontBrakeDiameter + '"' });
+    if (g.brakes.rearBrakeDiameter) items.push({ label: 'Rear Brake', value: g.brakes.rearBrakeDiameter + '"' });
+    if (items.length > 0) html += renderSpecsSection('Brakes', items, 'brake');
+  }
+
+  if (g.dimensions && Object.keys(g.dimensions).length > 0) {
+    const items = [];
+    if (g.dimensions.wheelbase) items.push({ label: 'Wheelbase', value: g.dimensions.wheelbase + '"' });
+    if (g.dimensions.length) items.push({ label: 'Length', value: g.dimensions.length + '"' });
+    if (g.dimensions.width) items.push({ label: 'Width', value: g.dimensions.width + '"' });
+    if (g.dimensions.height) items.push({ label: 'Height', value: g.dimensions.height + '"' });
+    if (g.dimensions.groundClearance) items.push({ label: 'Ground Clearance', value: g.dimensions.groundClearance + '"' });
+    if (g.dimensions.frontTrackWidth) items.push({ label: 'Front Track', value: g.dimensions.frontTrackWidth + '"' });
+    if (g.dimensions.rearTrackWidth) items.push({ label: 'Rear Track', value: g.dimensions.rearTrackWidth + '"' });
+    if (items.length > 0) html += renderSpecsSection('Dimensions', items, 'ruler');
+  }
+
+  if (g.weightsAndCapacities && Object.keys(g.weightsAndCapacities).length > 0) {
+    const items = [];
+    if (g.weightsAndCapacities.fuelTankCapacity) items.push({ label: 'Fuel Tank', value: g.weightsAndCapacities.fuelTankCapacity + ' gal' });
+    if (g.weightsAndCapacities.curbWeight) items.push({ label: 'Curb Weight', value: g.weightsAndCapacities.curbWeight + ' lbs' });
+    if (g.weightsAndCapacities.gvwr) items.push({ label: 'GVWR', value: g.weightsAndCapacities.gvwr + ' lbs' });
+    if (g.weightsAndCapacities.gcwr) items.push({ label: 'GCWR', value: g.weightsAndCapacities.gcwr + ' lbs' });
+    if (g.weightsAndCapacities.baseTowingCapacity) items.push({ label: 'Base Towing', value: g.weightsAndCapacities.baseTowingCapacity + ' lbs' });
+    if (g.weightsAndCapacities.maxTowingCapacity) items.push({ label: 'Max Towing', value: g.weightsAndCapacities.maxTowingCapacity + ' lbs' });
+    if (g.weightsAndCapacities.maxPayload) items.push({ label: 'Max Payload', value: g.weightsAndCapacities.maxPayload + ' lbs' });
+    if (g.weightsAndCapacities.tonnage) items.push({ label: 'Tonnage', value: g.weightsAndCapacities.tonnage });
+    if (items.length > 0) html += renderSpecsSection('Weights & Capacities', items, 'weight');
+  }
+
+  if (g.truckSpecs && Object.keys(g.truckSpecs).length > 0) {
+    const items = [];
+    if (g.truckSpecs.bedLength) items.push({ label: 'Bed Length', value: g.truckSpecs.bedLength });
+    if (items.length > 0) html += renderSpecsSection('Truck Specs', items, 'truck');
+  }
+
+  if (g.seating && Object.keys(g.seating).length > 0) {
+    const items = [];
+    if (g.seating.maxSeating) items.push({ label: 'Max Seating', value: g.seating.maxSeating });
+    if (g.seating.standardSeating) items.push({ label: 'Standard Seating', value: g.seating.standardSeating });
+    if (items.length > 0) html += renderSpecsSection('Seating', items, 'seat');
+  }
+
+  if (g.interior && Object.keys(g.interior).length > 0) {
+    const items = [];
+    if (g.interior.cargoVolume) items.push({ label: 'Cargo Volume', value: g.interior.cargoVolume + ' cu ft' });
+    if (g.interior.passengerVolume) items.push({ label: 'Passenger Volume', value: g.interior.passengerVolume + ' cu ft' });
+    if (items.length > 0) html += renderSpecsSection('Interior', items, 'interior');
+  }
+
+  if (data.vehicleInfo) {
+    const vi = data.vehicleInfo;
+    const general = [];
+    if (vi.bodyType) general.push({ label: 'Body Type', value: vi.bodyType });
+    if (vi.doors) general.push({ label: 'Doors', value: vi.doors });
+    if (vi.countryOfMfr) general.push({ label: 'Country', value: vi.countryOfMfr });
+    if (general.length > 0) html += renderSpecsSection('General', general, 'info');
+  }
+
+  if (!html) {
+    html = '<div class="specs-no-data">No detailed specifications available for this vehicle.</div>';
+  }
+
+  sectionsEl.innerHTML = html;
+}
+
+function renderSpecsSection(title, items, iconType) {
+  const icons = {
+    engine: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="9"/></svg>',
+    wheel: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>',
+    brake: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+    ruler: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M7 8v8M12 6v12M17 8v8"/></svg>',
+    weight: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a4 4 0 0 0-4 4c0 2 4 5 4 5s4-3 4-5a4 4 0 0 0-4-4z"/><path d="M5 21h14l-2-8H7l-2 8z"/></svg>',
+    truck: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>',
+    seat: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18v-4a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v4"/><circle cx="12" cy="6" r="3"/></svg>',
+    interior: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+  };
+  const icon = icons[iconType] || icons.info;
+
+  let rows = items.map(item =>
+    `<div class="specs-row"><span class="specs-label">${item.label}</span><span class="specs-value">${item.value}</span></div>`
+  ).join('');
+
+  return `
+    <div class="specs-section">
+      <div class="specs-section-header">
+        ${icon}
+        <span>${title}</span>
+      </div>
+      <div class="specs-section-body">${rows}</div>
+    </div>
+  `;
 }
 
 // ==================== SUPPORT CHAT ====================

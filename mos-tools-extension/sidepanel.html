@@ -132,6 +132,14 @@
           </svg>
           <span>Print</span>
         </button>
+        <button class="tab-btn" data-tab="specs" title="Vehicle Specs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span>Specs</span>
+        </button>
       </nav>
 
       <!-- Tab content -->
@@ -544,6 +552,21 @@
           
           <div id="sticker-disabled" class="panel-empty hidden">
             <p>Printing features are not enabled for your shop. Contact your administrator to enable them.</p>
+          </div>
+        </div>
+
+        <!-- Vehicle Specs tab -->
+        <div id="tab-specs" class="tab-panel hidden">
+          <div id="specs-loading" class="panel-loading hidden">
+            <div class="spinner-small"></div>
+            <span>Loading specifications...</span>
+          </div>
+          <div id="specs-empty" class="panel-empty">
+            <p>Navigate to a repair order to view vehicle specifications.</p>
+          </div>
+          <div id="specs-content" class="hidden">
+            <div id="specs-vehicle-header" class="specs-vehicle-header"></div>
+            <div id="specs-sections" class="specs-sections"></div>
           </div>
         </div>
       </main>
