@@ -340,48 +340,74 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: 'No repair order context' });
           return;
         }
-        if (!smsTokens.tekmetric) {
-          sendResponse({ success: false, error: 'No Tekmetric auth token' });
-          return;
-        }
 
-        const roId = currentSmsContext.roId;
-        const baseUrl = currentSmsContext.smsBaseUrl || tekmetricBaseUrl || 'https://shop.tekmetric.com';
+        const provider = currentSmsContext.provider || 'tekmetric';
         const concernText = message.text;
 
-        console.log(`[Concern] Adding customer concern to RO #${roId}`);
+        if (provider === 'protractor') {
+          console.log(`[Concern] Adding concern to Protractor WO ${currentSmsContext.roId} via MOS API`);
 
-        const res = await fetch(`${baseUrl}/api/repair-orders/${roId}/customer-concerns`, {
-          method: 'POST',
-          headers: {
-            'accept': 'application/json',
-            'content-type': 'application/json',
-            'x-auth-token': smsTokens.tekmetric
-          },
-          body: JSON.stringify({ concern: concernText })
-        });
+          const result = await handleMosApiRequest('/api/extension/concern-assistant/inject-protractor', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: currentSmsContext.shopId,
+              workOrderId: currentSmsContext.roId,
+              contactId: currentSmsContext.customerId || null,
+              serviceItemId: currentSmsContext.vehicleId || null,
+              concernText
+            })
+          });
 
-        const resBody = await res.text();
-        console.log(`[Concern] Response: ${res.status}`, resBody.substring(0, 300));
-
-        if (res.ok) {
-          console.log(`[Concern] Successfully added concern to RO #${roId}`);
-          sendResponse({ success: true });
-
-          const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
-          for (const tab of tabs) {
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'SHOW_TOAST',
-              message: 'Customer concern added — refreshing...',
-              type: 'success'
-            }).catch(() => {});
-            setTimeout(() => {
-              chrome.tabs.reload(tab.id).catch(() => {});
-            }, 1500);
+          if (result.ok) {
+            console.log(`[Concern] Successfully added concern to Protractor WO ${currentSmsContext.roId}`);
+            sendResponse({ success: true });
+          } else {
+            console.error(`[Concern] Protractor inject failed:`, result.error);
+            sendResponse({ success: false, error: result.error || 'Failed to add concern' });
           }
         } else {
-          console.error(`[Concern] Failed: ${res.status}`, resBody.substring(0, 200));
-          sendResponse({ success: false, error: `Failed: ${res.status}` });
+          if (!smsTokens.tekmetric) {
+            sendResponse({ success: false, error: 'No Tekmetric auth token' });
+            return;
+          }
+
+          const roId = currentSmsContext.roId;
+          const baseUrl = currentSmsContext.smsBaseUrl || tekmetricBaseUrl || 'https://shop.tekmetric.com';
+
+          console.log(`[Concern] Adding customer concern to RO #${roId}`);
+
+          const res = await fetch(`${baseUrl}/api/repair-orders/${roId}/customer-concerns`, {
+            method: 'POST',
+            headers: {
+              'accept': 'application/json',
+              'content-type': 'application/json',
+              'x-auth-token': smsTokens.tekmetric
+            },
+            body: JSON.stringify({ concern: concernText })
+          });
+
+          const resBody = await res.text();
+          console.log(`[Concern] Response: ${res.status}`, resBody.substring(0, 300));
+
+          if (res.ok) {
+            console.log(`[Concern] Successfully added concern to RO #${roId}`);
+            sendResponse({ success: true });
+
+            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+            for (const tab of tabs) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'SHOW_TOAST',
+                message: 'Customer concern added — refreshing...',
+                type: 'success'
+              }).catch(() => {});
+              setTimeout(() => {
+                chrome.tabs.reload(tab.id).catch(() => {});
+              }, 1500);
+            }
+          } else {
+            console.error(`[Concern] Failed: ${res.status}`, resBody.substring(0, 200));
+            sendResponse({ success: false, error: `Failed: ${res.status}` });
+          }
         }
       } catch (err) {
         console.error('[Concern] Error:', err.message);

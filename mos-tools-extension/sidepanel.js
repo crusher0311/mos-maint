@@ -493,7 +493,8 @@ function updateContext(context) {
       } else {
         elements.vehicleDisplay.textContent = 'Vehicle';
       }
-      elements.roDisplay.textContent = `RO #${context.roNumber || context.roId}`;
+      const roLabel = context.provider === 'protractor' ? 'WO' : 'RO';
+      elements.roDisplay.textContent = `${roLabel} #${context.roNumber || context.roId}`;
       
       if (context.mileage) {
         elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} mi`;
@@ -3139,14 +3140,21 @@ async function handleConcernInject() {
   const text = concernState.cleanedText;
   if (!text) return;
 
+  const isProtractor = currentContext?.provider === 'protractor';
+  const orderLabel = isProtractor ? 'work order' : 'repair order';
+
   try {
-    await sendMessage({
+    const result = await sendMessage({
       action: 'INSERT_CONCERN',
       text
     });
-    showNotification('Concern sent to repair order!', 'success');
+    if (result && result.success === false) {
+      showConcernError(result.error || `Failed to send concern to ${orderLabel}.`);
+      return;
+    }
+    showNotification(`Concern sent to ${orderLabel}!`, 'success');
   } catch (err) {
-    showConcernError('Failed to inject concern. Make sure you have a repair order open.');
+    showConcernError(`Failed to inject concern. Make sure you have a ${orderLabel} open.`);
   }
 }
 
