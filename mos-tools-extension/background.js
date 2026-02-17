@@ -869,6 +869,114 @@ async function autoApplyLaborRate(context) {
 
   // Tekmetric stores labor rate in cents
   const rateInCents = Math.round(matchedRule.rate * 100);
+
+  // Check if this rule has a jobCategory condition — if so, update per-job labor lines only
+  const hasJobCategoryCondition = (matchedRule.conditions || []).some(c => c.type === 'jobCategory');
+
+  if (hasJobCategoryCondition) {
+    return await applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl);
+  } else {
+    return await applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl);
+  }
+}
+
+async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl) {
+  const categoryValues = (matchedRule.conditions || [])
+    .filter(c => c.type === 'jobCategory')
+    .flatMap(c => c.values || [])
+    .map(v => v.toLowerCase());
+
+  const jobs = roData.jobs || [];
+  let updatedCount = 0;
+  let skippedCount = 0;
+  const updatedJobNames = [];
+
+  for (const job of jobs) {
+    const jobCat = (job.jobCategoryName || job.jobCategory?.name || job.jobCategory || job.category || job.type || job.name || '').toLowerCase();
+
+    const matches = categoryValues.some(cv => jobCat.includes(cv) || cv.includes(jobCat));
+    if (!matches) continue;
+
+    const laborEntries = job.labor || job.laborEntries || job.laborItems || [];
+    if (laborEntries.length === 0) {
+      console.log(`[LaborRate] Job "${job.name}" matches category but has no labor lines`);
+      continue;
+    }
+
+    for (const labor of laborEntries) {
+      const currentRate = labor.rate || 0;
+      if (currentRate === rateInCents) {
+        console.log(`[LaborRate] Labor "${labor.name}" on job "${job.name}" already at $${rateInCents/100}/hr, skipping`);
+        skippedCount++;
+        continue;
+      }
+
+      const laborPayload = {
+        ...labor,
+        rate: rateInCents
+      };
+
+      try {
+        console.log(`[LaborRate] Updating labor "${labor.name}" (id: ${labor.id}) on job "${job.name}" from $${currentRate/100}/hr → $${rateInCents/100}/hr`);
+
+        const updateRes = await fetch(`${baseUrl}/api/shop/${context.shopId || tekmetricShopId}/labor/${labor.id}`, {
+          method: 'PUT',
+          headers: {
+            'x-auth-token': smsTokens.tekmetric,
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify(laborPayload)
+        });
+
+        if (updateRes.ok) {
+          updatedCount++;
+          if (!updatedJobNames.includes(job.name)) updatedJobNames.push(job.name);
+          console.log(`[LaborRate] Updated labor "${labor.name}" on job "${job.name}" to $${rateInCents/100}/hr`);
+        } else {
+          const errText = await updateRes.text();
+          console.error(`[LaborRate] Failed to update labor ${labor.id}:`, updateRes.status, errText.substring(0, 300));
+        }
+      } catch (err) {
+        console.error(`[LaborRate] Error updating labor ${labor.id}:`, err.message);
+      }
+    }
+  }
+
+  lastAppliedRoId = context.roId;
+
+  if (updatedCount === 0 && skippedCount > 0) {
+    console.log(`[LaborRate] All matching labor lines already at target rate, skipped ${skippedCount}`);
+    return { success: true, noChange: true };
+  }
+
+  if (updatedCount > 0) {
+    console.log(`[LaborRate] Applied "${matchedRule.name}" to ${updatedCount} labor line(s) on jobs: ${updatedJobNames.join(', ')}`);
+
+    chrome.runtime.sendMessage({
+      action: "LABOR_RATE_APPLIED",
+      success: true,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      perJob: true,
+      updatedCount,
+      jobNames: updatedJobNames,
+      roNumber: context.roNumber || context.roId
+    }).catch(() => {});
+
+    chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI" }).catch(() => {});
+      }
+    });
+
+    return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate, updatedCount };
+  }
+
+  console.log("[LaborRate] No matching jobs/labor found for category rule");
+  return { success: false, error: "No matching jobs found for category" };
+}
+
+async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl) {
   const currentRate = roData.laborRate || 0;
   console.log(`[LaborRate] Current rate on RO: ${currentRate} (${currentRate/100}/hr), target: ${rateInCents} (${matchedRule.rate}/hr)`);
 
@@ -878,8 +986,6 @@ async function autoApplyLaborRate(context) {
     return;
   }
 
-  // Update the RO labor rate via Tekmetric PUT /api/repair-order/{roId}/summary
-  // Tekmetric requires a PUT with the full summary payload including existing fields
   try {
     const summaryPayload = {
       laborRate: rateInCents,
@@ -924,7 +1030,6 @@ async function autoApplyLaborRate(context) {
     lastAppliedRoId = context.roId;
     console.log(`[LaborRate] Applied "${matchedRule.name}" - $${matchedRule.rate}/hr (${rateInCents} cents) to RO #${context.roNumber || context.roId}`);
 
-    // Notify sidepanel of success
     chrome.runtime.sendMessage({
       action: "LABOR_RATE_APPLIED",
       success: true,
@@ -934,7 +1039,6 @@ async function autoApplyLaborRate(context) {
       roNumber: context.roNumber || context.roId
     }).catch(() => {});
 
-    // Tell the Tekmetric tab to refresh so the updated rate is visible
     chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
       for (const tab of tabs) {
         chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI" }).catch(() => {});
