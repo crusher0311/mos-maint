@@ -474,10 +474,10 @@ export async function GET(request: NextRequest) {
           shopId: { $in: [String(user.shopId), Number(user.shopId)] },
           vin: { $ne: null, $type: "string" },
           completed: { $ne: true }, // Exclude completed work orders
-          status: { $nin: ["Invoiced", "Closed", "Void"] }, // Exclude by status field
+          status: { $nin: ["Invoiced", "Closed", "Void", "Deleted"] }, // Exclude by status field
           workflowStage: { 
             $in: allowedStages, // Only show allowed workflow stages
-            $nin: TERMINAL_WORKFLOW_STAGES // Always exclude terminal stages (vehicle left shop)
+            $nin: [...TERMINAL_WORKFLOW_STAGES, "Deleted"] // Always exclude terminal/deleted stages
           }
         }
       },
