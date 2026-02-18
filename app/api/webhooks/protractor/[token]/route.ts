@@ -7,6 +7,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
 } from "@/lib/integrations/protractor";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
+import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -151,7 +152,11 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
         );
         console.log(`[Protractor Webhook] Updated work order snapshot ${objectId}`);
         
-        if (result.workOrder.Completed) {
+        const woStage = (result.workOrder.WorkflowStage || "").toLowerCase();
+        const isCompleted = result.workOrder.Completed || 
+          ["invoiced", "invoice", "posted", "completed", "closed"].some(s => woStage.includes(s));
+
+        if (isCompleted) {
           const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
           if (vin) {
             const savedWO = await db.collection("protractor_work_orders").findOne({
@@ -170,6 +175,45 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
               if (attribution.matched > 0) {
                 console.log(`[Protractor Webhook] Revenue attribution: ${attribution.matched} jobs, $${attribution.revenue.toFixed(2)}`);
               }
+            }
+
+            try {
+              const jobEntries = extractJobIndexFromWorkOrder(shopId, result.workOrder, "protractor");
+              let indexed = 0;
+              let skipped = 0;
+
+              for (const entry of jobEntries) {
+                const contentHash = computeJobHash(entry);
+                const filter = { 
+                  shopId, 
+                  workOrderId: entry.workOrderId, 
+                  servicePackageId: entry.servicePackageId 
+                };
+
+                const existing = await db.collection("job_index").findOne(filter);
+                if (existing?.contentHash === contentHash) {
+                  skipped++;
+                  continue;
+                }
+
+                await db.collection("job_index").updateOne(
+                  filter,
+                  { $set: { ...entry, contentHash } },
+                  { upsert: true }
+                );
+                indexed++;
+              }
+
+              if (indexed > 0) {
+                console.log(`[Protractor Webhook] Indexed ${indexed} jobs for WO ${objectId} (${skipped} unchanged)`);
+              }
+
+              await db.collection("protractor_work_orders").updateMany(
+                { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: objectId },
+                { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } }
+              );
+            } catch (indexErr: any) {
+              console.error(`[Protractor Webhook] Job indexing error for WO ${objectId}:`, indexErr.message);
             }
           }
         }

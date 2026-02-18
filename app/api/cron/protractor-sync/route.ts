@@ -25,6 +25,7 @@ import {
 } from "@/lib/integrations/protractor";
 import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
+import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";
 import { Db } from "mongodb";
 
@@ -83,7 +84,11 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
         if (result.ok && result.workOrder) {
           await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
           
-          if (result.workOrder.Completed) {
+          const queueWoStage = (result.workOrder.WorkflowStage || "").toLowerCase();
+          const queueIsCompleted = result.workOrder.Completed || 
+            ["invoiced", "invoice", "posted", "completed", "closed"].some(s => queueWoStage.includes(s));
+
+          if (queueIsCompleted) {
             const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
             if (vin) {
               const savedWO = await db.collection("protractor_work_orders").findOne({
@@ -106,6 +111,28 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
                 } catch (e) {
                   // Revenue attribution is non-critical
                 }
+              }
+
+              try {
+                const jobEntries = extractJobIndexFromWorkOrder(shopId, result.workOrder, "protractor");
+                let queueIndexed = 0;
+                for (const entry of jobEntries) {
+                  const contentHash = computeJobHash(entry);
+                  const filter = { shopId, workOrderId: entry.workOrderId, servicePackageId: entry.servicePackageId };
+                  const existing = await db.collection("job_index").findOne(filter);
+                  if (existing?.contentHash === contentHash) continue;
+                  await db.collection("job_index").updateOne(filter, { $set: { ...entry, contentHash } }, { upsert: true });
+                  queueIndexed++;
+                }
+                if (queueIndexed > 0) {
+                  console.log(`[Queue] Indexed ${queueIndexed} jobs for WO ${objectId}`);
+                }
+                await db.collection("protractor_work_orders").updateMany(
+                  { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: objectId },
+                  { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } }
+                );
+              } catch (e) {
+                console.error(`[Queue] Job indexing error for WO ${objectId}:`, e);
               }
             }
           }
@@ -342,6 +369,37 @@ export async function GET(req: NextRequest) {
                   }
                 }
               );
+
+              if (vin) {
+                const alreadyIndexed = await db.collection("protractor_work_orders").findOne({
+                  shopId: { $in: [String(shopId), Number(shopId)] },
+                  $or: [{ workOrderGuid: wo.ID }, { "data.ID": wo.ID }],
+                  jobsIndexed: true
+                });
+                if (!alreadyIndexed) {
+                  try {
+                    const jobEntries = extractJobIndexFromWorkOrder(shopId, wo, "protractor");
+                    let syncIndexed = 0;
+                    for (const entry of jobEntries) {
+                      const contentHash = computeJobHash(entry);
+                      const filter = { shopId, workOrderId: entry.workOrderId, servicePackageId: entry.servicePackageId };
+                      const existing = await db.collection("job_index").findOne(filter);
+                      if (existing?.contentHash === contentHash) continue;
+                      await db.collection("job_index").updateOne(filter, { $set: { ...entry, contentHash } }, { upsert: true });
+                      syncIndexed++;
+                    }
+                    if (syncIndexed > 0) {
+                      console.log(`[Cron] Protractor shop ${shopId}: Indexed ${syncIndexed} jobs for invoiced WO ${wo.WorkOrderNumber || wo.ID}`);
+                    }
+                    await db.collection("protractor_work_orders").updateMany(
+                      { shopId: { $in: [String(shopId), Number(shopId)] }, $or: [{ workOrderGuid: wo.ID }, { "data.ID": wo.ID }] },
+                      { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } }
+                    );
+                  } catch (e: any) {
+                    console.error(`[Cron] Job indexing error for WO ${wo.ID}:`, e.message);
+                  }
+                }
+              }
             }
           }
         }
