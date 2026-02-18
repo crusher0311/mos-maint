@@ -565,9 +565,78 @@ export async function createProtractorWorkOrder(
     });
   }
 
+  const woMapLineType = (lineType?: string): string => {
+    if (!lineType) return "LaborLine";
+    const normalized = lineType.toLowerCase();
+    if (normalized === "laborline" || normalized === "labor") return "LaborLine";
+    if (normalized === "partline" || normalized === "part" || normalized === "material") return "PartLine";
+    if (normalized === "subletline" || normalized === "sublet") return "SubletLine";
+    if (normalized === "otherline" || normalized === "other" || normalized === "miscellaneous") return "OtherLine";
+    if (lineType.endsWith("Line")) return lineType;
+    return "LaborLine";
+  };
+
+  const normalizeOneLine = (l: any) => ({
+    description: l.Description || l.description || "",
+    lineType: l.Type || l.LineType || l.lineType || "Labor",
+    quantity: l.Quantity ?? l.quantity ?? 1,
+    unitPrice: l.Price ?? l.UnitPrice ?? l.unitPrice ?? 0,
+    partNumber: l.PartNumber || l.partNumber || "",
+    manufacturer: l.Manufacturer || l.manufacturer || "",
+    rank: l.Rank ?? undefined,
+  });
+
+  const extractLinesFromRaw = (raw: any): any[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (raw?.ItemCollection) return raw.ItemCollection;
+    return [];
+  };
+
   if (params.servicePackages?.length) {
+    const db = await getDb();
+
     for (const pkg of params.servicePackages) {
       let resolvedLines = pkg.lines || [];
+
+      if (resolvedLines.length === 0 && pkg.source === "canned") {
+        try {
+          const rawCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
+          const rawItems = rawCache?.items || [];
+          const titleLower = pkg.title.toLowerCase();
+          const codeLower = (pkg.code || '').toLowerCase();
+          const match = rawItems.find((t: any) => {
+            const tTitle = (t.ServicePackageHeader?.Title || t.Title || t.title || '').toLowerCase();
+            const tCode = (t.Code || t.code || '').toLowerCase();
+            const tId = (t.ID || t.id || '');
+            return tTitle === titleLower || (codeLower && tCode === codeLower) || tId === pkg.deferredId;
+          });
+          if (match) {
+            const matchLines = extractLinesFromRaw(match.ServicePackageLines);
+            if (matchLines.length > 0) {
+              resolvedLines = matchLines.map(normalizeOneLine);
+              console.log(`[Create WO] Resolved ${resolvedLines.length} lines from canned jobs cache for "${pkg.title}"`);
+            }
+          }
+
+          if (resolvedLines.length === 0 && (pkg.deferredId || codeLower)) {
+            const templateId = pkg.deferredId || "";
+            if (templateId) {
+              console.log(`[Create WO] Fetching template detail for "${pkg.title}" (${templateId})`);
+              const templateResult = await fetchServicePackageTemplateDetail(shopId, templateId);
+              if (templateResult.ok && templateResult.template) {
+                const tplLines = extractLinesFromRaw(templateResult.template.ServicePackageLines);
+                if (tplLines.length > 0) {
+                  resolvedLines = tplLines.map(normalizeOneLine);
+                  console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template API for "${pkg.title}"`);
+                }
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error(`[Create WO] Failed to resolve canned job lines: ${err.message}`);
+        }
+      }
 
       if (resolvedLines.length === 0 && pkg.source === "deferred" && pkg.originalWorkOrderId) {
         try {
@@ -591,14 +660,8 @@ export async function createProtractorWorkOrder(
               return opTitle === titleLower || (codeLower && opCode === codeLower) || opTitle.includes(titleLower);
             });
             if (match) {
-              const linesRaw = match.ServicePackageLines;
-              const matchLines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
-              resolvedLines = matchLines.map((l: any) => ({
-                description: l.Description || "",
-                lineType: l.LineType || "Part",
-                quantity: l.Quantity ?? 1,
-                unitPrice: l.UnitPrice ?? 0,
-              }));
+              const matchLines = extractLinesFromRaw(match.ServicePackageLines);
+              resolvedLines = matchLines.map(normalizeOneLine);
               console.log(`[Create WO] Resolved ${resolvedLines.length} lines from original WO for "${pkg.title}"`);
             }
           }
@@ -607,21 +670,37 @@ export async function createProtractorWorkOrder(
         }
       }
 
+      if (resolvedLines.length === 0 && pkg.source === "deferred") {
+        try {
+          const rawCache = await db.collection("protractor_deferred_work").findOne({
+            shopId,
+          });
+          if (rawCache?.items) {
+            const deferredMatch = (rawCache.items as any[]).find(
+              (d: any) => d.ID === pkg.deferredId || (d.ServicePackageHeader?.Title || d.Title || '').toLowerCase() === pkg.title.toLowerCase()
+            );
+            if (deferredMatch) {
+              const dLines = extractLinesFromRaw(deferredMatch.ServicePackageLines);
+              if (dLines.length > 0) {
+                resolvedLines = dLines.map(normalizeOneLine);
+                console.log(`[Create WO] Resolved ${resolvedLines.length} lines from deferred cache for "${pkg.title}"`);
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error(`[Create WO] Failed to resolve deferred cache lines: ${err.message}`);
+        }
+      }
+
       if (resolvedLines.length === 0 && pkg.source === "history") {
         try {
-          const db = await getDb();
           const histDoc = await db.collection("job_index").findOne({
             shopId,
             'job.title': pkg.title,
             lines: { $exists: true, $ne: [] }
           });
           if (histDoc?.lines?.length) {
-            resolvedLines = histDoc.lines.map((l: any) => ({
-              description: l.description || l.Description || "",
-              lineType: l.lineType || l.LineType || "Part",
-              quantity: l.quantity ?? l.Quantity ?? 1,
-              unitPrice: l.unitPrice ?? l.UnitPrice ?? 0,
-            }));
+            resolvedLines = histDoc.lines.map(normalizeOneLine);
             console.log(`[Create WO] Resolved ${resolvedLines.length} lines from job_index for "${pkg.title}"`);
           }
         } catch (err: any) {
@@ -632,16 +711,24 @@ export async function createProtractorWorkOrder(
       const lines = resolvedLines.map((l: any, i: number) => ({
         ID: ZERO_GUID,
         Rank: i + 1,
-        LineType: l.lineType || "Part",
+        LineType: woMapLineType(l.lineType),
         Description: l.description || "",
         Quantity: l.quantity ?? 1,
         UnitPrice: l.unitPrice ?? 0,
+        PartNumber: l.partNumber || undefined,
+        Manufacturer: l.manufacturer || undefined,
       }));
+
+      console.log(`[Create WO] Package "${pkg.title}" (${pkg.source}): ${lines.length} lines`);
+      lines.forEach((l: any, i: number) => {
+        console.log(`[Create WO]   Line ${i}: ${l.LineType} - "${l.Description}" Qty:${l.Quantity} Price:${l.UnitPrice}`);
+      });
 
       allPackages.push({
         ID: ZERO_GUID,
         Chapter: pkg.chapter || "Service",
         Rank: rank++,
+        Code: pkg.code || "",
         ServicePackageHeader: {
           Title: pkg.title,
           Description: pkg.description || "",

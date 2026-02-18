@@ -56,10 +56,12 @@ export async function GET(req: NextRequest) {
         date: dw.DeferredDate || dw.CreatedDate || null,
         chapter: dw.Chapter || "",
         lines: lines.map((l: any) => ({
-          description: l.Description || "",
-          lineType: l.LineType || "Part",
-          quantity: l.Quantity ?? 1,
-          unitPrice: l.UnitPrice ?? 0,
+          description: l.Description || l.description || "",
+          lineType: l.Type || l.LineType || l.lineType || "Labor",
+          quantity: l.Quantity ?? l.quantity ?? 1,
+          unitPrice: l.Price ?? l.UnitPrice ?? l.unitPrice ?? 0,
+          partNumber: l.PartNumber || l.partNumber || "",
+          manufacturer: l.Manufacturer || l.manufacturer || "",
         })),
       };
     });

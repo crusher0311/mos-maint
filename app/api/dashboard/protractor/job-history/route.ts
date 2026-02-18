@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
 
     const jobs: any[] = [];
     for (const doc of results) {
+      const rawLines = doc.lines || [];
       jobs.push({
         title: doc.job?.title || "",
         description: doc.job?.description || "",
@@ -48,7 +49,14 @@ export async function GET(req: NextRequest) {
         chapter: doc.job?.chapter || "",
         workOrderNumber: doc.workOrderNumber || null,
         performedAt: doc.performedAt || null,
-        lines: doc.lines || [],
+        lines: rawLines.map((l: any) => ({
+          description: l.Description || l.description || "",
+          lineType: l.Type || l.LineType || l.lineType || "Labor",
+          quantity: l.Quantity ?? l.quantity ?? 1,
+          unitPrice: l.Price ?? l.UnitPrice ?? l.unitPrice ?? 0,
+          partNumber: l.PartNumber || l.partNumber || "",
+          manufacturer: l.Manufacturer || l.manufacturer || "",
+        })),
       });
     }
 

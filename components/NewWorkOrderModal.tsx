@@ -745,7 +745,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                             </div>
                           </div>
                           <button
-                            onClick={() => addJob({ source: "canned", title: job.title || job.name || "Untitled", code: job.code, chapter: job.chapter, lines: job.lines })}
+                            onClick={() => addJob({ source: "canned", title: job.title || job.name || "Untitled", code: job.code, chapter: job.chapter, deferredId: job.id, lines: job.lines })}
                             className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
