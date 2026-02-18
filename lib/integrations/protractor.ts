@@ -507,7 +507,7 @@ export async function createProtractorWorkOrder(
   params: {
     contactId: string;
     vehicleId: string;
-    note?: string;
+    concernText?: string;
     workflowStage?: string;
   }
 ): Promise<{ ok: boolean; workOrderId?: string; workOrderNumber?: number; error?: string }> {
@@ -517,6 +517,7 @@ export async function createProtractorWorkOrder(
   }
 
   const newWorkOrderId = crypto.randomUUID();
+  const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
   const body: Record<string, any> = {
     ID: newWorkOrderId,
@@ -528,7 +529,22 @@ export async function createProtractorWorkOrder(
     ServiceItem: { ID: params.vehicleId },
   };
 
-  if (params.note) body.Note = params.note;
+  if (params.concernText) {
+    body.ServicePackages = {
+      ItemCollection: [
+        {
+          ID: ZERO_GUID,
+          Chapter: "Concern",
+          Rank: 1,
+          ServicePackageHeader: {
+            Title: "Customer Concern Assistant",
+            Description: params.concernText,
+          },
+          ServicePackageLines: { ItemCollection: [] },
+        },
+      ],
+    };
+  }
 
   const result = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${newWorkOrderId}`,

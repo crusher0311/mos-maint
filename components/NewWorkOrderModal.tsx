@@ -206,14 +206,14 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setCreating(true);
     setCreateError("");
     try {
-      const note = cleanedText || concern || "";
+      const concernTextValue = cleanedText || concern || "";
       const res = await fetch("/api/dashboard/protractor/create-work-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contactId: selectedContact.id,
           vehicleId: selectedVehicle.id,
-          note,
+          concernText: concernTextValue || undefined,
         }),
       });
       const data = await res.json();
