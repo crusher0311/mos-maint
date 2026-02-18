@@ -30,6 +30,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services. Extension-triggered background prefetch: when a Tekmetric extension user views a plan for one RO, other open ROs at the same shop are prefetched in the background (up to 15, rate-limited per shop with DB lock).
 *   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
 *   **Modular Features**: A la carte feature flags control functionalities like maintenance, job lookup, oil stickers, keytags, auto booking, and part cross-reference.
+*   **Work Order Creation**: Multi-step wizard (Concern → Customer → Vehicle → Note → Add Jobs → Create) for creating Protractor work orders from the dashboard. Includes Customer Concern Assistant integration, optional notes, and a tabbed "Add Jobs" step with Canned Jobs search, Deferred Work lookup, and Job History search. Selected jobs are included as ServicePackages in the Protractor work order creation payload with proper rank ordering.
 *   **User Preferences**: Shops can select their preferred distance units (miles/kilometers).
 
 ## External Dependencies

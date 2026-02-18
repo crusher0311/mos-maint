@@ -16,6 +16,11 @@ import {
   Plus,
   FileText,
   AlertTriangle,
+  Wrench,
+  Clock,
+  History,
+  Package,
+  Trash2,
 } from "lucide-react";
 
 type Contact = {
@@ -45,7 +50,18 @@ type Exchange = {
   response: string;
 };
 
-type Step = "concern" | "customer" | "vehicle" | "note" | "confirm";
+type Step = "concern" | "customer" | "vehicle" | "note" | "jobs" | "confirm";
+
+type SelectedJob = {
+  source: "canned" | "deferred" | "history";
+  title: string;
+  description?: string;
+  chapter?: string;
+  code?: string;
+  lines?: Array<{ description?: string; lineType?: string; quantity?: number; unitPrice?: number }>;
+};
+
+type JobTab = "canned" | "deferred" | "history";
 
 interface NewWorkOrderModalProps {
   isOpen: boolean;
@@ -79,6 +95,18 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   const [noteText, setNoteText] = useState("");
 
+  const [jobTab, setJobTab] = useState<JobTab>("canned");
+  const [selectedJobs, setSelectedJobs] = useState<SelectedJob[]>([]);
+  const [cannedJobSearch, setCannedJobSearch] = useState("");
+  const [cannedJobs, setCannedJobs] = useState<any[]>([]);
+  const [searchingCanned, setSearchingCanned] = useState(false);
+  const [deferredItems, setDeferredItems] = useState<any[]>([]);
+  const [loadingDeferred, setLoadingDeferred] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyJobs, setHistoryJobs] = useState<any[]>([]);
+  const [searchingHistory, setSearchingHistory] = useState(false);
+  const [jobsError, setJobsError] = useState("");
+
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createdWO, setCreatedWO] = useState<number | null>(null);
@@ -105,8 +133,23 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setCreating(false);
       setCreateError("");
       setCreatedWO(null);
+      setJobTab("canned");
+      setSelectedJobs([]);
+      setCannedJobSearch("");
+      setCannedJobs([]);
+      setDeferredItems([]);
+      setHistorySearch("");
+      setHistoryJobs([]);
+      setJobsError("");
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (step === "jobs" && selectedVehicle) {
+      if (deferredItems.length === 0) fetchDeferredWork();
+      if (historyJobs.length === 0) searchJobHistory();
+    }
+  }, [step]);
 
   async function searchContactsFn() {
     if (contactSearch.length < 2) return;
@@ -217,6 +260,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           vehicleId: selectedVehicle.id,
           concernText: concernTextValue || undefined,
           note: noteText.trim() || undefined,
+          servicePackages: selectedJobs.length > 0 ? selectedJobs : undefined,
         }),
       });
       const data = await res.json();
@@ -229,6 +273,68 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     } finally {
       setCreating(false);
     }
+  }
+
+  async function searchCannedJobs() {
+    setSearchingCanned(true);
+    setJobsError("");
+    try {
+      const q = cannedJobSearch.trim();
+      const res = await fetch(`/api/dashboard/protractor/canned-jobs${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to search canned jobs");
+      setCannedJobs(data.jobs || []);
+    } catch (err: any) {
+      setJobsError(err.message);
+    } finally {
+      setSearchingCanned(false);
+    }
+  }
+
+  async function fetchDeferredWork() {
+    if (!selectedVehicle) return;
+    setLoadingDeferred(true);
+    setJobsError("");
+    try {
+      const res = await fetch(`/api/dashboard/protractor/deferred-work?vin=${selectedVehicle.vin}&serviceItemId=${selectedVehicle.id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load deferred work");
+      setDeferredItems(data.items || []);
+    } catch (err: any) {
+      setJobsError(err.message);
+    } finally {
+      setLoadingDeferred(false);
+    }
+  }
+
+  async function searchJobHistory() {
+    if (!selectedVehicle) return;
+    setSearchingHistory(true);
+    setJobsError("");
+    try {
+      const params = new URLSearchParams({ vin: selectedVehicle.vin });
+      if (historySearch.trim()) params.set("q", historySearch.trim());
+      const res = await fetch(`/api/dashboard/protractor/job-history?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to search job history");
+      setHistoryJobs(data.jobs || []);
+    } catch (err: any) {
+      setJobsError(err.message);
+    } finally {
+      setSearchingHistory(false);
+    }
+  }
+
+  function addJob(job: SelectedJob) {
+    setSelectedJobs(prev => {
+      const exists = prev.some(j => j.title === job.title && j.source === job.source);
+      if (exists) return prev;
+      return [...prev, job];
+    });
+  }
+
+  function removeJob(index: number) {
+    setSelectedJobs(prev => prev.filter((_, i) => i !== index));
   }
 
   if (!isOpen) return null;
@@ -245,10 +351,17 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     { key: "customer", label: "Customer", icon: User },
     { key: "vehicle", label: "Vehicle", icon: Car },
     { key: "note", label: "Note", icon: FileText },
+    { key: "jobs", label: "Jobs", icon: Wrench },
     { key: "confirm", label: "Done", icon: CheckCircle },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === step);
+
+  const jobTabs: { key: JobTab; label: string; icon: any }[] = [
+    { key: "canned", label: "Canned Jobs", icon: Package },
+    { key: "deferred", label: "Deferred Work", icon: Clock },
+    { key: "history", label: "History", icon: History },
+  ];
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -541,13 +654,246 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
               </div>
 
               <button
-                onClick={handleCreateWorkOrder}
-                disabled={creating}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                onClick={() => setStep("jobs")}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
               >
-                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Create Work Order
+                Next: Add Jobs
+                <ChevronRight className="w-4 h-4" />
               </button>
+              {createError && <p className="text-sm text-red-600">{createError}</p>}
+            </div>
+          )}
+
+          {step === "jobs" && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg flex-wrap">
+                <User className="w-4 h-4 text-blue-500" />
+                <span className="font-medium">{contactDisplay}</span>
+                <span className="text-gray-300 mx-1">|</span>
+                <Car className="w-4 h-4 text-blue-500" />
+                <span className="font-medium">{vehicleDisplay}</span>
+                {(cleanedText || concern) && (
+                  <>
+                    <span className="text-gray-300 mx-1">|</span>
+                    <MessageSquareText className="w-4 h-4 text-green-500" />
+                    <span className="text-green-600 text-xs">Concern attached</span>
+                  </>
+                )}
+              </div>
+
+              <div className="flex border-b border-gray-200">
+                {jobTabs.map(t => {
+                  const Icon = t.icon;
+                  const isActive = jobTab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setJobTab(t.key)}
+                      className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                        isActive
+                          ? "border-blue-600 text-blue-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {jobsError && (
+                <p className="text-sm text-red-600 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> {jobsError}
+                </p>
+              )}
+
+              {jobTab === "canned" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={cannedJobSearch}
+                        onChange={e => setCannedJobSearch(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && searchCannedJobs()}
+                        placeholder="Search canned jobs..."
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      onClick={searchCannedJobs}
+                      disabled={searchingCanned}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {searchingCanned ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      Search
+                    </button>
+                  </div>
+                  {cannedJobs.length > 0 && (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {cannedJobs.map((job: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900 truncate">{job.title || job.name || "Untitled"}</div>
+                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                              {job.code && <span>Code: {job.code}</span>}
+                              {job.chapter && <span>Chapter: {job.chapter}</span>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => addJob({ source: "canned", title: job.title || job.name || "Untitled", code: job.code, chapter: job.chapter, lines: job.lines })}
+                            className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!searchingCanned && cannedJobs.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-4">Search for canned jobs to add to the work order.</p>
+                  )}
+                </div>
+              )}
+
+              {jobTab === "deferred" && (
+                <div className="space-y-3">
+                  {loadingDeferred ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                      <span className="ml-2 text-sm text-gray-500">Loading deferred work...</span>
+                    </div>
+                  ) : deferredItems.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {deferredItems.map((item: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900 truncate">{item.title || item.name || "Untitled"}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {item.description && <span className="block truncate">{item.description}</span>}
+                              <span className="flex items-center gap-2 mt-0.5">
+                                {item.originalWorkOrderNumber && <span>WO #{item.originalWorkOrderNumber}</span>}
+                                {item.date && <span>{new Date(item.date).toLocaleDateString()}</span>}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => addJob({ source: "deferred", title: item.title || item.name || "Untitled", description: item.description, lines: item.lines })}
+                            className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-8">No deferred work found for this vehicle.</p>
+                  )}
+                </div>
+              )}
+
+              {jobTab === "history" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={historySearch}
+                        onChange={e => setHistorySearch(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && searchJobHistory()}
+                        placeholder="Search job history..."
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      onClick={searchJobHistory}
+                      disabled={searchingHistory}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {searchingHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      Search
+                    </button>
+                  </div>
+                  {searchingHistory ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                      <span className="ml-2 text-sm text-gray-500">Searching history...</span>
+                    </div>
+                  ) : historyJobs.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {historyJobs.map((job: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900 truncate">{job.title || job.name || "Untitled"}</div>
+                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                              {job.code && <span>Code: {job.code}</span>}
+                              {job.workOrderNumber && <span>WO #{job.workOrderNumber}</span>}
+                              {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => addJob({ source: "history", title: job.title || job.name || "Untitled", code: job.code, lines: job.lines })}
+                            className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">No job history found. Try searching or check back later.</p>
+                  )}
+                </div>
+              )}
+
+              {selectedJobs.length > 0 && (
+                <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Selected Jobs ({selectedJobs.length})</span>
+                  </div>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {selectedJobs.map((job, idx) => (
+                      <div key={idx} className="flex items-center justify-between py-1.5 px-2 bg-gray-50 rounded-md">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                            job.source === "canned" ? "bg-blue-100 text-blue-700" :
+                            job.source === "deferred" ? "bg-amber-100 text-amber-700" :
+                            "bg-purple-100 text-purple-700"
+                          }`}>
+                            {job.source}
+                          </span>
+                          <span className="text-sm text-gray-800 truncate">{job.title}</span>
+                        </div>
+                        <button
+                          onClick={() => removeJob(idx)}
+                          className="ml-2 p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleCreateWorkOrder}
+                  disabled={creating}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  {selectedJobs.length > 0
+                    ? `Create Work Order with ${selectedJobs.length} Job${selectedJobs.length > 1 ? "s" : ""}`
+                    : "Skip & Create Work Order"}
+                </button>
+              </div>
               {createError && <p className="text-sm text-red-600">{createError}</p>}
             </div>
           )}
@@ -581,6 +927,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                 if (step === "customer") setStep("concern");
                 if (step === "vehicle") setStep("customer");
                 if (step === "note") setStep("vehicle");
+                if (step === "jobs") setStep("note");
               }}
               disabled={step === "concern"}
               className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"

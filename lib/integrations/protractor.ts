@@ -502,6 +502,20 @@ export async function fetchVehiclesByOwner(
   return { ok: true, vehicles: result.data?.ItemCollection || [] };
 }
 
+export interface WorkOrderServicePackage {
+  chapter?: string;
+  title: string;
+  description?: string;
+  code?: string;
+  source: "canned" | "deferred" | "history";
+  lines?: Array<{
+    description?: string;
+    lineType?: string;
+    quantity?: number;
+    unitPrice?: number;
+  }>;
+}
+
 export async function createProtractorWorkOrder(
   shopId: number,
   params: {
@@ -510,6 +524,7 @@ export async function createProtractorWorkOrder(
     concernText?: string;
     note?: string;
     workflowStage?: string;
+    servicePackages?: WorkOrderServicePackage[];
   }
 ): Promise<{ ok: boolean; workOrderId?: string; workOrderNumber?: number; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
@@ -532,21 +547,49 @@ export async function createProtractorWorkOrder(
 
   if (params.note) body.Note = params.note;
 
+  const allPackages: any[] = [];
+  let rank = 1;
+
   if (params.concernText) {
-    body.ServicePackages = {
-      ItemCollection: [
-        {
-          ID: ZERO_GUID,
-          Chapter: "Concern",
-          Rank: 1,
-          ServicePackageHeader: {
-            Title: "Customer Concern Assistant",
-            Description: params.concernText,
-          },
-          ServicePackageLines: { ItemCollection: [] },
+    allPackages.push({
+      ID: ZERO_GUID,
+      Chapter: "Concern",
+      Rank: rank++,
+      ServicePackageHeader: {
+        Title: "Customer Concern Assistant",
+        Description: params.concernText,
+      },
+      ServicePackageLines: { ItemCollection: [] },
+    });
+  }
+
+  if (params.servicePackages?.length) {
+    for (const pkg of params.servicePackages) {
+      const lines = (pkg.lines || []).map((l, i) => ({
+        ID: ZERO_GUID,
+        Rank: i + 1,
+        LineType: l.lineType || "Part",
+        Description: l.description || "",
+        Quantity: l.quantity ?? 1,
+        UnitPrice: l.unitPrice ?? 0,
+      }));
+
+      allPackages.push({
+        ID: ZERO_GUID,
+        Chapter: pkg.chapter || "Service",
+        Rank: rank++,
+        ServicePackageHeader: {
+          Title: pkg.title,
+          Description: pkg.description || "",
+          Code: pkg.code || "",
         },
-      ],
-    };
+        ServicePackageLines: { ItemCollection: lines },
+      });
+    }
+  }
+
+  if (allPackages.length > 0) {
+    body.ServicePackages = { ItemCollection: allPackages };
   }
 
   const result = await protractorFetch<ProtractorWorkOrder>(
