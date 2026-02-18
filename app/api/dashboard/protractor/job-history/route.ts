@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 
+function normalizeLine(l: any) {
+  return {
+    description: l.Description || l.description || "",
+    lineType: l.Type || l.LineType || l.lineType || "Labor",
+    quantity: l.Quantity ?? l.quantity ?? 1,
+    unitPrice: l.Price ?? l.UnitPrice ?? l.unitPrice ?? 0,
+    partNumber: l.PartNumber || l.partNumber || "",
+    manufacturer: l.Manufacturer || l.manufacturer || "",
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const store = await cookies();
@@ -26,37 +37,82 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "vin is required" }, { status: 400 });
     }
 
+    const make = req.nextUrl.searchParams.get("make") || "";
+    const model = req.nextUrl.searchParams.get("model") || "";
+    const engine = req.nextUrl.searchParams.get("engine") || "";
     const q = req.nextUrl.searchParams.get("q")?.trim() || "";
     const shopId = Number(user.shopId);
 
-    const query: any = { shopId: shopId, 'vehicle.vin': vin.toUpperCase() };
-    if (q) {
-      query.$or = [
+    const vinResults = await db.collection("job_index").find({
+      shopId,
+      'vehicle.vin': vin.toUpperCase(),
+      ...(q ? { $or: [
         { 'job.title': { $regex: q, $options: 'i' } },
         { 'job.code': { $regex: q, $options: 'i' } },
-      ];
+      ]} : {}),
+    }).sort({ performedAt: -1 }).limit(30).toArray();
+
+    let similarResults: any[] = [];
+    if (make && model) {
+      const similarQuery: any = {
+        shopId,
+        'vehicle.vin': { $ne: vin.toUpperCase() },
+        'vehicle.make': { $regex: `^${make}$`, $options: 'i' },
+        'vehicle.model': { $regex: `^${model}$`, $options: 'i' },
+      };
+      if (engine) {
+        const engineBase = engine.split(' ').slice(0, 2).join(' ');
+        if (engineBase.length >= 3) {
+          similarQuery['vehicle.engine'] = { $regex: engineBase, $options: 'i' };
+        }
+      }
+      if (q) {
+        similarQuery.$or = [
+          { 'job.title': { $regex: q, $options: 'i' } },
+          { 'job.code': { $regex: q, $options: 'i' } },
+        ];
+      }
+      similarResults = await db.collection("job_index").find(similarQuery)
+        .sort({ performedAt: -1 }).limit(30).toArray();
     }
 
-    const results = await db.collection("job_index").find(query).sort({ performedAt: -1 }).limit(30).toArray();
-
+    const seenTitles = new Set<string>();
     const jobs: any[] = [];
-    for (const doc of results) {
-      const rawLines = doc.lines || [];
+
+    for (const doc of vinResults) {
+      const title = doc.job?.title || "";
+      const key = title.toLowerCase();
+      seenTitles.add(key);
       jobs.push({
-        title: doc.job?.title || "",
+        title,
         description: doc.job?.description || "",
         code: doc.job?.code || "",
         chapter: doc.job?.chapter || "",
         workOrderNumber: doc.workOrderNumber || null,
         performedAt: doc.performedAt || null,
-        lines: rawLines.map((l: any) => ({
-          description: l.Description || l.description || "",
-          lineType: l.Type || l.LineType || l.lineType || "Labor",
-          quantity: l.Quantity ?? l.quantity ?? 1,
-          unitPrice: l.Price ?? l.UnitPrice ?? l.unitPrice ?? 0,
-          partNumber: l.PartNumber || l.partNumber || "",
-          manufacturer: l.Manufacturer || l.manufacturer || "",
-        })),
+        vehicleVin: doc.vehicle?.vin || "",
+        vehicleLabel: [doc.vehicle?.year, doc.vehicle?.make, doc.vehicle?.model].filter(Boolean).join(" "),
+        matchType: "exact",
+        lines: (doc.lines || []).map(normalizeLine),
+      });
+    }
+
+    for (const doc of similarResults) {
+      const title = doc.job?.title || "";
+      const key = title.toLowerCase();
+      if (seenTitles.has(key)) continue;
+      seenTitles.add(key);
+      jobs.push({
+        title,
+        description: doc.job?.description || "",
+        code: doc.job?.code || "",
+        chapter: doc.job?.chapter || "",
+        workOrderNumber: doc.workOrderNumber || null,
+        performedAt: doc.performedAt || null,
+        vehicleVin: doc.vehicle?.vin || "",
+        vehicleLabel: [doc.vehicle?.year, doc.vehicle?.make, doc.vehicle?.model].filter(Boolean).join(" "),
+        matchType: "similar",
+        lines: (doc.lines || []).map(normalizeLine),
       });
     }
 

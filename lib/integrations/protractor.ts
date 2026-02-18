@@ -525,6 +525,7 @@ export async function createProtractorWorkOrder(
     vehicleId: string;
     concernText?: string;
     note?: string;
+    mileage?: number;
     workflowStage?: string;
     servicePackages?: WorkOrderServicePackage[];
   }
@@ -547,6 +548,9 @@ export async function createProtractorWorkOrder(
     ServiceItem: { ID: params.vehicleId },
   };
 
+  if (params.mileage && params.mileage > 0) {
+    body.InUsage = params.mileage;
+  }
   if (params.note) body.Note = params.note;
 
   const allPackages: any[] = [];
@@ -631,6 +635,16 @@ export async function createProtractorWorkOrder(
                   console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template API for "${pkg.title}"`);
                 }
               }
+            }
+          }
+          if (resolvedLines.length === 0) {
+            const cachedPricing = await findCachedJobPricing(shopId, {
+              jobTitle: pkg.title,
+              jobCode: pkg.code,
+            });
+            if (cachedPricing.found && cachedPricing.lines?.length) {
+              resolvedLines = cachedPricing.lines.map(normalizeOneLine);
+              console.log(`[Create WO] Resolved ${resolvedLines.length} lines from cached job pricing for "${pkg.title}"`);
             }
           }
         } catch (err: any) {
@@ -724,9 +738,13 @@ export async function createProtractorWorkOrder(
         console.log(`[Create WO]   Line ${i}: ${l.LineType} - "${l.Description}" Qty:${l.Quantity} Price:${l.UnitPrice}`);
       });
 
+      const chapter = (pkg.source === "deferred" || (pkg.chapter || "").toLowerCase() === "deferred")
+        ? "Service"
+        : (pkg.chapter || "Service");
+
       allPackages.push({
         ID: ZERO_GUID,
-        Chapter: pkg.chapter || "Service",
+        Chapter: chapter,
         Rank: rank++,
         Code: pkg.code || "",
         ServicePackageHeader: {

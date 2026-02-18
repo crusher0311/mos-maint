@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
       make: v.Make || "",
       model: v.Model || "",
       submodel: v.Submodel || "",
+      engine: v.Engine || "",
       color: v.Color || "",
       plate: v.LicensePlate || v.LookUp || v.Lookup || "",
       odometer: v.Usage || v.Odometer || null,

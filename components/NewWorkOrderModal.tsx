@@ -40,6 +40,7 @@ type Vehicle = {
   make: string;
   model: string;
   submodel: string;
+  engine: string;
   color: string;
   plate: string;
   odometer: number | null;
@@ -84,6 +85,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [vehicleError, setVehicleError] = useState("");
+  const [mileageInput, setMileageInput] = useState("");
 
   const [concern, setConcern] = useState("");
   const [concernStage, setConcernStage] = useState<"start" | "questions" | "result">("start");
@@ -123,6 +125,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setVehicles([]);
       setSelectedVehicle(null);
       setVehicleError("");
+      setMileageInput("");
       setConcern("");
       setConcernStage("start");
       setQuestions([]);
@@ -190,6 +193,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   const selectVehicle = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
+    setMileageInput("");
   };
 
   async function handleConcernSubmit() {
@@ -262,6 +266,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           vehicleId: selectedVehicle.id,
           concernText: concernTextValue || undefined,
           note: noteText.trim() || undefined,
+          mileage: mileageInput ? Number(mileageInput) : undefined,
           servicePackages: selectedJobs.length > 0 ? selectedJobs : undefined,
         }),
       });
@@ -315,6 +320,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setJobsError("");
     try {
       const params = new URLSearchParams({ vin: selectedVehicle.vin });
+      if (selectedVehicle.make) params.set("make", selectedVehicle.make);
+      if (selectedVehicle.model) params.set("model", selectedVehicle.model);
+      if (selectedVehicle.engine) params.set("engine", selectedVehicle.engine);
       if (historySearch.trim()) params.set("q", historySearch.trim());
       const res = await fetch(`/api/dashboard/protractor/job-history?${params.toString()}`);
       const data = await res.json();
@@ -517,7 +525,27 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                 </div>
               )}
               {selectedVehicle && (
-                <div className="pt-2">
+                <div className="pt-2 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Current Mileage <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={mileageInput}
+                        onChange={e => setMileageInput(e.target.value)}
+                        placeholder="Enter current mileage..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <span className="text-xs text-gray-400">miles</span>
+                    </div>
+                    {selectedVehicle.odometer && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Last known reading: {selectedVehicle.odometer.toLocaleString()} mi — enter actual mileage if available
+                      </p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setStep("note")}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
@@ -742,6 +770,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                             <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
                               {job.code && <span>Code: {job.code}</span>}
                               {job.chapter && <span>Chapter: {job.chapter}</span>}
+                              {job.lines?.length > 0 && <span className="text-green-600">{job.lines.length} line{job.lines.length !== 1 ? "s" : ""}</span>}
                             </div>
                           </div>
                           <button
@@ -779,11 +808,12 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                               <span className="flex items-center gap-2 mt-0.5">
                                 {item.originalWorkOrderNumber && <span>WO #{item.originalWorkOrderNumber}</span>}
                                 {item.date && <span>{new Date(item.date).toLocaleDateString()}</span>}
+                                {item.lines?.length > 0 && <span className="text-green-600">{item.lines.length} line{item.lines.length !== 1 ? "s" : ""}</span>}
                               </span>
                             </div>
                           </div>
                           <button
-                            onClick={() => addJob({ source: "deferred", title: item.title || item.name || "Untitled", description: item.description, code: item.code, chapter: item.chapter, originalWorkOrderId: item.originalWorkOrderId, deferredId: item.id, lines: item.lines })}
+                            onClick={() => addJob({ source: "deferred", title: item.title || item.name || "Untitled", description: item.description, code: item.code, chapter: item.chapter || "Service", originalWorkOrderId: item.originalWorkOrderId, deferredId: item.id, lines: item.lines })}
                             className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -829,13 +859,24 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                   ) : historyJobs.length > 0 ? (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto">
                       {historyJobs.map((job: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div key={idx} className={`flex items-center justify-between p-2.5 border rounded-lg hover:bg-gray-50 ${
+                          job.matchType === "similar" ? "border-purple-200 bg-purple-50/30" : "border-gray-200"
+                        }`}>
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-gray-900 truncate">{job.title || job.name || "Untitled"}</div>
-                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-gray-900 truncate">{job.title || job.name || "Untitled"}</span>
+                              {job.matchType === "similar" && (
+                                <span className="text-[9px] font-semibold uppercase px-1 py-0.5 rounded bg-purple-100 text-purple-600 flex-shrink-0">Similar</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap">
                               {job.code && <span>Code: {job.code}</span>}
                               {job.workOrderNumber && <span>WO #{job.workOrderNumber}</span>}
                               {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}
+                              {job.lines?.length > 0 && <span className="text-green-600">{job.lines.length} line{job.lines.length !== 1 ? "s" : ""}</span>}
+                              {job.matchType === "similar" && job.vehicleLabel && (
+                                <span className="text-purple-500">{job.vehicleLabel}</span>
+                              )}
                             </div>
                           </div>
                           <button
@@ -871,6 +912,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                             {job.source}
                           </span>
                           <span className="text-sm text-gray-800 truncate">{job.title}</span>
+                          {job.lines && job.lines.length > 0 && (
+                            <span className="text-[10px] text-green-600 flex-shrink-0">{job.lines.length} line{job.lines.length !== 1 ? "s" : ""}</span>
+                          )}
                         </div>
                         <button
                           onClick={() => removeJob(idx)}
