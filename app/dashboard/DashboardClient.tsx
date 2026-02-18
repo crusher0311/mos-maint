@@ -833,24 +833,36 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   }, [data.rows, data.shopId, data.user?.shopId]);
 
   useEffect(() => {
-    let lastUpdate = Date.now();
-    
+    let lastKnownUpdate = 0;
+    let lastFullRefresh = Date.now();
+    const POLL_INTERVAL = 3000;
+    const FULL_REFRESH_INTERVAL = 30000;
+
     const checkForUpdates = async () => {
       try {
+        const now = Date.now();
+        if (now - lastFullRefresh >= FULL_REFRESH_INTERVAL) {
+          lastFullRefresh = now;
+          loadData(currentPage, searchQuery, showArchived);
+          return;
+        }
+
         const response = await fetch('/api/dashboard/updates');
         if (response.ok) {
-          const data = await response.json();
-          if (data.lastUpdate > lastUpdate) {
-            lastUpdate = data.lastUpdate;
-            loadData(currentPage, searchQuery, showArchived);
+          const result = await response.json();
+          if (result.lastUpdate && result.lastUpdate > lastKnownUpdate) {
+            if (lastKnownUpdate > 0) {
+              loadData(currentPage, searchQuery, showArchived);
+            }
+            lastKnownUpdate = result.lastUpdate;
           }
         }
       } catch (e) {
-        // Ignore errors
       }
     };
-    
-    const interval = setInterval(checkForUpdates, 1000);
+
+    checkForUpdates();
+    const interval = setInterval(checkForUpdates, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [currentPage, searchQuery, showArchived]);
 

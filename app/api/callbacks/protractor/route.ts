@@ -17,6 +17,16 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function signalDashboardUpdate(db: Db) {
+  try {
+    await db.collection("dashboard_updates").updateOne(
+      { _id: "lastUpdate" } as any,
+      { $set: { timestamp: Date.now() } },
+      { upsert: true }
+    );
+  } catch (e) {}
+}
+
 async function processCallbackEvent(
   db: Db,
   eventId: ObjectId,
@@ -44,6 +54,7 @@ async function processCallbackEvent(
       const result = await fetchWorkOrderById(shopId, objectId);
       if (result.ok && result.workOrder) {
         await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+        await signalDashboardUpdate(db);
         console.log(`[Protractor Callback] Processed work order ${objectId}`);
 
         // Upsert vehicle snapshot for immediate dashboard display
@@ -334,6 +345,7 @@ export async function POST(request: NextRequest) {
         const result = await fetchWorkOrderById(shopId, workOrderId);
         if (result.ok && result.workOrder) {
           await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+          await signalDashboardUpdate(db);
           console.log(`[Protractor Callback] Upserted work order ${workOrderId} for immediate dashboard display`);
 
           // Also upsert vehicle snapshot if VIN is available
@@ -488,6 +500,8 @@ export async function POST(request: NextRequest) {
         { workOrderId, status, processed: false },
         { $set: { processed: true, processedAt: new Date() } }
       );
+
+      await signalDashboardUpdate(db);
     }
 
     return NextResponse.json({ 

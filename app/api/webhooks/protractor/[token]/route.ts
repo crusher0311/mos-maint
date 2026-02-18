@@ -94,6 +94,11 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
       const result = await fetchWorkOrderById(shopId, objectId);
       if (result.ok && result.workOrder) {
         await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+        await db.collection("dashboard_updates").updateOne(
+          { _id: "lastUpdate" } as any,
+          { $set: { timestamp: Date.now() } },
+          { upsert: true }
+        );
         console.log(`[Protractor Webhook] Updated work order snapshot ${objectId}`);
         
         if (result.workOrder.Completed) {
