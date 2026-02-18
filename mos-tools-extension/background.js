@@ -304,7 +304,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "SAVE_LABOR_RATE_RULES") {
-    handleMosApiRequest('/api/extension/labor-rates', {
+    const saveShopParam = tekmetricShopId ? `?smsShopId=${tekmetricShopId}` : '';
+    handleMosApiRequest(`/api/extension/labor-rates${saveShopParam}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rules: message.rules })

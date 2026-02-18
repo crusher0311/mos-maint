@@ -97,8 +97,41 @@ export async function PUT(req: NextRequest) {
   }));
 
   const db = await getDb();
+  const { searchParams } = new URL(req.url);
+  const smsShopId = searchParams.get("smsShopId");
+
+  let targetShopId = auth.user.shopId;
+
+  if (smsShopId) {
+    const tekShopIdNum = parseInt(smsShopId);
+    const tekShopIdStr = String(smsShopId);
+    const targetShop = await db.collection("shops").findOne(
+      {
+        $or: [
+          { "tekmetric.shopId": tekShopIdNum },
+          { "tekmetric.shopId": tekShopIdStr },
+          { tekmetricShopId: tekShopIdNum },
+          { tekmetricShopId: tekShopIdStr },
+          { "protractor.connectionId": smsShopId },
+          { protractorConnectionId: smsShopId },
+        ]
+      },
+      { projection: { shopId: 1 } }
+    );
+
+    if (targetShop) {
+      const userShopId = auth.user.shopId?.toString();
+      const userShopIds = (auth.user.shopIds || []).map((id: any) => id.toString());
+      const isPlatformAdmin = auth.user.role === "platform_admin";
+      const hasAccess = userShopId === String(targetShop.shopId) || userShopIds.includes(String(targetShop.shopId)) || isPlatformAdmin;
+      if (hasAccess) {
+        targetShopId = targetShop.shopId;
+      }
+    }
+  }
+
   await db.collection("shops").updateOne(
-    { shopId: auth.user.shopId },
+    { shopId: targetShopId },
     { $set: { laborRateRules: sanitized } }
   );
 
