@@ -58,6 +58,8 @@ type SelectedJob = {
   description?: string;
   chapter?: string;
   code?: string;
+  originalWorkOrderId?: string;
+  deferredId?: string;
   lines?: Array<{ description?: string; lineType?: string; quantity?: number; unitPrice?: number }>;
 };
 
@@ -781,7 +783,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                             </div>
                           </div>
                           <button
-                            onClick={() => addJob({ source: "deferred", title: item.title || item.name || "Untitled", description: item.description, lines: item.lines })}
+                            onClick={() => addJob({ source: "deferred", title: item.title || item.name || "Untitled", description: item.description, code: item.code, chapter: item.chapter, originalWorkOrderId: item.originalWorkOrderId, deferredId: item.id, lines: item.lines })}
                             className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -837,7 +839,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                             </div>
                           </div>
                           <button
-                            onClick={() => addJob({ source: "history", title: job.title || job.name || "Untitled", code: job.code, lines: job.lines })}
+                            onClick={() => addJob({ source: "history", title: job.title || job.name || "Untitled", description: job.description, code: job.code, chapter: job.chapter, lines: job.lines })}
                             className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />

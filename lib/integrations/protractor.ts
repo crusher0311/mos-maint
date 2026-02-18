@@ -508,6 +508,8 @@ export interface WorkOrderServicePackage {
   description?: string;
   code?: string;
   source: "canned" | "deferred" | "history";
+  originalWorkOrderId?: string;
+  deferredId?: string;
   lines?: Array<{
     description?: string;
     lineType?: string;
@@ -565,7 +567,69 @@ export async function createProtractorWorkOrder(
 
   if (params.servicePackages?.length) {
     for (const pkg of params.servicePackages) {
-      const lines = (pkg.lines || []).map((l, i) => ({
+      let resolvedLines = pkg.lines || [];
+
+      if (resolvedLines.length === 0 && pkg.source === "deferred" && pkg.originalWorkOrderId) {
+        try {
+          console.log(`[Create WO] Fetching lines from original WO ${pkg.originalWorkOrderId} for deferred job "${pkg.title}"`);
+          const origResult = await protractorFetch<ProtractorWorkOrder>(
+            `/WorkOrder/${pkg.originalWorkOrderId}`,
+            config,
+            {},
+            0,
+            shopId,
+            { priority: true }
+          );
+          if (origResult.ok && origResult.data) {
+            const origPkgsRaw = origResult.data.ServicePackages as any;
+            const origPkgs = Array.isArray(origPkgsRaw) ? origPkgsRaw : (origPkgsRaw?.ItemCollection || []);
+            const titleLower = pkg.title.toLowerCase();
+            const codeLower = (pkg.code || '').toLowerCase();
+            const match = origPkgs.find((op: any) => {
+              const opTitle = (op.ServicePackageHeader?.Title || op.Title || '').toLowerCase();
+              const opCode = (op.Code || '').toLowerCase();
+              return opTitle === titleLower || (codeLower && opCode === codeLower) || opTitle.includes(titleLower);
+            });
+            if (match) {
+              const linesRaw = match.ServicePackageLines;
+              const matchLines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+              resolvedLines = matchLines.map((l: any) => ({
+                description: l.Description || "",
+                lineType: l.LineType || "Part",
+                quantity: l.Quantity ?? 1,
+                unitPrice: l.UnitPrice ?? 0,
+              }));
+              console.log(`[Create WO] Resolved ${resolvedLines.length} lines from original WO for "${pkg.title}"`);
+            }
+          }
+        } catch (err: any) {
+          console.error(`[Create WO] Failed to resolve deferred lines: ${err.message}`);
+        }
+      }
+
+      if (resolvedLines.length === 0 && pkg.source === "history") {
+        try {
+          const db = await getDb();
+          const histDoc = await db.collection("job_index").findOne({
+            shopId,
+            'job.title': pkg.title,
+            lines: { $exists: true, $ne: [] }
+          });
+          if (histDoc?.lines?.length) {
+            resolvedLines = histDoc.lines.map((l: any) => ({
+              description: l.description || l.Description || "",
+              lineType: l.lineType || l.LineType || "Part",
+              quantity: l.quantity ?? l.Quantity ?? 1,
+              unitPrice: l.unitPrice ?? l.UnitPrice ?? 0,
+            }));
+            console.log(`[Create WO] Resolved ${resolvedLines.length} lines from job_index for "${pkg.title}"`);
+          }
+        } catch (err: any) {
+          console.error(`[Create WO] Failed to resolve history lines: ${err.message}`);
+        }
+      }
+
+      const lines = resolvedLines.map((l: any, i: number) => ({
         ID: ZERO_GUID,
         Rank: i + 1,
         LineType: l.lineType || "Part",

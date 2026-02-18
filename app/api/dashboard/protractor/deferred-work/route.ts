@@ -36,14 +36,33 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: result.error || "Failed to fetch deferred work" }, { status: 500 });
     }
 
-    const items = result.deferredWork.map((dw: any) => ({
-      id: dw.ID,
-      title: dw.ServicePackageHeader?.Title || dw.Title || "",
-      description: dw.ServicePackageHeader?.Description || dw.Description || "",
-      originalWorkOrderNumber: dw.OriginalWorkOrderNumber || null,
-      date: dw.DeferredDate || dw.CreatedDate || null,
-      chapter: dw.Chapter || "",
-    }));
+    const items = result.deferredWork.map((dw: any) => {
+      let lines: any[] = [];
+      if (dw.ServicePackageLines) {
+        const linesRaw = dw.ServicePackageLines;
+        if (Array.isArray(linesRaw)) {
+          lines = linesRaw;
+        } else if (linesRaw?.ItemCollection) {
+          lines = linesRaw.ItemCollection;
+        }
+      }
+      return {
+        id: dw.ID,
+        title: dw.ServicePackageHeader?.Title || dw.Title || "",
+        description: dw.ServicePackageHeader?.Description || dw.Description || "",
+        code: dw.Code || "",
+        originalWorkOrderNumber: dw.OriginalWorkOrderNumber || null,
+        originalWorkOrderId: dw.OriginalWorkOrderID || null,
+        date: dw.DeferredDate || dw.CreatedDate || null,
+        chapter: dw.Chapter || "",
+        lines: lines.map((l: any) => ({
+          description: l.Description || "",
+          lineType: l.LineType || "Part",
+          quantity: l.Quantity ?? 1,
+          unitPrice: l.UnitPrice ?? 0,
+        })),
+      };
+    });
 
     return NextResponse.json({ ok: true, items });
   } catch (err: any) {
