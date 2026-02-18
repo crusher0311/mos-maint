@@ -43,9 +43,9 @@ const articles: ArticleData[] = [
   {
     title: "Understanding Mileage Estimation (CARFAX)",
     problem: "A vehicle shows an estimated mileage in bold italic instead of an actual odometer reading. What does this mean?",
-    solution: "When a vehicle's odometer reading is zero or unavailable, MOS uses CARFAX historical data to estimate the current mileage:\n\n- MOS looks at the last 3 CARFAX data points within the past 5 years.\n- It calculates a miles-per-day driving rate from this history.\n- It projects forward to estimate today's mileage.\n- At least 2 historical data points are required for an estimate.\n\n**How to identify estimated mileage:**\n- Estimated mileage displays in **bold italic** text.\n- Hovering over it shows a tooltip with details about how the estimate was calculated (data points used, miles/day rate, etc.).\n\nThis ensures vehicles without a current odometer reading still get accurate maintenance plans rather than being skipped. The actual odometer reading from the repair order will be used whenever it's available.",
+    solution: "When a vehicle's odometer reading is not explicitly entered on the work order, MOS uses CARFAX historical data to estimate the current mileage:\n\n- MOS looks at the last 3 CARFAX data points within the past 5 years.\n- It calculates a miles-per-day driving rate from this history.\n- It projects forward to estimate today's mileage.\n- At least 2 historical data points are required for an estimate.\n\n**How to identify estimated mileage:**\n- Estimated mileage displays in **bold italic** text with '(est.)' next to it.\n- Hovering over it shows a tooltip with details about how the estimate was calculated (data points used, miles/day rate, etc.).\n\n**Important:** MOS intentionally does NOT fall back to the vehicle's previously stored odometer reading. If no mileage was entered on the current work order, the field shows blank until the CARFAX estimate fills it in. This prevents old/stale mileage from being displayed as if it were current.\n\nThis ensures vehicles without a current odometer reading still get accurate maintenance plans rather than being skipped. The actual odometer reading from the repair order will be used whenever it's entered.",
     category: "Vehicle Health Intelligence",
-    tags: ["mileage", "carfax", "estimation", "odometer", "bold italic"]
+    tags: ["mileage", "carfax", "estimation", "odometer", "bold italic", "inusage"]
   },
   {
     title: "VIN Tooltip and Vehicle Specs",
@@ -302,6 +302,38 @@ const articles: ArticleData[] = [
     solution: "MOS uses role-based access control to manage what each user can see and do:\n\n**User Roles:**\n- **Shop User**: Standard access to shop features, vehicle plans, stickers, and the Chrome extension. Can only access shops they're assigned to.\n- **Shop Owner**: Full access to their shop(s) including settings, billing, and user management.\n- **Platform Admin**: System-wide access including all shops, admin tools, observability, backfill management, and system configuration.\n\n**Security Features:**\n- Passwords are securely hashed using bcrypt.\n- Token-based authentication for API access.\n- The Chrome extension uses its own authentication tokens.\n- Each API request is verified against the user's role and shop assignments.\n\n**Multi-Shop Access:**\nUsers can be assigned to multiple shops. When using the Chrome extension, shop access is verified against both the user's shop assignments and the Tekmetric/Protractor shop mapping.",
     category: "Settings",
     tags: ["roles", "access", "permissions", "admin", "owner", "security", "authentication"]
+  },
+
+  // ===== WORK ORDER CREATION =====
+  {
+    title: "Creating Work Orders from the Dashboard",
+    problem: "How do I create a new work order (repair order) directly from the MOS dashboard instead of going into Protractor?",
+    solution: "MOS provides a multi-step wizard for creating Protractor work orders right from your dashboard:\n\n1. **Click 'New RO'**: The green button at the top of your dashboard opens the work order creation wizard.\n2. **Customer Concern** (optional): Enter the customer's concern, or use the AI-powered Customer Concern Assistant to build a professional write-up with follow-up questions.\n3. **Select Customer**: Search for the customer by name. Their vehicles are loaded automatically.\n4. **Select Vehicle**: Choose the vehicle from the customer's list. You'll see year, make, model, VIN, and last known odometer.\n5. **Current Mileage** (optional): Enter the current odometer reading if known. If left blank, the dashboard will show the mileage as blank until CARFAX estimation fills it in.\n6. **Add Note** (optional): Add any internal notes for the work order.\n7. **Add Jobs**: Search and add services from three sources:\n   - **Canned Jobs**: Your shop's pre-configured service templates.\n   - **Deferred Work**: Previously declined services for this vehicle.\n   - **Job History**: AI-scored search across your shop's service history with match quality indicators.\n8. **Create**: The work order is created in Protractor with all selected jobs, complete with parts and labor pricing.\n\n**Important:** Jobs are added with full pricing details (labor rates, part costs, quantities) — they show up in Protractor exactly as they would if added through the VHI system.",
+    category: "Work Order Creation",
+    tags: ["work order", "repair order", "create", "new ro", "protractor", "wizard", "dashboard"]
+  },
+  {
+    title: "Adding Jobs to a New Work Order",
+    problem: "I'm creating a new work order and want to add specific services. How do the job tabs work?",
+    solution: "When creating a work order, the 'Add Jobs' step has three tabs for finding and adding services:\n\n**Canned Jobs Tab:**\n- Search your shop's pre-configured service packages by name.\n- These are the standard services your shop offers.\n- Each result shows the job name and number of line items (parts + labor).\n\n**Deferred Work Tab:**\n- Automatically loads previously declined services for the selected vehicle.\n- Shows the original job title, when it was deferred, and line item count.\n- Great for following up on services the customer previously declined.\n\n**Job History Tab:**\n- Searches across your shop's complete service history using AI-scored matching.\n- Results show match quality badges (Exact Fit, Great Match, Good Match).\n- Finds jobs performed on similar vehicles (same make/model/engine) — not just the exact vehicle.\n- For multi-location shops, searches across all enterprise locations.\n- Shows which location performed the job if it's from another shop.\n\n**Each job you add shows:**\n- A source badge (Canned, Deferred, or History)\n- The job title\n- Number of line items\n\nYou can add multiple jobs from any combination of tabs before creating the work order.",
+    category: "Work Order Creation",
+    tags: ["jobs", "canned jobs", "deferred work", "job history", "add jobs", "work order", "ai scoring"]
+  },
+  {
+    title: "Why Work Order Jobs Show Full Pricing in Protractor",
+    problem: "When I create a work order from MOS, do the jobs show up with correct pricing in Protractor?",
+    solution: "Yes! MOS uses a two-phase approach to ensure jobs show up with full, correct pricing in Protractor:\n\n**How it works:**\n1. MOS first creates the work order with just the customer concern (if provided).\n2. Then it adds each service package individually, fetching the work order and appending to it.\n3. This matches the same proven pattern used by the Vehicle Health Intelligence (VHI) system.\n\n**Pricing details included:**\n- **Labor lines**: Include labor rate, technician hours, and calculated totals.\n- **Parts/Material lines**: Include unit price, quantity, part numbers, manufacturers, and calculated totals.\n- All prices use string-typed values matching Protractor's expected format.\n\n**Labor rate resolution:**\n- Uses your shop's cached labor rate first.\n- Falls back to rates from existing work order lines.\n- Then falls back to the job's own rate.\n\nThis ensures that every job added through MOS appears in Protractor with the same pricing detail as if it were added manually or through the VHI extension.",
+    category: "Work Order Creation",
+    tags: ["pricing", "labor rate", "parts", "protractor", "work order", "two-phase", "vhi"]
+  },
+
+  // ===== MILEAGE HANDLING =====
+  {
+    title: "Dashboard Mileage: Entered vs Estimated",
+    problem: "Sometimes the mileage column on my dashboard shows a number in regular text, and sometimes in italic with '(est.)'. What's the difference?",
+    solution: "The dashboard mileage column shows two types of readings:\n\n**Regular text (e.g., '145,268'):**\n- This is the actual odometer reading entered on the work order (the 'mileage in' field).\n- It was explicitly recorded by a service advisor when the vehicle came in.\n\n**Bold italic with '(est.)' (e.g., '115,763 (est.)'):**\n- This is a CARFAX-estimated mileage.\n- It appears when no odometer reading was entered on the work order.\n- Hover over it to see details about how the estimate was calculated.\n\n**How it works:**\n- When you create a work order without entering mileage, the dashboard shows the mileage field as blank initially.\n- The system then checks CARFAX history for that vehicle and calculates an estimate based on the vehicle's driving patterns.\n- The estimate shows up in italic so you can always tell it apart from an actual reading.\n\n**Why not use the vehicle's old mileage?**\nMOS intentionally does NOT fall back to the vehicle's previously stored odometer reading. This prevents stale/old mileage from being displayed as if it were current. The CARFAX estimate is more accurate because it accounts for how much the customer has driven since their last service.",
+    category: "Vehicle Health Intelligence",
+    tags: ["mileage", "odometer", "estimated", "carfax", "dashboard", "italic", "inusage"]
   }
 ];
 

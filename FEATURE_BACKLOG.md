@@ -115,7 +115,7 @@ Add `auto_populate` to existing feature flags system
 ## 3. CARFAX-Based Mileage Estimation
 
 **Priority:** Medium  
-**Status:** Idea
+**Status:** ✅ Complete (February 2026)
 
 ### Overview
 Use CARFAX history to estimate current mileage for vehicles without an input odometer reading, enabling plan generation.
@@ -1049,4 +1049,4 @@ Add a 5th icon to the vehicle dashboard row that generates AI-powered sales scri
 
 ---
 
-*Last Updated: February 4, 2026*
+*Last Updated: February 18, 2026*
