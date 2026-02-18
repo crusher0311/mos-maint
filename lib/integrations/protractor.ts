@@ -452,6 +452,103 @@ export async function fetchVehicleById(
   return { ok: true, vehicle: result.data };
 }
 
+export async function searchContacts(
+  shopId: number,
+  searchString: string
+): Promise<{ ok: boolean; contacts?: ProtractorContact[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const result = await protractorFetch<{ ItemCollection?: ProtractorContact[] }>(
+    `/Contact/Search/?searchString=${encodeURIComponent(searchString)}`,
+    config,
+    {},
+    0,
+    shopId,
+    { priority: true }
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, contacts: result.data?.ItemCollection || [] };
+}
+
+export async function fetchVehiclesByOwner(
+  shopId: number,
+  ownerId: string
+): Promise<{ ok: boolean; vehicles?: ProtractorVehicle[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const result = await protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
+    `/ServiceItem/Search/OwnerID/${ownerId}`,
+    config,
+    {},
+    0,
+    shopId,
+    { priority: true }
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, vehicles: result.data?.ItemCollection || [] };
+}
+
+export async function createProtractorWorkOrder(
+  shopId: number,
+  params: {
+    contactId: string;
+    vehicleId: string;
+    note?: string;
+    workflowStage?: string;
+  }
+): Promise<{ ok: boolean; workOrderId?: string; workOrderNumber?: number; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const newWorkOrderId = crypto.randomUUID();
+
+  const body: Record<string, any> = {
+    ID: newWorkOrderId,
+    WorkOrderNumber: 0,
+    Type: "WorkOrder",
+    Completed: false,
+    WorkflowStage: params.workflowStage || "Unassigned",
+    Contact: { ID: params.contactId },
+    ServiceItem: { ID: params.vehicleId },
+  };
+
+  if (params.note) body.Note = params.note;
+
+  const result = await protractorFetch<ProtractorWorkOrder>(
+    `/WorkOrder/${newWorkOrderId}`,
+    config,
+    { method: "POST", body: JSON.stringify(body) },
+    0,
+    shopId
+  );
+
+  if (!result.ok || !result.data) {
+    return { ok: false, error: result.error || "Failed to create work order" };
+  }
+
+  return {
+    ok: true,
+    workOrderId: result.data.ID,
+    workOrderNumber: result.data.WorkOrderNumber,
+  };
+}
+
 export async function fetchActiveWorkOrders(
   shopId: number,
   options?: { startDate?: string; endDate?: string; readInProgress?: boolean }

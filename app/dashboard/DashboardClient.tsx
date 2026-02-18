@@ -8,6 +8,7 @@ import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
 import AddVehicleModal from "@/components/AddVehicleModal";
 import ConcernAssistantModal from "@/components/ConcernAssistantModal";
+import NewWorkOrderModal from "@/components/NewWorkOrderModal";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
 
@@ -164,6 +165,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [showNewWorkOrder, setShowNewWorkOrder] = useState(false);
   const [concernAssistant, setConcernAssistant] = useState<{
     vin: string;
     vehicleDisplay: string;
@@ -920,6 +922,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <span className="text-xs sm:text-sm text-gray-500">({pagination.totalCount} total)</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
+            {data.smsType === "protractor" && (
+              <button
+                onClick={() => setShowNewWorkOrder(true)}
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Wrench className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">New RO</span>
+              </button>
+            )}
             <button
               onClick={() => setShowAddVehicle(true)}
               className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
@@ -1588,6 +1599,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         isOpen={showAddVehicle}
         onClose={() => setShowAddVehicle(false)}
         onVehicleAdded={handleVehicleAdded}
+      />
+
+      <NewWorkOrderModal
+        isOpen={showNewWorkOrder}
+        onClose={() => setShowNewWorkOrder(false)}
+        onCreated={() => refreshData()}
       />
 
       <ConcernAssistantModal
