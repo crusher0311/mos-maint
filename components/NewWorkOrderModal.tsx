@@ -320,15 +320,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setSearchingHistory(true);
     setJobsError("");
     try {
-      const params = new URLSearchParams({ vin: selectedVehicle.vin });
+      const params = new URLSearchParams();
+      if (historySearch.trim()) params.set("q", historySearch.trim());
+      if (selectedVehicle.year) params.set("year", String(selectedVehicle.year));
       if (selectedVehicle.make) params.set("make", selectedVehicle.make);
       if (selectedVehicle.model) params.set("model", selectedVehicle.model);
       if (selectedVehicle.engine) params.set("engine", selectedVehicle.engine);
-      if (historySearch.trim()) params.set("q", historySearch.trim());
-      const res = await fetch(`/api/dashboard/protractor/job-history?${params.toString()}`);
+      const res = await fetch(`/api/jobs/search?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to search job history");
-      setHistoryJobs(data.jobs || []);
+      setHistoryJobs(data.results || []);
     } catch (err: any) {
       setJobsError(err.message);
     } finally {
@@ -859,36 +860,49 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                     </div>
                   ) : historyJobs.length > 0 ? (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {historyJobs.map((job: any, idx: number) => (
+                      {historyJobs.map((job: any, idx: number) => {
+                        const title = job.job?.title || job.job?.name || job.title || "Untitled";
+                        const vehicleInfo = job.vehicle;
+                        const vehicleLabel = vehicleInfo ? `${vehicleInfo.year || ""} ${vehicleInfo.make || ""} ${vehicleInfo.model || ""}`.trim() : "";
+                        const isExactVehicle = selectedVehicle && vehicleInfo?.make?.toLowerCase() === selectedVehicle.make?.toLowerCase() && vehicleInfo?.model?.toLowerCase() === selectedVehicle.model?.toLowerCase();
+                        const bandColors: Record<string, string> = {
+                          exact: "bg-green-100 text-green-700",
+                          likely: "bg-blue-100 text-blue-700",
+                          possible: "bg-yellow-100 text-yellow-700",
+                          poor: "bg-gray-100 text-gray-500",
+                        };
+                        return (
                         <div key={idx} className={`flex items-center justify-between p-2.5 border rounded-lg hover:bg-gray-50 ${
-                          job.matchType === "similar" ? "border-purple-200 bg-purple-50/30" : "border-gray-200"
+                          !isExactVehicle ? "border-purple-200 bg-purple-50/30" : "border-gray-200"
                         }`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-gray-900 truncate">{job.title || job.name || "Untitled"}</span>
-                              {job.matchType === "similar" && (
-                                <span className="text-[9px] font-semibold uppercase px-1 py-0.5 rounded bg-purple-100 text-purple-600 flex-shrink-0">Similar</span>
+                              <span className="text-sm font-medium text-gray-900 truncate">{title}</span>
+                              {job.matchBandLabel && (
+                                <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0 ${bandColors[job.matchBand] || "bg-gray-100 text-gray-500"}`}>{job.matchBandLabel}</span>
                               )}
                             </div>
                             <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                              {job.code && <span>Code: {job.code}</span>}
-                              {job.workOrderNumber && <span>WO #{job.workOrderNumber}</span>}
                               {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}
                               {job.lines?.length > 0 && <span className="text-green-600">{job.lines.length} line{job.lines.length !== 1 ? "s" : ""}</span>}
-                              {job.matchType === "similar" && job.vehicleLabel && (
-                                <span className="text-purple-500">{job.vehicleLabel}</span>
+                              {vehicleLabel && !isExactVehicle && (
+                                <span className="text-purple-500">{vehicleLabel}</span>
+                              )}
+                              {job.locationName && !job.isCurrentLocation && (
+                                <span className="text-indigo-500">{job.locationName}</span>
                               )}
                             </div>
                           </div>
                           <button
-                            onClick={() => addJob({ source: "history", title: job.title || job.name || "Untitled", description: job.description, code: job.code, chapter: job.chapter, lines: job.lines })}
+                            onClick={() => addJob({ source: "history", title, description: job.job?.description || "", code: job.job?.code || "", chapter: "Service", lines: job.lines })}
                             className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             Add
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-500 text-center py-4">No job history found. Try searching or check back later.</p>
