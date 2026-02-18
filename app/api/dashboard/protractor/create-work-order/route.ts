@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { contactId, vehicleId, concernText, note, mileage, servicePackages } = body;
+    const { contactId, vehicleId, vin, concernText, note, mileage, servicePackages } = body;
 
     if (!contactId || !vehicleId) {
       return NextResponse.json({ error: "Contact and vehicle are required" }, { status: 400 });
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     const result = await createProtractorWorkOrder(shopId, {
       contactId,
       vehicleId,
+      vin: vin || undefined,
       concernText: concernText || undefined,
       note: note || undefined,
       mileage: mileage || undefined,

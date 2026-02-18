@@ -264,6 +264,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         body: JSON.stringify({
           contactId: selectedContact.id,
           vehicleId: selectedVehicle.id,
+          vin: selectedVehicle.vin || undefined,
           concernText: concernTextValue || undefined,
           note: noteText.trim() || undefined,
           mileage: mileageInput ? Number(mileageInput) : undefined,
