@@ -530,12 +530,7 @@ export async function GET(request: NextRequest) {
           },
           displayVin: "$vin",
           displayMiles: {
-            $let: {
-              vars: {
-                rawMiles: { $ifNull: ["$vehicle.mileage", { $ifNull: ["$odometer", { $ifNull: ["$vehicle.odometer", null] }] }] }
-              },
-              in: { $cond: [{ $gt: ["$$rawMiles", 0] }, "$$rawMiles", null] }
-            }
+            $cond: [{ $gt: ["$odometer", 0] }, "$odometer", null]
           },
           displayRo: "$workOrderNumber",
           workOrderGuid: "$workOrderGuid",
