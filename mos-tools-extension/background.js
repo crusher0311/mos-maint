@@ -100,6 +100,8 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
         tekmetricShopId = newShopId;
         chrome.storage.session.set({ tekmetricShopId });
         console.log("[Tekmetric] Shop ID captured:", tekmetricShopId);
+        laborRateRulesLastFetch = 0;
+        laborRateRules = [];
       } else {
         tekmetricShopId = newShopId;
       }
@@ -786,10 +788,11 @@ async function fetchLaborRateRules(forceRefresh = false) {
   }
 
   try {
-    const data = await handleMosApiRequest('/api/extension/labor-rates');
+    const shopParam = tekmetricShopId ? `?smsShopId=${tekmetricShopId}` : '';
+    const data = await handleMosApiRequest(`/api/extension/labor-rates${shopParam}`);
     laborRateRules = data.rules || [];
     laborRateRulesLastFetch = now;
-    console.log(`[LaborRate] Fetched ${laborRateRules.length} rules`);
+    console.log(`[LaborRate] Fetched ${laborRateRules.length} rules for shop ${tekmetricShopId || 'default'}`);
     return laborRateRules;
   } catch (err) {
     console.error("[LaborRate] Failed to fetch rules:", err);

@@ -23,10 +23,44 @@ export async function GET(req: NextRequest) {
   }
 
   const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { shopId: auth.user.shopId },
-    { projection: { laborRateRules: 1 } }
-  );
+  const { searchParams } = new URL(req.url);
+  const smsShopId = searchParams.get("smsShopId");
+
+  let shop;
+  if (smsShopId) {
+    const tekShopIdNum = parseInt(smsShopId);
+    const tekShopIdStr = String(smsShopId);
+    shop = await db.collection("shops").findOne(
+      {
+        $or: [
+          { "tekmetric.shopId": tekShopIdNum },
+          { "tekmetric.shopId": tekShopIdStr },
+          { tekmetricShopId: tekShopIdNum },
+          { tekmetricShopId: tekShopIdStr },
+          { "protractor.connectionId": smsShopId },
+          { protractorConnectionId: smsShopId },
+        ]
+      },
+      { projection: { laborRateRules: 1, shopId: 1 } }
+    );
+
+    if (shop) {
+      const userShopId = auth.user.shopId?.toString();
+      const userShopIds = (auth.user.shopIds || []).map((id: any) => id.toString());
+      const isPlatformAdmin = auth.user.role === "platform_admin";
+      const hasAccess = userShopId === String(shop.shopId) || userShopIds.includes(String(shop.shopId)) || isPlatformAdmin;
+      if (!hasAccess) {
+        shop = null;
+      }
+    }
+  }
+
+  if (!shop) {
+    shop = await db.collection("shops").findOne(
+      { shopId: auth.user.shopId },
+      { projection: { laborRateRules: 1 } }
+    );
+  }
 
   return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [] }, { headers: CORS_HEADERS });
 }
