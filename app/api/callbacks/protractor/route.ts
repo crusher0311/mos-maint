@@ -50,6 +50,66 @@ async function processCallbackEvent(
       }
     }
 
+    if (objectType === "WorkOrder" && objectId && operation === "Delete") {
+      const existingWO = await db.collection("protractor_work_orders").findOne({
+        shopId: { $in: [String(shopId), Number(shopId)] },
+        workOrderId: objectId
+      });
+
+      await db.collection("protractor_work_orders").updateMany(
+        { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: objectId },
+        { $set: { completed: true, status: "Deleted", workflowStage: "Deleted", deletedAt: new Date(), deletedViaCallback: true } }
+      );
+
+      if (existingWO?.vin) {
+        const otherActiveWOs = await db.collection("protractor_work_orders").countDocuments({
+          shopId: { $in: [String(shopId), Number(shopId)] },
+          vin: existingWO.vin,
+          completed: { $ne: true },
+          workOrderId: { $ne: objectId }
+        });
+
+        if (otherActiveWOs === 0) {
+          await db.collection("vehicles").updateOne(
+            {
+              $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+              vin: existingWO.vin
+            },
+            {
+              $set: {
+                "status.active": false,
+                "status.updatedAt": new Date(),
+                updatedAt: new Date()
+              }
+            }
+          );
+        }
+
+        const existingVehicle = await db.collection("vehicles").findOne({
+          $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+          vin: existingWO.vin
+        });
+        if (existingVehicle) {
+          const updatedSources = (existingVehicle.status?.sources || []).filter(
+            (s: any) => !(s.provider === "protractor" && String(s.workOrderId) === String(objectId))
+          );
+          await db.collection("vehicles").updateOne(
+            { _id: existingVehicle._id },
+            { $set: { "status.sources": updatedSources, "status.updatedAt": new Date() } }
+          );
+        }
+      }
+
+      await signalDashboardUpdate(db);
+      console.log(`[Protractor Callback] Deleted work order ${objectId} (WO#${existingWO?.workOrderNumber || '?'}) from dashboard`);
+
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: eventId },
+        { $set: { processed: true, processedAt: new Date(), workOrderNumber: existingWO?.workOrderNumber, deletedFromDashboard: true } }
+      );
+      return true;
+    }
+
     if (objectType === "WorkOrder" && objectId) {
       const result = await fetchWorkOrderById(shopId, objectId);
       if (result.ok && result.workOrder) {
