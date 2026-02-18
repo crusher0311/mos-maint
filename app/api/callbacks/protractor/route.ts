@@ -611,18 +611,20 @@ export async function GET(request: NextRequest) {
     const shopId = Number(shop.shopId);
     console.log(`[Protractor Callback GET] ${operation} ${objectType} ${objectId} for shop ${shopId}`);
 
-    // Deduplication: skip if we already processed this exact object in the last 60 seconds
+    // Deduplication: skip if we already processed this exact object+operation in the last 60 seconds
+    // IMPORTANT: Include operation in the query so Delete is not skipped when Update was just processed
     if (objectId) {
       const recentDuplicate = await db.collection("protractor_callback_events").findOne({
         shopId,
         objectType,
         objectId,
+        operation,
         processed: true,
         processedAt: { $gte: new Date(Date.now() - 60000) }
       });
 
       if (recentDuplicate) {
-        console.log(`[Protractor Callback GET] Skipping duplicate ${objectType} ${objectId} for shop ${shopId} (processed ${Math.round((Date.now() - recentDuplicate.processedAt.getTime()) / 1000)}s ago)`);
+        console.log(`[Protractor Callback GET] Skipping duplicate ${operation} ${objectType} ${objectId} for shop ${shopId} (processed ${Math.round((Date.now() - recentDuplicate.processedAt.getTime()) / 1000)}s ago)`);
         return NextResponse.json({ 
           ok: true, 
           status: "duplicate_skipped",
