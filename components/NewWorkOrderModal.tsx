@@ -45,8 +45,7 @@ type Exchange = {
   response: string;
 };
 
-type Step = "concern" | "customer" | "vehicle" | "confirm";
-
+type Step = "concern" | "customer" | "vehicle" | "note" | "confirm";
 
 interface NewWorkOrderModalProps {
   isOpen: boolean;
@@ -78,6 +77,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [concernLoading, setConcernLoading] = useState(false);
   const [concernError, setConcernError] = useState("");
 
+  const [noteText, setNoteText] = useState("");
+
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createdWO, setCreatedWO] = useState<number | null>(null);
@@ -99,6 +100,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setAnswers({});
       setCleanedText("");
       setConversationId(null);
+      setNoteText("");
       setConcernError("");
       setCreating(false);
       setCreateError("");
@@ -214,6 +216,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           contactId: selectedContact.id,
           vehicleId: selectedVehicle.id,
           concernText: concernTextValue || undefined,
+          note: noteText.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -241,6 +244,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     { key: "concern", label: "Concern", icon: MessageSquareText },
     { key: "customer", label: "Customer", icon: User },
     { key: "vehicle", label: "Vehicle", icon: Car },
+    { key: "note", label: "Note", icon: FileText },
     { key: "confirm", label: "Done", icon: CheckCircle },
   ];
 
@@ -400,14 +404,12 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
               {selectedVehicle && (
                 <div className="pt-2">
                   <button
-                    onClick={handleCreateWorkOrder}
-                    disabled={creating}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    onClick={() => setStep("note")}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
                   >
-                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    Create Work Order
+                    Next
+                    <ChevronRight className="w-4 h-4" />
                   </button>
-                  {createError && <p className="text-sm text-red-600 mt-2">{createError}</p>}
                 </div>
               )}
             </div>
@@ -507,6 +509,49 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
             </div>
           )}
 
+          {step === "note" && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg flex-wrap">
+                <User className="w-4 h-4 text-blue-500" />
+                <span className="font-medium">{contactDisplay}</span>
+                <span className="text-gray-300 mx-1">|</span>
+                <Car className="w-4 h-4 text-blue-500" />
+                <span className="font-medium">{vehicleDisplay}</span>
+                {(cleanedText || concern) && (
+                  <>
+                    <span className="text-gray-300 mx-1">|</span>
+                    <MessageSquareText className="w-4 h-4 text-green-500" />
+                    <span className="text-green-600 text-xs">Concern attached</span>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Work Order Note <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Add any additional notes for this work order..."
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  rows={4}
+                  autoFocus
+                />
+              </div>
+
+              <button
+                onClick={handleCreateWorkOrder}
+                disabled={creating}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Create Work Order
+              </button>
+              {createError && <p className="text-sm text-red-600">{createError}</p>}
+            </div>
+          )}
+
           {step === "confirm" && (
             <div className="flex flex-col items-center justify-center py-8 space-y-4">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
@@ -535,6 +580,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
               onClick={() => {
                 if (step === "customer") setStep("concern");
                 if (step === "vehicle") setStep("customer");
+                if (step === "note") setStep("vehicle");
               }}
               disabled={step === "concern"}
               className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"

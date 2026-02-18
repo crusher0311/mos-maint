@@ -508,6 +508,7 @@ export async function createProtractorWorkOrder(
     contactId: string;
     vehicleId: string;
     concernText?: string;
+    note?: string;
     workflowStage?: string;
   }
 ): Promise<{ ok: boolean; workOrderId?: string; workOrderNumber?: number; error?: string }> {
@@ -528,6 +529,8 @@ export async function createProtractorWorkOrder(
     Contact: { ID: params.contactId },
     ServiceItem: { ID: params.vehicleId },
   };
+
+  if (params.note) body.Note = params.note;
 
   if (params.concernText) {
     body.ServicePackages = {

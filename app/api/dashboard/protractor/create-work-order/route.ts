@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { contactId, vehicleId, concernText } = body;
+    const { contactId, vehicleId, concernText, note } = body;
 
     if (!contactId || !vehicleId) {
       return NextResponse.json({ error: "Contact and vehicle are required" }, { status: 400 });
@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
       contactId,
       vehicleId,
       concernText: concernText || undefined,
+      note: note || undefined,
     });
 
     if (!result.ok) {
