@@ -47,6 +47,7 @@ type Exchange = {
 
 type Step = "concern" | "customer" | "vehicle" | "confirm";
 
+
 interface NewWorkOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -54,7 +55,7 @@ interface NewWorkOrderModalProps {
 }
 
 export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWorkOrderModalProps) {
-  const [step, setStep] = useState<Step>("customer");
+  const [step, setStep] = useState<Step>("concern");
 
   const [contactSearch, setContactSearch] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -83,7 +84,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   useEffect(() => {
     if (!isOpen) {
-      setStep("customer");
+      setStep("concern");
       setContactSearch("");
       setContacts([]);
       setSelectedContact(null);
@@ -142,7 +143,6 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   const selectVehicle = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
-    setStep("concern");
   };
 
   async function handleConcernSubmit() {
@@ -175,12 +175,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       response: answers[i] || "No answer provided",
     }));
     const allExchanges = [...exchanges, ...newExchanges];
+    const conversationText = `Customer concern: ${concern.trim()}\n\n` +
+      allExchanges.map(e => `Q: ${e.question}\nA: ${e.response}`).join("\n\n");
     try {
       const res = await fetch("/api/dashboard/concern-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "cleanup",
+          conversationText,
           concern: concern.trim(),
           exchanges: allExchanges,
           conversationId,
@@ -235,9 +238,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     : "";
 
   const steps: { key: Step; label: string; icon: any }[] = [
+    { key: "concern", label: "Concern", icon: MessageSquareText },
     { key: "customer", label: "Customer", icon: User },
     { key: "vehicle", label: "Vehicle", icon: Car },
-    { key: "concern", label: "Concern", icon: MessageSquareText },
     { key: "confirm", label: "Done", icon: CheckCircle },
   ];
 
@@ -343,9 +346,13 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
                 <User className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{contactDisplay}</span>
-                <button onClick={() => setStep("customer")} className="ml-auto text-blue-600 hover:underline text-xs">
-                  Change
-                </button>
+                {(cleanedText || concern) && (
+                  <>
+                    <span className="text-gray-300 mx-1">|</span>
+                    <MessageSquareText className="w-4 h-4 text-green-500" />
+                    <span className="text-green-600 text-xs">Concern attached</span>
+                  </>
+                )}
               </div>
 
               {loadingVehicles ? (
@@ -358,31 +365,49 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                   <AlertTriangle className="w-4 h-4" /> {vehicleError}
                 </p>
               ) : (
-                <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Select Vehicle</label>
-                  {vehicles.map(v => (
-                    <button
-                      key={v.id}
-                      onClick={() => selectVehicle(v)}
-                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-gray-900 text-sm">
-                            {[v.year, v.make, v.model].filter(Boolean).join(" ")}
-                            {v.submodel && <span className="text-gray-500 ml-1">{v.submodel}</span>}
+                  {vehicles.map(v => {
+                    const isSelected = selectedVehicle?.id === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => selectVehicle(v)}
+                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                          isSelected ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-gray-900 text-sm">
+                              {[v.year, v.make, v.model].filter(Boolean).join(" ")}
+                              {v.submodel && <span className="text-gray-500 ml-1">{v.submodel}</span>}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
+                              {v.vin && <span>VIN: {v.vin}</span>}
+                              {v.plate && <span>Plate: {v.plate}</span>}
+                              {v.color && <span>{v.color}</span>}
+                              {v.odometer && <span>{v.odometer.toLocaleString()} mi</span>}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
-                            {v.vin && <span>VIN: {v.vin}</span>}
-                            {v.plate && <span>Plate: {v.plate}</span>}
-                            {v.color && <span>{v.color}</span>}
-                            {v.odometer && <span>{v.odometer.toLocaleString()} mi</span>}
-                          </div>
+                          {isSelected ? <CheckCircle className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                         </div>
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {selectedVehicle && (
+                <div className="pt-2">
+                  <button
+                    onClick={handleCreateWorkOrder}
+                    disabled={creating}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Create Work Order
+                  </button>
+                  {createError && <p className="text-sm text-red-600 mt-2">{createError}</p>}
                 </div>
               )}
             </div>
@@ -390,25 +415,19 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
           {step === "concern" && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
-                <User className="w-4 h-4 text-blue-500" />
-                <span className="font-medium">{contactDisplay}</span>
-                <span className="text-gray-300 mx-1">|</span>
-                <Car className="w-4 h-4 text-blue-500" />
-                <span className="font-medium">{vehicleDisplay}</span>
-              </div>
-
               {concernStage === "start" && (
                 <div className="space-y-3">
                   <label className="block text-sm font-medium text-gray-700">
                     Customer Concern <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
+                  <p className="text-xs text-gray-500">Describe the customer's issue to generate a structured write-up with AI-guided follow-up questions.</p>
                   <textarea
                     value={concern}
                     onChange={e => setConcern(e.target.value)}
                     placeholder="What did the customer say? e.g. 'Car is making a grinding noise when braking...'"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                     rows={4}
+                    autoFocus
                   />
                   {concernError && <p className="text-sm text-red-600">{concernError}</p>}
                   <div className="flex gap-2">
@@ -421,15 +440,13 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                       Build Concern Write-up
                     </button>
                     <button
-                      onClick={handleCreateWorkOrder}
-                      disabled={creating}
-                      className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-900 disabled:opacity-50"
+                      onClick={() => setStep("customer")}
+                      className="flex items-center gap-2 px-4 py-2 text-gray-700 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50"
                     >
-                      {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                      Skip & Create WO
+                      Skip
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
-                  {createError && <p className="text-sm text-red-600">{createError}</p>}
                 </div>
               )}
 
@@ -478,15 +495,13 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                       Start Over
                     </button>
                     <button
-                      onClick={handleCreateWorkOrder}
-                      disabled={creating}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                      onClick={() => setStep("customer")}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
                     >
-                      {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      Create Work Order
+                      Next: Select Customer
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
-                  {createError && <p className="text-sm text-red-600">{createError}</p>}
                 </div>
               )}
             </div>
@@ -518,10 +533,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           <div className="border-t border-gray-200 px-6 py-3 flex items-center justify-between bg-gray-50">
             <button
               onClick={() => {
+                if (step === "customer") setStep("concern");
                 if (step === "vehicle") setStep("customer");
-                if (step === "concern") setStep("vehicle");
               }}
-              disabled={step === "customer"}
+              disabled={step === "concern"}
               className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-4 h-4" />
