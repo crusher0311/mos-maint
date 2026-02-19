@@ -598,27 +598,37 @@ export async function createServiceItem(
 
   const newVehicleId = crypto.randomUUID();
 
+  const descParts = [
+    params.year ? String(params.year) : null,
+    params.make || null,
+    params.model || null,
+    params.submodel || null,
+  ].filter(Boolean);
+  const description = descParts.join(" ");
+
   const body: Record<string, any> = {
     ID: newVehicleId,
     OwnerID: params.ownerId,
     Type: "ServiceItemVehicle",
+    Description: description || "",
+    VIN: params.vin ? params.vin.toUpperCase() : undefined,
+    Year: params.year ? Number(params.year) : undefined,
+    Make: params.make || undefined,
+    Model: params.model || undefined,
+    Submodel: params.submodel || undefined,
+    Color: params.color || undefined,
+    Engine: params.engine || undefined,
+    Transmission: params.transmission || undefined,
+    PlateRegistration: params.licensePlate || undefined,
+    LicensePlate: params.licensePlate || undefined,
   };
 
-  if (params.vin) body.VIN = params.vin.toUpperCase();
-  if (params.year) body.Year = params.year;
-  if (params.make) body.Make = params.make;
-  if (params.model) body.Model = params.model;
-  if (params.submodel) body.Submodel = params.submodel;
-  if (params.color) body.Color = params.color;
-  if (params.engine) body.Engine = params.engine;
-  if (params.transmission) body.Transmission = params.transmission;
   if (params.odometer) body.Usage = params.odometer;
-  if (params.licensePlate) body.LicensePlate = params.licensePlate;
 
   if (params.vin) {
-    body.LookUp = params.vin.toUpperCase();
+    body.Lookup = params.vin.toUpperCase();
   } else if (params.licensePlate) {
-    body.LookUp = params.licensePlate;
+    body.Lookup = params.licensePlate;
   }
 
   const result = await protractorFetch<ProtractorVehicle>(
@@ -633,8 +643,46 @@ export async function createServiceItem(
     return { ok: false, error: result.error || "Failed to create vehicle" };
   }
 
-  console.log(`[Protractor] Created vehicle ${newVehicleId}: ${params.year} ${params.make} ${params.model} VIN:${params.vin || 'N/A'}`);
-  return { ok: true, vehicleId: result.data.ID || newVehicleId, vehicle: result.data };
+  const createdId = result.data.ID || newVehicleId;
+
+  try {
+    const updateBody: Record<string, any> = {
+      ID: createdId,
+      Type: "ServiceItemVehicle",
+      OwnerID: params.ownerId,
+      Description: description || "",
+    };
+    if (params.vin) {
+      updateBody.Lookup = params.vin.toUpperCase();
+      updateBody.VIN = params.vin.toUpperCase();
+    }
+    if (params.year) updateBody.Year = Number(params.year);
+    if (params.make) updateBody.Make = params.make;
+    if (params.model) updateBody.Model = params.model;
+    if (params.submodel) updateBody.Submodel = params.submodel;
+    if (params.color) updateBody.Color = params.color;
+    if (params.engine) updateBody.Engine = params.engine;
+    if (params.licensePlate) {
+      updateBody.PlateRegistration = params.licensePlate;
+      updateBody.LicensePlate = params.licensePlate;
+    }
+    if (params.transmission) updateBody.Transmission = params.transmission;
+    if (params.odometer) updateBody.Usage = params.odometer;
+
+    await protractorFetch<ProtractorVehicle>(
+      `/ServiceItem/${createdId}`,
+      config,
+      { method: "POST", body: JSON.stringify(updateBody) },
+      0,
+      shopId
+    );
+    console.log(`[Protractor] Follow-up POST to set vehicle fields for ${createdId}`);
+  } catch (updateErr: any) {
+    console.error(`[Protractor] Follow-up vehicle update error (non-fatal):`, updateErr.message);
+  }
+
+  console.log(`[Protractor] Created vehicle ${createdId}: ${description} VIN:${params.vin || 'N/A'}`);
+  return { ok: true, vehicleId: createdId, vehicle: result.data };
 }
 
 export interface WorkOrderServicePackage {
