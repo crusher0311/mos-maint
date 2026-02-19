@@ -623,6 +623,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       if (selectedVehicle.make) params.set("make", selectedVehicle.make);
       if (selectedVehicle.model) params.set("model", selectedVehicle.model);
       if (selectedVehicle.engine) params.set("engine", selectedVehicle.engine);
+      params.set("strictModel", "true");
       const res = await fetch(`/api/jobs/search?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to search job history");

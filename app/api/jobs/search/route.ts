@@ -82,7 +82,9 @@ async function searchNormalizedCollections(
   searchShopIds: number[],
   coreTokens: string[],
   vehicleMake?: string,
-  limit: number = 50
+  limit: number = 50,
+  vehicleModel?: string,
+  strictModel: boolean = false,
 ): Promise<any[]> {
   if (coreTokens.length === 0) return [];
 
@@ -137,6 +139,12 @@ async function searchNormalizedCollections(
     if (vehicleMake) {
       serviceJobsPipeline.push({
         $match: { 'vehicle.make': { $regex: new RegExp(escapeRegex(vehicleMake), 'i') } }
+      });
+    }
+
+    if (strictModel && vehicleModel) {
+      serviceJobsPipeline.push({
+        $match: { 'vehicle.model': { $regex: new RegExp(`^${escapeRegex(vehicleModel)}$`, 'i') } }
       });
     }
 
@@ -206,6 +214,7 @@ export async function GET(req: NextRequest) {
   const vehicleMake = searchParams.get("make");
   const vehicleModel = searchParams.get("model");
   const vehicleEngine = searchParams.get("engine");
+  const strictModel = searchParams.get("strictModel") === "true";
   const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
 
   if (!query && !vehicleMake) {
@@ -290,9 +299,15 @@ export async function GET(req: NextRequest) {
     matchStage["vehicle.make"] = { $regex: new RegExp(escapeRegex(vehicleMake), "i") };
   }
   
-  // NOTE: Model is NOT used as a hard filter - it's used for scoring only.
-  // This allows "oil change on HHR" to find results from other Chevrolet models
-  // (Trax, Cruze, etc.) when no exact HHR jobs exist in history.
+  if (strictModel && vehicleModel) {
+    matchStage["vehicle.model"] = { $regex: new RegExp(`^${escapeRegex(vehicleModel)}$`, "i") };
+  }
+  
+  // NOTE: When strictModel is false (default), model is NOT used as a hard filter -
+  // it's used for scoring only. This allows "oil change on HHR" to find results
+  // from other Chevrolet models (Trax, Cruze, etc.) when no exact HHR jobs exist.
+  // When strictModel=true (used by New Work Order history tab), model IS a hard
+  // filter so only jobs from the same vehicle model are shown.
 
   const pipeline: any[] = [
     { $match: matchStage },
@@ -315,7 +330,7 @@ export async function GET(req: NextRequest) {
   
   const [jobIndexResults, normalizedResults] = await Promise.all([
     db.collection("job_index").aggregate(pipeline).toArray(),
-    searchNormalizedCollections(db, searchShopIds, coreTokensForNormalized, vehicleMake || undefined, limit * 2)
+    searchNormalizedCollections(db, searchShopIds, coreTokensForNormalized, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel)
   ]);
   
   // Merge results from both sources, deduping by workOrderId + job title
