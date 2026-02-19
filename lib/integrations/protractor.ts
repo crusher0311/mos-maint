@@ -603,22 +603,26 @@ function buildServiceItemVehicleXml(fields: {
   const lines: string[] = [
     '<ServiceItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="ServiceItemVehicle">',
     `  <ID>${escapeXml(fields.id)}</ID>`,
+    `  <Type>Vehicle</Type>`,
+    `  <Lookup>${escapeXml(fields.lookup || "")}</Lookup>`,
+    `  <Description>${escapeXml(fields.description || "")}</Description>`,
+    `  <Usage>${fields.usage ?? 0}</Usage>`,
+    `  <ProductionDate>0001-01-01T00:00:00</ProductionDate>`,
+    `  <Note />`,
+    `  <NoEmail>false</NoEmail>`,
+    `  <NoPostCard>false</NoPostCard>`,
     `  <OwnerID>${escapeXml(fields.ownerId)}</OwnerID>`,
+    `  <PlateRegistration>${escapeXml(fields.plateRegistration || "")}</PlateRegistration>`,
+    `  <VIN>${escapeXml(fields.vin || "")}</VIN>`,
+    `  <Unit />`,
+    `  <Color>${escapeXml(fields.color || "")}</Color>`,
+    `  <Year>${fields.year || 0}</Year>`,
+    `  <Make>${escapeXml(fields.make || "")}</Make>`,
+    `  <Model>${escapeXml(fields.model || "")}</Model>`,
+    `  <Submodel>${escapeXml(fields.submodel || "")}</Submodel>`,
+    `  <Engine>${escapeXml(fields.engine || "")}</Engine>`,
+    "</ServiceItem>",
   ];
-
-  if (fields.lookup) lines.push(`  <Lookup>${escapeXml(fields.lookup)}</Lookup>`);
-  if (fields.description) lines.push(`  <Description>${escapeXml(fields.description)}</Description>`);
-  if (fields.vin) lines.push(`  <VIN>${escapeXml(fields.vin)}</VIN>`);
-  if (fields.plateRegistration) lines.push(`  <PlateRegistration>${escapeXml(fields.plateRegistration)}</PlateRegistration>`);
-  if (fields.year) lines.push(`  <Year>${fields.year}</Year>`);
-  if (fields.make) lines.push(`  <Make>${escapeXml(fields.make)}</Make>`);
-  if (fields.model) lines.push(`  <Model>${escapeXml(fields.model)}</Model>`);
-  if (fields.submodel) lines.push(`  <Submodel>${escapeXml(fields.submodel)}</Submodel>`);
-  if (fields.color) lines.push(`  <Color>${escapeXml(fields.color)}</Color>`);
-  if (fields.engine) lines.push(`  <Engine>${escapeXml(fields.engine)}</Engine>`);
-  if (fields.usage !== undefined) lines.push(`  <Usage>${fields.usage}</Usage>`);
-
-  lines.push("</ServiceItem>");
   return lines.join("\n");
 }
 
