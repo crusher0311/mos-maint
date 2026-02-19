@@ -1,0 +1,68 @@
+post /Contact/{id}
+Response Class (Status 200)
+OK
+
+ModelExample Value
+<?xml version="1.0"?>
+<Contact>
+  <Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+    <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+    <DeletionTimeSpecified>true</DeletionTimeSpecified>
+    <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+    <LastModifiedBy>string</LastModifiedBy>
+  </Header>
+  <ID>00000000-0000-0000-0000-000000000000</ID>
+  <FileAs>string</FileAs>
+  <Name>
+    <Title>string</Title>
+    <Prefix>string</Prefix>
+    <FirstName>string</FirstName>
+    <MiddleName>string</MiddleName>
+    <LastName>string</LastName>
+    <Suffix>string</Suffix>
+  </Name>
+  <Address>
+    <Title>string</Title>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <Street>string</Street>
+    <City>string</City>
+    <Province>string</Province>
+    <PostalCode>string</PostalCode>
+    <Country>string</Country>
+  </Address>
+  <Company>string</Company>
+  <Phone1Title>string</Phone1Title>
+  <Phone1>string</Phone1>
+  <Phone2Title>string</Phone2Title>
+  <Phone2>string</Phone2>
+  <EmailTitle>string</EmailTitle>
+  <Email>string</Email>
+  <AdditionalNames>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </AdditionalNames>
+  <AdditionalPhones>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </AdditionalPhones>
+  <AdditionalURIs>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </AdditionalURIs>
+  <PreferredContactMethod>string</PreferredContactMethod>
+  <MarketingSource>string</MarketingSource>
+  <Note>string</Note>
+  <NoMessaging>true</NoMessaging>
+  <NoEmail>true</NoEmail>
+  <NoPostCard>true</NoPostCard>
+  <Discount>
+    <LaborRateCode>string</LaborRateCode>
+    <LaborDiscountPercent>1.1</LaborDiscountPercent>
+    <LaborDiscountAlways>true</LaborDiscountAlways>
+    <MaterialRateCode>string</MaterialRateCode>
+    <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+    <MaterialDiscountAlways>true</MaterialDiscountAlways>
+  </Discount>
+</Contact>
