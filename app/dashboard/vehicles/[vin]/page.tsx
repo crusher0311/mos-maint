@@ -240,6 +240,37 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   }
 
   if (!vehicle) {
+    try {
+      const { decodeVinLocal } = await import("@/lib/integrations/dataone-local");
+      const decoded = await decodeVinLocal(vin);
+      if (decoded.ok && decoded.decoded) {
+        vehicle = {
+          _id: null,
+          vin,
+          year: decoded.decoded.year || null,
+          make: decoded.decoded.make || null,
+          model: decoded.decoded.model || null,
+          license: null,
+          lastMileage: null,
+          odometer: null,
+          updatedAt: new Date(),
+          customerId: null,
+        };
+        await db.collection("vehicles").updateOne(
+          { vin, shopId: String(shopId) },
+          {
+            $set: { ...vehicle, shopId: String(shopId) },
+            $setOnInsert: { createdAt: new Date() },
+          },
+          { upsert: true }
+        );
+      }
+    } catch (e) {
+      console.error("[Vehicle Detail] DataOne fallback error:", e);
+    }
+  }
+
+  if (!vehicle) {
     return (
       <main className="mx-auto max-w-5xl p-6 space-y-6">
         <div className="flex items-center justify-between">
