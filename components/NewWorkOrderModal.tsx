@@ -25,6 +25,31 @@ import {
   UserPlus,
 } from "lucide-react";
 
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
+];
+
+const STATE_NAME_TO_ABBR: Record<string, string> = {
+  ALABAMA:"AL",ALASKA:"AK",ARIZONA:"AZ",ARKANSAS:"AR",CALIFORNIA:"CA",COLORADO:"CO",CONNECTICUT:"CT",
+  DELAWARE:"DE",FLORIDA:"FL",GEORGIA:"GA",HAWAII:"HI",IDAHO:"ID",ILLINOIS:"IL",INDIANA:"IN",IOWA:"IA",
+  KANSAS:"KS",KENTUCKY:"KY",LOUISIANA:"LA",MAINE:"ME",MARYLAND:"MD",MASSACHUSETTS:"MA",MICHIGAN:"MI",
+  MINNESOTA:"MN",MISSISSIPPI:"MS",MISSOURI:"MO",MONTANA:"MT",NEBRASKA:"NE",NEVADA:"NV",
+  "NEW HAMPSHIRE":"NH","NEW JERSEY":"NJ","NEW MEXICO":"NM","NEW YORK":"NY","NORTH CAROLINA":"NC",
+  "NORTH DAKOTA":"ND",OHIO:"OH",OKLAHOMA:"OK",OREGON:"OR",PENNSYLVANIA:"PA","RHODE ISLAND":"RI",
+  "SOUTH CAROLINA":"SC","SOUTH DAKOTA":"SD",TENNESSEE:"TN",TEXAS:"TX",UTAH:"UT",VERMONT:"VT",
+  VIRGINIA:"VA",WASHINGTON:"WA","WEST VIRGINIA":"WV",WISCONSIN:"WI",WYOMING:"WY",
+  "DISTRICT OF COLUMBIA":"DC","WASHINGTON DC":"DC","WASHINGTON D.C.":"DC",
+};
+
+function resolveStateAbbr(state: string | null | undefined): string {
+  if (!state) return "";
+  const upper = state.toUpperCase().trim();
+  if (upper.length === 2 && US_STATES.includes(upper)) return upper;
+  return STATE_NAME_TO_ABBR[upper] || "";
+}
+
 type FieldVisibility = "required" | "optional" | "hidden";
 type CreateROSettings = {
   customerFields: Record<string, FieldVisibility>;
@@ -135,6 +160,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [roSettings, setRoSettings] = useState<CreateROSettings | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<string | null>(null);
+  const [vinDecoding, setVinDecoding] = useState(false);
+  const [vinDecoded, setVinDecoded] = useState(false);
+  const [plateLooking, setPlateLooking] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -175,6 +203,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setCreatingVehicle(false);
       setOcrLoading(false);
       setOcrResult(null);
+      setVinDecoding(false);
+      setVinDecoded(false);
+      setPlateLooking(false);
     }
   }, [isOpen]);
 
@@ -416,6 +447,70 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     }
   }
 
+  async function handleVinDecode(vin: string) {
+    if (!vin || vin.length !== 17) return;
+    setVinDecoding(true);
+    setVinDecoded(false);
+    try {
+      const res = await fetch(`/api/vin/decode?vin=${encodeURIComponent(vin)}`);
+      const data = await res.json();
+      if (data.decoded) {
+        setNewVehicle(prev => ({
+          ...prev,
+          vin,
+          year: data.year ? String(data.year) : prev.year || "",
+          make: data.make || prev.make || "",
+          model: data.model || prev.model || "",
+          submodel: data.submodel || prev.submodel || "",
+          engine: data.engine || prev.engine || "",
+          transmission: data.transmission || prev.transmission || "",
+        }));
+        setVinDecoded(true);
+      }
+    } catch {
+    } finally {
+      setVinDecoding(false);
+    }
+  }
+
+  async function handlePlateLookup() {
+    const plate = (newVehicle.licensePlate || "").replace(/\s+/g, "");
+    const state = newVehicle.plateState || "";
+    if (!plate || !state) {
+      setVehicleError("Enter both license plate and state to look up VIN");
+      return;
+    }
+    setPlateLooking(true);
+    setVehicleError("");
+    try {
+      const res = await fetch("/api/vin/plate-lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plate, state }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Plate lookup failed");
+      if (!data.success) throw new Error(data.error || "No VIN found for this plate");
+      setNewVehicle(prev => ({
+        ...prev,
+        vin: data.vin || prev.vin || "",
+        year: data.year ? String(data.year) : prev.year || "",
+        make: data.make || prev.make || "",
+        model: data.model || prev.model || "",
+        submodel: data.submodel || prev.submodel || "",
+        engine: data.engine || prev.engine || "",
+        transmission: data.transmission || prev.transmission || "",
+        color: data.color || prev.color || "",
+      }));
+      setVinDecoded(true);
+      setOcrResult(`VIN found: ${data.vin} — ${[data.year, data.make, data.model].filter(Boolean).join(" ")}`);
+    } catch (err: any) {
+      setVehicleError(err.message);
+    } finally {
+      setPlateLooking(false);
+    }
+  }
+
   async function handlePhotoUpload(file: File) {
     setOcrLoading(true);
     setOcrResult(null);
@@ -434,9 +529,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       if (result.vin) {
         setNewVehicle(prev => ({ ...prev, vin: result.vin }));
         setOcrResult(`VIN detected: ${result.vin} (${result.confidence} confidence)`);
+        handleVinDecode(result.vin);
       } else if (result.plate) {
-        setNewVehicle(prev => ({ ...prev, licensePlate: result.plate }));
-        setOcrResult(`Plate detected: ${result.plate}${result.state ? ` (${result.state})` : ""} (${result.confidence} confidence)`);
+        const stateAbbr = resolveStateAbbr(result.state);
+        setNewVehicle(prev => ({
+          ...prev,
+          licensePlate: result.plate,
+          ...(stateAbbr ? { plateState: stateAbbr } : {}),
+        }));
+        const stateMsg = stateAbbr ? ` (${stateAbbr})` : result.state ? ` (${result.state})` : "";
+        setOcrResult(`Plate detected: ${result.plate}${stateMsg} (${result.confidence} confidence) — ${stateAbbr ? "Click \"Lookup VIN\" to decode" : "Select state and click \"Lookup VIN\" to decode"}`);
       } else {
         setOcrResult("Could not detect a VIN or license plate. Try a clearer photo.");
       }
@@ -916,7 +1018,36 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           VIN {isFieldRequired("vehicle", "vin") && <span className="text-red-500">*</span>}
                         </label>
-                        <input type="text" value={newVehicle.vin || ""} onChange={e => setNewVehicle(p => ({ ...p, vin: e.target.value.toUpperCase() }))} maxLength={17} placeholder="17-character VIN" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono" />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newVehicle.vin || ""}
+                            onChange={e => {
+                              const v = e.target.value.toUpperCase();
+                              setNewVehicle(p => ({ ...p, vin: v }));
+                              setVinDecoded(false);
+                            }}
+                            onBlur={e => {
+                              const v = e.target.value.trim();
+                              if (v.length === 17) handleVinDecode(v);
+                            }}
+                            maxLength={17}
+                            placeholder="17-character VIN"
+                            className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono ${
+                              vinDecoded ? "border-green-400 bg-green-50" : "border-gray-300"
+                            }`}
+                          />
+                          {vinDecoding && <Loader2 className="w-5 h-5 animate-spin text-blue-500 mt-2" />}
+                          {vinDecoded && <CheckCircle className="w-5 h-5 text-green-500 mt-2" />}
+                        </div>
+                        {vinDecoded && (
+                          <p className="text-xs text-green-600 mt-1">VIN decoded — vehicle details auto-filled</p>
+                        )}
+                        {(newVehicle.vin || "").length === 17 && !vinDecoded && !vinDecoding && (
+                          <button onClick={() => handleVinDecode(newVehicle.vin || "")} className="text-xs text-blue-600 hover:text-blue-700 mt-1">
+                            Decode VIN
+                          </button>
+                        )}
                       </div>
                     )}
                     {isFieldVisible("vehicle", "year") && (
@@ -984,11 +1115,31 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                       </div>
                     )}
                     {isFieldVisible("vehicle", "licensePlate") && (
-                      <div>
+                      <div className="col-span-2">
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           License Plate {isFieldRequired("vehicle", "licensePlate") && <span className="text-red-500">*</span>}
                         </label>
-                        <input type="text" value={newVehicle.licensePlate || ""} onChange={e => setNewVehicle(p => ({ ...p, licensePlate: e.target.value.toUpperCase() }))} placeholder="ABC 1234" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                        <div className="flex gap-2">
+                          <input type="text" value={newVehicle.licensePlate || ""} onChange={e => setNewVehicle(p => ({ ...p, licensePlate: e.target.value.toUpperCase() }))} placeholder="ABC1234" className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                          <select
+                            value={newVehicle.plateState || ""}
+                            onChange={e => setNewVehicle(p => ({ ...p, plateState: e.target.value }))}
+                            className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          >
+                            <option value="">State</option>
+                            {US_STATES.map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={handlePlateLookup}
+                            disabled={plateLooking || !newVehicle.licensePlate || !newVehicle.plateState}
+                            className="px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center gap-1.5"
+                          >
+                            {plateLooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                            Lookup VIN
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
