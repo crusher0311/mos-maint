@@ -23,6 +23,7 @@ import {
   Trash2,
   Camera,
   UserPlus,
+  ChevronDown,
 } from "lucide-react";
 
 const US_STATES = [
@@ -142,6 +143,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [loadingDeferred, setLoadingDeferred] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [historyJobs, setHistoryJobs] = useState<any[]>([]);
+  const [expandedHistoryIdx, setExpandedHistoryIdx] = useState<number | null>(null);
   const [searchingHistory, setSearchingHistory] = useState(false);
   const [jobsError, setJobsError] = useState("");
 
@@ -1505,7 +1507,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                       <span className="ml-2 text-sm text-gray-500">Searching history...</span>
                     </div>
                   ) : historyJobs.length > 0 ? (
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
                       {historyJobs.map((job: any, idx: number) => {
                         const title = job.job?.title || job.job?.name || job.title || "Untitled";
                         const vehicleInfo = job.vehicle;
@@ -1517,35 +1519,69 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                           possible: "bg-yellow-100 text-yellow-700",
                           poor: "bg-gray-100 text-gray-500",
                         };
+                        const isExpanded = expandedHistoryIdx === idx;
+                        const lines = job.lines || [];
                         return (
-                        <div key={idx} className={`flex items-center justify-between p-2.5 border rounded-lg hover:bg-gray-50 ${
+                        <div key={idx} className={`border rounded-lg ${
                           !isExactVehicle ? "border-purple-200 bg-purple-50/30" : "border-gray-200"
                         }`}>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-gray-900 truncate">{title}</span>
-                              {job.matchBandLabel && (
-                                <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0 ${bandColors[job.matchBand] || "bg-gray-100 text-gray-500"}`}>{job.matchBandLabel}</span>
-                              )}
+                          <div className="flex items-center justify-between p-2.5 hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedHistoryIdx(isExpanded ? null : idx)}>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                <span className="text-sm font-medium text-gray-900 truncate">{title}</span>
+                                {job.matchBandLabel && (
+                                  <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0 ${bandColors[job.matchBand] || "bg-gray-100 text-gray-500"}`}>{job.matchBandLabel}</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap pl-5">
+                                {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}
+                                {lines.length > 0 && <span className="text-green-600">{lines.length} line{lines.length !== 1 ? "s" : ""}</span>}
+                                {vehicleLabel && !isExactVehicle && (
+                                  <span className="text-purple-500">{vehicleLabel}</span>
+                                )}
+                                {job.locationName && !job.isCurrentLocation && (
+                                  <span className="text-indigo-500">{job.locationName}</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                              {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}
-                              {job.lines?.length > 0 && <span className="text-green-600">{job.lines.length} line{job.lines.length !== 1 ? "s" : ""}</span>}
-                              {vehicleLabel && !isExactVehicle && (
-                                <span className="text-purple-500">{vehicleLabel}</span>
-                              )}
-                              {job.locationName && !job.isCurrentLocation && (
-                                <span className="text-indigo-500">{job.locationName}</span>
-                              )}
-                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); addJob({ source: "history", title, description: job.job?.description || "", code: job.job?.code || "", chapter: "Service", lines }); }}
+                              className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add
+                            </button>
                           </div>
-                          <button
-                            onClick={() => addJob({ source: "history", title, description: job.job?.description || "", code: job.job?.code || "", chapter: "Service", lines: job.lines })}
-                            className="ml-2 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-md hover:bg-blue-100 flex items-center gap-1 flex-shrink-0"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add
-                          </button>
+                          {isExpanded && lines.length > 0 && (
+                            <div className="px-3 pb-2.5 pt-0 border-t border-gray-100">
+                              <table className="w-full text-xs mt-1.5">
+                                <thead>
+                                  <tr className="text-gray-400 text-left">
+                                    <th className="font-medium pb-1 pr-2">Type</th>
+                                    <th className="font-medium pb-1 pr-2">Description</th>
+                                    <th className="font-medium pb-1 text-right">Qty</th>
+                                    <th className="font-medium pb-1 text-right">Price</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lines.map((line: any, li: number) => (
+                                    <tr key={li} className="text-gray-600">
+                                      <td className="pr-2 py-0.5 whitespace-nowrap">{line.lineType || line.type || "—"}</td>
+                                      <td className="pr-2 py-0.5 truncate max-w-[180px]">{line.description || "—"}</td>
+                                      <td className="py-0.5 text-right whitespace-nowrap">{line.quantity ?? line.qty ?? "—"}</td>
+                                      <td className="py-0.5 text-right whitespace-nowrap">{line.price != null ? `$${Number(line.price).toFixed(2)}` : (line.total != null ? `$${Number(line.total).toFixed(2)}` : "—")}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                          {isExpanded && lines.length === 0 && (
+                            <div className="px-3 pb-2.5 pt-1 border-t border-gray-100">
+                              <p className="text-xs text-gray-400 italic">No line details available</p>
+                            </div>
+                          )}
                         </div>
                         );
                       })}
