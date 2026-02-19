@@ -657,8 +657,35 @@ export async function createServiceItem(
 
   const lookup = params.vin ? params.vin.toUpperCase() : (params.licensePlate || "");
 
+  const patchLines = ['<?xml version="1.0"?>', '<ServiceItemVehicleModel>'];
+  if (params.vin) patchLines.push(`  <VIN>${escapeXml(params.vin.toUpperCase())}</VIN>`);
+  if (params.licensePlate) patchLines.push(`  <PlateNumber>${escapeXml(params.licensePlate)}</PlateNumber>`);
+  patchLines.push('</ServiceItemVehicleModel>');
+  const patchXml = patchLines.join("\n");
+
+  console.log(`[Protractor] Step 1: PATCH /ServiceItemVehicle to create vehicle: ${description} VIN:${params.vin || 'N/A'}`);
+
+  const patchResult = await protractorFetch<string>(
+    `/ServiceItemVehicle/${newVehicleId}`,
+    config,
+    {
+      method: "PATCH",
+      body: patchXml,
+      headers: { "Content-Type": "application/xml" } as any,
+    },
+    0,
+    shopId
+  );
+
+  if (!patchResult.ok) {
+    return { ok: false, error: patchResult.error || "Failed to create vehicle via PATCH" };
+  }
+
+  const createdId = (typeof patchResult.data === "string" ? patchResult.data : null) || newVehicleId;
+  console.log(`[Protractor] Vehicle created via PATCH: ${createdId}`);
+
   const xmlBody = buildServiceItemVehicleXml({
-    id: newVehicleId,
+    id: createdId,
     ownerId: params.ownerId,
     lookup,
     description,
@@ -674,10 +701,10 @@ export async function createServiceItem(
     usage: params.odometer,
   });
 
-  console.log(`[Protractor] Step 1: Creating ServiceItem for vehicle: ${description} VIN:${params.vin || 'N/A'}`);
+  console.log(`[Protractor] Step 2: POST /ServiceItem to set vehicle details`);
 
-  const result = await protractorFetch<ProtractorVehicle>(
-    `/ServiceItem/${newVehicleId}`,
+  const postResult = await protractorFetch<ProtractorVehicle>(
+    `/ServiceItem/${createdId}`,
     config,
     {
       method: "POST",
@@ -688,63 +715,12 @@ export async function createServiceItem(
     shopId
   );
 
-  if (!result.ok) {
-    return { ok: false, error: result.error || "Failed to create vehicle" };
-  }
-
-  const createdId = result.data?.ID || newVehicleId;
-
-  if (params.vin || params.licensePlate) {
-    try {
-      const patchXml = `<?xml version="1.0"?>\n<ServiceItemVehicleModel>\n${params.vin ? `  <VIN>${escapeXml(params.vin.toUpperCase())}</VIN>\n` : ""}${params.licensePlate ? `  <PlateNumber>${escapeXml(params.licensePlate)}</PlateNumber>\n` : ""}</ServiceItemVehicleModel>`;
-
-      console.log(`[Protractor] Step 2: PATCH /ServiceItemVehicle/${createdId} to convert to vehicle`);
-
-      const patchResult = await protractorFetch<string>(
-        `/ServiceItemVehicle/${createdId}`,
-        config,
-        {
-          method: "PATCH",
-          body: patchXml,
-          headers: { "Content-Type": "application/xml" } as any,
-        },
-        0,
-        shopId
-      );
-
-      if (patchResult.ok) {
-        console.log(`[Protractor] Vehicle ${createdId} converted to ServiceItemVehicle via PATCH`);
-
-        if (params.vin && params.licensePlate) {
-          const fixLookupXml = buildServiceItemVehicleXml({
-            id: createdId,
-            ownerId: params.ownerId,
-            lookup: params.vin.toUpperCase(),
-            description,
-          });
-          await protractorFetch<ProtractorVehicle>(
-            `/ServiceItem/${createdId}`,
-            config,
-            {
-              method: "POST",
-              body: fixLookupXml,
-              headers: { "Content-Type": "application/xml" } as any,
-            },
-            0,
-            shopId
-          );
-          console.log(`[Protractor] Step 3: Restored Lookup to VIN after PATCH`);
-        }
-      } else {
-        console.error(`[Protractor] PATCH ServiceItemVehicle failed (non-fatal): ${patchResult.error}`);
-      }
-    } catch (patchErr: any) {
-      console.error(`[Protractor] PATCH ServiceItemVehicle error (non-fatal):`, patchErr.message);
-    }
+  if (!postResult.ok) {
+    console.error(`[Protractor] POST ServiceItem details failed (non-fatal): ${postResult.error}`);
   }
 
   console.log(`[Protractor] Created vehicle ${createdId}: ${description} VIN:${params.vin || 'N/A'}`);
-  return { ok: true, vehicleId: createdId, vehicle: result.data };
+  return { ok: true, vehicleId: createdId, vehicle: postResult.data };
 }
 
 export interface WorkOrderServicePackage {
