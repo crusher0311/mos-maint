@@ -1558,14 +1558,32 @@ export async function upsertProtractorWorkOrderSnapshot(
     { upsert: true }
   );
 
-  if (vin && workOrder.ServiceItem) {
-    const si = workOrder.ServiceItem;
+  if (vin) {
+    const si = workOrder.ServiceItem || {} as any;
+    let year = si.Year ?? null;
+    let make = si.Make ?? null;
+    let model = si.Model ?? null;
+
+    if (!year && !make && !model && vin.length === 17) {
+      try {
+        const { decodeVinLocal } = await import("@/lib/integrations/dataone-local");
+        const decoded = await decodeVinLocal(vin);
+        if (decoded.ok && decoded.decoded) {
+          year = decoded.decoded.year ?? null;
+          make = decoded.decoded.make ?? null;
+          model = decoded.decoded.model ?? null;
+        }
+      } catch (decodeErr: any) {
+        console.error(`[Protractor Snapshot] VIN decode fallback error for ${vin}:`, decodeErr.message);
+      }
+    }
+
     const vehicleUpdate: Record<string, any> = {
       shopId,
       vin,
-      year: si.Year ?? null,
-      make: si.Make ?? null,
-      model: si.Model ?? null,
+      year,
+      make,
+      model,
       protractorId: si.ID ?? null,
       licensePlate: si.LicensePlate ?? null,
       updatedAt: now,
