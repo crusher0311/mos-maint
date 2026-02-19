@@ -575,6 +575,55 @@ export async function createContact(
   return { ok: true, contactId: result.data.ID || newContactId, contact: result.data };
 }
 
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function buildServiceItemVehicleXml(fields: {
+  id: string;
+  ownerId: string;
+  lookup?: string;
+  description?: string;
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  submodel?: string;
+  color?: string;
+  engine?: string;
+  transmission?: string;
+  plateRegistration?: string;
+  usage?: number;
+}): string {
+  const lines: string[] = [
+    '<?xml version="1.0"?>',
+    "<ServiceItemVehicle>",
+    `  <ID>${escapeXml(fields.id)}</ID>`,
+    `  <Type>ServiceItemVehicle</Type>`,
+    `  <OwnerID>${escapeXml(fields.ownerId)}</OwnerID>`,
+  ];
+
+  if (fields.lookup) lines.push(`  <Lookup>${escapeXml(fields.lookup)}</Lookup>`);
+  if (fields.description) lines.push(`  <Description>${escapeXml(fields.description)}</Description>`);
+  if (fields.vin) lines.push(`  <VIN>${escapeXml(fields.vin)}</VIN>`);
+  if (fields.plateRegistration) lines.push(`  <PlateRegistration>${escapeXml(fields.plateRegistration)}</PlateRegistration>`);
+  if (fields.year) lines.push(`  <Year>${fields.year}</Year>`);
+  if (fields.make) lines.push(`  <Make>${escapeXml(fields.make)}</Make>`);
+  if (fields.model) lines.push(`  <Model>${escapeXml(fields.model)}</Model>`);
+  if (fields.submodel) lines.push(`  <Submodel>${escapeXml(fields.submodel)}</Submodel>`);
+  if (fields.color) lines.push(`  <Color>${escapeXml(fields.color)}</Color>`);
+  if (fields.engine) lines.push(`  <Engine>${escapeXml(fields.engine)}</Engine>`);
+  if (fields.usage !== undefined) lines.push(`  <Usage>${fields.usage}</Usage>`);
+
+  lines.push("</ServiceItemVehicle>");
+  return lines.join("\n");
+}
+
 export async function createServiceItem(
   shopId: number,
   params: {
@@ -606,80 +655,44 @@ export async function createServiceItem(
   ].filter(Boolean);
   const description = descParts.join(" ");
 
-  const body: Record<string, any> = {
-    ID: newVehicleId,
-    OwnerID: params.ownerId,
-    Type: "ServiceItemVehicle",
-    Description: description || "",
-    VIN: params.vin ? params.vin.toUpperCase() : undefined,
-    Year: params.year ? Number(params.year) : undefined,
-    Make: params.make || undefined,
-    Model: params.model || undefined,
-    Submodel: params.submodel || undefined,
-    Color: params.color || undefined,
-    Engine: params.engine || undefined,
-    Transmission: params.transmission || undefined,
-    PlateRegistration: params.licensePlate || undefined,
-    LicensePlate: params.licensePlate || undefined,
-  };
+  const lookup = params.vin ? params.vin.toUpperCase() : (params.licensePlate || "");
 
-  if (params.odometer) body.Usage = params.odometer;
+  const xmlBody = buildServiceItemVehicleXml({
+    id: newVehicleId,
+    ownerId: params.ownerId,
+    lookup,
+    description,
+    vin: params.vin?.toUpperCase(),
+    year: params.year ? Number(params.year) : undefined,
+    make: params.make,
+    model: params.model,
+    submodel: params.submodel,
+    color: params.color,
+    engine: params.engine,
+    transmission: params.transmission,
+    plateRegistration: params.licensePlate,
+    usage: params.odometer,
+  });
 
-  if (params.vin) {
-    body.Lookup = params.vin.toUpperCase();
-  } else if (params.licensePlate) {
-    body.Lookup = params.licensePlate;
-  }
+  console.log(`[Protractor] Creating vehicle via XML ServiceItemVehicle: ${description} VIN:${params.vin || 'N/A'}`);
 
   const result = await protractorFetch<ProtractorVehicle>(
     `/ServiceItem/${newVehicleId}`,
     config,
-    { method: "POST", body: JSON.stringify(body) },
+    {
+      method: "POST",
+      body: xmlBody,
+      headers: { "Content-Type": "application/xml" } as any,
+    },
     0,
     shopId
   );
 
-  if (!result.ok || !result.data) {
+  if (!result.ok) {
     return { ok: false, error: result.error || "Failed to create vehicle" };
   }
 
-  const createdId = result.data.ID || newVehicleId;
-
-  try {
-    const updateBody: Record<string, any> = {
-      ID: createdId,
-      Type: "ServiceItemVehicle",
-      OwnerID: params.ownerId,
-      Description: description || "",
-    };
-    if (params.vin) {
-      updateBody.Lookup = params.vin.toUpperCase();
-      updateBody.VIN = params.vin.toUpperCase();
-    }
-    if (params.year) updateBody.Year = Number(params.year);
-    if (params.make) updateBody.Make = params.make;
-    if (params.model) updateBody.Model = params.model;
-    if (params.submodel) updateBody.Submodel = params.submodel;
-    if (params.color) updateBody.Color = params.color;
-    if (params.engine) updateBody.Engine = params.engine;
-    if (params.licensePlate) {
-      updateBody.PlateRegistration = params.licensePlate;
-      updateBody.LicensePlate = params.licensePlate;
-    }
-    if (params.transmission) updateBody.Transmission = params.transmission;
-    if (params.odometer) updateBody.Usage = params.odometer;
-
-    await protractorFetch<ProtractorVehicle>(
-      `/ServiceItem/${createdId}`,
-      config,
-      { method: "POST", body: JSON.stringify(updateBody) },
-      0,
-      shopId
-    );
-    console.log(`[Protractor] Follow-up POST to set vehicle fields for ${createdId}`);
-  } catch (updateErr: any) {
-    console.error(`[Protractor] Follow-up vehicle update error (non-fatal):`, updateErr.message);
-  }
+  const createdId = result.data?.ID || newVehicleId;
 
   console.log(`[Protractor] Created vehicle ${createdId}: ${description} VIN:${params.vin || 'N/A'}`);
   return { ok: true, vehicleId: createdId, vehicle: result.data };

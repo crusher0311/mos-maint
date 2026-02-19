@@ -1,0 +1,323 @@
+ServiceItemShow/HideList OperationsExpand Operations
+get /ServiceItem/{id}
+post /ServiceItem/{id}
+Response Class (Status 200)
+OK
+
+ModelExample Value
+<?xml version="1.0"?>
+<ServiceItem>
+  <Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+    <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+    <DeletionTimeSpecified>true</DeletionTimeSpecified>
+    <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+    <LastModifiedBy>string</LastModifiedBy>
+  </Header>
+  <ID>00000000-0000-0000-0000-000000000000</ID>
+  <Type>string</Type>
+  <Lookup>string</Lookup>
+  <Description>string</Description>
+  <Usage>1</Usage>
+  <ProductionDate>1970-01-01T00:00:00.001Z</ProductionDate>
+  <Note>string</Note>
+  <NoEmail>true</NoEmail>
+  <NoPostCard>true</NoPostCard>
+  <OwnerID>00000000-0000-0000-0000-000000000000</OwnerID>
+  <Owner>
+    <Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+      <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+      <DeletionTimeSpecified>true</DeletionTimeSpecified>
+      <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+      <LastModifiedBy>string</LastModifiedBy>
+    </Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <FileAs>string</FileAs>
+    <Name>
+      <Title>string</Title>
+      <Prefix>string</Prefix>
+      <FirstName>string</FirstName>
+      <MiddleName>string</MiddleName>
+      <LastName>string</LastName>
+      <Suffix>string</Suffix>
+    </Name>
+    <Address>
+      <Title>string</Title>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <Street>string</Street>
+      <City>string</City>
+      <Province>string</Province>
+      <PostalCode>string</PostalCode>
+      <Country>string</Country>
+    </Address>
+    <Company>string</Company>
+    <Phone1Title>string</Phone1Title>
+    <Phone1>string</Phone1>
+    <Phone2Title>string</Phone2Title>
+    <Phone2>string</Phone2>
+    <EmailTitle>string</EmailTitle>
+    <Email>string</Email>
+    <AdditionalNames>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalNames>
+    <AdditionalPhones>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalPhones>
+    <AdditionalURIs>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalURIs>
+    <PreferredContactMethod>string</PreferredContactMethod>
+    <MarketingSource>string</MarketingSource>
+    <Note>string</Note>
+    <NoMessaging>true</NoMessaging>
+    <NoEmail>true</NoEmail>
+    <NoPostCard>true</NoPostCard>
+    <Discount>
+      <LaborRateCode>string</LaborRateCode>
+      <LaborDiscountPercent>1.1</LaborDiscountPercent>
+      <LaborDiscountAlways>true</LaborDiscountAlways>
+      <MaterialRateCode>string</MaterialRateCode>
+      <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+      <MaterialDiscountAlways>true</MaterialDiscountAlways>
+    </Discount>
+  </Owner>
+  <Reminders>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </Reminders>
+</ServiceItem>
+
+
+Response Content Type 
+application/xml
+Parameters
+Parameter	Value	Description	Parameter Type	Data Type
+id	
+(required)
+path	string
+serviceItem	
+<?xml version="1.0"?>
+<ServiceItemVehicle>
+  <PlateRegistration>string</PlateRegistration>
+  <VIN>string</VIN>
+  <Unit>string</Unit>
+  <Color>string</Color>
+  <Year>1</Year>
+  <Make>string</Make>
+  <Model>string</Model>
+  <Submodel>string</Submodel>
+  <Engine>string</Engine>
+  <Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+    <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+    <DeletionTimeSpecified>true</DeletionTimeSpecified>
+    <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+    <LastModifiedBy>string</LastModifiedBy>
+  </Header>
+  <ID>00000000-0000-0000-0000-000000000000</ID>
+  <Type>string</Type>
+  <Lookup>string</Lookup>
+  <Description>string</Description>
+  <Usage>1</Usage>
+  <ProductionDate>1970-01-01T00:00:00.001Z</ProductionDate>
+  <Note>string</Note>
+  <NoEmail>true</NoEmail>
+  <NoPostCard>true</NoPostCard>
+  <OwnerID>00000000-0000-0000-0000-000000000000</OwnerID>
+  <Owner>
+    <Header>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <CreationTime>1970-01-01T00:00:00.001Z</CreationTime>
+      <DeletionTime>1970-01-01T00:00:00.001Z</DeletionTime>
+      <DeletionTimeSpecified>true</DeletionTimeSpecified>
+      <LastModifiedTime>1970-01-01T00:00:00.001Z</LastModifiedTime>
+      <LastModifiedBy>string</LastModifiedBy>
+    </Header>
+    <ID>00000000-0000-0000-0000-000000000000</ID>
+    <FileAs>string</FileAs>
+    <Name>
+      <Title>string</Title>
+      <Prefix>string</Prefix>
+      <FirstName>string</FirstName>
+      <MiddleName>string</MiddleName>
+      <LastName>string</LastName>
+      <Suffix>string</Suffix>
+    </Name>
+    <Address>
+      <Title>string</Title>
+      <ID>00000000-0000-0000-0000-000000000000</ID>
+      <Street>string</Street>
+      <City>string</City>
+      <Province>string</Province>
+      <PostalCode>string</PostalCode>
+      <Country>string</Country>
+    </Address>
+    <Company>string</Company>
+    <Phone1Title>string</Phone1Title>
+    <Phone1>string</Phone1>
+    <Phone2Title>string</Phone2Title>
+    <Phone2>string</Phone2>
+    <EmailTitle>string</EmailTitle>
+    <Email>string</Email>
+    <AdditionalNames>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalNames>
+    <AdditionalPhones>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalPhones>
+    <AdditionalURIs>
+      <!-- invalid XML -->
+      <Dummy>string</Dummy>
+    </AdditionalURIs>
+    <PreferredContactMethod>string</PreferredContactMethod>
+    <MarketingSource>string</MarketingSource>
+    <Note>string</Note>
+    <NoMessaging>true</NoMessaging>
+    <NoEmail>true</NoEmail>
+    <NoPostCard>true</NoPostCard>
+    <Discount>
+      <LaborRateCode>string</LaborRateCode>
+      <LaborDiscountPercent>1.1</LaborDiscountPercent>
+      <LaborDiscountAlways>true</LaborDiscountAlways>
+      <MaterialRateCode>string</MaterialRateCode>
+      <MaterialDiscountPercent>1.1</MaterialDiscountPercent>
+      <MaterialDiscountAlways>true</MaterialDiscountAlways>
+    </Discount>
+  </Owner>
+  <Reminders>
+    <!-- invalid XML -->
+    <Dummy>string</Dummy>
+  </Reminders>
+</ServiceItemVehicle>
+
+
+Parameter content type: 
+application/xml
+body	
+ModelExample Value
+ServiceItemVehicle {
+IsComplete (boolean, optional, read only),
+PlateRegistration (string, optional),
+VIN (string, optional),
+Unit (string, optional),
+Color (string, optional),
+Year (integer, optional),
+Make (string, optional),
+Model (string, optional),
+Submodel (string, optional),
+Engine (string, optional),
+Header (Header, optional),
+ID (string, optional),
+Type (string, optional),
+Lookup (string, optional),
+Description (string, optional),
+Usage (integer, optional),
+ProductionDate (string, optional),
+Note (string, optional),
+NoEmail (boolean, optional),
+NoPostCard (boolean, optional),
+OwnerID (string, optional),
+Owner (Contact, optional),
+Reminders (ServiceItemReminderDues, optional)
+}
+Header {
+ID (string, optional),
+CreationTime (string, optional),
+DeletionTime (string, optional),
+DeletionTimeSpecified (boolean, optional),
+LastModifiedTime (string, optional),
+LastModifiedBy (string, optional)
+}
+Contact {
+Header (Header, optional),
+ID (string, optional),
+FileAs (string, optional),
+Name (DefaultName, optional),
+Address (DefaultAddress, optional),
+Company (string, optional),
+Phone1Title (string, optional),
+Phone1 (string, optional),
+Phone2Title (string, optional),
+Phone2 (string, optional),
+EmailTitle (string, optional),
+Email (string, optional),
+AdditionalNames (FullNames, optional),
+AdditionalPhones (PhoneNumbers, optional),
+AdditionalURIs (URIs, optional),
+PreferredContactMethod (string, optional),
+MarketingSource (string, optional),
+Note (string, optional),
+NoMessaging (boolean, optional),
+NoEmail (boolean, optional),
+NoPostCard (boolean, optional),
+Discount (ContactDiscount, optional)
+}
+ServiceItemReminderDues {
+ItemCollection (Array[Inline Model 1], optional),
+Dummy (string, optional)
+}
+DefaultName {
+Title (string, optional),
+Prefix (string, optional),
+FirstName (string, optional),
+MiddleName (string, optional),
+LastName (string, optional),
+Suffix (string, optional)
+}
+DefaultAddress {
+Title (string, optional),
+ID (string, optional),
+Street (string, optional),
+City (string, optional),
+Province (string, optional),
+PostalCode (string, optional),
+Country (string, optional)
+}
+FullNames {
+ItemCollection (Array[Inline Model 2], optional),
+Dummy (string, optional)
+}
+PhoneNumbers {
+ItemCollection (Array[Inline Model 3], optional),
+Dummy (string, optional)
+}
+URIs {
+ItemCollection (Array[Inline Model 4], optional),
+Dummy (string, optional)
+}
+ContactDiscount {
+LaborRateCode (string, optional),
+LaborDiscountPercent (number, optional),
+LaborDiscountAlways (boolean, optional),
+MaterialRateCode (string, optional),
+MaterialDiscountPercent (number, optional),
+MaterialDiscountAlways (boolean, optional)
+}
+Inline Model 1 {}
+Inline Model 2 {}
+Inline Model 3 {}
+Inline Model 4 {}
+connectionid	
+a9f3c1e27b6d4f8ca02e3b9d5f7a1c4e
+Connection ID for session context. Example: a9f3c1e27b6d4f8ca02e3b9d5f7a1c4e
+
+query	string
+apiKey	
+4b8f7d2a19c34e6fb0a7d5c8e23f9b1a
+API Key used to authorize the request. Example: 4b8f7d2a19c34e6fb0a7d5c8e23f9b1a
+
+query	string
+authentication	
+n3/Fp9SbhzVQeWux/MdI7FlQJg==
+Encrypted authentication token. Example: m5/Vc1RzhUETQvEtx/JdIglQpTg=
+
+query	string
