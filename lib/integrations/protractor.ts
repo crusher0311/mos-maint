@@ -601,10 +601,8 @@ function buildServiceItemVehicleXml(fields: {
   usage?: number;
 }): string {
   const lines: string[] = [
-    '<?xml version="1.0"?>',
-    "<ServiceItemVehicle>",
+    '<ServiceItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="ServiceItemVehicle">',
     `  <ID>${escapeXml(fields.id)}</ID>`,
-    `  <Type>ServiceItemVehicle</Type>`,
     `  <OwnerID>${escapeXml(fields.ownerId)}</OwnerID>`,
   ];
 
@@ -620,8 +618,66 @@ function buildServiceItemVehicleXml(fields: {
   if (fields.engine) lines.push(`  <Engine>${escapeXml(fields.engine)}</Engine>`);
   if (fields.usage !== undefined) lines.push(`  <Usage>${fields.usage}</Usage>`);
 
-  lines.push("</ServiceItemVehicle>");
+  lines.push("</ServiceItem>");
   return lines.join("\n");
+}
+
+const PROTRACTOR_SOAP_URL = "https://integration.protractor.com/IntegrationServices/2.0/ContactServices.asmx";
+const PROTRACTOR_SOAP_NS = "http://www.protractor.com/Integration/";
+
+async function protractorSoapServiceItemUpdate(
+  config: { connectionId: string; apiKey: string; authentication: string },
+  serviceItemXml: string
+): Promise<{ ok: boolean; error?: string }> {
+  const soapEnvelope = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"',
+    `               xmlns:tns="${PROTRACTOR_SOAP_NS}">`,
+    '  <soap:Body>',
+    '    <tns:ServiceItemUpdate>',
+    `      <tns:connectionId>${escapeXml(config.connectionId)}</tns:connectionId>`,
+    `      <tns:apiKey>${escapeXml(config.apiKey)}</tns:apiKey>`,
+    `      <tns:authentication>${escapeXml(config.authentication)}</tns:authentication>`,
+    `      <tns:serviceItem><![CDATA[${serviceItemXml}]]></tns:serviceItem>`,
+    '    </tns:ServiceItemUpdate>',
+    '  </soap:Body>',
+    '</soap:Envelope>',
+  ].join("\n");
+
+  try {
+    const res = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const url = new URL(PROTRACTOR_SOAP_URL);
+      const req = https.request(
+        {
+          hostname: url.hostname,
+          port: 443,
+          path: url.pathname,
+          method: "POST",
+          headers: {
+            "Content-Type": "text/xml; charset=utf-8",
+            "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
+          },
+        },
+        (response) => {
+          let data = "";
+          response.on("data", (chunk: string) => (data += chunk));
+          response.on("end", () => resolve({ statusCode: response.statusCode || 0, body: data }));
+        }
+      );
+      req.on("error", reject);
+      req.write(soapEnvelope);
+      req.end();
+    });
+
+    if (res.statusCode === 200 && !res.body.includes("<soap:Fault>")) {
+      return { ok: true };
+    }
+
+    const faultMatch = res.body.match(/faultstring>([^<]+)/);
+    return { ok: false, error: faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}` };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "SOAP request failed" };
+  }
 }
 
 export async function createServiceItem(
@@ -657,35 +713,8 @@ export async function createServiceItem(
 
   const lookup = params.vin ? params.vin.toUpperCase() : (params.licensePlate || "");
 
-  const patchLines = ['<?xml version="1.0"?>', '<ServiceItemVehicleModel>'];
-  if (params.vin) patchLines.push(`  <VIN>${escapeXml(params.vin.toUpperCase())}</VIN>`);
-  if (params.licensePlate) patchLines.push(`  <PlateNumber>${escapeXml(params.licensePlate)}</PlateNumber>`);
-  patchLines.push('</ServiceItemVehicleModel>');
-  const patchXml = patchLines.join("\n");
-
-  console.log(`[Protractor] Step 1: PATCH /ServiceItemVehicle to create vehicle: ${description} VIN:${params.vin || 'N/A'}`);
-
-  const patchResult = await protractorFetch<string>(
-    `/ServiceItemVehicle/${newVehicleId}`,
-    config,
-    {
-      method: "PATCH",
-      body: patchXml,
-      headers: { "Content-Type": "application/xml" } as any,
-    },
-    0,
-    shopId
-  );
-
-  if (!patchResult.ok) {
-    return { ok: false, error: patchResult.error || "Failed to create vehicle via PATCH" };
-  }
-
-  const createdId = (typeof patchResult.data === "string" ? patchResult.data : null) || newVehicleId;
-  console.log(`[Protractor] Vehicle created via PATCH: ${createdId}`);
-
   const xmlBody = buildServiceItemVehicleXml({
-    id: createdId,
+    id: newVehicleId,
     ownerId: params.ownerId,
     lookup,
     description,
@@ -701,26 +730,20 @@ export async function createServiceItem(
     usage: params.odometer,
   });
 
-  console.log(`[Protractor] Step 2: POST /ServiceItem to set vehicle details`);
+  console.log(`[Protractor] Creating vehicle via SOAP ServiceItemUpdate: ${description} VIN:${params.vin || 'N/A'}`);
 
-  const postResult = await protractorFetch<ProtractorVehicle>(
-    `/ServiceItem/${createdId}`,
-    config,
-    {
-      method: "POST",
-      body: xmlBody,
-      headers: { "Content-Type": "application/xml" } as any,
-    },
-    0,
-    shopId
+  const soapResult = await protractorSoapServiceItemUpdate(
+    { connectionId: config.connectionId, apiKey: config.apiKey, authentication: config.authentication },
+    xmlBody
   );
 
-  if (!postResult.ok) {
-    console.error(`[Protractor] POST ServiceItem details failed (non-fatal): ${postResult.error}`);
+  if (!soapResult.ok) {
+    console.error(`[Protractor] SOAP vehicle creation failed: ${soapResult.error}`);
+    return { ok: false, error: soapResult.error || "Failed to create vehicle via SOAP" };
   }
 
-  console.log(`[Protractor] Created vehicle ${createdId}: ${description} VIN:${params.vin || 'N/A'}`);
-  return { ok: true, vehicleId: createdId, vehicle: postResult.data };
+  console.log(`[Protractor] Created vehicle ${newVehicleId}: ${description} VIN:${params.vin || 'N/A'}`);
+  return { ok: true, vehicleId: newVehicleId };
 }
 
 export interface WorkOrderServicePackage {
