@@ -89,7 +89,7 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
             ["invoiced", "invoice", "posted", "completed", "closed"].some(s => queueWoStage.includes(s));
 
           if (queueIsCompleted) {
-            const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+            const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
             if (vin) {
               const savedWO = await db.collection("protractor_work_orders").findOne({
                 shopId,
@@ -262,7 +262,7 @@ export async function GET(req: NextRequest) {
 
         for (const wo of detailedWOs) {
           const stage = wo.WorkflowStage || (wo as any).Status || "";
-          let vin = wo.ServiceItem?.VIN?.toUpperCase() || (wo as any).VIN?.toUpperCase();
+          let vin = wo.ServiceItem?.VIN?.toUpperCase() || wo.ServiceItem?.Lookup?.toUpperCase() || (wo as any).VIN?.toUpperCase();
           let vehicle = wo.ServiceItem;
           
           // Fallback: If VIN is missing but ServiceItemID exists, fetch vehicle details separately

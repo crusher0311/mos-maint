@@ -1443,7 +1443,11 @@ export async function upsertProtractorWorkOrderSnapshot(
 ): Promise<void> {
   const db = await getDb();
   const now = new Date();
-  const vin = workOrder.ServiceItem?.VIN?.toUpperCase() ?? null;
+  const rawVin = workOrder.ServiceItem?.VIN 
+    || workOrder.ServiceItem?.Lookup 
+    || (workOrder as any).VIN 
+    || null;
+  const vin = rawVin ? String(rawVin).trim().toUpperCase() : null;
   
   const contactName = workOrder.Contact
     ? [workOrder.Contact.Name?.FirstName, workOrder.Contact.Name?.LastName]
@@ -1528,8 +1532,8 @@ export async function upsertProtractorWorkOrderSnapshot(
         type: workOrder.Type ?? null,
         status: workOrder.Status ?? null,
         vin,
-        serviceItemId: workOrder.ServiceItemID ?? null,
-        contactId: workOrder.ContactID ?? null,
+        serviceItemId: workOrder.ServiceItemID ?? workOrder.ServiceItem?.ID ?? null,
+        contactId: workOrder.ContactID ?? workOrder.Contact?.ID ?? null,
         contactName,
         companyName,
         odometer: woInUsage,
@@ -1587,7 +1591,10 @@ export async function upsertProtractorInvoiceSnapshot(
 ): Promise<void> {
   const db = await getDb();
   const now = new Date();
-  const vin = invoice.ServiceItem?.VIN?.toUpperCase() ?? null;
+  const rawVin = invoice.ServiceItem?.VIN 
+    || invoice.ServiceItem?.Lookup 
+    || null;
+  const vin = rawVin ? String(rawVin).trim().toUpperCase() : null;
   
   await db.collection("protractor_invoices").updateOne(
     { shopId, invoiceId: invoice.ID },

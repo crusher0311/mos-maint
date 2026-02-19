@@ -117,8 +117,7 @@ async function processCallbackEvent(
         await signalDashboardUpdate(db);
         console.log(`[Protractor Callback] Processed work order ${objectId}`);
 
-        // Upsert vehicle snapshot for immediate dashboard display
-        const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+        const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
         if (vin && result.workOrder.ServiceItem) {
           await upsertProtractorVehicleSnapshot(shopId, vin, result.workOrder.ServiceItem);
 
@@ -408,8 +407,7 @@ export async function POST(request: NextRequest) {
           await signalDashboardUpdate(db);
           console.log(`[Protractor Callback] Upserted work order ${workOrderId} for immediate dashboard display`);
 
-          // Also upsert vehicle snapshot if VIN is available
-          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+          const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
           if (vin && result.workOrder.ServiceItem) {
             await upsertProtractorVehicleSnapshot(shopId, vin, result.workOrder.ServiceItem);
             console.log(`[Protractor Callback] Upserted vehicle ${vin} for shop ${shopId}`);

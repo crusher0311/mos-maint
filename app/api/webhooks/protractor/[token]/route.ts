@@ -24,7 +24,9 @@ function resolveVin(payload: any): string | null {
     payload?.VIN ??
     payload?.vin ??
     payload?.ServiceItem?.VIN ??
+    payload?.ServiceItem?.Lookup ??
     payload?.serviceItem?.vin ??
+    payload?.serviceItem?.lookup ??
     null;
   return vin ? String(vin).trim().toUpperCase() : null;
 }
@@ -157,7 +159,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
           ["invoiced", "invoice", "posted", "completed", "closed"].some(s => woStage.includes(s));
 
         if (isCompleted) {
-          const vin = result.workOrder.ServiceItem?.VIN?.toUpperCase();
+          const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
           if (vin) {
             const savedWO = await db.collection("protractor_work_orders").findOne({
               shopId,
