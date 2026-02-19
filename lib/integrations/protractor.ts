@@ -715,7 +715,7 @@ export async function createServiceItem(
   ].filter(Boolean);
   const description = descParts.join(" ");
 
-  const lookup = params.vin ? params.vin.toUpperCase() : (params.licensePlate || "");
+  const lookup = params.licensePlate || "";
 
   const xmlBody = buildServiceItemVehicleXml({
     id: newVehicleId,
@@ -730,7 +730,6 @@ export async function createServiceItem(
     color: params.color,
     engine: params.engine,
     transmission: params.transmission,
-    plateRegistration: params.licensePlate,
     usage: params.odometer,
   });
 
