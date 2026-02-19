@@ -502,6 +502,141 @@ export async function fetchVehiclesByOwner(
   return { ok: true, vehicles: result.data?.ItemCollection || [] };
 }
 
+export async function createContact(
+  shopId: number,
+  params: {
+    firstName: string;
+    lastName: string;
+    phone1?: string;
+    phone2?: string;
+    email?: string;
+    company?: string;
+    street?: string;
+    city?: string;
+    province?: string;
+    postalCode?: string;
+    country?: string;
+    marketingSource?: string;
+    note?: string;
+    noMessaging?: boolean;
+    noEmail?: boolean;
+    noPostCard?: boolean;
+  }
+): Promise<{ ok: boolean; contactId?: string; contact?: ProtractorContact; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const newContactId = crypto.randomUUID();
+
+  const body: Record<string, any> = {
+    ID: newContactId,
+    Name: {
+      FirstName: params.firstName,
+      LastName: params.lastName,
+    },
+  };
+
+  if (params.phone1) body.Phone1 = params.phone1;
+  if (params.phone2) body.Phone2 = params.phone2;
+  if (params.email) body.Email = params.email;
+  if (params.company) body.Company = params.company;
+  if (params.marketingSource) body.MarketingSource = params.marketingSource;
+  if (params.note) body.Note = params.note;
+  if (params.noMessaging !== undefined) body.NoMessaging = params.noMessaging;
+  if (params.noEmail !== undefined) body.NoEmail = params.noEmail;
+  if (params.noPostCard !== undefined) body.NoPostCard = params.noPostCard;
+
+  if (params.street || params.city || params.province || params.postalCode || params.country) {
+    body.Address = {};
+    if (params.street) body.Address.Street = params.street;
+    if (params.city) body.Address.City = params.city;
+    if (params.province) body.Address.Province = params.province;
+    if (params.postalCode) body.Address.PostalCode = params.postalCode;
+    if (params.country) body.Address.Country = params.country;
+  }
+
+  body.FileAs = `${params.lastName}, ${params.firstName}`.trim();
+
+  const result = await protractorFetch<ProtractorContact>(
+    `/Contact/${newContactId}`,
+    config,
+    { method: "POST", body: JSON.stringify(body) },
+    0,
+    shopId
+  );
+
+  if (!result.ok || !result.data) {
+    return { ok: false, error: result.error || "Failed to create contact" };
+  }
+
+  console.log(`[Protractor] Created contact ${newContactId}: ${params.firstName} ${params.lastName}`);
+  return { ok: true, contactId: result.data.ID || newContactId, contact: result.data };
+}
+
+export async function createServiceItem(
+  shopId: number,
+  params: {
+    ownerId: string;
+    vin?: string;
+    year?: number;
+    make?: string;
+    model?: string;
+    submodel?: string;
+    color?: string;
+    engine?: string;
+    transmission?: string;
+    odometer?: number;
+    licensePlate?: string;
+  }
+): Promise<{ ok: boolean; vehicleId?: string; vehicle?: ProtractorVehicle; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const newVehicleId = crypto.randomUUID();
+
+  const body: Record<string, any> = {
+    ID: newVehicleId,
+    OwnerID: params.ownerId,
+    Type: "ServiceItemVehicle",
+  };
+
+  if (params.vin) body.VIN = params.vin.toUpperCase();
+  if (params.year) body.Year = params.year;
+  if (params.make) body.Make = params.make;
+  if (params.model) body.Model = params.model;
+  if (params.submodel) body.Submodel = params.submodel;
+  if (params.color) body.Color = params.color;
+  if (params.engine) body.Engine = params.engine;
+  if (params.transmission) body.Transmission = params.transmission;
+  if (params.odometer) body.Usage = params.odometer;
+  if (params.licensePlate) body.LicensePlate = params.licensePlate;
+
+  if (params.vin) {
+    body.LookUp = params.vin.toUpperCase();
+  } else if (params.licensePlate) {
+    body.LookUp = params.licensePlate;
+  }
+
+  const result = await protractorFetch<ProtractorVehicle>(
+    `/ServiceItem/${newVehicleId}`,
+    config,
+    { method: "POST", body: JSON.stringify(body) },
+    0,
+    shopId
+  );
+
+  if (!result.ok || !result.data) {
+    return { ok: false, error: result.error || "Failed to create vehicle" };
+  }
+
+  console.log(`[Protractor] Created vehicle ${newVehicleId}: ${params.year} ${params.make} ${params.model} VIN:${params.vin || 'N/A'}`);
+  return { ok: true, vehicleId: result.data.ID || newVehicleId, vehicle: result.data };
+}
+
 export interface WorkOrderServicePackage {
   chapter?: string;
   title: string;

@@ -81,6 +81,7 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
       pathname?.startsWith("/dashboard/settings/keytags") ||
       pathname?.startsWith("/dashboard/settings/labor-rates") ||
       pathname?.startsWith("/dashboard/settings/auto-booking") ||
+      pathname?.startsWith("/dashboard/settings/create-ro") ||
       pathname?.startsWith("/dashboard/settings/preferences")) {
     sections.add("Preferences");
   }
@@ -199,6 +200,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
            pathname.startsWith("/dashboard/settings/keytags") ||
            pathname.startsWith("/dashboard/settings/labor-rates") ||
            pathname.startsWith("/dashboard/settings/auto-booking") ||
+           pathname.startsWith("/dashboard/settings/create-ro") ||
            pathname.startsWith("/dashboard/settings/preferences")) && !newExpanded.has("Preferences")) {
         newExpanded.add("Preferences");
         changed = true;
@@ -294,7 +296,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
             { name: "Keytags", href: "/dashboard/settings/keytags", featureId: "keytags" },
             { name: "Labor Rate Rules", href: "/dashboard/settings/labor-rates", featureId: "labor_rates" },
-            { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" }
+            { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },
+            { name: "Create RO", href: "/dashboard/settings/create-ro" }
           ]
         },
         ...(hasEnterpriseBilling ? [] : [{ name: "Billing", href: "/dashboard/settings/billing" }]),

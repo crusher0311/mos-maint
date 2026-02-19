@@ -21,7 +21,16 @@ import {
   History,
   Package,
   Trash2,
+  Camera,
+  UserPlus,
 } from "lucide-react";
+
+type FieldVisibility = "required" | "optional" | "hidden";
+type CreateROSettings = {
+  customerFields: Record<string, FieldVisibility>;
+  vehicleFields: Record<string, FieldVisibility>;
+  marketingSources: string[];
+};
 
 type Contact = {
   id: string;
@@ -115,6 +124,18 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [createError, setCreateError] = useState("");
   const [createdWO, setCreatedWO] = useState<number | null>(null);
 
+  const [createNewCustomer, setCreateNewCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState<Record<string, string>>({ firstName: "", lastName: "" });
+  const [creatingContact, setCreatingContact] = useState(false);
+
+  const [createNewVehicle, setCreateNewVehicle] = useState(false);
+  const [newVehicle, setNewVehicle] = useState<Record<string, string>>({});
+  const [creatingVehicle, setCreatingVehicle] = useState(false);
+
+  const [roSettings, setRoSettings] = useState<CreateROSettings | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrResult, setOcrResult] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) {
       setStep("concern");
@@ -146,6 +167,22 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setHistorySearch("");
       setHistoryJobs([]);
       setJobsError("");
+      setCreateNewCustomer(false);
+      setNewCustomer({ firstName: "", lastName: "" });
+      setCreatingContact(false);
+      setCreateNewVehicle(false);
+      setNewVehicle({});
+      setCreatingVehicle(false);
+      setOcrLoading(false);
+      setOcrResult(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && !roSettings) {
+      fetch("/api/settings/create-ro").then(r => r.json()).then(data => {
+        setRoSettings(data);
+      }).catch(() => {});
     }
   }, [isOpen]);
 
@@ -249,6 +286,164 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setConcernError(err.message);
     } finally {
       setConcernLoading(false);
+    }
+  }
+
+  function isFieldVisible(section: "customer" | "vehicle", key: string): boolean {
+    const fields = section === "customer" ? roSettings?.customerFields : roSettings?.vehicleFields;
+    if (!fields) return true;
+    return fields[key] !== "hidden";
+  }
+
+  function isFieldRequired(section: "customer" | "vehicle", key: string): boolean {
+    const fields = section === "customer" ? roSettings?.customerFields : roSettings?.vehicleFields;
+    if (!fields) return false;
+    return fields[key] === "required";
+  }
+
+  function validateNewCustomer(): string | null {
+    if (!newCustomer.firstName?.trim()) return "First name is required";
+    if (!newCustomer.lastName?.trim()) return "Last name is required";
+    const cf = roSettings?.customerFields || {};
+    for (const [key, vis] of Object.entries(cf)) {
+      if (vis === "required" && key !== "firstName" && key !== "lastName") {
+        if (!newCustomer[key]?.trim()) {
+          const label = key === "phone1" ? "Primary Phone" : key === "phone2" ? "Secondary Phone" : key === "postalCode" ? "Postal Code" : key.charAt(0).toUpperCase() + key.slice(1);
+          return `${label} is required`;
+        }
+      }
+    }
+    return null;
+  }
+
+  function validateNewVehicle(): string | null {
+    const vf = roSettings?.vehicleFields || {};
+    for (const [key, vis] of Object.entries(vf)) {
+      if (vis === "required" && !newVehicle[key]?.trim()) {
+        const label = key === "vin" ? "VIN" : key === "licensePlate" ? "License Plate" : key.charAt(0).toUpperCase() + key.slice(1);
+        return `${label} is required`;
+      }
+    }
+    return null;
+  }
+
+  async function handleCreateContact() {
+    const validationError = validateNewCustomer();
+    if (validationError) {
+      setContactError(validationError);
+      return;
+    }
+    setCreatingContact(true);
+    setContactError("");
+    try {
+      const res = await fetch("/api/dashboard/protractor/create-contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCustomer),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create customer");
+      const contact: Contact = {
+        id: data.contactId,
+        firstName: newCustomer.firstName || "",
+        lastName: newCustomer.lastName || "",
+        fileAs: `${newCustomer.lastName}, ${newCustomer.firstName}`,
+        company: newCustomer.company || "",
+        phone: newCustomer.phone1 || "",
+        email: newCustomer.email || "",
+      };
+      setSelectedContact(contact);
+      setCreateNewCustomer(false);
+      setStep("vehicle");
+      setVehicles([]);
+      setVehicleError("");
+      setCreateNewVehicle(false);
+      setLoadingVehicles(true);
+      try {
+        const vRes = await fetch(`/api/dashboard/protractor/vehicles?ownerId=${data.contactId}`);
+        const vData = await vRes.json();
+        setVehicles(vData.vehicles || []);
+        if (!vData.vehicles?.length) {
+          setCreateNewVehicle(true);
+        }
+      } catch {
+        setCreateNewVehicle(true);
+      } finally {
+        setLoadingVehicles(false);
+      }
+    } catch (err: any) {
+      setContactError(err.message);
+    } finally {
+      setCreatingContact(false);
+    }
+  }
+
+  async function handleCreateVehicle() {
+    if (!selectedContact) return;
+    const validationError = validateNewVehicle();
+    if (validationError) {
+      setVehicleError(validationError);
+      return;
+    }
+    setCreatingVehicle(true);
+    setVehicleError("");
+    try {
+      const res = await fetch("/api/dashboard/protractor/create-vehicle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newVehicle, ownerId: selectedContact.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create vehicle");
+      const vehicle: Vehicle = {
+        id: data.vehicleId,
+        vin: newVehicle.vin || "",
+        year: newVehicle.year ? Number(newVehicle.year) : null,
+        make: newVehicle.make || "",
+        model: newVehicle.model || "",
+        submodel: newVehicle.submodel || "",
+        engine: newVehicle.engine || "",
+        color: newVehicle.color || "",
+        plate: newVehicle.licensePlate || "",
+        odometer: newVehicle.odometer ? Number(newVehicle.odometer) : null,
+      };
+      setSelectedVehicle(vehicle);
+      setCreateNewVehicle(false);
+    } catch (err: any) {
+      setVehicleError(err.message);
+    } finally {
+      setCreatingVehicle(false);
+    }
+  }
+
+  async function handlePhotoUpload(file: File) {
+    setOcrLoading(true);
+    setOcrResult(null);
+    setVehicleError("");
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("type", "auto");
+      const res = await fetch("/api/dashboard/protractor/vin-plate-ocr", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to process image");
+      const result = data.result;
+      if (result.vin) {
+        setNewVehicle(prev => ({ ...prev, vin: result.vin }));
+        setOcrResult(`VIN detected: ${result.vin} (${result.confidence} confidence)`);
+      } else if (result.plate) {
+        setNewVehicle(prev => ({ ...prev, licensePlate: result.plate }));
+        setOcrResult(`Plate detected: ${result.plate}${result.state ? ` (${result.state})` : ""} (${result.confidence} confidence)`);
+      } else {
+        setOcrResult("Could not detect a VIN or license plate. Try a clearer photo.");
+      }
+    } catch (err: any) {
+      setVehicleError(err.message);
+    } finally {
+      setOcrLoading(false);
     }
   }
 
@@ -410,62 +605,182 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {step === "customer" && (
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Customer</label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={contactSearch}
-                      onChange={e => setContactSearch(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && searchContactsFn()}
-                      placeholder="Name, phone, email, or company..."
-                      className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      autoFocus
-                    />
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={() => { setCreateNewCustomer(false); setContactError(""); }}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    !createNewCustomer ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Search className="w-4 h-4" /> Search Existing
+                </button>
+                <button
+                  onClick={() => { setCreateNewCustomer(true); setContactError(""); }}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    createNewCustomer ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <UserPlus className="w-4 h-4" /> Create New
+                </button>
+              </div>
+
+              {!createNewCustomer ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search Customer</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={contactSearch}
+                          onChange={e => setContactSearch(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && searchContactsFn()}
+                          placeholder="Name, phone, email, or company..."
+                          className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          autoFocus
+                        />
+                      </div>
+                      <button
+                        onClick={searchContactsFn}
+                        disabled={contactSearch.length < 2 || searchingContacts}
+                        className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {searchingContacts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        Search
+                      </button>
+                    </div>
                   </div>
+
+                  {contacts.length > 0 && (
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                      {contacts.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => selectContact(c)}
+                          className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium text-gray-900 text-sm">
+                                {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.fileAs}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
+                                {c.company && <span>{c.company}</span>}
+                                {c.phone && <span>{c.phone}</span>}
+                                {c.email && <span>{c.email}</span>}
+                              </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        First Name <span className="text-red-500">*</span>
+                      </label>
+                      <input type="text" value={newCustomer.firstName || ""} onChange={e => setNewCustomer(p => ({ ...p, firstName: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" autoFocus />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Last Name <span className="text-red-500">*</span>
+                      </label>
+                      <input type="text" value={newCustomer.lastName || ""} onChange={e => setNewCustomer(p => ({ ...p, lastName: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  </div>
+                  {isFieldVisible("customer", "phone1") && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Primary Phone {isFieldRequired("customer", "phone1") && <span className="text-red-500">*</span>}
+                      </label>
+                      <input type="tel" value={newCustomer.phone1 || ""} onChange={e => setNewCustomer(p => ({ ...p, phone1: e.target.value }))} placeholder="(555) 123-4567" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  )}
+                  {isFieldVisible("customer", "phone2") && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Secondary Phone {isFieldRequired("customer", "phone2") && <span className="text-red-500">*</span>}
+                      </label>
+                      <input type="tel" value={newCustomer.phone2 || ""} onChange={e => setNewCustomer(p => ({ ...p, phone2: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  )}
+                  {isFieldVisible("customer", "email") && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Email {isFieldRequired("customer", "email") && <span className="text-red-500">*</span>}
+                      </label>
+                      <input type="email" value={newCustomer.email || ""} onChange={e => setNewCustomer(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  )}
+                  {isFieldVisible("customer", "company") && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Company {isFieldRequired("customer", "company") && <span className="text-red-500">*</span>}
+                      </label>
+                      <input type="text" value={newCustomer.company || ""} onChange={e => setNewCustomer(p => ({ ...p, company: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  )}
+                  {(isFieldVisible("customer", "street") || isFieldVisible("customer", "city") || isFieldVisible("customer", "province") || isFieldVisible("customer", "postalCode")) && (
+                    <div className="space-y-3">
+                      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Address</label>
+                      {isFieldVisible("customer", "street") && (
+                        <input type="text" value={newCustomer.street || ""} onChange={e => setNewCustomer(p => ({ ...p, street: e.target.value }))} placeholder="Street address" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      )}
+                      <div className="grid grid-cols-3 gap-2">
+                        {isFieldVisible("customer", "city") && (
+                          <input type="text" value={newCustomer.city || ""} onChange={e => setNewCustomer(p => ({ ...p, city: e.target.value }))} placeholder="City" className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                        )}
+                        {isFieldVisible("customer", "province") && (
+                          <input type="text" value={newCustomer.province || ""} onChange={e => setNewCustomer(p => ({ ...p, province: e.target.value }))} placeholder="Province" className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                        )}
+                        {isFieldVisible("customer", "postalCode") && (
+                          <input type="text" value={newCustomer.postalCode || ""} onChange={e => setNewCustomer(p => ({ ...p, postalCode: e.target.value }))} placeholder="Postal Code" className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {isFieldVisible("customer", "marketingSource") && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Marketing Source {isFieldRequired("customer", "marketingSource") && <span className="text-red-500">*</span>}
+                      </label>
+                      {roSettings?.marketingSources && roSettings.marketingSources.length > 0 ? (
+                        <select value={newCustomer.marketingSource || ""} onChange={e => setNewCustomer(p => ({ ...p, marketingSource: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                          <option value="">Select source...</option>
+                          {roSettings.marketingSources.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : (
+                        <input type="text" value={newCustomer.marketingSource || ""} onChange={e => setNewCustomer(p => ({ ...p, marketingSource: e.target.value }))} placeholder="How did customer find you?" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      )}
+                    </div>
+                  )}
+                  {isFieldVisible("customer", "note") && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Contact Note</label>
+                      <textarea value={newCustomer.note || ""} onChange={e => setNewCustomer(p => ({ ...p, note: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none" />
+                    </div>
+                  )}
                   <button
-                    onClick={searchContactsFn}
-                    disabled={contactSearch.length < 2 || searchingContacts}
-                    className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    onClick={handleCreateContact}
+                    disabled={!newCustomer.firstName?.trim() || !newCustomer.lastName?.trim() || creatingContact}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
-                    {searchingContacts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                    Search
+                    {creatingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                    Create Customer & Continue
                   </button>
                 </div>
-              </div>
+              )}
 
               {contactError && (
                 <p className="text-sm text-amber-600 flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4" /> {contactError}
                 </p>
-              )}
-
-              {contacts.length > 0 && (
-                <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                  {contacts.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => selectContact(c)}
-                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-gray-900 text-sm">
-                            {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.fileAs}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
-                            {c.company && <span>{c.company}</span>}
-                            {c.phone && <span>{c.phone}</span>}
-                            {c.email && <span>{c.email}</span>}
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
               )}
             </div>
           )}
@@ -484,50 +799,229 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                 )}
               </div>
 
-              {loadingVehicles ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                  <span className="ml-2 text-sm text-gray-500">Loading vehicles...</span>
-                </div>
-              ) : vehicleError ? (
-                <p className="text-sm text-amber-600 flex items-center gap-1.5 py-4">
-                  <AlertTriangle className="w-4 h-4" /> {vehicleError}
-                </p>
-              ) : (
-                <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Vehicle</label>
-                  {vehicles.map(v => {
-                    const isSelected = selectedVehicle?.id === v.id;
-                    return (
-                      <button
-                        key={v.id}
-                        onClick={() => selectVehicle(v)}
-                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                          isSelected ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-gray-900 text-sm">
-                              {[v.year, v.make, v.model].filter(Boolean).join(" ")}
-                              {v.submodel && <span className="text-gray-500 ml-1">{v.submodel}</span>}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
-                              {v.vin && <span>VIN: {v.vin}</span>}
-                              {v.plate && <span>Plate: {v.plate}</span>}
-                              {v.color && <span>{v.color}</span>}
-                              {v.odometer && <span>{v.odometer.toLocaleString()} mi</span>}
-                            </div>
-                          </div>
-                          {isSelected ? <CheckCircle className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        </div>
-                      </button>
-                    );
-                  })}
+              {!createNewVehicle && !selectedVehicle && (
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => { setCreateNewVehicle(false); setVehicleError(""); }}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      !createNewVehicle ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <Search className="w-4 h-4" /> Select Existing
+                  </button>
+                  <button
+                    onClick={() => { setCreateNewVehicle(true); setVehicleError(""); }}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      createNewVehicle ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <Plus className="w-4 h-4" /> Create New
+                  </button>
                 </div>
               )}
+
+              {!createNewVehicle && !selectedVehicle && (
+                <>
+                  {loadingVehicles ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                      <span className="ml-2 text-sm text-gray-500">Loading vehicles...</span>
+                    </div>
+                  ) : vehicles.length > 0 ? (
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Select Vehicle</label>
+                      {vehicles.map(v => (
+                        <button
+                          key={v.id}
+                          onClick={() => selectVehicle(v)}
+                          className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium text-gray-900 text-sm">
+                                {[v.year, v.make, v.model].filter(Boolean).join(" ")}
+                                {v.submodel && <span className="text-gray-500 ml-1">{v.submodel}</span>}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
+                                {v.vin && <span>VIN: {v.vin}</span>}
+                                {v.plate && <span>Plate: {v.plate}</span>}
+                                {v.color && <span>{v.color}</span>}
+                                {v.odometer && <span>{v.odometer.toLocaleString()} mi</span>}
+                              </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : !loadingVehicles && vehicleError ? (
+                    <div className="text-center py-6 space-y-3">
+                      <p className="text-sm text-amber-600 flex items-center justify-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" /> {vehicleError}
+                      </p>
+                      <button
+                        onClick={() => { setCreateNewVehicle(true); setVehicleError(""); }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700"
+                      >
+                        <Plus className="w-4 h-4" /> Create New Vehicle
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              )}
+
+              {createNewVehicle && !selectedVehicle && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">New Vehicle</label>
+                    {vehicles.length > 0 && (
+                      <button onClick={() => { setCreateNewVehicle(false); setVehicleError(""); }} className="text-xs text-blue-600 hover:text-blue-700">
+                        Back to list
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors">
+                      <Camera className="w-4 h-4" />
+                      {ocrLoading ? "Processing..." : "Scan VIN / Plate Photo"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePhotoUpload(file);
+                          e.target.value = "";
+                        }}
+                        disabled={ocrLoading}
+                      />
+                    </label>
+                  </div>
+                  {ocrLoading && (
+                    <div className="flex items-center gap-2 text-sm text-blue-600">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Analyzing photo with AI...
+                    </div>
+                  )}
+                  {ocrResult && (
+                    <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      {ocrResult}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {isFieldVisible("vehicle", "vin") && (
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          VIN {isFieldRequired("vehicle", "vin") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.vin || ""} onChange={e => setNewVehicle(p => ({ ...p, vin: e.target.value.toUpperCase() }))} maxLength={17} placeholder="17-character VIN" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "year") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Year {isFieldRequired("vehicle", "year") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="number" value={newVehicle.year || ""} onChange={e => setNewVehicle(p => ({ ...p, year: e.target.value }))} placeholder="2024" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "make") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Make {isFieldRequired("vehicle", "make") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.make || ""} onChange={e => setNewVehicle(p => ({ ...p, make: e.target.value }))} placeholder="Toyota" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "model") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Model {isFieldRequired("vehicle", "model") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.model || ""} onChange={e => setNewVehicle(p => ({ ...p, model: e.target.value }))} placeholder="Camry" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "submodel") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Submodel {isFieldRequired("vehicle", "submodel") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.submodel || ""} onChange={e => setNewVehicle(p => ({ ...p, submodel: e.target.value }))} placeholder="SE, LE, XLE" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "color") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Color {isFieldRequired("vehicle", "color") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.color || ""} onChange={e => setNewVehicle(p => ({ ...p, color: e.target.value }))} placeholder="Silver" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "engine") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Engine {isFieldRequired("vehicle", "engine") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.engine || ""} onChange={e => setNewVehicle(p => ({ ...p, engine: e.target.value }))} placeholder="2.5L 4-Cyl" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "transmission") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Transmission {isFieldRequired("vehicle", "transmission") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.transmission || ""} onChange={e => setNewVehicle(p => ({ ...p, transmission: e.target.value }))} placeholder="Automatic" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "odometer") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Odometer {isFieldRequired("vehicle", "odometer") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="number" value={newVehicle.odometer || ""} onChange={e => setNewVehicle(p => ({ ...p, odometer: e.target.value }))} placeholder="45000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                    {isFieldVisible("vehicle", "licensePlate") && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          License Plate {isFieldRequired("vehicle", "licensePlate") && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" value={newVehicle.licensePlate || ""} onChange={e => setNewVehicle(p => ({ ...p, licensePlate: e.target.value.toUpperCase() }))} placeholder="ABC 1234" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                      </div>
+                    )}
+                  </div>
+
+                  {vehicleError && (
+                    <p className="text-sm text-amber-600 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4" /> {vehicleError}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={handleCreateVehicle}
+                    disabled={creatingVehicle}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {creatingVehicle ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Create Vehicle & Continue
+                  </button>
+                </div>
+              )}
+
               {selectedVehicle && (
                 <div className="pt-2 space-y-3">
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="font-medium text-blue-900 text-sm flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-blue-600" />
+                      {[selectedVehicle.year, selectedVehicle.make, selectedVehicle.model].filter(Boolean).join(" ")}
+                    </div>
+                    <div className="text-xs text-blue-700 mt-0.5">
+                      {selectedVehicle.vin && <span>VIN: {selectedVehicle.vin} </span>}
+                      {selectedVehicle.plate && <span>Plate: {selectedVehicle.plate}</span>}
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Current Mileage <span className="text-gray-400 font-normal">(optional)</span>
