@@ -2387,12 +2387,45 @@ async function loadVehicleSpecs() {
   const specsEmpty = document.getElementById('specs-empty');
   const specsContent = document.getElementById('specs-content');
 
-  const vin = currentContext?.vin;
+  let vin = currentContext?.vin;
+  if (!vin && currentContext?.roId && currentContext?.shopId) {
+    specsLoading.classList.remove('hidden');
+    specsEmpty.classList.add('hidden');
+    specsContent.classList.add('hidden');
+    try {
+      const params = new URLSearchParams({
+        shopId: currentContext.shopId,
+        roId: currentContext.roId,
+        provider: currentContext.provider || 'tekmetric'
+      });
+      const result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/plan?${params}`
+      });
+      if (result?.vehicle?.vin) {
+        currentContext.vin = result.vehicle.vin.toUpperCase();
+        vin = currentContext.vin;
+        console.log('[MOS] Specs: fetched VIN from plan API:', vin);
+        if (result.vehicle.year && result.vehicle.make && result.vehicle.model) {
+          currentContext.vehicle = {
+            year: result.vehicle.year,
+            make: result.vehicle.make,
+            model: result.vehicle.model,
+            engine: result.vehicle.engine || null
+          };
+          currentContext.vehicleDisplay = `${result.vehicle.year} ${result.vehicle.make} ${result.vehicle.model}`;
+          elements.vehicleDisplay.textContent = currentContext.vehicleDisplay;
+        }
+      }
+    } catch (err) {
+      console.error('[MOS] Specs: failed to fetch VIN:', err);
+    }
+  }
   if (!vin) {
     specsLoading.classList.add('hidden');
     specsContent.classList.add('hidden');
     specsEmpty.classList.remove('hidden');
-    specsEmpty.querySelector('p').textContent = 'VIN not available yet. Open the Plan tab first to load vehicle data, then come back here.';
+    specsEmpty.querySelector('p').textContent = 'VIN not available for this vehicle.';
     return;
   }
 
