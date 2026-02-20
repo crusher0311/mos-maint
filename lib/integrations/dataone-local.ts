@@ -1,6 +1,47 @@
 import postgres from "postgres";
 
-const sql = postgres(process.env.DATABASE_URL!);
+let _sql: ReturnType<typeof postgres> | null = null;
+
+function getSql() {
+  if (!_sql) {
+    _sql = postgres(process.env.DATABASE_URL!, {
+      connect_timeout: 30,
+      idle_timeout: 0,
+      max_lifetime: 60 * 30,
+    });
+  }
+  return _sql;
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 3000): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const isEndpointDisabled = msg.includes("endpoint has been disabled") || msg.includes("endpoint is disabled") || err?.code === "XX000";
+      if (isEndpointDisabled && attempt < retries) {
+        console.log(`[DataOne] Neon endpoint sleeping, retrying in ${delayMs}ms (attempt ${attempt + 1}/${retries})...`);
+        _sql = null;
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("withRetry: unreachable");
+}
+
+const sql = new Proxy({} as ReturnType<typeof postgres>, {
+  apply(_target, _thisArg, args) {
+    return (getSql() as any)(...args);
+  },
+  get(_target, prop) {
+    const s = getSql();
+    const val = (s as any)[prop];
+    return typeof val === "function" ? val.bind(s) : val;
+  },
+});
 
 function toSquish(vin: string): string {
   const v = String(vin).toUpperCase().trim();
@@ -71,11 +112,11 @@ export async function decodeVinLocal(vin: string): Promise<{
   try {
     const squish = toSquish(vin);
     
-    const result = await sql<VinReferenceData[]>`
+    const result = await withRetry(() => sql<VinReferenceData[]>`
       SELECT * FROM dataone_vin_reference 
       WHERE vin_pattern = ${squish}
       LIMIT 1
-    `;
+    `);
     
     if (result.length === 0) {
       return { ok: false, vin, error: "VIN not found in database", source: "local" };
@@ -100,11 +141,11 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
   try {
     const squish = toSquish(vin);
     
-    const vinMaintenance = await sql`
+    const vinMaintenance = await withRetry(() => sql`
       SELECT vm.vin_maintenance_id, vm.maintenance_id, vm.maintenance_schedule_id
       FROM dataone_lkp_vin_maintenance vm
       WHERE vm.squish = ${squish}
-    `;
+    `);
     
     if (vinMaintenance.length === 0) {
       return { ok: false, vin, squish, count: 0, items: [], error: "No maintenance data found for this VIN", source: "local" };
@@ -114,27 +155,27 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
     const vinMaintenanceIds = vinMaintenance.map(vm => vm.vin_maintenance_id);
     
     const [maintenanceDefs, intervals] = await Promise.all([
-      sql`
+      withRetry(() => sql`
         SELECT maintenance_id, maintenance_category, maintenance_name, maintenance_notes
         FROM dataone_def_maintenance
         WHERE maintenance_id = ANY(${maintenanceIds})
-      `,
-      sql`
+      `),
+      withRetry(() => sql`
         SELECT vmi.vin_maintenance_id, vmi.maintenance_interval_id, vmi.maintenance_operating_parameter_id
         FROM dataone_lkp_vin_maintenance_interval vmi
         WHERE vmi.vin_maintenance_id = ANY(${vinMaintenanceIds})
-      `
+      `)
     ]);
     
     const intervalIds = [...new Set(intervals.map(i => i.maintenance_interval_id).filter((id: number) => id > 0))];
     
     let intervalDefs: any[] = [];
     if (intervalIds.length > 0) {
-      intervalDefs = await sql`
+      intervalDefs = await withRetry(() => sql`
         SELECT maintenance_interval_id, interval_type, value, units, initial_value
         FROM dataone_def_maintenance_interval
         WHERE maintenance_interval_id = ANY(${intervalIds})
-      `;
+      `);
     }
     
     const maintenanceDefMap = new Map(maintenanceDefs.map(d => [d.maintenance_id, d]));
@@ -298,7 +339,7 @@ export async function getVehicleRecallsLocal(vin: string): Promise<{
     
     const vehicleId = decoded.decoded.vehicle_id;
     
-    const recalls = await sql<VehicleRecall[]>`
+    const recalls = await withRetry(() => sql<VehicleRecall[]>`
       SELECT 
              MIN(r.nhtsa_recall_id) as nhtsa_recall_id,
              r.nhtsa_campaign_number, 
@@ -317,7 +358,7 @@ export async function getVehicleRecallsLocal(vin: string): Promise<{
       WHERE vr.vehicle_id = ${vehicleId}
       GROUP BY r.nhtsa_campaign_number, r.report_manufacturer
       ORDER BY MAX(r.record_creation_date) DESC
-    `;
+    `);
     
     // Mark safety-critical recalls
     const recallsWithSeverity = recalls.map(r => ({
@@ -428,14 +469,14 @@ export async function getVehicleSpecsLocal(vin: string): Promise<{
     
     const vehicleId = decoded.decoded.vehicle_id;
     
-    const specs = await sql<VehicleSpecification[]>`
+    const specs = await withRetry(() => sql<VehicleSpecification[]>`
       SELECT DISTINCT s.specification_id, s.specification_category, 
              s.specification_name, s.specification_value
       FROM dataone_def_specification s
       JOIN dataone_lkp_veh_standard_specification vs ON s.specification_id = vs.specification_id
       WHERE vs.vehicle_id = ${vehicleId}
       ORDER BY s.specification_category, s.specification_name
-    `;
+    `);
     
     // Group specs into structured object
     const grouped: VehicleSpecsGrouped = {
@@ -505,9 +546,9 @@ export async function getVehicleSpecsLocal(vin: string): Promise<{
 
 export async function checkDataOneLocalAvailable(): Promise<boolean> {
   try {
-    const result = await sql`
+    const result = await withRetry(() => sql`
       SELECT COUNT(*) as count FROM dataone_vin_reference LIMIT 1
-    `;
+    `);
     return result[0].count > 0;
   } catch {
     return false;
@@ -520,12 +561,12 @@ export async function getDataOneSyncStatus(): Promise<{
   rowCounts?: Record<string, number>;
 }> {
   try {
-    const metadata = await sql`
+    const metadata = await withRetry(() => sql`
       SELECT * FROM dataone_sync_metadata 
       WHERE sync_status = 'success'
       ORDER BY last_sync_at DESC
       LIMIT 1
-    `;
+    `);
     
     if (metadata.length === 0) {
       return { available: false };
@@ -562,18 +603,18 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
     const squishPatterns = vins.map(vin => ({ vin, squish: toSquish(vin) }));
     const uniqueSquishes = [...new Set(squishPatterns.map(p => p.squish))];
     
-    const vinRows = await sql<{ vin_pattern: string; vehicle_id: number }[]>`
+    const vinRows = await withRetry(() => sql<{ vin_pattern: string; vehicle_id: number }[]>`
       SELECT vin_pattern, vehicle_id 
       FROM dataone_vin_reference 
       WHERE vin_pattern = ANY(${uniqueSquishes})
-    `;
+    `);
     
     if (!vinRows.length) return result;
     
     const squishToVehicleId = new Map(vinRows.map(r => [r.vin_pattern, r.vehicle_id]));
     const vehicleIds = [...new Set(vinRows.map(r => r.vehicle_id))];
     
-    const specs = await sql<{ vehicle_id: number; specification_name: string; specification_value: string }[]>`
+    const specs = await withRetry(() => sql<{ vehicle_id: number; specification_name: string; specification_value: string }[]>`
       SELECT DISTINCT vs.vehicle_id, s.specification_name, s.specification_value
       FROM dataone_lkp_veh_standard_specification vs
       JOIN dataone_def_specification s ON vs.specification_id = s.specification_id
@@ -582,7 +623,7 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
           'Front Tire Description', 'Rear Tire Description',
           'Front Brake Diameter', 'Rear Brake Diameter', 'Wheelbase'
         )
-    `;
+    `);
     
     const vehicleSpecs = new Map<number, QuickSpecs>();
     for (const row of specs) {
