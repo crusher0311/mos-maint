@@ -152,6 +152,26 @@ interface VehicleDetailClientProps {
 
 type TabId = "oe" | "dvi" | "carfax" | "specs";
 
+interface VehicleInfoDecoded {
+  year?: string;
+  make?: string;
+  model?: string;
+  trim?: string;
+  style?: string;
+  engine?: string;
+  engineSize?: string;
+  engineCylinders?: string;
+  transmission?: string;
+  transType?: string;
+  driveType?: string;
+  fuelType?: string;
+  bodyType?: string;
+  doors?: string;
+  wheelbase?: string;
+  brakeSystem?: string;
+  countryOfMfr?: string;
+}
+
 interface VehicleSpecsGrouped {
   weightsAndCapacities: {
     fuelTankCapacity?: string;
@@ -221,6 +241,7 @@ export default function VehicleDetailClient({
   const tabParam = searchParams.get("tab") as TabId | null;
   const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax", "specs"].includes(tabParam) ? tabParam : "oe");
   const [specsData, setSpecsData] = useState<VehicleSpecsGrouped | null>(null);
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoDecoded | null>(null);
   const [specsLoading, setSpecsLoading] = useState(false);
 
   useEffect(() => {
@@ -237,6 +258,9 @@ export default function VehicleDetailClient({
         .then(data => {
           if (data.ok) {
             setSpecsData(data.grouped);
+          }
+          if (data.vehicleInfo) {
+            setVehicleInfo(data.vehicleInfo);
           }
         })
         .catch(console.error)
@@ -877,9 +901,69 @@ export default function VehicleDetailClient({
                   <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
                   <p className="text-sm text-gray-500">Loading specifications...</p>
                 </div>
-              ) : specsData ? (
+              ) : (specsData || vehicleInfo) ? (
                 <>
-                  {Object.keys(specsData.weightsAndCapacities).length > 0 && (
+                  {vehicleInfo && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-indigo-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>&#x2699;&#xFE0F;</span> Powertrain
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {vehicleInfo.engine && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Engine</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.engine}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.engineSize && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Displacement</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.engineSize}L</div>
+                          </div>
+                        )}
+                        {vehicleInfo.engineCylinders && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Cylinders</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.engineCylinders}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.transmission && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Transmission</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.transmission}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.transType && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Trans Type</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.transType}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.driveType && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Drive Type</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.driveType}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.fuelType && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Fuel Type</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.fuelType}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.brakeSystem && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Brake System</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.brakeSystem}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {specsData && Object.keys(specsData.weightsAndCapacities).length > 0 && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -891,6 +975,12 @@ export default function VehicleDetailClient({
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Fuel Tank</div>
                             <div className="font-semibold text-gray-900">{specsData.weightsAndCapacities.fuelTankCapacity} gal</div>
+                          </div>
+                        )}
+                        {specsData.weightsAndCapacities.baseTowingCapacity && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Base Towing</div>
+                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.baseTowingCapacity).toLocaleString()} lbs</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.maxTowingCapacity && (
@@ -923,11 +1013,17 @@ export default function VehicleDetailClient({
                             <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.gcwr).toLocaleString()} lbs</div>
                           </div>
                         )}
+                        {specsData.weightsAndCapacities.tonnage && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Tonnage</div>
+                            <div className="font-semibold text-gray-900">{specsData.weightsAndCapacities.tonnage}</div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {Object.keys(specsData.wheelsAndTires).length > 0 && (
+                  {specsData && Object.keys(specsData.wheelsAndTires).length > 0 && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -947,10 +1043,28 @@ export default function VehicleDetailClient({
                             <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.rearTireDescription}</div>
                           </div>
                         )}
+                        {specsData.wheelsAndTires.frontWheelDiameter && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Front Wheel</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.frontWheelDiameter}"</div>
+                          </div>
+                        )}
+                        {specsData.wheelsAndTires.rearWheelDiameter && specsData.wheelsAndTires.rearWheelDiameter !== specsData.wheelsAndTires.frontWheelDiameter && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Rear Wheel</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.rearWheelDiameter}"</div>
+                          </div>
+                        )}
                         {specsData.wheelsAndTires.frontWheelSize && (
                           <div>
-                            <div className="text-xs text-gray-500 uppercase">Wheel Size</div>
-                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.frontWheelSize}"</div>
+                            <div className="text-xs text-gray-500 uppercase">Front Wheel Size</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.frontWheelSize}</div>
+                          </div>
+                        )}
+                        {specsData.wheelsAndTires.rearWheelSize && specsData.wheelsAndTires.rearWheelSize !== specsData.wheelsAndTires.frontWheelSize && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Rear Wheel Size</div>
+                            <div className="font-semibold text-gray-900">{specsData.wheelsAndTires.rearWheelSize}</div>
                           </div>
                         )}
                         {specsData.wheelsAndTires.tireType && (
@@ -963,7 +1077,7 @@ export default function VehicleDetailClient({
                     </div>
                   )}
 
-                  {Object.keys(specsData.brakes).length > 0 && (
+                  {specsData && Object.keys(specsData.brakes).length > 0 && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-red-50">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -987,7 +1101,7 @@ export default function VehicleDetailClient({
                     </div>
                   )}
 
-                  {Object.keys(specsData.dimensions).length > 0 && (
+                  {specsData && Object.keys(specsData.dimensions).length > 0 && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-green-50">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -1025,11 +1139,23 @@ export default function VehicleDetailClient({
                             <div className="font-semibold text-gray-900">{specsData.dimensions.groundClearance}"</div>
                           </div>
                         )}
+                        {specsData.dimensions.frontTrackWidth && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Front Track</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.frontTrackWidth}"</div>
+                          </div>
+                        )}
+                        {specsData.dimensions.rearTrackWidth && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Rear Track</div>
+                            <div className="font-semibold text-gray-900">{specsData.dimensions.rearTrackWidth}"</div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {specsData.truckSpecs.bedLength && (
+                  {specsData?.truckSpecs?.bedLength && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-amber-50">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -1045,7 +1171,7 @@ export default function VehicleDetailClient({
                     </div>
                   )}
 
-                  {(specsData.seating.maxSeating || specsData.interior.cargoVolume) && (
+                  {(specsData?.seating?.maxSeating || specsData?.seating?.standardSeating || specsData?.interior?.cargoVolume || specsData?.interior?.passengerVolume) && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-200 bg-purple-50">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -1053,22 +1179,58 @@ export default function VehicleDetailClient({
                         </h3>
                       </div>
                       <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {specsData.seating.maxSeating && (
+                        {specsData?.seating?.maxSeating && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Max Seating</div>
                             <div className="font-semibold text-gray-900">{specsData.seating.maxSeating} passengers</div>
                           </div>
                         )}
-                        {specsData.interior.cargoVolume && (
+                        {specsData?.seating?.standardSeating && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Standard Seating</div>
+                            <div className="font-semibold text-gray-900">{specsData.seating.standardSeating} passengers</div>
+                          </div>
+                        )}
+                        {specsData?.interior?.cargoVolume && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Cargo Volume</div>
                             <div className="font-semibold text-gray-900">{specsData.interior.cargoVolume} cu ft</div>
                           </div>
                         )}
-                        {specsData.interior.passengerVolume && (
+                        {specsData?.interior?.passengerVolume && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Passenger Volume</div>
                             <div className="font-semibold text-gray-900">{specsData.interior.passengerVolume} cu ft</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {vehicleInfo && (vehicleInfo.bodyType || vehicleInfo.doors || vehicleInfo.countryOfMfr) && (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-slate-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <span>&#x2139;&#xFE0F;</span> General
+                        </h3>
+                      </div>
+                      <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {vehicleInfo.bodyType && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Body Type</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.bodyType}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.doors && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Doors</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.doors}</div>
+                          </div>
+                        )}
+                        {vehicleInfo.countryOfMfr && (
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Country of Manufacture</div>
+                            <div className="font-semibold text-gray-900">{vehicleInfo.countryOfMfr}</div>
                           </div>
                         )}
                       </div>
