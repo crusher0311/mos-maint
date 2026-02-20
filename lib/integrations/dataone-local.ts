@@ -13,10 +13,12 @@ function getSql() {
   return _sql;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 3000): Promise<T> {
+const sql = getSql();
+
+async function withRetry<T>(fn: (db: ReturnType<typeof postgres>) => Promise<T>, retries = 2, delayMs = 3000): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await fn();
+      return await fn(getSql());
     } catch (err: any) {
       const msg = err?.message || String(err);
       const isEndpointDisabled = msg.includes("endpoint has been disabled") || msg.includes("endpoint is disabled") || err?.code === "XX000";
@@ -31,17 +33,6 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 3000): 
   }
   throw new Error("withRetry: unreachable");
 }
-
-const sql = new Proxy({} as ReturnType<typeof postgres>, {
-  apply(_target, _thisArg, args) {
-    return (getSql() as any)(...args);
-  },
-  get(_target, prop) {
-    const s = getSql();
-    const val = (s as any)[prop];
-    return typeof val === "function" ? val.bind(s) : val;
-  },
-});
 
 function toSquish(vin: string): string {
   const v = String(vin).toUpperCase().trim();
@@ -112,7 +103,7 @@ export async function decodeVinLocal(vin: string): Promise<{
   try {
     const squish = toSquish(vin);
     
-    const result = await withRetry(() => sql<VinReferenceData[]>`
+    const result = await withRetry((db) => db<VinReferenceData[]>`
       SELECT * FROM dataone_vin_reference 
       WHERE vin_pattern = ${squish}
       LIMIT 1
@@ -141,7 +132,7 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
   try {
     const squish = toSquish(vin);
     
-    const vinMaintenance = await withRetry(() => sql`
+    const vinMaintenance = await withRetry((db) => db`
       SELECT vm.vin_maintenance_id, vm.maintenance_id, vm.maintenance_schedule_id
       FROM dataone_lkp_vin_maintenance vm
       WHERE vm.squish = ${squish}
@@ -155,12 +146,12 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
     const vinMaintenanceIds = vinMaintenance.map(vm => vm.vin_maintenance_id);
     
     const [maintenanceDefs, intervals] = await Promise.all([
-      withRetry(() => sql`
+      withRetry((db) => db`
         SELECT maintenance_id, maintenance_category, maintenance_name, maintenance_notes
         FROM dataone_def_maintenance
         WHERE maintenance_id = ANY(${maintenanceIds})
       `),
-      withRetry(() => sql`
+      withRetry((db) => db`
         SELECT vmi.vin_maintenance_id, vmi.maintenance_interval_id, vmi.maintenance_operating_parameter_id
         FROM dataone_lkp_vin_maintenance_interval vmi
         WHERE vmi.vin_maintenance_id = ANY(${vinMaintenanceIds})
@@ -171,7 +162,7 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
     
     let intervalDefs: any[] = [];
     if (intervalIds.length > 0) {
-      intervalDefs = await withRetry(() => sql`
+      intervalDefs = await withRetry((db) => db`
         SELECT maintenance_interval_id, interval_type, value, units, initial_value
         FROM dataone_def_maintenance_interval
         WHERE maintenance_interval_id = ANY(${intervalIds})
@@ -339,7 +330,7 @@ export async function getVehicleRecallsLocal(vin: string): Promise<{
     
     const vehicleId = decoded.decoded.vehicle_id;
     
-    const recalls = await withRetry(() => sql<VehicleRecall[]>`
+    const recalls = await withRetry((db) => db<VehicleRecall[]>`
       SELECT 
              MIN(r.nhtsa_recall_id) as nhtsa_recall_id,
              r.nhtsa_campaign_number, 
@@ -469,7 +460,7 @@ export async function getVehicleSpecsLocal(vin: string): Promise<{
     
     const vehicleId = decoded.decoded.vehicle_id;
     
-    const specs = await withRetry(() => sql<VehicleSpecification[]>`
+    const specs = await withRetry((db) => db<VehicleSpecification[]>`
       SELECT DISTINCT s.specification_id, s.specification_category, 
              s.specification_name, s.specification_value
       FROM dataone_def_specification s
@@ -546,7 +537,7 @@ export async function getVehicleSpecsLocal(vin: string): Promise<{
 
 export async function checkDataOneLocalAvailable(): Promise<boolean> {
   try {
-    const result = await withRetry(() => sql`
+    const result = await withRetry((db) => db`
       SELECT COUNT(*) as count FROM dataone_vin_reference LIMIT 1
     `);
     return result[0].count > 0;
@@ -561,7 +552,7 @@ export async function getDataOneSyncStatus(): Promise<{
   rowCounts?: Record<string, number>;
 }> {
   try {
-    const metadata = await withRetry(() => sql`
+    const metadata = await withRetry((db) => db`
       SELECT * FROM dataone_sync_metadata 
       WHERE sync_status = 'success'
       ORDER BY last_sync_at DESC
@@ -603,7 +594,7 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
     const squishPatterns = vins.map(vin => ({ vin, squish: toSquish(vin) }));
     const uniqueSquishes = [...new Set(squishPatterns.map(p => p.squish))];
     
-    const vinRows = await withRetry(() => sql<{ vin_pattern: string; vehicle_id: number }[]>`
+    const vinRows = await withRetry((db) => db<{ vin_pattern: string; vehicle_id: number }[]>`
       SELECT vin_pattern, vehicle_id 
       FROM dataone_vin_reference 
       WHERE vin_pattern = ANY(${uniqueSquishes})
@@ -614,7 +605,7 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
     const squishToVehicleId = new Map(vinRows.map(r => [r.vin_pattern, r.vehicle_id]));
     const vehicleIds = [...new Set(vinRows.map(r => r.vehicle_id))];
     
-    const specs = await withRetry(() => sql<{ vehicle_id: number; specification_name: string; specification_value: string }[]>`
+    const specs = await withRetry((db) => db<{ vehicle_id: number; specification_name: string; specification_value: string }[]>`
       SELECT DISTINCT vs.vehicle_id, s.specification_name, s.specification_value
       FROM dataone_lkp_veh_standard_specification vs
       JOIN dataone_def_specification s ON vs.specification_id = s.specification_id
