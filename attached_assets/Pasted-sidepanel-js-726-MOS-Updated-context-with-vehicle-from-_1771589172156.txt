@@ -1,0 +1,44 @@
+sidepanel.js:726 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:759 [MOS] Updated RO number from API: 32
+sidepanel.js:764 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:726 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:759 [MOS] Updated RO number from API: 32
+sidepanel.js:764 [MOS] Updated customer name from API: Brandon Crusha
+background.js:1331 [MOS Tools] Background service worker loaded
+background.js:35 [MOS] Restored API token from storage
+background.js:39 [MOS] Restored API URL: https://mos.tools
+background.js:140 [MOS] Side panel opens on action click
+background.js:54 [Tekmetric] Restored session token
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 4 rules for shop 14245
+background.js:944 [LaborRate] Loaded 5 jobs with labor from estimate
+background.js:976 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:1013 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["diagnostics","maintenance"] customer: Brandon Crusha phones: 1
+background.js:1024 [LaborRate] Matched RO-level rule: "Ford Diesel" (priority 11) → $219.95/hr
+background.js:1255 [LaborRate] Current rate on RO: 21995 (219.95/hr), target: 21995 (219.95/hr)
+background.js:1258 [LaborRate] Rate already matches ($219.95/hr), skipping
+background.js:1057 [LaborRate] Matched per-job rule: "Diag" (priority 20) → $299/hr
+background.js:1146 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1169 [LaborRate] Labor "testing" on job "Diag CEL" already at $299/hr, skipping
+background.js:1151 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1146 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1146 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1220 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1057 [LaborRate] Matched per-job rule: "Maint" (priority 19) → $100/hr
+background.js:1146 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1151 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1169 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1146 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1146 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1220 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1092 [LaborRate] Job "CEL" labor already at RO rate $219.95/hr
+background.js:1092 [LaborRate] Job "6K Lube Oil And Filter" labor already at RO rate $219.95/hr
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:726 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:759 [MOS] Updated RO number from API: 32
+sidepanel.js:764 [MOS] Updated customer name from API: Brandon Crusha
+background.js:163 [MOS] Message received: MOS_API_REQUEST
