@@ -227,18 +227,24 @@ export interface QueuedBooking {
   vehicleModel?: string;
   serviceType: string;
   serviceMileage?: number;
+  serviceDueDate?: string;
   scheduledDate: string;
   scheduledTime: string;
-  status: "pending" | "confirmed" | "sent" | "failed" | "cancelled";
+  status: "pending" | "confirmed" | "sent" | "failed" | "cancelled" | "superseded";
   confirmationMode: "auto" | "review";
   stickerGeneratedAt: Date;
   createdAt: Date;
+  updatedAt?: Date;
   confirmedAt?: Date;
   sentAt?: Date;
   failedAt?: Date;
   failedReason?: string;
   externalAppointmentId?: string;
   provider?: string;
+  previousExternalId?: string;
+  previousScheduledDate?: string;
+  supersededAt?: Date;
+  replacesBookingId?: string;
 }
 
 export async function queueBooking(
@@ -905,99 +911,113 @@ export async function triggerAutoBookingFromSticker(
 
     const db = await getDb();
 
-    const existingQuery: any = {
-      shopId,
-      status: { $in: ["pending", "confirmed", "sent"] },
-    };
-    if (data.vin) {
-      existingQuery.vin = data.vin;
-    } else if (data.vehicleId) {
-      existingQuery.vehicleId = data.vehicleId;
-    } else if (data.customerId) {
-      existingQuery.customerId = data.customerId;
-    }
-
-    const existingBooking = await db.collection("auto_booking_queue").findOne(
-      existingQuery,
-      { sort: { createdAt: -1 } }
-    );
-
-    if (existingBooking) {
-      const stickerDate = new Date(nextServiceDate);
-      const bookingTarget = new Date(stickerDate);
-      bookingTarget.setDate(bookingTarget.getDate() - settings.leadTimeDays);
-      const targetDateStr = formatDate(bookingTarget);
-
-      if (existingBooking.scheduledDate === targetDateStr || existingBooking.scheduledDate === nextServiceDate) {
-        console.log(`[Auto Booking] Duplicate detected for shop ${shopId}, VIN ${data.vin || 'N/A'} — existing booking ${existingBooking._id} already scheduled for ${existingBooking.scheduledDate}. Skipping.`);
-        return {
-          queued: false,
-          bookingId: existingBooking._id.toString(),
-          status: existingBooking.status,
-          scheduledDate: existingBooking.scheduledDate,
-          skipped: true,
-        };
+    const vehicleIdentifier = data.vin || data.vehicleId;
+    if (vehicleIdentifier) {
+      const existingQuery: any = {
+        shopId,
+        serviceType: "Oil Change",
+        status: { $in: ["pending", "confirmed", "sent"] },
+      };
+      if (data.vin) {
+        existingQuery.vin = data.vin;
+      } else {
+        existingQuery.vehicleId = data.vehicleId;
       }
 
-      console.log(`[Auto Booking] Service date changed for shop ${shopId}, VIN ${data.vin || 'N/A'} — old scheduled: ${existingBooking.scheduledDate}, new target: ${targetDateStr}. Updating booking.`);
-
-      const slotResult = await findAvailableSlotFromDate(shopId, bookingTarget, settings);
-
-      if (!slotResult.success || !slotResult.slot) {
-        return { queued: false, error: slotResult.error || "No available slot near new service date" };
-      }
-
-      await db.collection("auto_booking_queue").updateOne(
-        { _id: existingBooking._id },
-        {
-          $set: {
-            scheduledDate: slotResult.slot.date,
-            scheduledTime: slotResult.slot.time,
-            serviceMileage: nextServiceMileage,
-            stickerGeneratedAt: new Date(),
-            updatedAt: new Date(),
-            status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
-            ...(existingBooking.status === "sent" ? { previousExternalId: existingBooking.externalAppointmentId, previousScheduledDate: existingBooking.scheduledDate } : {}),
-          },
-          $unset: {
-            ...(existingBooking.status === "sent" ? { sentAt: "", externalAppointmentId: "" } : {}),
-            failedAt: "",
-            failedReason: "",
-          },
-        }
+      const existingBooking = await db.collection("auto_booking_queue").findOne(
+        existingQuery,
+        { sort: { createdAt: -1 } }
       );
 
-      if (settings.confirmationMode === "auto") {
-        const updatedBooking = await db.collection("auto_booking_queue").findOne({ _id: existingBooking._id });
-        if (updatedBooking) {
-          const pushResult = await pushAppointmentToSMS(updatedBooking as QueuedBooking & { _id: any });
-          if (pushResult.success) {
-            await db.collection("auto_booking_queue").updateOne(
-              { _id: existingBooking._id },
-              {
-                $set: {
-                  status: "sent",
-                  sentAt: new Date(),
-                  externalAppointmentId: pushResult.externalId,
-                  provider: pushResult.provider,
-                },
-              }
-            );
-            console.log(`[Auto Booking] Updated booking ${existingBooking._id} re-sent to ${pushResult.provider}`);
-          } else {
-            console.error(`[Auto Booking] Updated booking ${existingBooking._id} failed to re-send: ${pushResult.error}`);
-          }
-        }
-      }
+      if (existingBooking) {
+        const existingServiceDueDate = existingBooking.serviceDueDate || existingBooking.scheduledDate;
 
-      console.log(`[Auto Booking] Updated existing booking ${existingBooking._id} to new date ${slotResult.slot.date}`);
-      return {
-        queued: true,
-        bookingId: existingBooking._id.toString(),
-        status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
-        scheduledDate: slotResult.slot.date,
-        updated: true,
-      };
+        if (existingServiceDueDate === nextServiceDate) {
+          console.log(`[Auto Booking] Duplicate detected for shop ${shopId}, VIN ${data.vin || data.vehicleId} — existing booking ${existingBooking._id} for same service due date ${nextServiceDate}. Skipping.`);
+          return {
+            queued: false,
+            bookingId: existingBooking._id.toString(),
+            status: existingBooking.status,
+            scheduledDate: existingBooking.scheduledDate,
+            skipped: true,
+          };
+        }
+
+        console.log(`[Auto Booking] Service date changed for shop ${shopId}, VIN ${data.vin || data.vehicleId} — old due: ${existingServiceDueDate}, new due: ${nextServiceDate}. Updating booking.`);
+
+        const stickerDate = new Date(nextServiceDate);
+        const bookingTarget = new Date(stickerDate);
+        bookingTarget.setDate(bookingTarget.getDate() - settings.leadTimeDays);
+
+        const slotResult = await findAvailableSlotFromDate(shopId, bookingTarget, settings);
+
+        if (!slotResult.success || !slotResult.slot) {
+          return { queued: false, error: slotResult.error || "No available slot near new service date" };
+        }
+
+        if (existingBooking.status === "sent" && existingBooking.externalAppointmentId) {
+          console.log(`[Auto Booking] Marking prior external appointment ${existingBooking.externalAppointmentId} as superseded (provider: ${existingBooking.provider})`);
+        }
+
+        await db.collection("auto_booking_queue").updateOne(
+          { _id: existingBooking._id },
+          {
+            $set: {
+              scheduledDate: slotResult.slot.date,
+              scheduledTime: slotResult.slot.time,
+              serviceDueDate: nextServiceDate,
+              serviceMileage: nextServiceMileage,
+              stickerGeneratedAt: new Date(),
+              updatedAt: new Date(),
+              status: existingBooking.status === "sent" ? "superseded" : (settings.confirmationMode === "auto" ? "confirmed" : "pending"),
+              ...(existingBooking.status === "sent" ? { previousExternalId: existingBooking.externalAppointmentId, previousScheduledDate: existingBooking.scheduledDate, supersededAt: new Date() } : {}),
+            },
+            $unset: {
+              failedAt: "",
+              failedReason: "",
+            },
+          }
+        );
+
+        if (existingBooking.status === "sent") {
+          const newResult = await queueBooking(shopId, settings, {
+            customerId: data.customerId,
+            customerName: data.customerName || existingBooking.customerName || "Unknown Customer",
+            customerPhone: data.customerPhone || existingBooking.customerPhone,
+            customerEmail: data.customerEmail || existingBooking.customerEmail,
+            vehicleId: data.vehicleId || existingBooking.vehicleId,
+            vin: data.vin || existingBooking.vin,
+            vehicleYear: data.vehicleYear || existingBooking.vehicleYear,
+            vehicleMake: data.vehicleMake || existingBooking.vehicleMake,
+            vehicleModel: data.vehicleModel || existingBooking.vehicleModel,
+            serviceType: "Oil Change",
+            serviceMileage: nextServiceMileage,
+            scheduledDate: slotResult.slot.date,
+            scheduledTime: slotResult.slot.time,
+            stickerGeneratedAt: new Date(),
+            serviceDueDate: nextServiceDate,
+            replacesBookingId: existingBooking._id.toString(),
+          });
+
+          console.log(`[Auto Booking] Created replacement booking ${newResult.bookingId} for superseded ${existingBooking._id}, new date ${slotResult.slot.date}`);
+          return {
+            queued: true,
+            bookingId: newResult.bookingId,
+            status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
+            scheduledDate: slotResult.slot.date,
+            updated: true,
+          };
+        }
+
+        console.log(`[Auto Booking] Updated existing booking ${existingBooking._id} to new date ${slotResult.slot.date}`);
+        return {
+          queued: true,
+          bookingId: existingBooking._id.toString(),
+          status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
+          scheduledDate: slotResult.slot.date,
+          updated: true,
+        };
+      }
     }
     
     // Apply lead time: schedule the appointment leadTimeDays before the service due date
@@ -1026,6 +1046,7 @@ export async function triggerAutoBookingFromSticker(
       vehicleModel: data.vehicleModel,
       serviceType: "Oil Change",
       serviceMileage: nextServiceMileage,
+      serviceDueDate: nextServiceDate,
       scheduledDate: slotResult.slot.date,
       scheduledTime: slotResult.slot.time,
       stickerGeneratedAt: new Date(),
