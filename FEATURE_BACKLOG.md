@@ -1041,6 +1041,50 @@ Add a 5th icon to the vehicle dashboard row that generates AI-powered sales scri
 
 ---
 
+## Work Order Audit / Repair Verification
+
+**Priority:** Medium  
+**Status:** Planned  
+
+### Overview
+An on-demand "Verify" feature that reviews a work order before the service advisor calls the customer to sell the work. It checks correctness of all parts, identifies missing items, and uses AI to ensure the best repair is being recommended for the customer.
+
+### Requirements
+
+#### Trigger & Location
+- On-demand button (e.g., "Verify Work Order") — not automatic
+- Accessed as a review step before calling the client to present the repair
+- Should work in both the dashboard and Chrome extension
+
+#### Data Sources
+- **Job/Part Pairing Lists:** Shop-provided reference lists mapping common jobs to their expected parts (uploaded/managed by the shop)
+- **AI Layer:** OpenAI-powered analysis on top of the reference lists to catch contextual issues the lists alone can't identify (vehicle age, mileage, repair history, industry best practices)
+
+#### Verification Checks
+- **Missing parts:** Flag parts typically required for the job that aren't on the RO
+- **Incorrect fitment:** Parts that don't match the vehicle's year/make/model/engine
+- **Better alternatives:** Suggest OE vs aftermarket options, updated superseded part numbers
+- **Companion repairs:** Common jobs that should be done together (e.g., water pump with timing belt)
+- **Pricing anomalies:** Flag unusually high or low pricing compared to typical ranges
+
+#### UI / Output
+- Checklist-style display with color-coded indicators:
+  - **Green:** Looks good / verified correct
+  - **Yellow:** Suggestion or optional improvement
+  - **Red:** Potential problem or missing item
+- Each item shows a brief explanation of why it was flagged
+
+#### SMS Integration
+- Must support Tekmetric and Protractor, extensible for future SMS providers
+- Pull RO data (jobs, parts, vehicle info, customer) from the active SMS
+
+#### Future Enhancements
+- Learning from shop corrections over time (feedback loop)
+- Shop-specific part preferences and vendor mappings
+- Integration with parts supplier APIs for real-time availability/pricing
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
@@ -1049,4 +1093,4 @@ Add a 5th icon to the vehicle dashboard row that generates AI-powered sales scri
 
 ---
 
-*Last Updated: February 18, 2026*
+*Last Updated: February 23, 2026*
