@@ -891,7 +891,7 @@ export async function triggerAutoBookingFromSticker(
   nextServiceDate: string,
   nextServiceMileage: number,
   data: StickerBookingData
-): Promise<{ queued: boolean; bookingId?: string; status?: string; error?: string; scheduledDate?: string }> {
+): Promise<{ queued: boolean; bookingId?: string; status?: string; error?: string; scheduledDate?: string; updated?: boolean; skipped?: boolean }> {
   try {
     const settings = await getAutoBookingSettings(shopId);
     
@@ -901,6 +901,103 @@ export async function triggerAutoBookingFromSticker(
     
     if (!data.customerName && !data.customerId) {
       return { queued: false, error: "Customer info required for booking" };
+    }
+
+    const db = await getDb();
+
+    const existingQuery: any = {
+      shopId,
+      status: { $in: ["pending", "confirmed", "sent"] },
+    };
+    if (data.vin) {
+      existingQuery.vin = data.vin;
+    } else if (data.vehicleId) {
+      existingQuery.vehicleId = data.vehicleId;
+    } else if (data.customerId) {
+      existingQuery.customerId = data.customerId;
+    }
+
+    const existingBooking = await db.collection("auto_booking_queue").findOne(
+      existingQuery,
+      { sort: { createdAt: -1 } }
+    );
+
+    if (existingBooking) {
+      const stickerDate = new Date(nextServiceDate);
+      const bookingTarget = new Date(stickerDate);
+      bookingTarget.setDate(bookingTarget.getDate() - settings.leadTimeDays);
+      const targetDateStr = formatDate(bookingTarget);
+
+      if (existingBooking.scheduledDate === targetDateStr || existingBooking.scheduledDate === nextServiceDate) {
+        console.log(`[Auto Booking] Duplicate detected for shop ${shopId}, VIN ${data.vin || 'N/A'} — existing booking ${existingBooking._id} already scheduled for ${existingBooking.scheduledDate}. Skipping.`);
+        return {
+          queued: false,
+          bookingId: existingBooking._id.toString(),
+          status: existingBooking.status,
+          scheduledDate: existingBooking.scheduledDate,
+          skipped: true,
+        };
+      }
+
+      console.log(`[Auto Booking] Service date changed for shop ${shopId}, VIN ${data.vin || 'N/A'} — old scheduled: ${existingBooking.scheduledDate}, new target: ${targetDateStr}. Updating booking.`);
+
+      const slotResult = await findAvailableSlotFromDate(shopId, bookingTarget, settings);
+
+      if (!slotResult.success || !slotResult.slot) {
+        return { queued: false, error: slotResult.error || "No available slot near new service date" };
+      }
+
+      await db.collection("auto_booking_queue").updateOne(
+        { _id: existingBooking._id },
+        {
+          $set: {
+            scheduledDate: slotResult.slot.date,
+            scheduledTime: slotResult.slot.time,
+            serviceMileage: nextServiceMileage,
+            stickerGeneratedAt: new Date(),
+            updatedAt: new Date(),
+            status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
+            ...(existingBooking.status === "sent" ? { previousExternalId: existingBooking.externalAppointmentId, previousScheduledDate: existingBooking.scheduledDate } : {}),
+          },
+          $unset: {
+            ...(existingBooking.status === "sent" ? { sentAt: "", externalAppointmentId: "" } : {}),
+            failedAt: "",
+            failedReason: "",
+          },
+        }
+      );
+
+      if (settings.confirmationMode === "auto") {
+        const updatedBooking = await db.collection("auto_booking_queue").findOne({ _id: existingBooking._id });
+        if (updatedBooking) {
+          const pushResult = await pushAppointmentToSMS(updatedBooking as QueuedBooking & { _id: any });
+          if (pushResult.success) {
+            await db.collection("auto_booking_queue").updateOne(
+              { _id: existingBooking._id },
+              {
+                $set: {
+                  status: "sent",
+                  sentAt: new Date(),
+                  externalAppointmentId: pushResult.externalId,
+                  provider: pushResult.provider,
+                },
+              }
+            );
+            console.log(`[Auto Booking] Updated booking ${existingBooking._id} re-sent to ${pushResult.provider}`);
+          } else {
+            console.error(`[Auto Booking] Updated booking ${existingBooking._id} failed to re-send: ${pushResult.error}`);
+          }
+        }
+      }
+
+      console.log(`[Auto Booking] Updated existing booking ${existingBooking._id} to new date ${slotResult.slot.date}`);
+      return {
+        queued: true,
+        bookingId: existingBooking._id.toString(),
+        status: settings.confirmationMode === "auto" ? "confirmed" : "pending",
+        scheduledDate: slotResult.slot.date,
+        updated: true,
+      };
     }
     
     // Apply lead time: schedule the appointment leadTimeDays before the service due date
