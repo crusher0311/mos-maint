@@ -283,6 +283,20 @@
                 </select>
               </div>
               <div class="rates-form-field">
+                <label>CUSTOMER TYPE</label>
+                <select id="rate-form-customer-type">
+                  <option value="">Any customer type</option>
+                  <option value="Individual">Individual</option>
+                  <option value="Business">Business</option>
+                  <option value="Fleet">Fleet</option>
+                </select>
+              </div>
+              <div class="rates-form-field">
+                <label>CUSTOMER TAGS</label>
+                <input type="text" id="rate-form-tags" placeholder="VIP, Fleet, Wholesale (comma-separated)" autocomplete="off">
+                <span class="rates-form-hint">Match customers with any of these Tekmetric tags</span>
+              </div>
+              <div class="rates-form-field">
                 <label>JOB CATEGORIES</label>
                 <input type="text" id="rate-form-categories" placeholder="Maintenance, Diagnostics, Tires (comma-separated)" autocomplete="off">
                 <span class="rates-form-hint">Leave blank to apply to all job types</span>

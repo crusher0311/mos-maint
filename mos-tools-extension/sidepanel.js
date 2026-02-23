@@ -128,6 +128,8 @@ const elements = {
   rateFormModels: document.getElementById('rate-form-models'),
   rateFormCategories: document.getElementById('rate-form-categories'),
   rateFormFuelType: document.getElementById('rate-form-fuel-type'),
+  rateFormCustomerType: document.getElementById('rate-form-customer-type'),
+  rateFormTags: document.getElementById('rate-form-tags'),
   rateFormRate: document.getElementById('rate-form-rate'),
   rateFormPriority: document.getElementById('rate-form-priority'),
   rateFormApplyAllWrap: document.getElementById('rate-form-apply-all-wrap'),
@@ -1653,10 +1655,18 @@ function renderLaborRateRules() {
     const fuelTypes = (rule.conditions || [])
       .filter(c => c.type === 'fuelType')
       .flatMap(c => c.values || []);
+    const customerTypes = (rule.conditions || [])
+      .filter(c => c.type === 'customerType')
+      .flatMap(c => c.values || []);
+    const tags = (rule.conditions || [])
+      .filter(c => c.type === 'tag')
+      .flatMap(c => c.values || []);
     const makesText = makes.length > 0 ? makes.join(', ') : 'All vehicles';
     const modelsText = models.length > 0 ? models.join(', ') : '';
     const categoriesText = categories.length > 0 ? categories.join(', ') : '';
     const fuelText = fuelTypes.length > 0 ? fuelTypes.join(', ') : '';
+    const customerTypeText = customerTypes.length > 0 ? customerTypes.join(', ') : '';
+    const tagsText = tags.length > 0 ? tags.join(', ') : '';
     const color = rule.color || '#3B82F6';
 
     return `
@@ -1670,6 +1680,8 @@ function renderLaborRateRules() {
           <div class="rate-group-makes">${escapeHtml(makesText)}</div>
           ${modelsText ? `<div class="rate-group-categories"><span class="rate-group-tag">Models:</span> ${escapeHtml(modelsText)}</div>` : ''}
           ${fuelText ? `<div class="rate-group-categories"><span class="rate-group-tag">Fuel:</span> ${escapeHtml(fuelText)}</div>` : ''}
+          ${customerTypeText ? `<div class="rate-group-categories"><span class="rate-group-tag">Customer:</span> ${escapeHtml(customerTypeText)}</div>` : ''}
+          ${tagsText ? `<div class="rate-group-categories"><span class="rate-group-tag">Tags:</span> ${escapeHtml(tagsText)}</div>` : ''}
           ${categoriesText ? `<div class="rate-group-categories"><span class="rate-group-tag">Jobs:</span> ${escapeHtml(categoriesText)}</div>` : ''}
           ${rule.applyToAllLabor ? `<div class="rate-group-categories"><span class="rate-group-tag" style="color:#10B981;">Applies to all job labor</span></div>` : ''}
           ${rule.priority ? `<div class="rate-group-priority">Priority: ${rule.priority}</div>` : ''}
@@ -1720,9 +1732,17 @@ function showRateForm(editRule = null) {
     const fuelTypes = (editRule.conditions || [])
       .filter(c => c.type === 'fuelType')
       .flatMap(c => c.values || []);
+    const customerTypes = (editRule.conditions || [])
+      .filter(c => c.type === 'customerType')
+      .flatMap(c => c.values || []);
+    const tags = (editRule.conditions || [])
+      .filter(c => c.type === 'tag')
+      .flatMap(c => c.values || []);
     elements.rateFormMakes.value = makes.join(', ');
     elements.rateFormModels.value = models.join(', ');
     elements.rateFormFuelType.value = fuelTypes[0] || '';
+    elements.rateFormCustomerType.value = customerTypes[0] || '';
+    elements.rateFormTags.value = tags.join(', ');
     elements.rateFormCategories.value = categories.join(', ');
     elements.rateFormRate.value = editRule.rate || '';
     elements.rateFormPriority.value = editRule.priority || 0;
@@ -1742,6 +1762,8 @@ function showRateForm(editRule = null) {
     elements.rateFormMakes.value = '';
     elements.rateFormModels.value = '';
     elements.rateFormFuelType.value = '';
+    elements.rateFormCustomerType.value = '';
+    elements.rateFormTags.value = '';
     elements.rateFormCategories.value = '';
     elements.rateFormRate.value = '';
     elements.rateFormPriority.value = '0';
@@ -1796,6 +1818,9 @@ async function handleSaveRateGroup() {
   const models = modelsRaw ? modelsRaw.split(',').map(m => m.trim()).filter(Boolean) : [];
   const categories = categoriesRaw ? categoriesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
   const fuelType = elements.rateFormFuelType.value.trim();
+  const customerType = elements.rateFormCustomerType.value.trim();
+  const tagsRaw = elements.rateFormTags.value.trim();
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
   const conditions = [];
   if (makes.length > 0) {
     conditions.push({ type: 'make', label: 'Vehicle Makes', values: makes });
@@ -1805,6 +1830,12 @@ async function handleSaveRateGroup() {
   }
   if (fuelType) {
     conditions.push({ type: 'fuelType', label: 'Fuel Type', values: [fuelType] });
+  }
+  if (customerType) {
+    conditions.push({ type: 'customerType', label: 'Customer Type', values: [customerType] });
+  }
+  if (tags.length > 0) {
+    conditions.push({ type: 'tag', label: 'Customer Tags', values: tags });
   }
   if (categories.length > 0) {
     conditions.push({ type: 'jobCategory', label: 'Job Categories', values: categories });

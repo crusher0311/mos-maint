@@ -836,6 +836,16 @@ function matchRuleCondition(condition, vehicleData) {
         return false;
       });
     }
+    case 'customerType': {
+      const custType = (vehicleData.customerType || '').toLowerCase();
+      if (!custType) return false;
+      return values.some(v => v.toLowerCase() === custType);
+    }
+    case 'tag': {
+      const custTags = (vehicleData.customerTags || []).map(t => t.toLowerCase());
+      if (custTags.length === 0) return false;
+      return values.some(v => custTags.some(t => t.includes(v.toLowerCase())));
+    }
     case 'roField': {
       const fieldPath = condition.field;
       if (!fieldPath) return false;
@@ -981,6 +991,33 @@ async function autoApplyLaborRate(context, options = {}) {
     ...(customer.phones || []).map(p => typeof p === 'string' ? p : p?.number || '')
   ].filter(Boolean);
 
+  // Fetch full customer details if any rule uses customerType or tag conditions
+  let customerType = customer.customerType || '';
+  let customerTags = [];
+  const needsCustomerDetails = rules.some(r =>
+    (r.conditions || []).some(c => c.type === 'customerType' || c.type === 'tag')
+  );
+  if (needsCustomerDetails && customer.id && shopId) {
+    try {
+      const custRes = await fetch(`${baseUrl}/api/shop/${shopId}/customer/${customer.id}`, {
+        headers: {
+          'x-auth-token': smsTokens.tekmetric,
+          'content-type': 'application/json'
+        }
+      });
+      if (custRes.ok) {
+        const custData = await custRes.json();
+        customerType = custData.customerType || customerType;
+        customerTags = (custData.tags || []).map(t => typeof t === 'string' ? t : (t.name || t.label || ''));
+        console.log(`[LaborRate] Customer details: type="${customerType}", tags=[${customerTags.join(', ')}]`);
+      } else {
+        console.log(`[LaborRate] Customer details fetch returned ${custRes.status}`);
+      }
+    } catch (err) {
+      console.warn("[LaborRate] Error fetching customer details:", err.message);
+    }
+  }
+
   // Derive fuel type: use explicit field first, then detect from engine description
   let derivedFuelType = vehicle.fuelType || vehicle.fuelTypeName || '';
   if (!derivedFuelType) {
@@ -1007,10 +1044,12 @@ async function autoApplyLaborRate(context, options = {}) {
     }).filter(Boolean),
     customerName,
     customerPhones,
+    customerType,
+    customerTags,
     roData: roData
   };
 
-  console.log("[LaborRate] Matching against vehicle:", vehicleData.year, vehicleData.make, vehicleData.model, "fuel:", vehicleData.fuelType, "categories:", JSON.stringify(vehicleData.jobCategories), "customer:", customerName, "phones:", customerPhones.length);
+  console.log("[LaborRate] Matching against vehicle:", vehicleData.year, vehicleData.make, vehicleData.model, "fuel:", vehicleData.fuelType, "categories:", JSON.stringify(vehicleData.jobCategories), "customer:", customerName, "phones:", customerPhones.length, "custType:", customerType, "tags:", JSON.stringify(customerTags));
 
   // Separate rules into per-job (has jobCategory condition) and RO-level (no jobCategory)
   const perJobRules = rules.filter(r => (r.conditions || []).some(c => c.type === 'jobCategory'));

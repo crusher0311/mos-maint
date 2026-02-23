@@ -22,7 +22,7 @@ import {
   Database,
 } from "lucide-react";
 
-type ConditionType = "make" | "fuelType" | "jobCategory" | "customer" | "roField";
+type ConditionType = "make" | "fuelType" | "jobCategory" | "customer" | "customerType" | "tag" | "roField";
 
 type RuleCondition = {
   type: ConditionType;
@@ -47,6 +47,8 @@ const CONDITION_TYPES: { value: ConditionType; label: string; icon: any; descrip
   { value: "fuelType", label: "Fuel Type", icon: Fuel, description: "Match by fuel type (Gas, Diesel, Electric, Hybrid)" },
   { value: "jobCategory", label: "Job Category", icon: Wrench, description: "Match by Tekmetric job category" },
   { value: "customer", label: "Customer Name / Phone", icon: User, description: "Match by customer name or phone number on the repair order" },
+  { value: "customerType", label: "Customer Type", icon: User, description: "Match by Tekmetric customer type (Individual, Business, Fleet)" },
+  { value: "tag", label: "Customer Tags", icon: Tag, description: "Match by Tekmetric customer tags" },
   { value: "roField", label: "RO Data Field", icon: Database, description: "Match any field from the repair order (engine, drive type, etc.)" },
 ];
 
@@ -222,7 +224,9 @@ export default function LaborRatesPage() {
       case "make": return COMMON_MAKES;
       case "fuelType": return FUEL_TYPES;
       case "jobCategory": return jobCategories;
+      case "customerType": return ["Individual", "Business", "Fleet"];
       case "customer": return [];
+      case "tag": return [];
       case "roField": return [];
       default: return [];
     }
@@ -295,7 +299,7 @@ export default function LaborRatesPage() {
             <Settings className="w-12 h-12 text-gray-400 mx-auto mb-3" />
             <h3 className="text-lg font-medium text-gray-600">No labor rate rules yet</h3>
             <p className="text-sm text-gray-500 mt-1">
-              Create rules to automatically apply different rates based on vehicle make, fuel type, job category, or custom tags.
+              Create rules to automatically apply different rates based on vehicle make, fuel type, job category, customer type, tags, or custom fields.
             </p>
             <button
               onClick={startNewRule}
@@ -582,7 +586,7 @@ function RuleEditor({
           rule.conditions.map((cond, index) => {
             const Icon = getConditionIcon(cond.type);
             const options = getValueOptions(cond.type);
-            const needsFreeText = cond.type === "customer" || cond.type === "roField";
+            const needsFreeText = cond.type === "customer" || cond.type === "tag" || cond.type === "roField";
             const fieldLabel = cond.type === "roField" && cond.field
               ? RO_FIELD_OPTIONS.find(f => f.value === cond.field)?.label || cond.field
               : null;
@@ -647,9 +651,11 @@ function RuleEditor({
                       placeholder={
                         cond.type === "customer"
                           ? "Type customer name or phone and press Enter"
-                          : fieldLabel
-                            ? `Type ${fieldLabel.toLowerCase()} value and press Enter`
-                            : "Type a value and press Enter"
+                          : cond.type === "tag"
+                            ? "Type a customer tag and press Enter"
+                            : fieldLabel
+                              ? `Type ${fieldLabel.toLowerCase()} value and press Enter`
+                              : "Type a value and press Enter"
                       }
                       className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
                     />

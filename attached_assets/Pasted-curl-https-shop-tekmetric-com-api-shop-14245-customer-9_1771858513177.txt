@@ -1,0 +1,15 @@
+curl ^"https://shop.tekmetric.com/api/shop/14245/customer/96588167^" ^
+  -H ^"accept: application/json^" ^
+  -H ^"accept-language: en-US,en;q=0.9^" ^
+  -H ^"content-type: application/json^" ^
+  -b ^"_ga=GA1.2.1262566790.1761759404; __stripe_mid=3116fb36-6388-4c79-b8f3-a5bf6c03d9414f1522; mp_93abc6809d9e9b7b3f727c19b8d10312_mixpanel=^%^7B^%^22distinct_id^%^22^%^3A180023^%^2C^%^22^%^24device_id^%^22^%^3A^%^22cd927828-de72-4e41-94ba-d198d816ccaf^%^22^%^2C^%^22^%^24initial_referrer^%^22^%^3A^%^22https^%^3A^%^2F^%^2Fshop.tekmetric.com^%^2Flogout^%^22^%^2C^%^22^%^24initial_referring_domain^%^22^%^3A^%^22shop.tekmetric.com^%^22^%^2C^%^22__mps^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpso^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpus^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpa^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpu^%^22^%^3A^%^7B^%^7D^%^2C^%^22__mpr^%^22^%^3A^%^5B^%^5D^%^2C^%^22__mpap^%^22^%^3A^%^5B^%^5D^%^2C^%^22^%^24user_id^%^22^%^3A180023^%^7D; _gat=1; __stripe_sid=70b6f3a6-3312-48f6-a648-eb2b46e7e7b12b0bfa; _ga_N4QPY5HCYY=GS2.2.s1771857424^$o69^$g1^$t1771857426^$j58^$l0^$h0; AWSALB=z2vFNk1nrvA/2MMHKRDtFwOiiLQZ/PUlQ0SzK390Zs10N2Ubhwc0ThOa/ZkhIH2QJwnSQUKEfWTGavj32+zCquWQ7XOcsJ9XL+FNHlGrqvkvQX7XFxLCJJYB3c8P; AWSALBCORS=z2vFNk1nrvA/2MMHKRDtFwOiiLQZ/PUlQ0SzK390Zs10N2Ubhwc0ThOa/ZkhIH2QJwnSQUKEfWTGavj32+zCquWQ7XOcsJ9XL+FNHlGrqvkvQX7XFxLCJJYB3c8P^" ^
+  -H ^"priority: u=1, i^" ^
+  -H ^"referer: https://shop.tekmetric.com/admin/shop/14245/repair-orders/295818536/estimate^" ^
+  -H ^"sec-ch-ua: ^\^"Not:A-Brand^\^";v=^\^"99^\^", ^\^"Google Chrome^\^";v=^\^"145^\^", ^\^"Chromium^\^";v=^\^"145^\^"^" ^
+  -H ^"sec-ch-ua-mobile: ?0^" ^
+  -H ^"sec-ch-ua-platform: ^\^"Windows^\^"^" ^
+  -H ^"sec-fetch-dest: empty^" ^
+  -H ^"sec-fetch-mode: cors^" ^
+  -H ^"sec-fetch-site: same-origin^" ^
+  -H ^"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36^" ^
+  -H ^"x-auth-token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJiY3J1c2hhQGNhcmV4cGVydHNvay5jb20iLCJ1c2VySWQiOiIxODAwMjMiLCJzaG9wSWQiOiIxNDI0NSIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjE1MDIiLCIxMDAiLCIxNTAxIiwiMTAxIiwiMjAwIiwiMTUwMCIsIjEwMiIsIjMwMCIsIjIwMSIsIjEwMyIsIjE0MDAiLCI0MDAiLCIzMDEiLCIyMDIiLCIxMTAyIiwiMTIwMSIsIjEzMDAiLCI0MDEiLCIzMDIiLCIyMDMiLCI1MDAiLCIxMTAxIiwiNDAyIiwiNTAxIiwiMTIwMCIsIjIwNCIsIjYwMCIsIjQwMyIsIjIwNSIsIjUwMiIsIjYwMSIsIjExMDAiLCI3MDAiLCIyMDYiLCI2MDIiLCI1MDMiLCI4MDAiLCI4MDEiLCIyMDciLCI2MDMiLCI1MDQiLCI5MDAiLCI4MDIiLCI1MDUiLCI1MDYiXSwiZW1wbG95ZWVJZCI6IjI3MDE5OSIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wMi0yM1QxNDozNzowNi4yNzE0MzIzMDdaIiwic2VxdWVuY2VJZCI6ImM5NDcwZjc2LWQ4NmUtNDRjYi04MTI5LTZlNmY5ODZhZGU3YiIsImV4cCI6MTc3MTkxNTAyNn0.zp_FPDaenj5KHiOvhBGlLlc6HyHI6JRE5IdbgkvDF9A^"
