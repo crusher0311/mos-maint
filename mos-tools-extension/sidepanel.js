@@ -691,10 +691,22 @@ async function loadPlan() {
     });
     if (currentContext.vin) params.set('vin', currentContext.vin);
     
-    const result = await sendMessage({
-      action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/plan?${params}`
-    });
+    let result;
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/plan?${params}`
+      }, 60000);
+      
+      if (!result.error) break;
+      lastError = result.error;
+      if (attempt === 0 && (lastError.includes('timed out') || lastError.includes('timeout'))) {
+        console.log('[MOS] Plan request timed out, retrying...');
+        continue;
+      }
+      break;
+    }
     
     if (result.error) throw new Error(result.error);
     
