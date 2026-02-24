@@ -15,16 +15,62 @@ function getSql() {
 
 const sql = getSql();
 
-async function withRetry<T>(fn: (db: ReturnType<typeof postgres>) => Promise<T>, retries = 2, delayMs = 3000): Promise<T> {
+async function resetConnection() {
+  if (_sql) {
+    const old = _sql;
+    _sql = null;
+    try { await old.end({ timeout: 3 }); } catch {}
+  }
+}
+
+const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000;
+let _keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+let _keepAliveStarted = false;
+
+function ensureKeepAlive() {
+  if (_keepAliveStarted || _keepAliveTimer) return;
+  if (typeof process !== 'undefined' && process.env.NEXT_RUNTIME === 'edge') return;
+  _keepAliveStarted = true;
+  _keepAliveTimer = setInterval(async () => {
+    try {
+      const db = getSql();
+      await db`SELECT 1`;
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const isEndpointDisabled = msg.includes("endpoint has been disabled") || msg.includes("endpoint is disabled") || err?.code === "XX000";
+      if (isEndpointDisabled) {
+        console.warn(`[DataOne] Keep-alive: Neon endpoint sleeping, resetting connection...`);
+        await resetConnection();
+        try {
+          const db = getSql();
+          await db`SELECT 1`;
+          console.log(`[DataOne] Keep-alive: Neon endpoint woke up after reconnect`);
+        } catch {
+          console.warn(`[DataOne] Keep-alive: Still unable to reach Neon endpoint`);
+        }
+      } else {
+        console.warn(`[DataOne] Keep-alive ping failed:`, msg);
+        await resetConnection();
+      }
+    }
+  }, KEEP_ALIVE_INTERVAL_MS);
+  if (_keepAliveTimer.unref) _keepAliveTimer.unref();
+  console.log(`[DataOne] Keep-alive started (every ${KEEP_ALIVE_INTERVAL_MS / 1000}s)`);
+}
+
+async function withRetry<T>(fn: (db: ReturnType<typeof postgres>) => Promise<T>, retries = 3, initialDelayMs = 5000): Promise<T> {
+  ensureKeepAlive();
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await fn(getSql());
     } catch (err: any) {
       const msg = err?.message || String(err);
       const isEndpointDisabled = msg.includes("endpoint has been disabled") || msg.includes("endpoint is disabled") || err?.code === "XX000";
-      if (isEndpointDisabled && attempt < retries) {
-        console.log(`[DataOne] Neon endpoint sleeping, retrying in ${delayMs}ms (attempt ${attempt + 1}/${retries})...`);
-        _sql = null;
+      const isConnectionError = msg.includes("Connection terminated") || msg.includes("connection refused") || msg.includes("ECONNREFUSED") || msg.includes("timeout");
+      if ((isEndpointDisabled || isConnectionError) && attempt < retries) {
+        const delayMs = initialDelayMs * Math.pow(1.5, attempt);
+        console.log(`[DataOne] Neon endpoint sleeping, retrying in ${Math.round(delayMs)}ms (attempt ${attempt + 1}/${retries})...`);
+        await resetConnection();
         await new Promise(r => setTimeout(r, delayMs));
         continue;
       }
@@ -642,5 +688,26 @@ export async function getBatchQuickSpecs(vins: string[]): Promise<Record<string,
   } catch (err) {
     console.error("getBatchQuickSpecs error:", err);
     return result;
+  }
+}
+
+export async function pingDataOneDb(): Promise<boolean> {
+  ensureKeepAlive();
+  try {
+    const db = getSql();
+    await db`SELECT 1`;
+    return true;
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    console.warn("[DataOne] Ping failed:", msg);
+    await resetConnection();
+    try {
+      const db = getSql();
+      await db`SELECT 1`;
+      console.log("[DataOne] Ping succeeded after reconnect");
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

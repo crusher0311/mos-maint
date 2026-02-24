@@ -37,7 +37,7 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Database**: MongoDB Atlas (planned migration to PostgreSQL), PostgreSQL
 *   **AI**: OpenAI API
 *   **Payments**: Stripe
-*   **VIN Decoding & OEM Schedules**: DataOne (local PostgreSQL, SFTP sync weekly)
+*   **VIN Decoding & OEM Schedules**: DataOne (local PostgreSQL, SFTP sync weekly). DataOne DB connection uses exponential-backoff retry (3 retries, 5s/7.5s/11.25s) for Neon endpoint wake-up, plus a keep-alive ping every 4 minutes to prevent auto-suspension. Health check at `/api/health` includes DataOne DB connectivity.
 *   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
 *   **Vehicle History Reports**: CARFAX
 *   **Digital Vehicle Inspections (DVI)**: AutoVitals
