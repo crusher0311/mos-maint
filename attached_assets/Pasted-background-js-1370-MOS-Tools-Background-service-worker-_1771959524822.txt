@@ -1,0 +1,42 @@
+background.js:1370 [MOS Tools] Background service worker loaded
+background.js:140 [MOS] Side panel opens on action click
+background.js:163 [MOS] Message received: GET_MOS_AUTH
+background.js:35 [MOS] Restored API token from storage
+background.js:39 [MOS] Restored API URL: https://mos.tools
+background.js:54 [Tekmetric] Restored session token
+background.js:163 [MOS] Message received: GET_SMS_CONTEXT
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:799 [LaborRate] Failed to fetch rules: Error: Session expired. Please login again.
+    at handleMosApiRequest (background.js:520:11)
+    at async fetchLaborRateRules (background.js:793:18)
+    at async autoApplyLaborRate (background.js:912:17)
+fetchLaborRateRules @ background.js:799
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: GET_MOS_AUTH
+background.js:163 [MOS] Message received: MOS_LOGIN
+background.js:494 [MOS] Login successful: jhubych86@gmail.com
+background.js:163 [MOS] Message received: GET_SMS_CONTEXT
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
