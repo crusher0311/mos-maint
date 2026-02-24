@@ -323,9 +323,20 @@ async function runOnDemandAnalysis(
     console.log(`[Extension] Using prefetched ${shopWorkOrders.length} work orders`);
   }
 
-  // Use prefetched OEM data or fetch if not provided
+  // Use prefetched OEM data or fetch if not provided (with 15s timeout to avoid blocking)
   try {
-    const oemResult = prefetched?.oemResult || await getMaintenanceScheduleCached(vin);
+    let oemFetch: Promise<Awaited<ReturnType<typeof getMaintenanceScheduleCached>>>;
+    if (prefetched?.oemResult) {
+      oemFetch = Promise.resolve(prefetched.oemResult);
+    } else {
+      oemFetch = Promise.race([
+        getMaintenanceScheduleCached(vin),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("DataOne timeout — plan will load without OEM data")), 15000)
+        )
+      ]);
+    }
+    const oemResult = await oemFetch;
     console.log(`[Extension] OEM data: ${oemResult.count} items, source: ${oemResult.source}`);
     
     if (oemResult.ok && oemResult.items?.length > 0) {

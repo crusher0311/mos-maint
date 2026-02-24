@@ -679,12 +679,21 @@ export async function POST(req: NextRequest) {
     const vinUpper = vin.toUpperCase();
     const vinRegex = new RegExp(`^${vinUpper}$`, 'i');
 
+    const oemWithTimeout = Promise.race([
+      getMaintenanceScheduleCached(vin),
+      new Promise<Awaited<ReturnType<typeof getMaintenanceScheduleCached>>>((resolve) =>
+        setTimeout(() => {
+          console.warn(`[PlanBuild] DataOne timeout for ${vin}, continuing without OEM data`);
+          resolve({ ok: false, vin, squish: '', count: 0, items: [], error: 'timeout', source: 'cache' as const });
+        }, 15000)
+      )
+    ]);
     const [autoCfg, carfaxCfg, protractorCfg, autoVitalsCfg, oemData] = await Promise.all([
       resolveAutoflowConfig(shopId),
       resolveCarfaxConfig(shopId),
       resolveProtractorConfig(shopId),
       resolveAutoVitalsConfig(shopId),
-      getMaintenanceScheduleCached(vin),
+      oemWithTimeout,
     ]);
 
     const vehicleDoc = await db.collection("vehicles").findOne(

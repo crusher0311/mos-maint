@@ -47,7 +47,7 @@ async function ensureAwake(): Promise<void> {
       if (isEndpointSleeping(err) || isConnectionError(err)) {
         await resetConnection();
         for (let attempt = 0; attempt < 3; attempt++) {
-          const delayMs = 5000 * Math.pow(1.5, attempt);
+          const delayMs = 2000 * Math.pow(2, attempt);
           console.log(`[DataOne] Waking Neon endpoint, attempt ${attempt + 1}/3 (waiting ${Math.round(delayMs)}ms)...`);
           await new Promise(r => setTimeout(r, delayMs));
           try {
@@ -88,7 +88,7 @@ function ensureKeepAlive() {
   console.log(`[DataOne] Keep-alive started (every ${KEEP_ALIVE_INTERVAL_MS / 1000}s)`);
 }
 
-async function withRetry<T>(fn: (db: ReturnType<typeof postgres>) => Promise<T>, retries = 3, initialDelayMs = 5000): Promise<T> {
+async function withRetry<T>(fn: (db: ReturnType<typeof postgres>) => Promise<T>, retries = 3, initialDelayMs = 2000): Promise<T> {
   ensureKeepAlive();
   await ensureAwake();
   for (let attempt = 0; attempt <= retries; attempt++) {
