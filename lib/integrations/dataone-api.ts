@@ -338,7 +338,10 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     
     if (cached && cached.expiresAt > now && cached.vehicle) {
       const cachedHasIntervals = cached.data.items?.some((item: any) => item.miles || item.months);
-      if (cachedHasIntervals || cached.data.count === 0) {
+      const isErrorResult = !cached.data.ok && cached.data.count === 0 && cached.data.error;
+      if (isErrorResult) {
+        console.log(`[DataOne Cache] HIT but cached error result for squish ${squish} (${cached.data.error}), re-fetching...`);
+      } else if (cachedHasIntervals || cached.data.count === 0) {
         console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
         return {
           ok: cached.data.ok,
@@ -351,8 +354,9 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
           source: "cache",
           cachedAt: cached.fetchedAt,
         };
+      } else {
+        console.log(`[DataOne Cache] HIT but cached data has ${cached.data.count} items with NO intervals for squish ${squish}, re-fetching...`);
       }
-      console.log(`[DataOne Cache] HIT but cached data has ${cached.data.count} items with NO intervals for squish ${squish}, re-fetching...`);
     }
     
     // If cache hit but missing vehicle info, mark for re-fetch

@@ -1,0 +1,87 @@
+background.js:1370 [MOS Tools] Background service worker loaded
+background.js:140 [MOS] Side panel opens on action click
+background.js:35 [MOS] Restored API token from storage
+background.js:39 [MOS] Restored API URL: https://mos.tools
+background.js:54 [Tekmetric] Restored session token
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: GET_MOS_AUTH
+background.js:163 [MOS] Message received: GET_SMS_CONTEXT
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '524', roId: '306090921', roNumber: null, vin: null, …}
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '524', roId: '306090921', roNumber: null, vin: null, …}
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '524', roId: null, roNumber: null, vin: null, …}
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '524', roId: null, roNumber: null, vin: null, …}
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '524', roId: null, roNumber: '25768', vin: null, …}
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: {provider: 'tekmetric', shopId: '524', roId: '305759034', roNumber: '25760', vin: null, …}
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 3KPF24ADXLE262441
+sidepanel.js:773 [MOS] Updated RO number from API: 25766
+sidepanel.js:778 [MOS] Updated customer name from API: JACKIE PUMPHREY
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 1FA6P8TH5G5202048
+sidepanel.js:773 [MOS] Updated RO number from API: 25760
+sidepanel.js:778 [MOS] Updated customer name from API: Renee Hutchings
