@@ -407,7 +407,29 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       }
     }
     
-    // Store in cache
+    const isDbError = !finalOk && finalError && (
+      finalError.includes("endpoint has been disabled") ||
+      finalError.includes("endpoint is disabled") ||
+      finalError.includes("unavailable after retries") ||
+      finalError.includes("Connection terminated") ||
+      finalError.includes("ECONNREFUSED") ||
+      finalError.includes("timeout")
+    );
+
+    if (isDbError && finalCount === 0) {
+      console.warn(`[DataOne Cache] Skipping cache store for squish ${squish} — DB unavailable, would cache empty result`);
+      return {
+        ok: false,
+        vin,
+        squish,
+        count: 0,
+        items: [],
+        vehicle: vehicleInfo,
+        error: finalError,
+        source: "cache",
+      };
+    }
+
     const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
     
     await cacheCollection.updateOne(
