@@ -696,7 +696,7 @@ export async function GET(request: NextRequest) {
           const decoded = await Promise.race([
             decodeVinLocal(vin.toUpperCase()),
             new Promise<{ ok: false; vin: string; error: string; source: "local" }>((resolve) =>
-              setTimeout(() => resolve({ ok: false, vin, error: "timeout", source: "local" }), 10000)
+              setTimeout(() => resolve({ ok: false, vin, error: "timeout", source: "local" }), 5000)
             )
           ]);
           if (decoded.ok && decoded.decoded) {
@@ -961,8 +961,16 @@ export async function GET(request: NextRequest) {
             console.warn('[Extension] CARFAX fetch failed:', e);
             return { ok: false, serviceRecords: [] };
           }),
-          // DataOne OEM maintenance schedule
-          getMaintenanceScheduleCached(vin).catch(e => {
+          // DataOne OEM maintenance schedule (15s timeout to avoid blocking on Neon wake-up)
+          Promise.race([
+            getMaintenanceScheduleCached(vin),
+            new Promise<{ ok: false; count: 0; items: []; vin: string; squish: string; source: 'cache' }>((resolve) =>
+              setTimeout(() => {
+                console.warn('[Extension] OEM fetch timed out after 15s');
+                resolve({ ok: false, count: 0, items: [], vin, squish: '', source: 'cache' });
+              }, 15000)
+            )
+          ]).catch(e => {
             console.warn('[Extension] OEM fetch failed:', e);
             return { ok: false, count: 0, items: [], vin, squish: '', source: 'cache' as const };
           }),
