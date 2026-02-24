@@ -1083,11 +1083,24 @@ function injectFloatingButton() {
 }
 
 function openSidePanel() {
-  // Send message to background to open the side panel
-  chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }, (response) => {
+  chrome.runtime.sendMessage({ action: 'PING' }, () => {
     if (chrome.runtime.lastError) {
-      console.log('[MOS Tools] Could not open side panel:', chrome.runtime.lastError.message);
+      console.log('[MOS Tools] Waking service worker...');
     }
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log('[MOS Tools] Could not open side panel:', chrome.runtime.lastError.message);
+          setTimeout(() => {
+            chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }, () => {
+              if (chrome.runtime.lastError) {
+                console.log('[MOS Tools] Side panel open failed after retry');
+              }
+            });
+          }, 500);
+        }
+      });
+    }, 100);
   });
 }
 
