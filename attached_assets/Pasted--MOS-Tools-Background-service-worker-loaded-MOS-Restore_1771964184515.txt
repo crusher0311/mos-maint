@@ -1,0 +1,58 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [MOS] Side panel opens on action click
+ [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:102 [Tekmetric] Shop ID captured: 524
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: GET_MOS_AUTH
+background.js:163 [MOS] Message received: GET_SMS_CONTEXT
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 1FA6P8TH5G5202048
+sidepanel.js:773 [MOS] Updated RO number from API: 25760
+sidepanel.js:778 [MOS] Updated customer name from API: Renee Hutchings
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 1FA6P8TH5G5202048
+sidepanel.js:773 [MOS] Updated RO number from API: 25760
+sidepanel.js:778 [MOS] Updated customer name from API: Renee Hutchings
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 1FA6P8TH5G5202048
+sidepanel.js:773 [MOS] Updated RO number from API: 25760
+sidepanel.js:778 [MOS] Updated customer name from API: Renee Hutchings
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:914 [LaborRate] No rules configured, skipping
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:796 [LaborRate] Fetched 0 rules for shop 524
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:740 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:773 [MOS] Updated RO number from API: 25751
+sidepanel.js:778 [MOS] Updated customer name from API: madonna edwards
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: MOS_API_REQUEST

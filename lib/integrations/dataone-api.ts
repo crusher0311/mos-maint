@@ -339,8 +339,12 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     if (cached && cached.expiresAt > now && cached.vehicle) {
       const cachedHasIntervals = cached.data.items?.some((item: any) => item.miles || item.months);
       const isErrorResult = !cached.data.ok && cached.data.count === 0 && cached.data.error;
+      const cachedAgeMs = now.getTime() - new Date(cached.fetchedAt).getTime();
+      const isStaleEmpty = cached.data.count === 0 && cachedAgeMs > 24 * 60 * 60 * 1000;
       if (isErrorResult) {
         console.log(`[DataOne Cache] HIT but cached error result for squish ${squish} (${cached.data.error}), re-fetching...`);
+      } else if (isStaleEmpty) {
+        console.log(`[DataOne Cache] HIT but empty result cached ${Math.round(cachedAgeMs / 3600000)}h ago for squish ${squish}, re-fetching...`);
       } else if (cachedHasIntervals || cached.data.count === 0) {
         console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
         return {
