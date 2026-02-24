@@ -693,7 +693,12 @@ export async function GET(request: NextRequest) {
       if (!vehicle || !vehicle.year || !vehicle.make || !vehicle.model) {
         try {
           const { decodeVinLocal } = await import("@/lib/integrations/dataone-local");
-          const decoded = await decodeVinLocal(vin.toUpperCase());
+          const decoded = await Promise.race([
+            decodeVinLocal(vin.toUpperCase()),
+            new Promise<{ ok: false; vin: string; error: string; source: "local" }>((resolve) =>
+              setTimeout(() => resolve({ ok: false, vin, error: "timeout", source: "local" }), 10000)
+            )
+          ]);
           if (decoded.ok && decoded.decoded) {
             const d = decoded.decoded;
             vehicle = {
