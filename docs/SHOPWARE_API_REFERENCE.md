@@ -1063,7 +1063,16 @@ Creates a new RO in `estimate` state.
 
 Returns `201` with full RO in `estimate` state (same schema as GET).
 
-### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
+### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{id}`
+
+Updates an existing RO. Same discount and `preferred_contact_type` rules as POST.
+
+**Notable differences from POST:**
+- `customer_id`, `shop_id`, `vehicle_id` — **cannot be changed** (not accepted in body)
+- `status_id` — can be set/changed here (not available on POST)
+- Tax rates (`part_tax_rate`, `labor_tax_rate`, `sublet_tax_rate`, `hazmat_tax_rate`) — **can only be updated on `estimate` or `in_progress` ROs**, ignored on `invoice` state
+
+Returns `200` with full RO schema.
 
 ---
 
