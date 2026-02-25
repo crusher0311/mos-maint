@@ -1,0 +1,102 @@
+| event_message                                                                                                                   | id                                   | timestamp        |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------- |
+| Schema cache loaded in 1.6 milliseconds                                                                                         | 311e2351-d4f8-4937-b34a-eea274d97433 | 1772026512515441 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | fa064f6a-8944-4d43-a4af-2da063ae4ad6 | 1772026512515330 |
+| Schema cache queried in 9.3 milliseconds                                                                                        | b8d13868-c491-4cf2-bb63-6d3c8dead19f | 1772026512504062 |
+| Config reloaded                                                                                                                 | ee88c35f-5021-421d-bba9-3fa8cf858f58 | 1772026512308984 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 62f533f0-5990-4a4b-aeae-7f1dbccb8e06 | 1772026512282205 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | 4db1b389-0431-4a79-9687-2dc9d37fa0c1 | 1772026512282205 |
+| Schema cache loaded in 1.4 milliseconds                                                                                         | ddae46ab-850f-48ef-a04c-9b49f5049a4e | 1772026512158977 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | f8f3121a-22bb-49c5-9a4d-834965c28861 | 1772026512158977 |
+| Schema cache queried in 13.0 milliseconds                                                                                       | 130f1a21-aacd-4d1e-90d5-37d0f6600a2d | 1772026512149073 |
+| Config reloaded                                                                                                                 | c29b5940-4430-4c85-97fe-5f80eedaa0ad | 1772026510984579 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | 396827cc-a6ea-4fcc-b2ac-71cb0f3e9f44 | 1772026510321510 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 943c4bdd-ac04-4081-8088-2f2d6ed8b291 | 1772026510314374 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | c54630dd-743f-4c73-bdc5-e5dfc07de2ce | 1772026510141340 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | fa6e0b35-26d7-4883-8a57-6bf535672b1c | 1772026510141340 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 3327bbcb-a71e-4c26-bde0-0b91cde1d6d0 | 1772026510117987 |
+| Schema cache loaded in 0.7 milliseconds                                                                                         | 46ec9285-29d9-4049-9d4a-12ccb61e2163 | 1772026333197362 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | 51b45b8b-fbfe-47bf-a59d-3fbca08486db | 1772026333197362 |
+| Schema cache queried in 5.3 milliseconds                                                                                        | 49552408-920f-472f-b5fc-5ab026e7f4bf | 1772026333196278 |
+| Config reloaded                                                                                                                 | 78a9036c-7225-4b6b-abf4-c7da5c1dbf4e | 1772026333062865 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 8022b92b-01ce-44ed-948a-2a465ea7b848 | 1772026333050525 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | eda5a7e4-c9c3-4f64-80eb-993bdad4fea5 | 1772026333050525 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | bd54ba51-0ee2-418e-bf46-d80587f97546 | 1772026332984646 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | c06c5a72-6cae-48a7-a148-9ef96700daca | 1772026332941676 |
+| Schema cache loaded in 0.8 milliseconds                                                                                         | a6b241bf-63a1-4083-a1a7-321a96af66b1 | 1772026332935858 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | 6b02393a-a522-4156-adfa-ef47bf438d45 | 1772026332935858 |
+| Schema cache queried in 8.8 milliseconds                                                                                        | 6839a977-3af0-4c63-83e2-9c818c27acd4 | 1772026332933643 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 4aa4d25d-aa5a-47ea-9de1-9a91bb25a8ff | 1772026332898955 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | d7b9390d-b5e2-4e7b-bbb3-552ea6bca95c | 1772026332856249 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 9a7b5d1e-6454-4a48-9377-186aa14e4a3a | 1772026332813604 |
+| Config reloaded                                                                                                                 | 635d3dbb-b50f-48b2-b0b6-7c63896604ef | 1772026332796462 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | fc305e60-93f2-42a8-a3f1-63650e1aef53 | 1772026332788150 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | d0cf351c-f2a7-4373-9cf9-eeb065225127 | 1772026332788150 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | c3433dce-abdf-4012-92c9-955670ac3acf | 1772026332770986 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 89b56866-c796-4027-885c-a3c5f4103f3c | 1772026332727459 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 14a65e76-6f45-44e3-9f5c-3b7930ef6c89 | 1772026332684239 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | 6e82683c-88a5-4a4a-a480-5b702e7584b7 | 1772026332671581 |
+| Schema cache loaded in 0.8 milliseconds                                                                                         | 3938c2c2-d1ed-4d60-a942-7d4210d4edc6 | 1772026332671581 |
+| Schema cache queried in 6.2 milliseconds                                                                                        | c19b254d-ddb7-4180-8415-225386f13886 | 1772026332670656 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 1ba28926-c7ab-4b1d-980c-d310cab8dc03 | 1772026332641640 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 5d9ce417-8653-41fd-a55c-0515116e3e4a | 1772026332599126 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 278f2365-ed8a-4045-861e-afd06d6598cb | 1772026332556437 |
+| Config reloaded                                                                                                                 | f2a69ffb-f826-4281-b0a9-8c0309437d33 | 1772026332540056 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 3c2df35b-e45c-43b9-af85-43f6e1807c98 | 1772026332531394 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | b2329d50-0659-4242-b53d-10081ed96143 | 1772026332531394 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 6e1607d2-e713-464a-9128-5285f2371411 | 1772026332514703 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | a549f956-ca0d-419e-b7ad-c5c2c48935eb | 1772026332471075 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 56b300f4-fea8-4fc5-9f9f-dc7269760c22 | 1772026332426627 |
+| Schema cache loaded in 0.8 milliseconds                                                                                         | 35109b82-b3af-4055-a44b-9e8c689719a3 | 1772026332412340 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | 4239b966-72a0-4f1a-97e2-79f97ec32d71 | 1772026332412184 |
+| Schema cache queried in 6.3 milliseconds                                                                                        | 885e3ba3-96fc-494b-82fb-124a2ab16a89 | 1772026332411436 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 84acf8dc-c04e-4429-a811-0086c77c9f3e | 1772026332383982 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 860ca087-ab55-4936-881a-45e45113d088 | 1772026332341109 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | e558b8b7-79d7-45f8-b90b-0bdc0d810c06 | 1772026332298469 |
+| Config reloaded                                                                                                                 | 35f1dd55-5750-49e1-b55d-5bec86807c57 | 1772026332279551 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | dda10b77-f6f2-4008-a647-70aab87b41f0 | 1772026332270723 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | d23e0f22-84f7-45da-907d-e3c3f5c2d3a5 | 1772026332270723 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | ed9548b8-92db-4ed3-a882-de255472f608 | 1772026332255605 |
+| Schema cache loaded 30 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | a5132bb0-d2ca-4965-a377-da1805fa12e4 | 1772026319172090 |
+| Schema cache loaded in 0.8 milliseconds                                                                                         | dd321bcc-e583-46e0-8976-c882e9316bba | 1772026319172090 |
+| Schema cache queried in 6.3 milliseconds                                                                                        | 2a3fe102-d44b-4dbe-b1b0-d3f03692b9cd | 1772026319170914 |
+| Config reloaded                                                                                                                 | df75f6f8-5d43-46a6-a3c8-e510ff48f865 | 1772026319034058 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | f76d9170-3c13-4038-a2a9-34a8eda05cf7 | 1772026319025721 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | fa5727c2-4044-4729-811a-0378339c943c | 1772026319025721 |
+| Schema cache loaded 29 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | b1fa39b9-a397-4a79-8fa2-ba53cdcf4880 | 1772026318908228 |
+| Schema cache queried in 7.3 milliseconds                                                                                        | 6a94c130-ee4e-4cf5-b625-4ea5b4de363b | 1772026318908228 |
+| Schema cache loaded in 0.7 milliseconds                                                                                         | 01fa6e17-9ff3-4c43-bae1-b79b3bc2fae7 | 1772026318908228 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | b89dc622-e1d4-4a4b-8f90-21a1c46f716d | 1772026318781928 |
+| Config reloaded                                                                                                                 | b23eec9e-46b7-44f4-bdc3-c15546a5a0af | 1772026318764405 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | d293139e-2ec9-43f7-a28c-ddccc5617fa0 | 1772026318754398 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 3c9a1118-3885-4a05-ad89-5346b6f7083e | 1772026318754398 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 5721c417-0e47-4219-8177-3d620e7dcd90 | 1772026318688757 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 64116853-51b0-4952-82c2-f3e68de9c64a | 1772026318640468 |
+| Schema cache loaded 22 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | 33ee5548-3518-46aa-8084-8fe09c24d3d6 | 1772026318639872 |
+| Schema cache loaded in 0.7 milliseconds                                                                                         | d4823f5e-0018-436d-8dfe-72ddd86687da | 1772026318639872 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 7151dd81-183a-4a97-9646-e169c549b25a | 1772026318639757 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 618fa394-182b-4414-bd74-7cafd151e917 | 1772026318639757 |
+| Schema cache queried in 29.2 milliseconds                                                                                       | b5f42e01-733d-45b4-a912-ce6ad4b61632 | 1772026318639757 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 7847e4d1-96b3-4671-a87a-400a66541822 | 1772026318637756 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | fd4db28c-0ae3-4ff9-a909-66d881e3dbd6 | 1772026318262815 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | a3442ce1-1465-404d-bb86-cc1baa9f6762 | 1772026318173151 |
+| Config reloaded                                                                                                                 | 449cebc1-5bc8-4acf-a85c-b5843df040ab | 1772026318138195 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | 21c3383e-60d8-4355-842d-d82914975557 | 1772026318128846 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 61e827d2-b858-4b1f-8506-ecd0f221c9b0 | 1772026318128846 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 6eaa82f7-3b63-4989-93e5-169d179523b3 | 1772026318082240 |
+| Schema cache loaded in 0.7 milliseconds                                                                                         | 69c19fd3-e532-41c1-b0cb-49d1b2b38ed9 | 1772026318013084 |
+| Schema cache loaded 19 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | a9184e8c-f45d-471c-a552-e1e2cab382c4 | 1772026318013010 |
+| Schema cache queried in 7.2 milliseconds                                                                                        | 21efd951-1f54-4281-a1d5-a71a00342feb | 1772026318012277 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 94647930-3760-4536-95c3-60f99a44a550 | 1772026317989050 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 037a0949-8943-4a0d-b400-458c93a5afe0 | 1772026317897260 |
+| Config reloaded                                                                                                                 | 9a704f5f-27b1-4fa2-8d51-da7d3c2021d4 | 1772026317876697 |
+| Successfully connected to PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit                    | 5d5d3c54-be3a-463b-9be0-145cbf05a99c | 1772026317866220 |
+| Connection Pool initialized with a maximum size of 20 connections                                                               | c40e0378-27d9-4933-8a9d-69ad1fdab39e | 1772026317866220 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | fa65e029-18f6-488e-bc39-c38d5a04fb0a | 1772026317760182 |
+| Schema cache loaded 16 Relations, 9 Relationships, 1 Functions, 0 Domain Representations, 4 Media Type Handlers, 1194 Timezones | cc05dfaf-05a3-4703-91ce-9b04e21bbf19 | 1772026317751670 |
+| Schema cache loaded in 0.7 milliseconds                                                                                         | f340d933-42e7-4843-bed3-81f006436d0d | 1772026317751670 |
+| Schema cache queried in 6.5 milliseconds                                                                                        | 76f1aa0d-78d2-41f7-944a-a9507b750ad0 | 1772026317750306 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 9a742cc8-4918-4d56-8016-2b54ba5f6a45 | 1772026317714179 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | ec9d6377-161b-4deb-ab62-128dbde339de | 1772026317664735 |
+| Received a schema cache reload message on the "pgrst" channel                                                                   | 9170dc59-3fbb-4ced-8ee0-04ce055e439c | 1772026317619283 |
+| Config reloaded                                                                                                                 | 4fc3aa07-7051-406c-a404-c6a12ed5a6d4 | 1772026317616330 |
