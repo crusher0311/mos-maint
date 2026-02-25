@@ -1202,6 +1202,10 @@ Tenant-wide. A single staff member can be both `advisor: true` and `technician: 
 
 Returns `201` with same shape as list item.
 
+### `PUT /api/v1/tenants/{tenant_id}/staffs`
+
+**Anomaly:** PUT operates on the **collection URL** (no `{id}` in path) — same pattern as Pay Rates. Same required/optional fields as POST. Returns `200` with same shape.
+
 ### `GET /api/v1/tenants/{tenant_id}/staffs/{id}` `[NEEDS DOCS]`
 
 ---
