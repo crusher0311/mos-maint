@@ -3,10 +3,14 @@ export * from './core';
 import './protractor/index';
 import './tekmetric/index';
 import './autoflow/index';
+import { integrationRegistry } from './core/facade';
+import { shopWareAdapter } from './shopware/adapter';
+integrationRegistry.register(shopWareAdapter);
 
 export { protractorAdapter } from './protractor/adapter';
 export { tekmetricAdapter } from './tekmetric/adapter';
 export { autoflowAdapter } from './autoflow/adapter';
+export { shopWareAdapter } from './shopware/adapter';
 
 export {
   resolveProtractorConfig,
