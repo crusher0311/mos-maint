@@ -1127,14 +1127,43 @@ Same shape as list item. Official `inspection.state` values: `"red"`, `"yellow"`
 
 ---
 
-## Shops `[NEEDS DOCS]`
+## Shops
 
-Business locations under a tenant.
+Business locations under a tenant. Shop config (tax rates, supply fees, labor cost) is important context for RO processing.
 
-### `GET /api/v1/tenants/{tenant_id}/shops` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/shops`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+```json
+{
+  "id": 1,
+  "identifier": "02",
+  "name": "Shop 02",
+  "address": "123 Shop Street",
+  "phone": "(111) 111-1111",
+  "time_zone": "Pacific Time (US & Canada)",
+  "service_desk_email": "shop02@example.com",
+  "live_at": "2026-02-17T13:14:57Z",
+  "avg_labor_cost_cents": 5000,
+  "part_tax_rate": 4.4,
+  "labor_tax_rate": 3.3,
+  "hazmat_tax_rate": 2.2,
+  "sublet_tax_rate": 1.1,
+  "supply_fee_rate": 0,
+  "part_supply_fee_rate": 0,
+  "supply_fee_name": null,
+  "supply_fee_cap_cents": 0,
+  "mycarfax_enabled": false,
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Note: `supply_fee_cap_cents` appears in actual responses but is missing from the spec field list.
+
 ### `GET /api/v1/tenants/{tenant_id}/shops/{id}` `[NEEDS DOCS]`
-
-Expected fields: `id`, `tenant_id`, `name`, `address`, `city`, `state`, `zip`, `phone`, `email`, `timezone`
 
 ---
 
