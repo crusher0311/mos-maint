@@ -1372,15 +1372,13 @@ Expected fields: `id`, `shop_id`, `name`, `account_number`, `contact`, `phone`, 
 
 ### `POST /api/v1/webhooks`
 
-Register a new webhook. Up to 20 per Partner ID.
+Register a new webhook. Up to 20 per Partner ID. Lives at the **partner level** (no `tenant_id`).
 
-**Request body:**
-```json
-{
-  "url": "https://mos.tools/api/webhooks/shopware",
-  "events": ["repair_order.created", "repair_order.updated", "vehicle.updated", "customer.updated"]
-}
-```
+**Required:** `url` (HTTPS, no redirects), `events` (array of event strings)
+
+**Optional:** `format` — webhook format (values undocumented; `null` is default)
+
+Events follow `object_type.event_action` pattern, e.g. `"repair_order.updated"`, `"assignment.created"`. Returns `201` with same shape as GET item (`id`, `url`, `events`, `format`).
 
 **Webhook event payload (created/updated):**
 ```json
