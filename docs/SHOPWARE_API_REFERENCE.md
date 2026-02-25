@@ -1262,11 +1262,33 @@ Same shape as list item.
 
 ---
 
-## Tenants `[NEEDS DOCS]`
+## Tenants
+
+Top-level entity — each tenant is a business (company) that may have multiple shops. This endpoint lives at the partner level, not under a `tenant_id` path.
+
+### `GET /api/v1/tenants`
+
+Lists all tenants this partner API key is authorized to access. Use for connection setup and tenant discovery.
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+```json
+{
+  "id": 2,
+  "cname": "atomic92",
+  "name": "Example Company, Inc.",
+  "country_code": "US",
+  "subscription_status": "Active",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+`subscription_status` values: `"Active"`, `"Canceled"` — skip data sync for canceled tenants.
+
+Note: No `integrator_tags` on tenants.
 
 ### `GET /api/v1/tenants/{tenant_id}` `[NEEDS DOCS]`
-
-Expected fields: `id`, `name`, `shops[]`
 
 ---
 
