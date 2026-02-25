@@ -514,7 +514,9 @@ Visual color-coded tags applied to ROs. No `updated_after` filter — not increm
 
 Note: No `created_at`/`updated_at` on list items. Fetch full list at setup time and cache.
 
-### `GET /api/v1/tenants/{tenant_id}/labels/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/labels/{id}`
+
+Same shape as list item — `{ id, text, color_code, row_order }`. No timestamps.
 
 ---
 
