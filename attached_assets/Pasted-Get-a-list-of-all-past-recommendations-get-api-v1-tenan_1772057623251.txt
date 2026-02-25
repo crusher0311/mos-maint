@@ -1,0 +1,147 @@
+Get a list of all past recommendations
+get
+/api/v1/tenants/{tenant_id}/past_recommendations
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+customer_id
+integer
+Examples:
+1
+done
+boolean
+Examples:
+null
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+updated_after
+string
+Filter response to only include records updated after a given time
+
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+vehicle_id
+integer
+Examples:
+null
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+description
+string
+The title of the previously recommended service
+
+approved
+boolean
+True if the past recommendation has since been approved by the customer, false if it has been declined, and null otherwise.
+
+approver_id
+integer or null
+A foreign key that points to a Staff or Customer ID. This represents the person who approved the recommendation (if it has been approved, null otherwise).
+
+approval_at
+string<date-time> or null
+Date and time the recommendation was approved if it has been approved, null otherwise.
+
+approval_type
+string or null
+Type of approval: one of "customer" (Approved by customer), "email" (Approved by email), "estimate" (Approved in estimate), "person" (Approved in person), "phone" (Approved by phone). Null if unapproved or declined.
+
+imported
+boolean
+True if the past recommendation has been added as a service on an Repair Order, false otherwise. All imported=true past recommendations will also be done=true, but not all done=true past recommendations will be imported=true.
+
+vehicle_id
+integer
+A foreign key that points to a Vehicle ID. This represents the vehicle that this service was recommended for.
+
+done
+boolean
+True if the past recommendation has been either sold to the customer, or has been manually marked as done by a staff member (for example, work since performed by another shop). These past recommendations will no longer be presented to the vehicle owner on future visits.
+
+recommendation_id
+integer
+A foreign key which points to the Recommendation that was unsold at the time that the original source repair order was closed, resulting in the creation of this past recommendation.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/past_recommendations \
+  --header 'Accept: application/json'
+without filterfilter when done param equal to falsefilter when done param equal to truefilter by vehicle_idfilter by customer_id
+{
+  "results": [
+    {
+      "id": 2,
+      "created_at": "2026-02-18T13:14:43Z",
+      "updated_at": "2026-02-18T13:14:43Z",
+      "description": "Rotate tires",
+      "approved": false,
+      "approver_id": null,
+      "approval_type": null,
+      "imported": false,
+      "vehicle_id": 2,
+      "done": false,
+      "recommendation_id": 1,
+      "approval_at": null
+    },
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:43Z",
+      "updated_at": "2026-02-18T13:14:43Z",
+      "description": "Change oil",
+      "approved": true,
+      "approver_id": 1,
+      "approval_type": "phone",
+      "imported": true,
+      "vehicle_id": 1,
+      "done": true,
+      "recommendation_id": 1,
+      "approval_at": "2026-02-17T13:14:43Z"
+    }
+  ],
+  "limit": 2,
+  "limited": false,
+  "total_count": 2,
+  "current_page": 1,
+  "total_pages": 1
+}

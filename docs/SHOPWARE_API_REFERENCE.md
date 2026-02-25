@@ -550,11 +550,41 @@ All fields optional: `repair_order_id`, `description`. Returns `200` with update
 
 ---
 
-## Past Recommendations `[NEEDS DOCS]`
+## Past Recommendations
 
-Previously recommended services that were declined.
+Services recommended on a prior visit that were not sold. Created automatically when an RO is closed with unsold recommendations.
 
-### `GET /api/v1/tenants/{tenant_id}/past_recommendations` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/past_recommendations`
+
+**Query filters:** `customer_id`, `vehicle_id`, `done` (boolean), `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{
+  "id": 2,
+  "description": "Rotate tires",
+  "vehicle_id": 2,
+  "recommendation_id": 1,
+  "approved": false,
+  "approver_id": null,
+  "approval_type": null,
+  "approval_at": null,
+  "imported": false,
+  "done": false,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+**Key fields:**
+- `done` — `true` if sold or manually marked done; these no longer show on future visits
+- `imported` — `true` if the recommendation was added as a service on a new RO. All `imported=true` are also `done=true`, but not vice versa
+- `approved` — `true` if approved, `false` if declined, `null` if neither
+- `approval_type` — `"customer"`, `"email"`, `"estimate"`, `"person"`, `"phone"`, or `null`
+- `recommendation_id` — foreign key back to the original Recommendation record
+
+**Filter pattern for deferred work:** `done=false` + `vehicle_id=<id>` to get outstanding declined services for a vehicle.
+
 ### `GET /api/v1/tenants/{tenant_id}/past_recommendations/{id}` `[NEEDS DOCS]`
 
 ---
