@@ -759,9 +759,42 @@ Same shape as list item.
 
 ---
 
-## Purchase Records `[NEEDS DOCS]`
+## Purchase Records
 
-### `GET /api/v1/tenants/{tenant_id}/purchase_records` `[NEEDS DOCS]`
+Parts purchase orders from vendors (including eComm integrators like PartsTech).
+
+### `GET /api/v1/tenants/{tenant_id}/purchase_records`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{
+  "id": 1,
+  "shop_id": 1,
+  "invoice_number": "IN1",
+  "purchase_order_number": "PO-number-1",
+  "vendor_id": 1,
+  "payment_type": "Credit Card",
+  "ecomm_integrator_order_id": 100,
+  "is_return": false,
+  "line_items": [
+    {
+      "inventory_id": 1,
+      "quantity": 1,
+      "list_price_cents": 0,
+      "msrp_cents": 0,
+      "cost_cents": 50,
+      "ecomm_integrator_part_id": "PARTSTECH_PART_ID"
+    }
+  ],
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+### `GET /api/v1/tenants/{tenant_id}/purchase_records/{id}` `[NEEDS DOCS]`
 
 ---
 
