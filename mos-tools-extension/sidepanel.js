@@ -114,6 +114,10 @@ const elements = {
   keytagPrintBtn: document.getElementById('keytag-print-btn'),
   keytagError: document.getElementById('keytag-error'),
   
+  // Labor Rate applying banner
+  laborRateStatusBanner: document.getElementById('labor-rate-status-banner'),
+  laborRateStatusText: document.getElementById('labor-rate-status-text'),
+
   // Labor Rates
   ratesLoading: document.getElementById('rates-loading'),
   ratesMain: document.getElementById('rates-main'),
@@ -290,27 +294,36 @@ function setupEventListeners() {
       }
       switchTab('sticker');
     }
+    if (message.action === 'LABOR_RATE_APPLYING') {
+      showLaborRateStatus('Applying labor rates...');
+    }
     if (message.action === 'LABOR_RATE_APPLIED') {
       if (message.success) {
         const rate = typeof message.rate === 'number' ? message.rate.toFixed(2) : message.rate;
+        let resultText;
         if (message.perJob) {
+          resultText = `Labor rate applied: "${message.ruleName}" → $${rate}/hr`;
           showNotification(
             `Labor rate updated: "${message.ruleName}" → $${rate}/hr on ${message.jobNames?.join(', ') || 'jobs'}`,
             'success'
           );
         } else if (message.previousRate != null) {
           const prevRate = typeof message.previousRate === 'number' ? message.previousRate.toFixed(2) : message.previousRate;
+          resultText = `"${message.ruleName}" applied: $${prevRate}/hr → $${rate}/hr`;
           showNotification(
             `Labor rate updated: "${message.ruleName}" → $${rate}/hr (was $${prevRate}/hr)`,
             'success'
           );
         } else {
+          resultText = `"${message.ruleName}" applied: $${rate}/hr`;
           showNotification(
             `Labor rate updated: "${message.ruleName}" → $${rate}/hr`,
             'success'
           );
         }
+        showLaborRateStatus(resultText, 'success');
       } else {
+        hideLaborRateStatus();
         showNotification(`Labor rate error: ${message.error}`, 'error');
       }
     }
@@ -1948,20 +1961,26 @@ async function handleApplyLaborRateNow() {
     <div class="spinner-tiny"></div>
     Applying...
   `;
+  showLaborRateStatus('Applying labor rates...');
 
   try {
     const result = await sendMessage({ action: 'APPLY_LABOR_RATE_NOW' });
     if (result.success) {
+      const rate = typeof result.rate === 'number' ? result.rate.toFixed(2) : result.rate;
+      showLaborRateStatus(`"${result.ruleName}" applied: $${rate}/hr`, 'success');
       showNotification(
-        `Labor rate updated: "${result.ruleName}" → $${result.rate.toFixed(2)}/hr`,
+        `Labor rate updated: "${result.ruleName}" → $${rate}/hr`,
         'success'
       );
     } else if (result.noMatch) {
+      hideLaborRateStatus();
       showNotification('No matching rule for this vehicle', 'info');
     } else {
+      hideLaborRateStatus();
       showNotification(result.error || 'Failed to apply labor rate', 'error');
     }
   } catch (err) {
+    hideLaborRateStatus();
     showNotification(err.message || 'Failed to apply labor rate', 'error');
   } finally {
     elements.ratesApplyNowBtn.disabled = false;
@@ -2399,6 +2418,30 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+let laborRateStatusTimer = null;
+
+function showLaborRateStatus(text, state = 'applying') {
+  if (!elements.laborRateStatusBanner) return;
+  clearTimeout(laborRateStatusTimer);
+  const banner = elements.laborRateStatusBanner;
+  const spinner = banner.querySelector('.spinner-tiny');
+  banner.classList.remove('hidden', 'success', 'error');
+  if (state === 'success') banner.classList.add('success');
+  if (state === 'error') banner.classList.add('error');
+  if (spinner) spinner.style.display = state === 'applying' ? '' : 'none';
+  if (elements.laborRateStatusText) elements.laborRateStatusText.textContent = text;
+  if (state !== 'applying') {
+    laborRateStatusTimer = setTimeout(() => {
+      if (elements.laborRateStatusBanner) elements.laborRateStatusBanner.classList.add('hidden');
+    }, 3000);
+  }
+}
+
+function hideLaborRateStatus() {
+  if (elements.laborRateStatusBanner) elements.laborRateStatusBanner.classList.add('hidden');
+  clearTimeout(laborRateStatusTimer);
 }
 
 function showNotification(message, type = 'info') {

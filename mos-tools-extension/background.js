@@ -202,8 +202,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // Auto-apply labor rate if enabled and we have a new RO
     if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
+      chrome.runtime.sendMessage({ action: 'LABOR_RATE_APPLYING' }).catch(() => {});
       autoApplyLaborRate(currentSmsContext).catch(err => {
         console.warn("[LaborRate] Auto-apply error:", err.message);
+        chrome.runtime.sendMessage({ action: 'LABOR_RATE_APPLY_DONE' }).catch(() => {});
       });
     }
 
