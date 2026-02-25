@@ -1023,7 +1023,8 @@ async function autoApplyLaborRate(context, options = {}) {
         }));
         customerType = extractCustomerType(custData.customerType) || customerType;
         const rawTags = custData.tag || custData.tags || custData.labels || custData.tagList || custData.tagNames || custData.customerTags || [];
-        customerTags = rawTags.map(t => typeof t === 'string' ? t : (t.name || t.label || t.value || ''));
+        const tagsArr = Array.isArray(rawTags) ? rawTags : (rawTags ? [rawTags] : []);
+        customerTags = tagsArr.map(t => typeof t === 'string' ? t : (t.name || t.label || t.value || ''));
         console.log(`[LaborRate] Customer details: type="${customerType}", tags=[${customerTags.join(', ')}]`);
       } else {
         console.log(`[LaborRate] Customer details fetch returned ${custRes.status}`);
