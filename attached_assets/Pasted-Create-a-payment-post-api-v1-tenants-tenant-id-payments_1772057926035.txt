@@ -1,0 +1,156 @@
+Create a payment
+post
+/api/v1/tenants/{tenant_id}/payments
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+amount_cents
+integer
+required
+The amount of the payment in cents.
+
+payment_type_details
+object
+required
+type
+string
+required
+One of 'Credit Card', 'Check', 'Cash', 'Other'.
+
+Allowed values:
+Credit Card
+Check
+Cash
+Other
+name
+string or null
+For types 'Credit Card' and 'Other', this attribute may be set to an alphanumeric string that is at most 25 characters in length. For example, 'Visa' or 'Promo Coupon'.
+
+repair_order_id
+integer
+required
+A foreign key that points to a RepairOrder.id. Represents the RepairOrder that this payment will be applied to.
+
+notes
+string or null
+Notes about the payment.
+
+customer_id
+integer or null
+A foreign key that points to a Customer.id, this attribute required for sync to QB. If not specified, will be taken from repair order.
+
+Responses
+201
+successful
+
+Body
+
+application/json
+
+application/json
+id
+integer
+Unique identifier of this record.
+
+repair_order_id
+integer
+ID of the associated repair order.
+
+payment_type
+string
+Type of the payment and the name associated. Example: 'Credit Card - VISA'.
+
+payment_type_details
+object
+type
+string
+Type of the payment: 'Credit Card', 'Check', 'Cash', 'Other'
+
+name
+string
+Name of the payment type. Only present if type is 'Credit Card' or 'Other'.Must be at must 25 characters and alphanumeric, if present.
+
+notes
+string
+Notes about the payment.
+
+amount_cents
+integer
+Amount of the payment in cents.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request POST \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/payments \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "repair_order_id": 1,
+  "payment_type_details": {
+    "type": "Other",
+    "name": "Special Offer"
+  },
+  "notes": "Custom payment type note",
+  "amount_cents": 99,
+  "customer_id": 1
+}'
+with default typewith custom type
+{
+  "id": 2,
+  "created_at": "2026-02-18T13:14:48Z",
+  "updated_at": "2026-02-18T13:14:48Z",
+  "repair_order_id": 1,
+  "payment_type": "Credit Card - Visa",
+  "payment_type_details": {
+    "type": "Credit Card",
+    "name": "Visa"
+  },
+  "notes": "Customer made partial payment",
+  "amount_cents": 21849,
+  "integrator_tags": []
+}

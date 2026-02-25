@@ -688,7 +688,9 @@ Credit card terminal transaction attempts (approved and declined). Low priority 
 
 Note: `payment_id` is only set for authorized transactions — links to the Payment record that appears on the RO.
 
-### `GET /api/v1/tenants/{tenant_id}/payment_transactions/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/payment_transactions/{id}`
+
+Same shape as list item.
 
 ---
 
