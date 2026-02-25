@@ -1,0 +1,203 @@
+Create a vehicle
+post
+/api/v1/tenants/{tenant_id}/vehicles
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+plate
+string or null
+License plate.
+
+production_date
+string<date> or null
+Production date
+
+registration_exp_date
+string<date> or null
+Registration expire date
+
+detail
+string or null
+Notes made by the staff about this vehicle
+
+fleet_number
+string or null
+Fleet number.
+
+vin
+string or null
+Vehicle Identification Number.
+
+year
+string or null
+Year.
+
+make
+string
+required
+Vehicle make.
+
+>= 1 characters
+model
+string or null
+Vehicle model.
+
+engine
+string or null
+Vehicle engine
+
+color
+string or null
+Vehicle color
+
+customer_ids
+array[integer] or null
+A list of foreign keys that point to zero or more Customer.id. This represents the list of customers who own this vehicle. Multiple customers may own a vehicle.
+
+Responses
+201
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+201
+id
+integer
+Unique identifier of this record.
+
+plate
+string or null
+License plate.
+
+detail
+string or null
+Notes made by the staff about this vehicle
+
+fleet_number
+string or null
+Fleet number.
+
+vin
+string or null
+Vehicle Identification Number.
+
+year
+string or null
+Year.
+
+make
+string or null
+Vehicle make.
+
+model
+string or null
+Vehicle model.
+
+engine
+string or null
+Vehicle engine
+
+production_date
+string or null
+Production date
+
+registration_exp_date
+string or null
+Registration expire date
+
+color
+string or null
+Vehicle color
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+curl --request POST \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/vehicles \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "plate": "EZRIDR",
+  "detail": "Keys in glovebox",
+  "fleet_number": "23R",
+  "vin": "1FMPU16W14LB56648",
+  "year": "2004",
+  "make": "Ford",
+  "model": "Expedition",
+  "engine": "4.6L V8",
+  "customer_ids": [
+    1
+  ],
+  "production_date": "2022-10-24",
+  "registration_exp_date": "2025-10-24",
+  "color": "Black"
+}'
+{
+  "id": 2,
+  "created_at": "2026-02-18T13:15:01Z",
+  "updated_at": "2026-02-18T13:15:01Z",
+  "plate": "EZRIDR",
+  "detail": "Keys in glovebox",
+  "fleet_number": "23R",
+  "vin": "1FMPU16W14LB56648",
+  "year": "2004",
+  "make": "Ford",
+  "model": "Expedition",
+  "engine": "4.6L V8",
+  "color": "BLACK",
+  "production_date": "2022-10-24T08:00:00.000Z",
+  "registration_exp_date": "2025-10-24T08:00:00.000Z",
+  "customer_ids": [
+    1
+  ],
+  "integrator_tags": []
+}

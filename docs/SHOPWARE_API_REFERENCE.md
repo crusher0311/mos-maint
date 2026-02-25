@@ -1288,7 +1288,9 @@ Lists all tenants this partner API key is authorized to access. Use for connecti
 
 Note: No `integrator_tags` on tenants.
 
-### `GET /api/v1/tenants/{tenant_id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}`
+
+Same shape as list item.
 
 ---
 

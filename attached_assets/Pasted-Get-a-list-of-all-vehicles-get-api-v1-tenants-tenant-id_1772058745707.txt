@@ -1,0 +1,161 @@
+Get a list of all vehicles
+get
+/api/v1/tenants/{tenant_id}/vehicles
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+customer_id
+integer
+Filter response to include only Customers with this ID.
+
+Examples:
+2
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+updated_after
+string
+Filter response to only include records updated after a given time
+
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+vin
+string
+Filter response to include only Vehicles with this VIN.
+
+Examples:
+1FMPU16W14LB56648
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+plate
+string
+License plate.
+
+production_date
+string
+Production date
+
+registration_exp_date
+string
+Registration expire date
+
+detail
+string
+Notes made by the staff about this vehicle
+
+fleet_number
+string
+Fleet number.
+
+vin
+string
+Vehicle Identification Number.
+
+year
+string
+Year.
+
+make
+string
+Vehicle make.
+
+model
+string
+Vehicle model.
+
+engine
+string
+Vehicle engine
+
+color
+string
+Vehicle color
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+integrator_tags
+array[object]
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/vehicles \
+  --header 'Accept: application/json'
+{
+  "results": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:15:01Z",
+      "updated_at": "2026-02-18T13:15:01Z",
+      "plate": "EZRIDR",
+      "detail": "Keys in glovebox",
+      "fleet_number": "23R",
+      "vin": "1FMPU16W14LB56648",
+      "year": "2004",
+      "make": "Ford",
+      "model": "Expedition",
+      "engine": "4.6L V8",
+      "color": "BLACK",
+      "production_date": "2026-02-17T13:15:01.046Z",
+      "registration_exp_date": "2026-02-17T13:15:01.046Z",
+      "customer_ids": [
+        2
+      ],
+      "integrator_tags": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:15:01Z",
+          "updated_at": "2026-02-18T13:15:01Z",
+          "taggable_type": "Vehicle",
+          "taggable_id": 1,
+          "name": "tag_name",
+          "value": "tag_value"
+        }
+      ]
+    }
+  ],
+  "limit": 1,
+  "limited": false,
+  "total_count": 1,
+  "current_page": 1,
+  "total_pages": 1
+}
