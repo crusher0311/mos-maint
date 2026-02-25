@@ -548,6 +548,25 @@ Same shape as list item.
 
 Same schema as the list item. Returns a single inventory record directly (not wrapped in `results`). No additional fields beyond the list response.
 
+### `PUT /api/v1/tenants/{tenant_id}/inventories/{id}`
+
+Partial update — only send fields you want to change. Returns full inventory record.
+
+**Writable fields:**
+| Field | Type | Notes |
+|-------|------|-------|
+| `cost_cents` | integer ≥ 0 | Shop cost per unit |
+| `msrp_cents` | integer ≥ 0 | MSRP; prefer over deprecated `list_price_cents` |
+| `location` | string | Shelf/bin number |
+| `min_stock` | number 0–999999 or null | Reorder threshold |
+| `max_stock` | number 0–999999 or null | Max stock level |
+
+**Not writable via this endpoint:** `brand`, `description`, `number`, `shop_id`, `quantity_*`, `tags`, `integrator_tags`, `type`, `primary_vendor_id`, `partstech_part_id`
+
+```json
+{ "cost_cents": 179, "msrp_cents": 439, "location": "C4", "min_stock": 1, "max_stock": 2 }
+```
+
 ---
 
 ## Labels
