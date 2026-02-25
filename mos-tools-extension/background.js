@@ -1012,8 +1012,17 @@ async function autoApplyLaborRate(context, options = {}) {
       });
       if (custRes.ok) {
         const custData = await custRes.json();
+        console.log('[LaborRate] Raw customer API response keys:', Object.keys(custData).join(', '));
+        console.log('[LaborRate] Raw customer tags fields:', JSON.stringify({
+          tags: custData.tags,
+          labels: custData.labels,
+          tagList: custData.tagList,
+          tagNames: custData.tagNames,
+          customerTags: custData.customerTags,
+        }));
         customerType = extractCustomerType(custData.customerType) || customerType;
-        customerTags = (custData.tags || []).map(t => typeof t === 'string' ? t : (t.name || t.label || ''));
+        const rawTags = custData.tags || custData.labels || custData.tagList || custData.tagNames || custData.customerTags || [];
+        customerTags = rawTags.map(t => typeof t === 'string' ? t : (t.name || t.label || t.value || ''));
         console.log(`[LaborRate] Customer details: type="${customerType}", tags=[${customerTags.join(', ')}]`);
       } else {
         console.log(`[LaborRate] Customer details fetch returned ${custRes.status}`);
