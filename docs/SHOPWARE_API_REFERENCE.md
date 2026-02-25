@@ -867,97 +867,13 @@ Returns `200` with same full shape as GET.
 
 ---
 
-## Repair Orders `[NEEDS DOCS]`
+## Repair Orders
 
 **CRITICAL** — core entity for job indexing and backfill.
 
 RO lifecycle states: `estimate` → `in_progress` (when `started_at` set) → `invoice` (when `closed_at` set)
 
-### `GET /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
-
-Expected query filters: `shop_id`, `customer_id`, `vehicle_id`, `updated_after`, `page`, `per_page`
-
-Known fields from estimate/add-canned-job response:
-```json
-{
-  "id": 2,
-  "number": 11340,
-  "state": "estimate | in_progress | invoice",
-  "shop_id": 2,
-  "customer_id": 3,
-  "vehicle_id": 1,
-  "technician_id": 1,
-  "advisor_id": 2,
-  "status_id": 1,
-  "odometer": 90321,
-  "odometer_out": null,
-  "detail": "Key tag 84, customer waiting",
-  "customer_concern": "reason for visit",
-  "vehicle_use": "primary use of vehicle",
-  "customer_source": "Repeat",
-  "preferred_contact_type": "Waiting | Phone | Email | Text",
-  "fleet_po": null,
-  "supply_fee_cents": 3250,
-  "taxable": true,
-  "part_tax_rate": 0.0,
-  "labor_tax_rate": 0.0,
-  "sublet_tax_rate": 0.0,
-  "hazmat_tax_rate": 0.0,
-  "part_discount_cents": null,
-  "labor_discount_cents": null,
-  "part_discount_percentage": null,
-  "labor_discount_percentage": null,
-  "started_at": null,
-  "closed_at": null,
-  "picked_up_at": null,
-  "due_in_at": "2026-02-21T13:14:38Z",
-  "due_out_at": null,
-  "services": [...],
-  "payments": [...],
-  "label": { "id": 1, "text": "Test", "color_code": "#FFFFFF", "row_order": 1 },
-  "integrator_tags": [...],
-  "created_at": "...",
-  "updated_at": "..."
-}
-```
-
-Service line items on RO:
-```json
-{
-  "id": 1,
-  "title": "Warning Light On",
-  "category_id": 4,
-  "canned_job_id": 1,
-  "completed": false,
-  "completed_at": null,
-  "last_completed_at": null,
-  "row_order": 1,
-  "is_fixed_price_service": false,
-  "fixed_price_cents": null,
-  "fixed_price_labor_total_cents": null,
-  "labor_rate_cents": 10000,
-  "comment": "",
-  "labors": [
-    { "id": 1, "name": "Advise on proper course of action", "technician_id": 1, "hours": 0.13, "taxable": false, "row_order": 1 }
-  ],
-  "parts": [
-    {
-      "id": 1, "brand": "Superbright", "description": "194 LED", "number": "WLED-A-120",
-      "quoted_price_cents": 395, "sell_price_cents": 395, "cost_cents": 85,
-      "part_inventory_id": 1, "taxable": false, "quantity": 2, "quantity_needed": 1
-    }
-  ],
-  "hazmats": [{ "id": 1, "name": "Recycling fee", "fee_cents": 2000, "taxable": true, "quantity": 1 }],
-  "sublets": [
-    {
-      "id": 1, "name": "Windshield repair", "price_cents": 1999, "cost_cents": 999,
-      "provider": "Windshield Bros.", "invoice_number": "1111", "description": "...",
-      "taxable": true, "vendor_id": 1, "invoice_date": "..."
-    }
-  ],
-  "inspections": [{ "id": 1, "name": "Measure tire tread depth", "state": "red | yellow | green" }]
-}
-```
+See fully documented endpoints below.
 
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders/{id}/start`
 
@@ -1300,7 +1216,7 @@ Same shape as list item.
 
 ---
 
-## Vehicles `[NEEDS DOCS]`
+## Vehicles
 
 **CRITICAL** — tenant-wide vehicle records.
 
@@ -1439,7 +1355,9 @@ Same shape as list item.
 
 All fields optional: `url`, `events`, `format`. Replaces the existing values for any provided fields. Returns `200` with same shape as GET item.
 
-### `DELETE /api/v1/webhooks/{id}` `[NEEDS DOCS]`
+### `DELETE /api/v1/webhooks/{id}`
+
+Returns `200` with empty body `{}`.
 
 ---
 
