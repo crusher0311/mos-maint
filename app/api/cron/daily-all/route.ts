@@ -78,6 +78,30 @@ export async function GET(req: NextRequest) {
     console.error(`[Cron] Protractor sync error:`, error);
   }
 
+  try {
+    console.log(`[Cron] Running Shop-Ware sync...`);
+    const shopwareResponse = await fetch(`${baseUrl}/api/cron/shopware-sync`, {
+      method: "GET",
+      headers: {
+        ...(CRON_SECRET ? { "Authorization": `Bearer ${CRON_SECRET}` } : {}),
+      },
+    });
+
+    if (shopwareResponse.ok) {
+      results.shopwareSync = await shopwareResponse.json();
+      console.log(`[Cron] Shop-Ware sync completed`);
+    } else {
+      results.shopwareSync = {
+        error: `HTTP ${shopwareResponse.status}`,
+        details: await shopwareResponse.text(),
+      };
+      console.error(`[Cron] Shop-Ware sync failed:`, results.shopwareSync);
+    }
+  } catch (error: any) {
+    results.shopwareSync = { error: error.message };
+    console.error(`[Cron] Shop-Ware sync error:`, error);
+  }
+
   const duration = Date.now() - startTime;
   console.log(`[Cron] Daily-all completed in ${duration}ms`);
 
