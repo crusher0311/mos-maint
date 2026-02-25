@@ -847,7 +847,12 @@ Services recommended to a customer on an active RO (live, not yet closed). When 
 - `quick_price_cents` — optional quick estimate price
 - Belongs to an active RO via `repair_order_id`
 
-### `POST /api/v1/tenants/{tenant_id}/recommendations` `[NEEDS DOCS]`
+### `POST /api/v1/tenants/{tenant_id}/recommendations`
+
+**Required:** `repair_order_id` + either `description` or `canned_job_id` (must have at least one; if `canned_job_id` provided, `description` is ignored).
+
+Returns `201` with full recommendation including embedded `service` object with complete line items (`labors`, `parts`, `hazmats`, `sublets`, `inspections`).
+
 ### `GET /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
 ### `DELETE /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
