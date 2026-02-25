@@ -1431,6 +1431,10 @@ Lists all registered webhooks for this Partner ID. Lives at the **partner level*
 ]
 ```
 
+### `GET /api/v1/webhooks/{id}`
+
+Same shape as list item.
+
 ### `PUT /api/v1/webhooks/{id}` `[NEEDS DOCS]`
 ### `DELETE /api/v1/webhooks/{id}` `[NEEDS DOCS]`
 
