@@ -641,6 +641,10 @@ Updates one or more existing pay rates. PUT is on the **collection** (not `/{id}
 
 Same shape as list item.
 
+### `POST /api/v1/tenants/{tenant_id}/pay_rates/delete`
+
+Bulk delete. Uses POST to `/delete` sub-path (not HTTP DELETE verb). **Required:** `pay_rate_ids` (array of integers). Returns `200` with empty body.
+
 ---
 
 ## Payment Transactions `[NEEDS DOCS]`
