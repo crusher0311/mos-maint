@@ -992,7 +992,12 @@ async function autoApplyLaborRate(context, options = {}) {
   ].filter(Boolean);
 
   // Fetch full customer details if any rule uses customerType or tag conditions
-  let customerType = customer.customerType || '';
+  const extractCustomerType = (val) => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    return val.name || val.label || val.type || '';
+  };
+  let customerType = extractCustomerType(customer.customerType);
   let customerTags = [];
   const needsCustomerDetails = rules.some(r =>
     (r.conditions || []).some(c => c.type === 'customerType' || c.type === 'tag')
@@ -1007,7 +1012,7 @@ async function autoApplyLaborRate(context, options = {}) {
       });
       if (custRes.ok) {
         const custData = await custRes.json();
-        customerType = custData.customerType || customerType;
+        customerType = extractCustomerType(custData.customerType) || customerType;
         customerTags = (custData.tags || []).map(t => typeof t === 'string' ? t : (t.name || t.label || ''));
         console.log(`[LaborRate] Customer details: type="${customerType}", tags=[${customerTags.join(', ')}]`);
       } else {
