@@ -4,7 +4,8 @@ let _sql: ReturnType<typeof postgres> | null = null;
 
 function getSql() {
   if (!_sql) {
-    _sql = postgres(process.env.DATABASE_URL!, {
+    const connStr = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL!;
+    _sql = postgres(connStr, {
       connect_timeout: 30,
       idle_timeout: 0,
       max_lifetime: 60 * 30,
