@@ -1539,25 +1539,6 @@ body {
   text-decoration: underline;
 }
 
-.labor-rate-status-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: #1D4ED8;
-  color: white;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.labor-rate-status-banner.success {
-  background: #059669;
-}
-
-.labor-rate-status-banner.error {
-  background: #DC2626;
-}
-
 .spinner-tiny {
   width: 14px;
   height: 14px;

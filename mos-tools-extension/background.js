@@ -202,10 +202,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // Auto-apply labor rate if enabled and we have a new RO
     if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
-      chrome.runtime.sendMessage({ action: 'LABOR_RATE_APPLYING' }).catch(() => {});
       autoApplyLaborRate(currentSmsContext).catch(err => {
         console.warn("[LaborRate] Auto-apply error:", err.message);
-        chrome.runtime.sendMessage({ action: 'LABOR_RATE_APPLY_DONE' }).catch(() => {});
       });
     }
 
@@ -1202,6 +1200,19 @@ async function autoApplyLaborRate(context, options = {}) {
     if (unmatchedUpdated > 0) {
       console.log(`[LaborRate] Applied RO rate to ${unmatchedUpdated} unmatched job(s)`);
       appliedAny = true;
+      chrome.runtime.sendMessage({
+        action: "LABOR_RATE_APPLIED",
+        success: true,
+        ruleName: matchedRoRule.name,
+        rate: matchedRoRule.rate,
+        roNumber: context.roNumber || context.roId
+      }).catch(() => {});
+      const toastMsg = `${matchedRoRule.name}: $${matchedRoRule.rate}/hr applied to ${unmatchedUpdated} job(s)`;
+      chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
+        for (const tab of tabs) {
+          chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI", soft: false, toastMessage: toastMsg }).catch(() => {});
+        }
+      });
     }
   }
 
