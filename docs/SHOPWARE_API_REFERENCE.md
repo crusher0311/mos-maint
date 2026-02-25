@@ -535,7 +535,11 @@ Internal staff notes attached to repair orders.
 
 Note: Queried at tenant level, filtered by `repair_order_id`. `description` typed as `any`.
 
-### `POST /api/v1/tenants/{tenant_id}/notes` `[NEEDS DOCS]`
+### `POST /api/v1/tenants/{tenant_id}/notes`
+
+**Required:** `repair_order_id`, `description` (min 1 char)
+Returns `201` with created note.
+
 ### `GET /api/v1/tenants/{tenant_id}/notes/{id}` `[NEEDS DOCS]`
 
 ---
