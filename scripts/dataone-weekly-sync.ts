@@ -114,8 +114,9 @@ async function importCoreTables(sql: postgres.Sql): Promise<void> {
       const copyCmd = `\\COPY ${table}(${columns}) FROM '${csvPath}' WITH (FORMAT csv, HEADER true, QUOTE '"', NULL '')`;
       const tmpSqlFile = path.join(WORK_DIR, `_copy_${table}.sql`);
       fs.writeFileSync(tmpSqlFile, copyCmd);
+      const dbUrl = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL!;
       execSync(
-        `psql "$DATABASE_URL" -f "${tmpSqlFile}"`,
+        `psql "${dbUrl}" -f "${tmpSqlFile}"`,
         { stdio: "pipe" }
       );
       
@@ -171,7 +172,8 @@ async function createSyncMetadataRecord(sql: postgres.Sql, fileName: string, fil
 
 async function main() {
   const startTime = Date.now();
-  const sql = postgres(process.env.DATABASE_URL!);
+  const connStr = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL!;
+  const sql = postgres(connStr);
   
   console.log("╔════════════════════════════════════════════════════════════╗");
   console.log("║   DataOne Weekly Sync                                      ║");

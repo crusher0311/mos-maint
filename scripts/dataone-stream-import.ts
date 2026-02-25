@@ -3,7 +3,7 @@ import fs from "fs";
 import readline from "readline";
 import postgres from "postgres";
 
-const { DATABASE_URL } = process.env;
+const DATABASE_URL = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
 const WORK_DIR = ".dataone/extracted";
 const BATCH_SIZE = 2000;
 
