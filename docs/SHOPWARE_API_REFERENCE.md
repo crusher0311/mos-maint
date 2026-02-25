@@ -544,7 +544,9 @@ Same shape as list item.
 - `tags` is a free-form string array (staff-applied labels)
 - `part_type_metadata` is an array of arbitrary key-value objects (varies by part type, e.g. tire size)
 
-### `GET /api/v1/tenants/{tenant_id}/inventories/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/inventories/{id}`
+
+Same schema as the list item. Returns a single inventory record directly (not wrapped in `results`). No additional fields beyond the list response.
 
 ---
 
@@ -1197,9 +1199,40 @@ Returns `200` with no body.
 
 ---
 
-## Staff Shift Clocks `[NEEDS DOCS]`
+## Staff Time Clocks
 
-### `GET /api/v1/tenants/{tenant_id}/staff_shift_clocks` `[NEEDS DOCS]`
+**Actual URL:** nested under `/staffs/{staff_id}/time_clocks` — **not** a flat `/staff_shift_clocks` endpoint.
+
+### `GET /api/v1/tenants/{tenant_id}/staffs/{staff_id}/time_clocks`
+
+**Query filters:**
+- `start_after` — ISO 8601; returns records with `clock_in_at` after this time
+- `end_before` — ISO 8601; returns records with `clock_out_at` before this time
+- `page`, `per_page`
+
+Returns standard paginated envelope. Each result has minimal fields — no `id` on the clock record itself.
+
+```json
+{
+  "results": [
+    {
+      "staff_id": 1,
+      "clock_in_at": "2022-10-12T00:00:00-08:00",
+      "clock_out_at": "2022-10-12T04:00:00-08:00"
+    }
+  ],
+  "limit": 5,
+  "limited": false,
+  "total_count": 5,
+  "current_page": 1,
+  "total_pages": 1
+}
+```
+
+**Notes:**
+- Fields: `staff_id`, `clock_in_at`, `clock_out_at` only — no `id`, no `created_at`/`updated_at`
+- Use `start_after`/`end_before` to fetch shifts for a payroll period
+- A staff member may have multiple clock-in/out pairs per day (e.g., lunch break)
 
 ---
 
@@ -1256,12 +1289,6 @@ Note: No `integrator_tags` on tenants.
 ### `GET /api/v1/tenants/{tenant_id}`
 
 Same shape as list item.
-
----
-
-## Shift Clocks `[NEEDS DOCS]`
-
-### `GET /api/v1/tenants/{tenant_id}/shift_clocks` `[NEEDS DOCS]`
 
 ---
 

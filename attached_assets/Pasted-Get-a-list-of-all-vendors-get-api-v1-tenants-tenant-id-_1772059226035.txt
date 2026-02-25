@@ -1,0 +1,133 @@
+Get a list of all vendors
+get
+/api/v1/tenants/{tenant_id}/vendors
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+updated_after
+string
+Filter response to only include records updated after a given time
+
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+name
+string
+Vendor name.
+
+phone
+string or null
+Vendor phone.
+
+account_number
+string or null
+Account number.
+
+info
+string or null
+Vendor information.
+
+notes
+null
+Notes.
+
+website
+string or null
+Vendor website.
+
+shop_id
+integer
+A foreign key that points to the Shop that this Vendor belongs to.
+
+active
+boolean
+True if the vendor is still active and in use, false if the vendor has been archived.
+
+preferred
+boolean
+True if the user has marked this vendor as a frequently-used vendor.
+
+integrator_tags
+array[object]
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/vendors \
+  --header 'Accept: application/json'
+{
+  "results": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:15:02Z",
+      "updated_at": "2026-02-18T13:15:02Z",
+      "name": "Vendor 3",
+      "phone": null,
+      "account_number": null,
+      "info": null,
+      "notes": null,
+      "website": "vendor19.com",
+      "shop_id": 1,
+      "active": true,
+      "preferred": false,
+      "integrator_tags": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:15:02Z",
+          "updated_at": "2026-02-18T13:15:02Z",
+          "taggable_type": "Vendor",
+          "taggable_id": 1,
+          "name": "tag_name",
+          "value": "tag_value"
+        }
+      ]
+    }
+  ],
+  "limit": 1,
+  "limited": false,
+  "total_count": 1,
+  "current_page": 1,
+  "total_pages": 1
+}
