@@ -520,10 +520,23 @@ Same shape as list item — `{ id, text, color_code, row_order }`. No timestamps
 
 ---
 
-## Notes `[NEEDS DOCS]`
+## Notes
 
-### `GET /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/notes` `[NEEDS DOCS]`
-### `POST /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/notes` `[NEEDS DOCS]`
+Internal staff notes attached to repair orders.
+
+### `GET /api/v1/tenants/{tenant_id}/notes`
+
+**Query filters:** `repair_order_id`, `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{ "id": 1, "description": "This is a test note", "repair_order_id": 1, "created_at": "...", "updated_at": "..." }
+```
+
+Note: Queried at tenant level, filtered by `repair_order_id`. `description` typed as `any`.
+
+### `POST /api/v1/tenants/{tenant_id}/notes` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/notes/{id}` `[NEEDS DOCS]`
 
 ---
 
