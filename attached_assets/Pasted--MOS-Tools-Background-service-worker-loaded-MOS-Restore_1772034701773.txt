@@ -1,0 +1,78 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [MOS] Side panel opens on action click
+ [Tekmetric] Shop ID captured: 14245
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 5 rules for shop 14245
+ [LaborRate] Loading rule into form — overrideCategoryRates: undefined applyToAllLabor: undefined raw rule: {"id":"temp_1772031296488","name":"Fleet","rate":99.99,"priority":50,"conditions":[{"type":"customerType","field":null,"label":"Customer Type","values":["Business"]},{"type":"tag","field":null,"label":"Customer Tags","values":["Fleet"]}],"matchMode":"all","color":"#3B82F6","createdAt":"2026-02-25T14:54:56.488Z","updatedAt":"2026-02-25T15:44:08.775Z"}
+ [LaborRate] Saving rule — applyToAllLabor: false overrideCategoryRates: true categories: 0
+ [MOS] Message received: SAVE_LABOR_RATE_RULES
+ [LaborRate] Loading rule into form — overrideCategoryRates: true applyToAllLabor: false raw rule: {"id":"temp_1772031296488","name":"Fleet","rate":99.99,"priority":50,"conditions":[{"type":"customerType","label":"Customer Type","values":["Business"]},{"type":"tag","label":"Customer Tags","values":["Fleet"]}],"matchMode":"all","color":"#3B82F6","createdAt":"2026-02-25T14:54:56.488Z","updatedAt":"2026-02-25T15:51:22.520Z","applyToAllLabor":false,"overrideCategoryRates":true}
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Loaded 5 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Raw customer API response keys: id, firstName, lastName, email, phone, vehicles, customerType, contactFirstName, contactLastName, notes, address, shopId, shopName, shopNickname, taxExempt, taxId, arCreditLimit, okForMarketing, leadSource, referrerId, referrerName, birthday, fleetId, deletedDate, rewardsId, fleetCompany, tekmetricId, linkedCustomers, tag, requiredFieldValidationBypassed, userBypassedBy, arBalance, storeCreditBalance, storeCreditBalanceAge, fullName
+ [LaborRate] Raw customer tags fields: {"tag":"FLEET"}
+ [LaborRate] Customer details: type="Business", tags=[FLEET]
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["diagnostics","maintenance"] customer: Brandon phones: 1 custType: Business tags: ["FLEET"]
+ [LaborRate] Matched RO-level rule: "Fleet" (priority 50) → $99.99/hr
+ [LaborRate] Current rate on RO: 9999 (99.99/hr), target: 9999 (99.99/hr)
+ [LaborRate] Rate already matches ($99.99/hr), skipping
+ [LaborRate] Matched per-job rule: "Diag" (priority 20) → $299/hr
+ [LaborRate] Job "CEL" has no category, skipping per-job rule
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1226 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1300 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1137 [LaborRate] Matched per-job rule: "Maint" (priority 19) → $100/hr
+background.js:1226 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1231 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1249 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1226 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1226 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1300 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1172 [LaborRate] Job "CEL" labor already at RO rate $99.99/hr
+background.js:1172 [LaborRate] Job "6K Lube Oil And Filter" labor already at RO rate $99.99/hr
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: APPLY_LABOR_RATE_NOW
+background.js:975 [LaborRate] Loaded 5 jobs with labor from estimate
+background.js:1007 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:1036 [LaborRate] Raw customer API response keys: id, firstName, lastName, email, phone, vehicles, customerType, contactFirstName, contactLastName, notes, address, shopId, shopName, shopNickname, taxExempt, taxId, arCreditLimit, okForMarketing, leadSource, referrerId, referrerName, birthday, fleetId, deletedDate, rewardsId, fleetCompany, tekmetricId, linkedCustomers, tag, requiredFieldValidationBypassed, userBypassedBy, arBalance, storeCreditBalance, storeCreditBalanceAge, fullName
+background.js:1037 [LaborRate] Raw customer tags fields: {"tag":"FLEET"}
+background.js:1049 [LaborRate] Customer details: type="Business", tags=[FLEET]
+background.js:1089 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["diagnostics","maintenance"] customer: Brandon phones: 1 custType: Business tags: ["FLEET"]
+background.js:1100 [LaborRate] Matched RO-level rule: "Fleet" (priority 50) → $99.99/hr
+background.js:1335 [LaborRate] Current rate on RO: 9999 (99.99/hr), target: 9999 (99.99/hr)
+background.js:1338 [LaborRate] Rate already matches ($99.99/hr), skipping
+background.js:1137 [LaborRate] Matched per-job rule: "Diag" (priority 20) → $299/hr
+background.js:1226 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1249 [LaborRate] Labor "testing" on job "Diag CEL" already at $299/hr, skipping
+background.js:1231 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1226 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1226 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1300 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1137 [LaborRate] Matched per-job rule: "Maint" (priority 19) → $100/hr
+background.js:1226 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1231 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1249 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1226 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1226 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1300 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1172 [LaborRate] Job "CEL" labor already at RO rate $99.99/hr
+background.js:1172 [LaborRate] Job "6K Lube Oil And Filter" labor already at RO rate $99.99/hr

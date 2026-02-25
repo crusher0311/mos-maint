@@ -326,7 +326,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: result.error || 'Failed to save rules' });
         return;
       }
-      laborRateRules = result.rules || [];
+      // Merge local overrides into in-memory rules so apply logic sees them immediately
+      laborRateRules = (result.rules || []).map(r =>
+        newOverrides[r.id] ? Object.assign({}, r, newOverrides[r.id]) : r
+      );
       laborRateRulesLastFetch = Date.now();
       sendResponse({ success: true, rules: laborRateRules });
     }).catch(err => {
