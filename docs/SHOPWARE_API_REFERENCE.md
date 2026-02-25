@@ -540,7 +540,9 @@ Note: Queried at tenant level, filtered by `repair_order_id`. `description` type
 **Required:** `repair_order_id`, `description` (min 1 char)
 Returns `201` with created note.
 
-### `GET /api/v1/tenants/{tenant_id}/notes/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/notes/{id}`
+
+Same shape as list item.
 
 ---
 
