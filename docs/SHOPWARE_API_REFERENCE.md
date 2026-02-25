@@ -145,7 +145,13 @@ Consistent tag schema across all entities:
 
 Note: `taggable_type` can be any entity type — `Customer`, `Shop`, `Vehicle`, `CannedJob`, `RepairOrder`, `Assignment`, `Category`, etc.
 
-### `POST /api/v1/tenants/{tenant_id}/integrator_tags` `[NEEDS DOCS]`
+### `POST /api/v1/tenants/{tenant_id}/integrator_tags`
+
+**Required:** `taggable_type`, `taggable_id`, `name`, `value`
+
+**Valid `taggable_type` values:** `Appointment`, `Assignment`, `CannedJob`, `Category`, `Customer`, `GpException`, `Inventory`, `Payment`, `PaymentTransaction`, `PurchaseRecord`, `Recommendation`, `RepairOrder`, `Shop`, `Staff`, `Status`, `Vehicle`, `Vendor`
+
+Returns `201` with the created tag.
 ### `GET /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
 ### `DELETE /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
