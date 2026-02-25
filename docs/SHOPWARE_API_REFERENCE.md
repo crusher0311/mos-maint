@@ -1206,7 +1206,9 @@ Returns `201` with same shape as list item.
 
 **Anomaly:** PUT operates on the **collection URL** (no `{id}` in path) — same pattern as Pay Rates. Same required/optional fields as POST. Returns `200` with same shape.
 
-### `GET /api/v1/tenants/{tenant_id}/staffs/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/staffs/{id}`
+
+Same shape as list item.
 
 ---
 
