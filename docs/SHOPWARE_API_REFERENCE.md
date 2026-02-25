@@ -1256,7 +1256,9 @@ Custom RO status labels defined per tenant (e.g., "Waiting for Parts", "In Bay",
 }
 ```
 
-### `GET /api/v1/tenants/{tenant_id}/statuses/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/statuses/{id}`
+
+Same shape as list item.
 
 ---
 
