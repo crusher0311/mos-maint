@@ -694,7 +694,9 @@ Same shape as list item.
 
 ---
 
-## Payments `[NEEDS DOCS]`
+## Payments
+
+Finalized payments that appear on ROs (only created for authorized transactions).
 
 Known fields from RO response:
 ```json
@@ -709,6 +711,14 @@ Known fields from RO response:
   "created_at": "...",
   "updated_at": "..."
 }
+```
+
+### `GET /api/v1/tenants/{tenant_id}/payments/customer_payment_types`
+
+Returns a flat array of custom payment type strings configured for this tenant.
+
+```json
+["Coupon", "Special Offer"]
 ```
 
 ### `GET /api/v1/tenants/{tenant_id}/payments` `[NEEDS DOCS]`
