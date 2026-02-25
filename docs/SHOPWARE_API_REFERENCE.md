@@ -1163,7 +1163,9 @@ Business locations under a tenant. Shop config (tax rates, supply fees, labor co
 
 Note: `supply_fee_cap_cents` appears in actual responses but is missing from the spec field list.
 
-### `GET /api/v1/tenants/{tenant_id}/shops/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/shops/{id}`
+
+Same shape as list item.
 
 ---
 
