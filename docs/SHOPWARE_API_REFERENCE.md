@@ -1304,30 +1304,36 @@ Same shape as list item.
 
 **CRITICAL** — tenant-wide vehicle records.
 
-### `GET /api/v1/tenants/{tenant_id}/vehicles` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/vehicles`
 
-Expected query filters: `customer_id`, `vin`, `updated_after`, `page`, `per_page`
+**Query filters:** `customer_id`, `vin`, `updated_after`, `page`, `per_page`
 
-Expected fields:
 ```json
 {
   "id": 1,
-  "customer_id": 1,
-  "year": "2006",
-  "make": "Toyota",
-  "model": "Prius",
-  "submodel": null,
-  "engine": "1.5L L4 (1NZFXE)",
-  "vin": "1HGCM82633A123456",
-  "license_plate": null,
-  "color": null,
-  "odometer": 90321,
-  "shop_ids": [...],
+  "vin": "1FMPU16W14LB56648",
+  "year": "2004",
+  "make": "Ford",
+  "model": "Expedition",
+  "engine": "4.6L V8",
+  "color": "BLACK",
+  "plate": "EZRIDR",
+  "detail": "Keys in glovebox",
+  "fleet_number": "23R",
+  "production_date": "2026-02-17T13:15:01.046Z",
+  "registration_exp_date": "2026-02-17T13:15:01.046Z",
+  "customer_ids": [2],
   "integrator_tags": [...],
   "created_at": "...",
   "updated_at": "..."
 }
 ```
+
+**Key notes:**
+- `year` is a **string**, not an integer
+- `customer_ids` is an **array** — a vehicle can belong to multiple customers (e.g. fleet or shared ownership)
+- Field is `plate`, not `license_plate`
+- No `odometer` on the vehicle record — mileage lives on the RO
 
 ### `GET /api/v1/tenants/{tenant_id}/vehicles/{id}` `[NEEDS DOCS]`
 ### `POST /api/v1/tenants/{tenant_id}/vehicles` `[NEEDS DOCS]`
