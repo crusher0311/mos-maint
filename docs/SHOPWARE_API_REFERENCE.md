@@ -800,11 +800,53 @@ Same shape as list item. Note: `list_price_cents` on line items is **deprecated*
 
 ---
 
-## Recommendations `[NEEDS DOCS]`
+## Recommendations
 
-Services recommended to the customer (future work).
+Services recommended to a customer on an active RO (live, not yet closed). When an RO closes with unsold recommendations, they become `past_recommendations`.
 
-### `GET /api/v1/tenants/{tenant_id}/recommendations` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/recommendations`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{
+  "id": 1,
+  "description": "Test Service",
+  "repair_order_id": 3,
+  "approved": "true",
+  "approver_id": null,
+  "approval_type": null,
+  "approval_at": null,
+  "imported": false,
+  "quick_price_cents": null,
+  "service": {
+    "id": 1,
+    "title": "Test Service",
+    "completed": false,
+    "category_id": null,
+    "canned_job_id": null,
+    "row_order": 1,
+    "is_fixed_price_service": false,
+    "fixed_price_cents": null,
+    "labor_rate_cents": 10000,
+    "labors": [...],
+    "parts": [...],
+    "hazmats": [...],
+    "sublets": [...]
+  },
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+**Key differences from `past_recommendations`:**
+- `approved` is a **string** `"true"`/`"false"` (not a boolean)
+- `service` is an embedded full service object (not just an ID reference)
+- `quick_price_cents` — optional quick estimate price
+- Belongs to an active RO via `repair_order_id`
+
 ### `POST /api/v1/tenants/{tenant_id}/recommendations` `[NEEDS DOCS]`
 ### `GET /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
