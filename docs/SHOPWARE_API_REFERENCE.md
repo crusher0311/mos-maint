@@ -1238,14 +1238,25 @@ Returns `200` with no body.
 
 ---
 
-## Statuses `[NEEDS DOCS]`
+## Statuses
 
-Custom RO status labels (e.g., "Waiting", "In Bay", "Parts Ordered").
+Custom RO status labels defined per tenant (e.g., "Waiting for Parts", "In Bay", "Parts Ordered"). Referenced by `status_id` on ROs.
 
-### `GET /api/v1/tenants/{tenant_id}/statuses` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/statuses`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+```json
+{
+  "id": 1,
+  "text": "status text",
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
 ### `GET /api/v1/tenants/{tenant_id}/statuses/{id}` `[NEEDS DOCS]`
-
-Expected fields: `id`, `shop_id`, `name`, `color_code`, `row_order`
 
 ---
 
