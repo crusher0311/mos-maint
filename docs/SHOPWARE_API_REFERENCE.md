@@ -1435,7 +1435,10 @@ Lists all registered webhooks for this Partner ID. Lives at the **partner level*
 
 Same shape as list item.
 
-### `PUT /api/v1/webhooks/{id}` `[NEEDS DOCS]`
+### `PUT /api/v1/webhooks/{id}`
+
+All fields optional: `url`, `events`, `format`. Replaces the existing values for any provided fields. Returns `200` with same shape as GET item.
+
 ### `DELETE /api/v1/webhooks/{id}` `[NEEDS DOCS]`
 
 ---
