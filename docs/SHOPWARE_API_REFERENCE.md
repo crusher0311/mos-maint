@@ -1118,6 +1118,10 @@ Individual service lines. Can be queried tenant-wide or scoped to an RO.
 
 Same shape as list item. Official `inspection.state` values: `"red"`, `"yellow"`, `"green"`, `"unchecked"`, or `null`. Note: `quoted_price_cents` on parts is **deprecated** — use `sell_price_cents`.
 
+### `PUT /api/v1/tenants/{tenant_id}/services/{id}`
+
+**Only `comment` is updatable** (required, min 1 character). Returns `200` with full service shape.
+
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/services` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/services/{id}` `[NEEDS DOCS]`
 
