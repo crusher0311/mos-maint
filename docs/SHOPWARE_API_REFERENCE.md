@@ -753,7 +753,9 @@ Optional: `notes`, `customer_id` (required for QuickBooks sync, otherwise taken 
 
 Returns `201` with full payment object.
 
-### `GET /api/v1/tenants/{tenant_id}/payments/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/payments/{id}`
+
+Same shape as list item.
 
 ---
 
