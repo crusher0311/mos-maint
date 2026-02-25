@@ -633,6 +633,10 @@ Note: request uses `employee_id` but response returns `staff_id` (same value).
 
 Returns `201` with an **array** of created pay rate objects (not wrapped in `results`).
 
+### `PUT /api/v1/tenants/{tenant_id}/pay_rates`
+
+Updates one or more existing pay rates. PUT is on the **collection** (not `/{id}`). Include `id` in each `pay_information` item to identify records. Returns `200` with array of updated records.
+
 ### `GET /api/v1/tenants/{tenant_id}/pay_rates/{id}` `[NEEDS DOCS]`
 
 ---
