@@ -1,0 +1,113 @@
+Get a specific appointment by ID
+get
+/api/v1/tenants/{tenant_id}/appointments/{id}
+Request
+Path Parameters
+id
+integer
+required
+Examples:
+1
+tenant_id
+integer
+required
+Examples:
+1
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+/
+updated_at
+id
+integer
+Unique identifier of this record.
+
+shop_id
+integer
+A foreign key that points to the Shop this appointment was created in.
+
+staff_id
+integer
+A foreign key which points to a Staff.id. Represents the technician assigned to this appointment. If staff_id is not present, the appointment is unassigned.
+
+repair_order_id
+integer
+A foreign key that points to the RepairOrder that this Note belongs to.
+
+description
+string
+The description of the appointment.
+
+title
+string
+The title of the appointment. Either repair_order_id or title must be set.
+
+integrator_tags
+array[object]
+Array of integrator tags.
+
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+name
+string
+Entity type the tag attached to.
+
+value
+integer
+Entity identifier the tag attached to.
+
+created_at
+string<date-time>
+The datetime when tag was created.
+
+updated_at
+string<date-time>
+The datetime when tag was last modified.
+
+start_at
+string<date-time>
+Date the appointment will start. Must be in utc iso8601 date format. Setting this value does not automatically update the associated repair_order.due_in_at.
+
+end_at
+string<date-time>
+Date the appointment will end. Must be in utc iso8601 date format. Setting this value does not automatically update the associated repair_order.due_out_at.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/appointments/1 \
+  --header 'Accept: application/json'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:31Z",
+  "updated_at": "2026-02-18T13:14:31Z",
+  "staff_id": 1,
+  "title": "title 3",
+  "description": "",
+  "shop_id": 1,
+  "start_at": "2026-02-18T13:14:31Z",
+  "end_at": "2026-02-19T08:59:59Z",
+  "repair_order_id": 1,
+  "integrator_tags": []
+}
