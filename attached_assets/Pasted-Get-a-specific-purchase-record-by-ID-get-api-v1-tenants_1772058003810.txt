@@ -1,0 +1,160 @@
+Get a specific purchase record by ID
+get
+/api/v1/tenants/{tenant_id}/purchase_records/{id}
+Request
+Path Parameters
+id
+integer
+required
+Examples:
+1
+tenant_id
+integer
+required
+Examples:
+1
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+id
+integer
+Unique identifier of this record.
+
+shop_id
+integer
+A foreign key that points to a Shop.id. Represents the shop in which the order was created.
+
+invoice_number
+string
+A string which identifies invoice from provider.
+
+purchase_order_number
+string
+A string which identifies purchase order from provider.
+
+vendor_id
+integer
+A foreign key which points to a Vendor.id. Represents a vendor associated with this purchase record.
+
+payment_type
+string
+The form of payment that was used to pay for these parts.
+
+ecomm_integrator_order_id
+integer
+An identifier assigned to this order by the parts eComm integrator (if any).
+
+is_return
+boolean
+True if this Purchase Record is a return.
+
+line_items
+array[object]
+inventory_id
+integer
+A foreign key that points to an Inventory.id. Represents the inventory that has been received.
+
+quantity
+number
+The number of units.
+
+list_price_cents
+integer
+deprecated
+The MSRP in cents per unit.
+
+msrp_cents
+integer
+The MSRP in cents per unit.
+
+cost_cents
+integer
+The cost of this line item to the shop, in cents per unit.
+
+ecomm_integrator_part_id
+string
+An identifier assigned to this line item by the parts eComm integrator (if any).
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/purchase_records/1 \
+  --header 'Accept: application/json'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:49Z",
+  "updated_at": "2026-02-18T13:14:49Z",
+  "shop_id": 1,
+  "invoice_number": "IN2",
+  "purchase_order_number": "PO-number-3",
+  "vendor_id": 1,
+  "payment_type": "Credit Card",
+  "ecomm_integrator_order_id": 100,
+  "is_return": false,
+  "line_items": [
+    {
+      "inventory_id": 1,
+      "quantity": 1,
+      "list_price_cents": 0,
+      "msrp_cents": 0,
+      "cost_cents": 50,
+      "ecomm_integrator_part_id": "PARTSTECH_PART_ID"
+    }
+  ],
+  "integrator_tags": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:50Z",
+      "updated_at": "2026-02-18T13:14:50Z",
+      "taggable_type": "PurchaseRecord",
+      "taggable_id": 1,
+      "name": "tag_name",
+      "value": "tag_value"
+    }
+  ]
+}

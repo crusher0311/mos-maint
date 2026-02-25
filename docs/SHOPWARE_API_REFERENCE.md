@@ -742,6 +742,17 @@ Returns a flat array of custom payment type strings configured for this tenant.
 
 Note: `payment_type_details` is an object with `{ type, name }` — the display string `payment_type` combines them as `"<type> - <name>"`.
 
+### `POST /api/v1/tenants/{tenant_id}/payments`
+
+**Required:** `amount_cents`, `repair_order_id`, `payment_type_details.type`
+
+`payment_type_details.type` values: `"Credit Card"`, `"Check"`, `"Cash"`, `"Other"`
+`payment_type_details.name` — optional, only for `Credit Card` and `Other`, max 25 alphanumeric chars (e.g. `"Visa"`, `"Promo Coupon"`)
+
+Optional: `notes`, `customer_id` (required for QuickBooks sync, otherwise taken from the RO)
+
+Returns `201` with full payment object.
+
 ### `GET /api/v1/tenants/{tenant_id}/payments/{id}` `[NEEDS DOCS]`
 
 ---
