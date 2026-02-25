@@ -1,0 +1,174 @@
+Get a list of all payment transactions
+get
+/api/v1/tenants/{tenant_id}/payment_transactions
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+updated_after
+string
+Filter response to only include records updated after a given time
+
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+payment_id
+integer or null
+A foreign key which points to a Payment.id. Represents the final payment that is associated with this transaction which will appear on the RO and in reporting. It is only created for authorized transactions.
+
+repair_order_id
+integer
+A foreign key which points to a RepairOrder.id. Represents the RO that this transaction was made against.
+
+staff_id
+integer
+A foreign key which points to a Staff.id. Represents the staff member who attempted the transaction.
+
+status
+string
+The current status of this transaction. One of 'approved', 'retry', 'declined', 'authentication_error', 'invalid_hsn', 'request_error', 'server_error', 'terminal_not_connected_error', 'terminal_in_use_error', 'transaction_cancelled_error', 'pin_debit_not_supported', 'decryption_failure', 'signature_not_supported'. Only 'approved' is a successful status, meaning that the payment transaction was authorized.
+
+serial_number
+string
+The HSN of the credit card reader.
+
+mid
+string
+The merchant ID that the transaction was made against.
+
+requested_amount_cents
+integer
+The amount in cents that the user attempted to charge or refund.
+
+amount_cents
+integer
+The amount that was actually charged or refunded.
+
+reference_number
+string
+The unique reference number for this transaction.
+
+account
+string
+An obfuscated account number of the payment card.
+
+name
+string
+The name on the credit card.
+
+currency
+string
+response_code
+string
+The raw gateway response code of the transaction.
+
+response_text
+string
+A human readable description of the transaction status.
+
+bin_type
+string or null
+entry_mode
+string or null
+avs_response
+string
+cvv_response
+string
+authorization_code
+string
+integrator_tags
+array[object]
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/payment_transactions \
+  --header 'Accept: application/json'
+{
+  "results": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:47Z",
+      "updated_at": "2026-02-18T13:14:47Z",
+      "payment_id": null,
+      "repair_order_id": 1,
+      "staff_id": 2,
+      "status": "declined",
+      "serial_number": "18238PP21557288",
+      "mid": "800000000830",
+      "requested_amount_cents": 279900,
+      "amount_cents": 279900,
+      "reference_number": "123849201653",
+      "account": "9546981898575454",
+      "name": "JOE SMITH",
+      "currency": "USD",
+      "response_code": "54",
+      "response_text": "Wrong expiration",
+      "bin_type": null,
+      "entry_mode": null,
+      "avs_response": "",
+      "cvv_response": "N",
+      "authorization_code": "PPS010",
+      "integrator_tags": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:47Z",
+          "updated_at": "2026-02-18T13:14:47Z",
+          "taggable_type": "PaymentTransaction",
+          "taggable_id": 1,
+          "name": "tag_name",
+          "value": "tag_value"
+        }
+      ]
+    }
+  ],
+  "limit": 1,
+  "limited": false,
+  "total_count": 1,
+  "current_page": 1,
+  "total_pages": 1
+}

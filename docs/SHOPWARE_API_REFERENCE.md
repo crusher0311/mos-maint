@@ -637,7 +637,9 @@ Returns `201` with an **array** of created pay rate objects (not wrapped in `res
 
 Updates one or more existing pay rates. PUT is on the **collection** (not `/{id}`). Include `id` in each `pay_information` item to identify records. Returns `200` with array of updated records.
 
-### `GET /api/v1/tenants/{tenant_id}/pay_rates/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/pay_rates/{id}`
+
+Same shape as list item.
 
 ---
 
