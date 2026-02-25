@@ -1335,7 +1335,10 @@ Same shape as list item.
 - Field is `plate`, not `license_plate`
 - No `odometer` on the vehicle record — mileage lives on the RO
 
-### `GET /api/v1/tenants/{tenant_id}/vehicles/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/vehicles/{id}`
+
+Same shape as list item.
+
 ### `POST /api/v1/tenants/{tenant_id}/vehicles`
 
 **Required:** `make` only (min 1 character)
