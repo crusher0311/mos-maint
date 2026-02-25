@@ -1764,6 +1764,7 @@ function showRateForm(editRule = null) {
     elements.rateFormSaveText.textContent = 'Update Group';
     elements.rateFormApplyAllLabor.checked = !!editRule.applyToAllLabor;
     elements.rateFormOverrideCategoryRates.checked = !!editRule.overrideCategoryRates;
+    console.log('[LaborRate] Loading rule into form — overrideCategoryRates:', editRule.overrideCategoryRates, 'applyToAllLabor:', editRule.applyToAllLabor, 'raw rule:', JSON.stringify(editRule));
 
     const isRoLevel = categories.length === 0;
     elements.rateFormApplyAllWrap.style.display = isRoLevel ? '' : 'none';
