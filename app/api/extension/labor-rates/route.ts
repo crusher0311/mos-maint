@@ -92,6 +92,8 @@ export async function PUT(req: NextRequest) {
     })),
     matchMode: r.matchMode === "any" ? "any" : "all",
     color: validColors.includes(r.color) ? r.color : '#3B82F6',
+    applyToAllLabor: Boolean(r.applyToAllLabor),
+    overrideCategoryRates: Boolean(r.overrideCategoryRates),
     createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
     updatedAt: new Date(),
   }));

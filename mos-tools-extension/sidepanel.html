@@ -334,6 +334,13 @@
                 </label>
                 <span class="rates-form-hint">When enabled, jobs without a specific category rule will also get this rate applied to their labor</span>
               </div>
+              <div class="rates-form-field" id="rate-form-override-cat-wrap" style="display:none;">
+                <label class="rate-checkbox-label">
+                  <input type="checkbox" id="rate-form-override-category-rates">
+                  <span>Override per-job category rates</span>
+                </label>
+                <span class="rates-form-hint">When enabled, this rule's rate applies to ALL jobs — including those matched by Diag, Maint, or other category-specific rules. Use for fleet or wholesale accounts that get a flat rate regardless of job type.</span>
+              </div>
               <div class="rates-form-actions">
                 <button id="rate-form-cancel" class="btn-rate-cancel">Cancel</button>
                 <button id="rate-form-save" class="btn-rate-save">

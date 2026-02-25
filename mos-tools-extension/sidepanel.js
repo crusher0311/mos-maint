@@ -134,6 +134,8 @@ const elements = {
   rateFormPriority: document.getElementById('rate-form-priority'),
   rateFormApplyAllWrap: document.getElementById('rate-form-apply-all-wrap'),
   rateFormApplyAllLabor: document.getElementById('rate-form-apply-all-labor'),
+  rateFormOverrideCatWrap: document.getElementById('rate-form-override-cat-wrap'),
+  rateFormOverrideCategoryRates: document.getElementById('rate-form-override-category-rates'),
   rateFormCancel: document.getElementById('rate-form-cancel'),
   rateFormSave: document.getElementById('rate-form-save'),
   rateFormSaveText: document.getElementById('rate-form-save-text'),
@@ -1761,9 +1763,11 @@ function showRateForm(editRule = null) {
     elements.rateFormEditId.value = editRule.id;
     elements.rateFormSaveText.textContent = 'Update Group';
     elements.rateFormApplyAllLabor.checked = !!editRule.applyToAllLabor;
+    elements.rateFormOverrideCategoryRates.checked = !!editRule.overrideCategoryRates;
 
     const isRoLevel = categories.length === 0;
     elements.rateFormApplyAllWrap.style.display = isRoLevel ? '' : 'none';
+    elements.rateFormOverrideCatWrap.style.display = isRoLevel ? '' : 'none';
 
     const color = editRule.color || '#3B82F6';
     document.querySelectorAll('.rate-color-swatch').forEach(s => {
@@ -1782,7 +1786,9 @@ function showRateForm(editRule = null) {
     elements.rateFormEditId.value = '';
     elements.rateFormSaveText.textContent = 'Add Group';
     elements.rateFormApplyAllLabor.checked = false;
+    elements.rateFormOverrideCategoryRates.checked = false;
     elements.rateFormApplyAllWrap.style.display = '';
+    elements.rateFormOverrideCatWrap.style.display = '';
     document.querySelectorAll('.rate-color-swatch').forEach(s => s.classList.remove('active'));
     document.querySelector('.rate-color-swatch')?.classList.add('active');
   }
@@ -1796,6 +1802,7 @@ function showRateForm(editRule = null) {
 function updateApplyAllVisibility() {
   const hasCategories = elements.rateFormCategories.value.trim().length > 0;
   elements.rateFormApplyAllWrap.style.display = hasCategories ? 'none' : '';
+  elements.rateFormOverrideCatWrap.style.display = hasCategories ? 'none' : '';
 }
 
 function hideRateForm() {
@@ -1854,6 +1861,7 @@ async function handleSaveRateGroup() {
   }
 
   const applyToAllLabor = categories.length === 0 && elements.rateFormApplyAllLabor.checked;
+  const overrideCategoryRates = categories.length === 0 && elements.rateFormOverrideCategoryRates.checked;
 
   const ruleData = {
     name,
@@ -1863,6 +1871,7 @@ async function handleSaveRateGroup() {
     matchMode: 'all',
     color,
     applyToAllLabor,
+    overrideCategoryRates,
   };
 
   let updatedRules;
