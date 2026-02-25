@@ -1,0 +1,168 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Side panel opens on action click
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [Tekmetric] Shop ID captured: 14245
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: MOS_LOGIN
+ [MOS] Login successful: bcrusha@carexpertsok.com
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 32
+ [MOS] Updated customer name from API: Brandon Crusha
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Fetched 4 rules for shop 14245
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Loaded 5 jobs with labor from estimate
+ [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+ [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["diagnostics","maintenance"] customer: Brandon Crusha phones: 1 custType: Object tags: []
+ [LaborRate] Matched RO-level rule: "Ford Diesel" (priority 11) → $219.95/hr
+ [LaborRate] Current rate on RO: 21995 (219.95/hr), target: 21995 (219.95/hr)
+ [LaborRate] Rate already matches ($219.95/hr), skipping
+ [LaborRate] Matched per-job rule: "Diag" (priority 20) → $299/hr
+ [LaborRate] Job "CEL" has no category, skipping per-job rule
+ [LaborRate] Labor "testing" on job "Diag CEL" already at $299/hr, skipping
+ [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+ [LaborRate] Job "test 3" has no category, skipping per-job rule
+ [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Matched per-job rule: "Maint" (priority 19) → $100/hr
+ [LaborRate] Job "CEL" has no category, skipping per-job rule
+ [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+ [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+ [LaborRate] Job "test 3" has no category, skipping per-job rule
+ [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+ [LaborRate] All matching labor lines already at target rate, skipped 1
+ [LaborRate] Job "CEL" labor already at RO rate $219.95/hr
+ [LaborRate] Job "6K Lube Oil And Filter" labor already at RO rate $219.95/hr
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 32
+ [MOS] Updated customer name from API: Brandon Crusha
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 32
+ [MOS] Updated customer name from API: Brandon Crusha
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [LaborRate] Loaded 4 jobs with labor from estimate
+ [LaborRate] Vehicle: 2021 Chevrolet Silverado 1500
+ [LaborRate] Matching against vehicle: 2021 Chevrolet Silverado 1500 fuel:  categories: ["diagnostics","test","diagnostics","test"] customer: Jay Demore phones: 1 custType: Object tags: []
+ [LaborRate] No RO-level rule matched
+ [LaborRate] Matched per-job rule: "Diag" (priority 20) → $299/hr
+ [LaborRate] Updating job "6K Lube Oil And Filter" labor (Change engine oil and filter.  Check and top off under hood fluids.  Perform general visual inspection.
+) to $299/hr via POST /job
+ [LaborRate] Updated 1 labor line(s) on job "6K Lube Oil And Filter" to $299/hr
+ [LaborRate] Job "Test Job" category "test" does not match rule categories [diag]
+ [LaborRate] Updating job "Spark Plugs" labor (R&R Spark Plugs) to $299/hr via POST /job
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Updated 1 labor line(s) on job "Spark Plugs" to $299/hr
+ [LaborRate] Job "test" category "test" does not match rule categories [diag]
+ [LaborRate] Applied "Diag" to 2 labor line(s) on jobs: 6K Lube Oil And Filter, Spark Plugs
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 32
+ [MOS] Updated customer name from API: Brandon Crusha
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated VIN from API: 3GCUYEED2MG329819
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Updated RO number from API: 1
+ [MOS] Updated customer name from API: Jay Demore
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:163 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:163 [MOS] Message received: SET_SMS_CONTEXT
+background.js:195 [MOS] SMS context updated: Object
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+background.js:954 [LaborRate] Loaded 5 jobs with labor from estimate
+background.js:986 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:1052 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: ["diagnostics","maintenance"] customer: Brandon Crusha phones: 1 custType: Object tags: []
+background.js:1063 [LaborRate] Matched RO-level rule: "Ford Diesel" (priority 11) → $219.95/hr
+background.js:1294 [LaborRate] Current rate on RO: 21995 (219.95/hr), target: 21995 (219.95/hr)
+background.js:1297 [LaborRate] Rate already matches ($219.95/hr), skipping
+background.js:1096 [LaborRate] Matched per-job rule: "Diag" (priority 20) → $299/hr
+background.js:1185 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1208 [LaborRate] Labor "testing" on job "Diag CEL" already at $299/hr, skipping
+background.js:1190 [LaborRate] Job "test 1" category "maintenance" does not match rule categories [diag]
+background.js:1185 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1185 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1259 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1096 [LaborRate] Matched per-job rule: "Maint" (priority 19) → $100/hr
+background.js:1185 [LaborRate] Job "CEL" has no category, skipping per-job rule
+background.js:1190 [LaborRate] Job "Diag CEL" category "diagnostics" does not match rule categories [maint]
+background.js:1208 [LaborRate] Labor "test 1" on job "test 1" already at $100/hr, skipping
+background.js:1185 [LaborRate] Job "test 3" has no category, skipping per-job rule
+background.js:1185 [LaborRate] Job "6K Lube Oil And Filter" has no category, skipping per-job rule
+background.js:1259 [LaborRate] All matching labor lines already at target rate, skipped 1
+background.js:1131 [LaborRate] Job "CEL" labor already at RO rate $219.95/hr
+background.js:1131 [LaborRate] Job "6K Lube Oil And Filter" labor already at RO rate $219.95/hr
+background.js:163 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:747 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:773 [MOS] Updated RO number from API: 32
+sidepanel.js:778 [MOS] Updated customer name from API: Brandon Crusha
