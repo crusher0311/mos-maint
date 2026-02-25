@@ -978,6 +978,22 @@ Transitions an RO from `estimate` → `in_progress`. Returns the full RO (same s
 - Fixed-price service guardrail: a single part may appear **twice** in `parts` with different `quoted_price_cents`/`sell_price_cents` (one at guardrail price, one at list)
 - `inspection.state` values: `"red"`, `"yellow"`, `"green"`, or `null`
 
+### `POST /api/v1/tenants/{tenant_id}/repair_orders/{id}/share`
+
+Sends an SMS with an RO share link to one or more phone numbers.
+
+**Required body:**
+```json
+{
+  "phone_numbers": ["+14158900906"],
+  "text": "Optional message text (max 1480 chars)"
+}
+```
+- `phone_numbers` — array of E.164 formatted numbers, min 1 item
+- `text` — optional; if omitted, only the RO share link is sent
+
+Returns `200` with no body.
+
 ### `GET /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
 ### `GET /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
