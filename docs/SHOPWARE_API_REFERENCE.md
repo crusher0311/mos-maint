@@ -1,7 +1,7 @@
 # Shop-Ware API Reference
 
 This document tracks the Shop-Ware public API endpoints relevant to the MOS Tools integration.
-Status: **Documentation in progress** — endpoints marked `[NEEDS DOCS]` have not yet been pasted/confirmed.
+Status: **Complete** — all available endpoints from the official API docs have been documented. One endpoint is unconfirmed (`DELETE /recommendations/{id}`); one confirmed absent (`POST`/`PUT` on RO services).
 
 ## Official Docs
 - Production: https://shop-ware.stoplight.io/docs/public-api
@@ -933,7 +933,9 @@ Updatable fields: `repair_order_id`, `description`. **Note:** `description` cann
 
 Returns `200` with same full shape as GET.
 
-### `DELETE /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
+### `DELETE /api/v1/tenants/{tenant_id}/recommendations/{id}`
+
+**Unconfirmed** — not present in the official API docs reviewed. May not exist. Do not implement until confirmed against a live sandbox.
 
 ---
 
@@ -1108,8 +1110,7 @@ Same shape as list item. Official `inspection.state` values: `"red"`, `"yellow"`
 
 **Only `comment` is updatable** (required, min 1 character). Returns `200` with full service shape.
 
-### `POST /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/services` `[NEEDS DOCS]`
-### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/services/{id}` `[NEEDS DOCS]`
+**Note:** `POST` and `PUT` on services **do not exist** in the Shop-Ware API. Services (and their labors, parts, sublets, hazmats) are read-only through the RO associations — you can retrieve them via `?associations=services,...` on the RO endpoints, but there is no API surface to create or update them directly.
 
 ---
 
@@ -1519,27 +1520,6 @@ Returns `200` with empty body `{}`.
 | P3 | Payments | Invoice totals |
 | P3 | Labels / Statuses | RO visual status |
 
-## Remaining `[NEEDS DOCS]` — Resume Order
+## Documentation Complete
 
-When resuming documentation, paste these in order:
-1. Integrator Tags (CRUD)
-2. Inventory
-3. Labels
-4. Notes
-5. Past Recommendations
-6. Pay Rates
-7. Payment Transactions
-8. Payments
-9. Purchase Records
-10. Recommendations
-11. **Repair Orders** ← MOST IMPORTANT
-12. **Services** ← MOST IMPORTANT
-13. **Shops** ← IMPORTANT
-14. Staff shift clocks
-15. **Staff Members** ← IMPORTANT
-16. **Statuses** ← IMPORTANT
-17. **Tenants** ← IMPORTANT
-18. Shift clocks
-19. **Vehicles** ← MOST IMPORTANT
-20. Vendors
-21. Webhooks CRUD
+All Shop-Ware API endpoints available in the official docs have been documented. The reference is ready to guide integration implementation.
