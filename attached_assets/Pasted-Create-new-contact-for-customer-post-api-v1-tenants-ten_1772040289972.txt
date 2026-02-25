@@ -1,0 +1,128 @@
+Create new contact for customer
+post
+/api/v1/tenants/{tenant_id}/customers/{customer_id}/contacts
+Request
+Path Parameters
+customer_id
+string
+required
+Customer id must reference to customer with 'corporate' type.
+
+Examples:
+1
+tenant_id
+string
+required
+Examples:
+1
+Headers
+X-Api-Partner-Id
+string
+required
+Examples:
+31fda6cf-758a-4cf9-ad89-26db50171f5a
+X-Api-Secret
+string
+required
+Examples:
+w2Yj1yamAHRXD7lq0x_T5h5WbZoT4cc_OfrCSohU13w
+Body
+
+application/json
+
+application/json
+first_name
+string
+required
+First name
+
+last_name
+string or null
+Last name
+
+email
+string or null
+Email.
+
+personnel
+string or null
+Personnel.
+
+phone_number
+string or null
+Phone number.
+
+show_on_ro
+boolean or null
+Defines whether contact is shows on Repair Order.
+
+Responses
+201
+successful
+
+Body
+
+application/json
+
+application/json
+id
+integer
+Unique identifier of this record.
+
+first_name
+string
+First name,
+
+last_name
+string or null
+Last name.
+
+email
+string<email> or null
+Email.
+
+personnel
+string or null
+Personnel.
+
+phone_number
+string or null
+Phone number.
+
+show_on_ro
+boolean or null
+Defines whether contact is shows on Repair Order.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request POST \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/customers/1/contacts \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --header 'X-Api-Partner-Id: ' \
+  --header 'X-Api-Secret: ' \
+  --data '{
+  "first_name": "First Name",
+  "last_name": "Last Name",
+  "email": "test@email.com",
+  "personnel": "Test",
+  "phone_number": "+17722271221",
+  "show_on_ro": true
+}'
+{
+  "id": 2,
+  "created_at": "2026-02-18T13:14:34Z",
+  "updated_at": "2026-02-18T13:14:34Z",
+  "first_name": "First Name",
+  "last_name": "Last Name",
+  "email": "test@email.com",
+  "personnel": "Test",
+  "phone_number": "+17722271221",
+  "show_on_ro": true
+}
