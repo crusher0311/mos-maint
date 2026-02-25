@@ -585,7 +585,9 @@ Services recommended on a prior visit that were not sold. Created automatically 
 
 **Filter pattern for deferred work:** `done=false` + `vehicle_id=<id>` to get outstanding declined services for a vehicle.
 
-### `GET /api/v1/tenants/{tenant_id}/past_recommendations/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/past_recommendations/{id}`
+
+Same shape as list item.
 
 ---
 
