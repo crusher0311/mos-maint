@@ -1862,6 +1862,7 @@ async function handleSaveRateGroup() {
 
   const applyToAllLabor = categories.length === 0 && elements.rateFormApplyAllLabor.checked;
   const overrideCategoryRates = categories.length === 0 && elements.rateFormOverrideCategoryRates.checked;
+  console.log('[LaborRate] Saving rule — applyToAllLabor:', applyToAllLabor, 'overrideCategoryRates:', overrideCategoryRates, 'categories:', categories.length);
 
   const ruleData = {
     name,
