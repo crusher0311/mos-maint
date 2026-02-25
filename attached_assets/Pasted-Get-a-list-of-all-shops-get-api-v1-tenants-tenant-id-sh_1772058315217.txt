@@ -1,0 +1,172 @@
+Get a list of all shops
+get
+/api/v1/tenants/{tenant_id}/shops
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+updated_after
+string
+Filter response to only include records updated after a given time
+
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+identifier
+string
+A name used to uniquely identify a shop.
+
+name
+string
+Shop`s name.
+
+address
+string
+Shop`s address.
+
+phone
+string
+Shop`s phone.
+
+live_at
+string<date-time>
+The datetime the Shop went live.
+
+time_zone
+string
+Shop`s timezone
+
+service_desk_email
+string
+Shop`s service desk email.
+
+avg_labor_cost_cents
+number
+Average labor cost cents. It used to estimate Labor GP % and GP/hr on unassigned labor lines or for technicians that don’t have a pay structure set up.
+
+part_tax_rate
+number
+Part tax rate.
+
+labor_tax_rate
+number
+Labor tax rate.
+
+hazmat_tax_rate
+number
+Hazmat tax rate.
+
+supply_fee_rate
+number
+Supply fee rate for labor.
+
+part_supply_fee_rate
+number
+Supply fee rate for parts.
+
+supply_fee_name
+string or null
+Supply fee name.
+
+sublet_tax_rate
+number
+Supply tax rate.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+mycarfax_enabled
+boolean
+true if the shop has Carfax enabled, false if Carfax disabled.
+
+integrator_tags
+array[object]
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/shops \
+  --header 'Accept: application/json'
+{
+  "results": [
+    {
+      "id": 1,
+      "created_at": "2026-02-19T13:14:57Z",
+      "updated_at": "2026-02-19T13:14:57Z",
+      "identifier": "02",
+      "name": "Shop 02",
+      "address": "123 Shop Street",
+      "phone": "(111) 111-1111",
+      "time_zone": "Pacific Time (US & Canada)",
+      "service_desk_email": "shop02@example.com",
+      "avg_labor_cost_cents": 5000,
+      "part_tax_rate": 4.4,
+      "labor_tax_rate": 3.3,
+      "hazmat_tax_rate": 2.2,
+      "sublet_tax_rate": 1.1,
+      "supply_fee_rate": 0,
+      "part_supply_fee_rate": 0,
+      "supply_fee_name": null,
+      "supply_fee_cap_cents": 0,
+      "mycarfax_enabled": false,
+      "live_at": "2026-02-17T13:14:57Z",
+      "integrator_tags": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:57Z",
+          "updated_at": "2026-02-18T13:14:57Z",
+          "taggable_type": "Shop",
+          "taggable_id": 1,
+          "name": "tag_name",
+          "value": "tag_value"
+        }
+      ]
+    }
+  ],
+  "limit": 1,
+  "limited": false,
+  "total_count": 1,
+  "current_page": 1,
+  "total_pages": 1
+}

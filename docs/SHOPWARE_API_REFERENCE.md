@@ -1019,7 +1019,10 @@ Returns `200` with no body.
 
 Returns standard paginated envelope. Full RO schema documented above under the `start` endpoint.
 
-### `GET /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/repair_orders/{id}`
+
+Same schema as list item. Supports the same `associations` query parameter to control which nested objects are returned.
+
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders`
 
 Creates a new RO in `estimate` state.
