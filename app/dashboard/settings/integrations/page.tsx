@@ -21,7 +21,7 @@ import {
   EyeOff,
 } from "lucide-react";
 
-type ShopManagementChoice = "protractor" | "tekmetric" | "standalone" | null;
+type ShopManagementChoice = "protractor" | "tekmetric" | "shopware" | "standalone" | null;
 type DviChoice = "autoflow" | "tekmetric" | null;
 
 interface IntegrationStatus {
@@ -29,6 +29,7 @@ interface IntegrationStatus {
   autoflow: { configured: boolean };
   protractor: { configured: boolean; connectionId?: string };
   tekmetric: { configured: boolean; shopId?: number; shopName?: string; lastSync?: string };
+  shopware: { configured: boolean; tenantId?: number; swShopId?: number; shopName?: string; lastSyncAt?: string };
 }
 
 export default function IntegrationsPage() {
@@ -38,6 +39,7 @@ export default function IntegrationsPage() {
     autoflow: { configured: false },
     protractor: { configured: false },
     tekmetric: { configured: false },
+    shopware: { configured: false },
   });
   const [shopManagement, setShopManagement] = useState<ShopManagementChoice>(null);
   const [dviChoice, setDviChoice] = useState<DviChoice>(null);
@@ -48,17 +50,19 @@ export default function IntegrationsPage() {
 
   async function fetchAllStatuses() {
     try {
-      const [carfaxRes, autoflowRes, protractorRes, tekmetricRes] = await Promise.all([
+      const [carfaxRes, autoflowRes, protractorRes, tekmetricRes, shopwareRes] = await Promise.all([
         fetch("/api/settings/carfax").catch(() => null),
         fetch("/api/settings/autoflow").catch(() => null),
         fetch("/api/settings/protractor").catch(() => null),
         fetch("/api/settings/tekmetric").catch(() => null),
+        fetch("/api/settings/shopware").catch(() => null),
       ]);
 
       const carfaxData = carfaxRes?.ok ? await carfaxRes.json() : {};
       const autoflowData = autoflowRes?.ok ? await autoflowRes.json() : {};
       const protractorData = protractorRes?.ok ? await protractorRes.json() : {};
       const tekmetricData = tekmetricRes?.ok ? await tekmetricRes.json() : {};
+      const shopwareData = shopwareRes?.ok ? await shopwareRes.json() : {};
 
       const newStatuses = {
         carfax: { 
@@ -79,6 +83,13 @@ export default function IntegrationsPage() {
           shopName: tekmetricData.shopName,
           lastSync: tekmetricData.lastSync,
         },
+        shopware: {
+          configured: Boolean(shopwareData.configured),
+          tenantId: shopwareData.tenantId,
+          swShopId: shopwareData.swShopId,
+          shopName: shopwareData.shopName,
+          lastSyncAt: shopwareData.lastSyncAt,
+        },
       };
 
       setStatuses(newStatuses);
@@ -94,6 +105,8 @@ export default function IntegrationsPage() {
         setShopManagement("tekmetric");
       } else if (newStatuses.protractor.configured) {
         setShopManagement("protractor");
+      } else if (newStatuses.shopware.configured) {
+        setShopManagement("shopware");
       }
 
       if (newStatuses.autoflow.configured) {
@@ -200,6 +213,17 @@ export default function IntegrationsPage() {
                 <input
                   type="radio"
                   name="shopManagement"
+                  checked={shopManagement === "shopware"}
+                  onChange={() => handleShopManagementChange("shopware")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">Shop-Ware</span>
+                {statuses.shopware.configured && <CheckCircle className="w-4 h-4 text-green-500" />}
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="shopManagement"
                   checked={shopManagement === "standalone"}
                   onChange={() => handleShopManagementChange("standalone")}
                   className="w-4 h-4 text-blue-600"
@@ -213,6 +237,9 @@ export default function IntegrationsPage() {
             )}
             {shopManagement === "tekmetric" && (
               <TekmetricSection status={statuses.tekmetric} onUpdate={fetchAllStatuses} />
+            )}
+            {shopManagement === "shopware" && (
+              <ShopWareSection status={statuses.shopware} onUpdate={fetchAllStatuses} />
             )}
             {shopManagement === "standalone" && (
               <StandaloneSection />
@@ -1439,6 +1466,141 @@ function AutoflowSection({ status, onUpdate }: { status: { configured: boolean }
       <button
         onClick={handleSave}
         disabled={saving || !domain || !apiKey}
+        className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+        Connect
+      </button>
+    </div>
+  );
+}
+
+function ShopWareSection({
+  status,
+  onUpdate,
+}: {
+  status: { configured: boolean; tenantId?: number; swShopId?: number; shopName?: string; lastSyncAt?: string };
+  onUpdate: () => void;
+}) {
+  const [tenantId, setTenantId] = useState("");
+  const [swShopId, setSwShopId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings/shopware", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: parseInt(tenantId), swShopId: parseInt(swShopId) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: `Connected to ${data.shopName || "Shop-Ware"}` });
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to connect" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Disconnect Shop-Ware?")) return;
+    setDisconnecting(true);
+    try {
+      const res = await fetch("/api/settings/shopware", { method: "DELETE" });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Disconnected" });
+        onUpdate();
+      }
+    } catch {
+      setMessage({ type: "error", text: "Failed to disconnect" });
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  if (status.configured) {
+    return (
+      <div className="space-y-3 border-t pt-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <CheckCircle className="w-4 h-4" />
+            <span>Connected: {status.shopName || `Shop ${status.swShopId}`}</span>
+          </div>
+          <div className="text-xs text-green-700 mt-1">
+            Tenant {status.tenantId} · Shop {status.swShopId}
+            {status.lastSyncAt && (
+              <span> · Last sync {new Date(status.lastSyncAt).toLocaleDateString()}</span>
+            )}
+          </div>
+        </div>
+
+        {message && (
+          <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+            message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+          }`}>
+            {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{message.text}</span>
+          </div>
+        )}
+
+        <button
+          onClick={handleDisconnect}
+          disabled={disconnecting}
+          className="w-full px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 flex items-center justify-center gap-2"
+        >
+          {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
+        <input
+          type="text"
+          value={tenantId}
+          onChange={(e) => setTenantId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="e.g. 42"
+        />
+        <p className="text-xs text-gray-500 mt-1">Your Shop-Ware company (tenant) ID</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Shop ID</label>
+        <input
+          type="text"
+          value={swShopId}
+          onChange={(e) => setSwShopId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="e.g. 3"
+        />
+        <p className="text-xs text-gray-500 mt-1">Your Shop-Ware shop ID within the tenant</p>
+      </div>
+
+      {message && (
+        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+        }`}>
+          {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+          <span>{message.text}</span>
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !tenantId || !swShopId}
         className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {saving && <Loader2 className="w-4 h-4 animate-spin" />}
