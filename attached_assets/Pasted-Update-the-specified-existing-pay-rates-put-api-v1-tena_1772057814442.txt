@@ -1,0 +1,122 @@
+Update the specified existing pay rates
+put
+/api/v1/tenants/{tenant_id}/pay_rates
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+pay_information
+array[object]
+required
+id
+integer
+pay_type
+string
+required
+Pay type.
+
+>= 1 characters
+effective_date
+string<date>
+required
+Effective date in YYYY-MM-DD format. Must be unique within specific employee.
+
+hourly_rate_cents
+integer
+required
+Hourly rate in cents.
+
+> 0
+loaded_cost_percent
+number
+Loaded cost percent as a decimal
+
+>= 0
+<= 1
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+array of:
+id
+integer
+Unique identifier of this record.
+
+pay_type
+string
+Pay type. Default is 'Flat Rate'.
+
+commission_percent
+integer or null
+Commission percent.
+
+hourly_rate_cents
+integer
+Hourly rate in cents.
+
+hourly_rate_currency
+string
+Hourly rate currency. Default is 'USD'.
+
+staff_id
+integer
+A foreign key that points to staff associated with this pay rate.
+
+effective_date
+string<date>
+Effective date in YYYY-MM-DD format. Must be unique within specific employee's pay rates.
+
+loaded_cost_percent
+string or null
+Loaded cost percent as a decimal.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request PUT \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/pay_rates \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "pay_information": [
+    {
+      "id": 1,
+      "pay_type": "Flat Rate",
+      "effective_date": "2023-01-01",
+      "hourly_rate_cents": 1000,
+      "loaded_cost_percent": 0.1
+    }
+  ]
+}'
+[
+  {
+    "id": 1,
+    "created_at": "2026-02-18T13:14:46Z",
+    "updated_at": "2026-02-18T13:14:46Z",
+    "pay_type": "Flat Rate",
+    "commission_percent": null,
+    "hourly_rate_cents": 1000,
+    "hourly_rate_currency": "USD",
+    "staff_id": 1,
+    "effective_date": "2023-01-01",
+    "loaded_cost_percent": "0.1"
+  }
+]

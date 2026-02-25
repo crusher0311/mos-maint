@@ -615,6 +615,24 @@ Staff compensation rates. Low priority for MOS integration.
 }
 ```
 
+### `POST /api/v1/tenants/{tenant_id}/pay_rates`
+
+Creates one or more pay rate records. **Required:** `employee_id`, `shop_id`, `pay_information[]`.
+
+Note: request uses `employee_id` but response returns `staff_id` (same value).
+
+```json
+{
+  "employee_id": 1,
+  "shop_id": 2,
+  "pay_information": [
+    { "pay_type": "Flat Rate", "effective_date": "2023-01-01", "hourly_rate_cents": 1000, "loaded_cost_percent": 0.1 }
+  ]
+}
+```
+
+Returns `201` with an **array** of created pay rate objects (not wrapped in `results`).
+
 ### `GET /api/v1/tenants/{tenant_id}/pay_rates/{id}` `[NEEDS DOCS]`
 
 ---
