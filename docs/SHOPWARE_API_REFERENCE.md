@@ -1169,22 +1169,26 @@ Same shape as list item.
 
 ---
 
-## Staff Members `[NEEDS DOCS]`
+## Staff Members
 
-Tenant-wide. Includes advisors and technicians.
+Tenant-wide. A single staff member can be both `advisor: true` and `technician: true`.
 
-### `GET /api/v1/tenants/{tenant_id}/staffs` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/staffs`
 
-Known fields from pagination example:
+**Query filters:** `assigned_shop_id`, `is_active`, `updated_after`, `page`, `per_page`
+
 ```json
 {
   "id": 1,
   "first_name": "James",
   "last_name": "Brown",
   "advisor": true,
-  "technician": false,
+  "technician": true,
   "active": true,
-  "email": "jbrown@example.com",
+  "assigned_shop_id": 1,
+  "employee_id": 1,
+  "email": "mrdynamite@example.com",
+  "integrator_tags": [...],
   "created_at": "...",
   "updated_at": "..."
 }
