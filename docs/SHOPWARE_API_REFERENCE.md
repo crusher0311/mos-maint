@@ -1020,7 +1020,46 @@ Returns `200` with no body.
 Returns standard paginated envelope. Full RO schema documented above under the `start` endpoint.
 
 ### `GET /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
-### `POST /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
+### `POST /api/v1/tenants/{tenant_id}/repair_orders`
+
+Creates a new RO in `estimate` state.
+
+**Required:** `customer_id`, `shop_id`
+
+**Optional fields:**
+```json
+{
+  "number": null,
+  "odometer": 90321,
+  "vehicle_id": 1,
+  "technician_id": 2,
+  "advisor_id": 3,
+  "label_id": 1,
+  "detail": "Key tag 84, customer waiting",
+  "preferred_contact_type": "text",
+  "taxable": true,
+  "due_in_at": "2026-02-21T13:14:53Z",
+  "customer_source": "Repeat",
+  "fleet_po": "PO#123",
+  "customer_concern": "reason for visit",
+  "vehicle_use": "primary use of vehicle",
+  "part_tax_rate": 10,
+  "labor_tax_rate": 20,
+  "sublet_tax_rate": 30,
+  "hazmat_tax_rate": 40,
+  "part_discount_percentage": 50,
+  "labor_discount_cents": 5000
+}
+```
+
+**Rules:**
+- `preferred_contact_type` allowed values are **lowercase**: `"waiting"`, `"phone"`, `"email"`, `"text"`, or `null`
+- Discount is **cents XOR percentage** per line type — if one is non-null, the other must be omitted or null
+- `fleet_po` is ignored if the customer is not a corporate account
+- `vehicle_id` is optional — RO can be created without a vehicle
+
+Returns `201` with full RO in `estimate` state (same schema as GET).
+
 ### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
 
 ---
