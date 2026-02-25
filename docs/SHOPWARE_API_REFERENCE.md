@@ -647,9 +647,48 @@ Bulk delete. Uses POST to `/delete` sub-path (not HTTP DELETE verb). **Required:
 
 ---
 
-## Payment Transactions `[NEEDS DOCS]`
+## Payment Transactions
 
-### `GET /api/v1/tenants/{tenant_id}/payment_transactions` `[NEEDS DOCS]`
+Credit card terminal transaction attempts (approved and declined). Low priority for MOS integration.
+
+### `GET /api/v1/tenants/{tenant_id}/payment_transactions`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{
+  "id": 1,
+  "payment_id": null,
+  "repair_order_id": 1,
+  "staff_id": 2,
+  "status": "declined",
+  "serial_number": "18238PP21557288",
+  "mid": "800000000830",
+  "requested_amount_cents": 279900,
+  "amount_cents": 279900,
+  "reference_number": "123849201653",
+  "account": "9546981898575454",
+  "name": "JOE SMITH",
+  "currency": "USD",
+  "response_code": "54",
+  "response_text": "Wrong expiration",
+  "bin_type": null,
+  "entry_mode": null,
+  "avs_response": "",
+  "cvv_response": "N",
+  "authorization_code": "PPS010",
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+**Status values:** `approved`, `retry`, `declined`, `authentication_error`, `invalid_hsn`, `request_error`, `server_error`, `terminal_not_connected_error`, `terminal_in_use_error`, `transaction_cancelled_error`, `pin_debit_not_supported`, `decryption_failure`, `signature_not_supported`. Only `approved` is successful.
+
+Note: `payment_id` is only set for authorized transactions — links to the Payment record that appears on the RO.
+
+### `GET /api/v1/tenants/{tenant_id}/payment_transactions/{id}` `[NEEDS DOCS]`
 
 ---
 
