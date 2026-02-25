@@ -857,7 +857,12 @@ Returns `201` with full recommendation including embedded `service` object with 
 
 Same shape as list item — full embedded `service` object with all line item arrays.
 
-### `PUT /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
+### `PUT /api/v1/tenants/{tenant_id}/recommendations/{id}`
+
+Updatable fields: `repair_order_id`, `description`. **Note:** `description` cannot be updated if a `canned_job_id` is associated with the recommendation.
+
+Returns `200` with same full shape as GET.
+
 ### `DELETE /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
 
 ---
