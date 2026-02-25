@@ -1,0 +1,232 @@
+Get a list of all services
+get
+/api/v1/tenants/{tenant_id}/services
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+repair_order_id
+integer
+A foreign key which points to a WorkOrder.id. Represents the repair order related with this service.
+
+Examples:
+null
+technician_id
+integer
+Filter response to only include Services with labors assigned to this Technican ID.
+
+Examples:
+null
+updated_after
+string
+Filter response to only include Services updated after a given time
+
+Examples:
+2026-05-17T12:14:56Z
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+title
+string
+The title of the service.
+
+completed
+boolean
+True if the service has been completed.
+
+category_id
+integer or null
+A foreign key that points to a Category ID.
+
+canned_job_id
+integer or null
+A reference that points to a CannedJob ID.
+
+labor_rate_cents
+integer or null
+The rate in cents that labor on this service is charged at.
+
+fixed_price_cents
+integer or null
+The price in cents that this service will be charged at.
+
+fixed_price_labor_total_cents
+integer or null
+The total price in cents that labors on this service will be charged at.
+
+is_fixed_price_service
+boolean
+Determines if this service has a fixed price.
+
+comment
+any
+Service comments.
+
+completed_at
+string<date-time> or null
+The datetime the service was last marked completed. This may occur if the service had been marked completed then restarted and marked completed again.
+
+last_completed_at
+string<date-time> or null
+The datetime the service was last marked completed. This may occur if the service had been marked completed then restarted and marked completed again.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+labors
+array[object]
+parts
+array[object]
+If you hit a guardrail on a fixed price service, you will get two lines for the part as they could have separate prices
+
+hazmats
+array[object]
+sublets
+array[object]
+inspections
+array[object]
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/services \
+  --header 'Accept: application/json'
+without filterfiltering by repair_order_idfiltering by technician_idfiltering by updated_after
+{
+  "results": [
+    {
+      "id": 2,
+      "created_at": "2026-05-18T12:14:54Z",
+      "updated_at": "2026-05-18T12:14:54Z",
+      "title": "Test Service",
+      "completed": false,
+      "category_id": null,
+      "canned_job_id": null,
+      "comment": "No comment",
+      "fixed_price_cents": null,
+      "fixed_price_labor_total_cents": null,
+      "is_fixed_price_service": false,
+      "labor_rate_cents": 10000,
+      "repair_order_id": 2,
+      "completed_at": null,
+      "last_completed_at": null,
+      "labors": [
+        {
+          "id": 2,
+          "created_at": "2026-05-18T12:14:54Z",
+          "updated_at": "2026-05-18T12:14:54Z",
+          "name": "Test labor 6",
+          "technician_id": null,
+          "taxable": true,
+          "hours": 1
+        }
+      ],
+      "parts": [
+        {
+          "id": 2,
+          "created_at": "2026-05-18T12:14:54Z",
+          "updated_at": "2026-05-18T12:14:54Z",
+          "brand": null,
+          "description": null,
+          "number": null,
+          "quoted_price_cents": null,
+          "cost_cents": null,
+          "part_inventory_id": 2,
+          "taxable": true,
+          "sell_price_cents": null,
+          "quantity": 1
+        }
+      ],
+      "hazmats": [
+        {
+          "id": 2,
+          "created_at": "2026-05-18T12:14:54Z",
+          "updated_at": "2026-05-18T12:14:54Z",
+          "name": "Test hazmat fee 6",
+          "fee_cents": 25,
+          "taxable": true,
+          "quantity": 1
+        }
+      ],
+      "sublets": [
+        {
+          "id": 2,
+          "created_at": "2026-05-18T12:14:54Z",
+          "updated_at": "2026-05-18T12:14:54Z",
+          "name": "Test sublet 6",
+          "price_cents": 50,
+          "cost_cents": null,
+          "provider": "",
+          "invoice_number": "1111",
+          "description": null,
+          "taxable": true,
+          "vendor_id": null,
+          "invoice_date": null
+        }
+      ],
+      "inspections": [
+        {
+          "id": 2,
+          "created_at": "2026-05-18T12:14:54Z",
+          "updated_at": "2026-05-18T12:14:54Z",
+          "name": "Test inspection 6",
+          "state": null
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:54Z",
+      "updated_at": "2026-02-18T13:14:54Z",
+      "title": "Test Service",
+      "completed": false,
+      "category_id": null,
+      "canned_job_id": null,
+      "comment": "No comment",
+      "fixed_price_cents": null,
+      "fixed_price_labor_total_cents": null,
+      "is_fixed_price_service": false,
+      "labor_rate_cents": 10000,
+      "repair_order_id": 1,
+      "completed_at": null,
+      "last_completed_at": null,
+      "labors": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:54Z",
+          "updated_at": "2026-02-18T13:14:54Z",
+          "name": "Test labor 5",
+          "technician_id": null,
+          "taxable": true,
+          "hours": 1

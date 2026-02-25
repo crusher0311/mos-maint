@@ -1,0 +1,354 @@
+Update a specific service
+put
+/api/v1/tenants/{tenant_id}/services/{id}
+Request
+Path Parameters
+id
+integer
+required
+Examples:
+1
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+comment
+string
+required
+Service comments.
+
+>= 1 characters
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+id
+integer
+Unique identifier of this record.
+
+title
+string
+The title of the service.
+
+completed
+boolean
+True if the service has been completed.
+
+category_id
+integer or null
+A foreign key that points to a Category ID.
+
+canned_job_id
+integer or null
+A reference that points to a CannedJob ID.
+
+labor_rate_cents
+integer or null
+The rate in cents that labor on this service is charged at.
+
+fixed_price_cents
+integer or null
+The price in cents that this service will be charged at.
+
+fixed_price_labor_total_cents
+integer or null
+The total price in cents that labors on this service will be charged at.
+
+is_fixed_price_service
+boolean
+Determines if this service has a fixed price.
+
+comment
+string
+Service comments.
+
+completed_at
+string<date-time> or null
+The datetime the service was last marked completed. This may occur if the service had been marked completed then restarted and marked completed again.
+
+last_completed_at
+string<date-time> or null
+The datetime the service was last marked completed. This may occur if the service had been marked completed then restarted and marked completed again.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+labors
+array[object]
+id
+integer
+The labor primary key.
+
+name
+string
+The name of this labor as it will appear on the RO.
+
+technician_id
+integer or null
+A foreign key which points to a Staff.id. Represents the technician assigned to this specific labor item.
+
+taxable
+boolean
+Determines if labor tax rate will be applied to this labor.
+
+hours
+number
+created_at
+string<date-time>
+The date and time when labor was created.
+
+updated_at
+string<date-time>
+The date and time when labor was last updated.
+
+parts
+array[object]
+id
+integer
+The part primary key.
+
+brand
+string or null
+Part`s brand
+
+description
+string or null
+Part`s description
+
+quoted_price_cents
+number or null
+deprecated
+The price of this part that is being sold to the customer in cents per unit.
+
+sell_price_cents
+number or null
+The price of this part that is being sold to the customer in cents per unit.
+
+cost_cents
+number or null
+The wholesale cost of this part to the shop in cents per unit.
+
+part_inventory_id
+integer or null
+A foreign key which points to an Inventory.id. Represents the associated inventory and quantity information for this part.
+
+quantity
+number
+The number of units this part line item represents.
+
+taxable
+boolean
+Determines if part tax rate will be applied to this part.
+
+created_at
+string<date-time>
+The date and time when part was created.
+
+updated_at
+string<date-time>
+The date and time when part was last updated.
+
+hazmats
+array[object]
+id
+integer
+The hazmat primary key.
+
+name
+string
+The name of this hazmat as it will appear on the RO.
+
+fee_cents
+integer
+The price of this fee or hazmat in cents per unit.
+
+quantity
+number
+The number of units.
+
+taxable
+boolean
+Determines if hazmat tax rate will be applied to this hazmat.
+
+created_at
+string<date-time>
+The date and time when hazmat was created.
+
+updated_at
+string<date-time>
+The date and time when hazmat was last updated.
+
+sublets
+array[object]
+id
+integer
+The sublet primary key.
+
+name
+string
+The name of this sublet as it will appear on the RO.
+
+price_cents
+integer
+The price in cents of sublet being sold to customer.
+
+cost_cents
+number or null
+The amount in cents paid to provider for services.
+
+provider
+string
+The name of the entity providing services for sublet.
+
+invoice_number
+string
+A string which identifies invoice from provider.
+
+invoice_date
+string<date-time> or null
+The date when the invoice from provider was created.
+
+taxable
+boolean
+Determines if sublet tax rate will be applied to this sublet.
+
+vendor_id
+integer or null
+A foreign key which points to a Vendor.id. Represents a vendor associated with this sublet item.
+
+created_at
+string<date-time>
+The date and time when sublet was created.
+
+updated_at
+string<date-time>
+The date and time when sublet was last updated.
+
+inspections
+array[object]
+id
+integer
+The inspection primary key.
+
+name
+string
+The name of this inspection as it will appear on the RO.
+
+state
+string or null
+One of "yellow", "green", "unchecked", "red". More states may be added.
+
+created_at
+string<date-time>
+The date and time when inspection was created.
+
+updated_at
+string<date-time>
+The date and time when inspection was last updated.
+
+curl --request PUT \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/services/1 \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "comment": "UPDATED COMMENT"
+}'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:56Z",
+  "updated_at": "2022-10-23T02:05:00Z",
+  "title": "Test Service",
+  "completed": false,
+  "category_id": null,
+  "canned_job_id": null,
+  "comment": "UPDATED COMMENT",
+  "fixed_price_cents": null,
+  "fixed_price_labor_total_cents": null,
+  "is_fixed_price_service": false,
+  "labor_rate_cents": 10000,
+  "repair_order_id": 1,
+  "completed_at": null,
+  "last_completed_at": null,
+  "labors": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:56Z",
+      "updated_at": "2026-02-18T13:14:56Z",
+      "name": "Test labor 15",
+      "technician_id": null,
+      "taxable": true,
+      "hours": 1
+    }
+  ],
+  "parts": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:56Z",
+      "updated_at": "2026-02-18T13:14:56Z",
+      "brand": null,
+      "description": null,
+      "number": null,
+      "quoted_price_cents": null,
+      "cost_cents": null,
+      "part_inventory_id": 1,
+      "taxable": true,
+      "sell_price_cents": null,
+      "quantity": 1
+    }
+  ],
+  "hazmats": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:56Z",
+      "updated_at": "2026-02-18T13:14:56Z",
+      "name": "Test hazmat fee 15",
+      "fee_cents": 25,
+      "taxable": true,
+      "quantity": 1
+    }
+  ],
+  "sublets": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:56Z",
+      "updated_at": "2026-02-18T13:14:56Z",
+      "name": "Test sublet 15",
+      "price_cents": 50,
+      "cost_cents": null,
+      "provider": "",
+      "invoice_number": "1111",
+      "description": null,
+      "taxable": true,
+      "vendor_id": null,
+      "invoice_date": null
+    }
+  ],
+  "inspections": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:56Z",
+      "updated_at": "2026-02-18T13:14:56Z",
+      "name": "Test inspection 15",
+      "state": null
+    }
+  ]
+}

@@ -994,8 +994,32 @@ Sends an SMS with an RO share link to one or more phone numbers.
 
 Returns `200` with no body.
 
+### `GET /api/v1/tenants/{tenant_id}/repair_orders`
+
+**Query filters:**
+- `shop_id`, `customer_id`, `vehicle_id`, `technician_id` — ID filters
+- `number` — filter by RO number
+- `status` — `"estimate"`, `"in_progress"`, `"invoice"`
+- `updated_after` — ISO8601 datetime
+- `closed_after` — only ROs that transitioned to invoice after this datetime
+- `page`, `per_page`
+- `associations` — comma-separated list controlling which nested objects are returned. Supported values:
+  - `none` (strips everything except scalar fields)
+  - `payments`, `integrator_tags`, `label`
+  - `services`, `services.labors`, `services.parts`, `services.hazmats`, `services.inspections`, `services.sublets`
+  - `customer`, `customer.phones`, `customer.integrator_tags`
+  - `vehicle`, `vehicle.integrator_tags`
+  - Specifying a deep association (e.g. `services.hazmats`) implies the parent (`services`)
+
+**Important:** Default response includes all associations. Use `associations=none` or selective list for faster/smaller responses during high-volume sync.
+
+**Note on `labort_discount_cents`:** This typo (`labort`) appears in the official spec and real responses — handle both field names defensively.
+
+**Note on `preferred_contact_type`:** Example shows `"text"` (lowercase) despite spec listing `"Waiting"`, `"Phone"`, `"Email"`, `"Text"` — normalize to lowercase when storing.
+
+Returns standard paginated envelope. Full RO schema documented above under the `start` endpoint.
+
 ### `GET /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
-### `GET /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
 
