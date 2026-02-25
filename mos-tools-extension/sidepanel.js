@@ -1892,12 +1892,7 @@ async function handleSaveRateGroup() {
 
   try {
     const result = await sendMessage({ action: 'SAVE_LABOR_RATE_RULES', rules: updatedRules });
-    if (result.success && result.rules) {
-      currentLaborRateRules = result.rules;
-      renderLaborRateRules();
-      hideRateForm();
-      showNotification(editId ? 'Group updated' : 'Group added', 'success');
-    } else if (result.success) {
+    if (result.success) {
       currentLaborRateRules = updatedRules;
       renderLaborRateRules();
       hideRateForm();

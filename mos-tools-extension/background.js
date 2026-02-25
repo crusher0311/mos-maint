@@ -305,6 +305,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "SAVE_LABOR_RATE_RULES") {
     const saveShopParam = tekmetricShopId ? `?smsShopId=${tekmetricShopId}` : '';
+    // Persist overrideCategoryRates/applyToAllLabor locally — server may not return them
+    const newOverrides = {};
+    (message.rules || []).forEach(r => {
+      newOverrides[r.id] = {
+        overrideCategoryRates: !!r.overrideCategoryRates,
+        applyToAllLabor: !!r.applyToAllLabor,
+      };
+    });
+    chrome.storage.local.get(['laborRateRuleOverrides'], (stored) => {
+      const merged = Object.assign({}, stored.laborRateRuleOverrides || {}, newOverrides);
+      chrome.storage.local.set({ laborRateRuleOverrides: merged });
+    });
     handleMosApiRequest(`/api/extension/labor-rates${saveShopParam}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -791,7 +803,16 @@ async function fetchLaborRateRules(forceRefresh = false) {
   try {
     const shopParam = tekmetricShopId ? `?smsShopId=${tekmetricShopId}` : '';
     const data = await handleMosApiRequest(`/api/extension/labor-rates${shopParam}`);
-    laborRateRules = data.rules || [];
+    const serverRules = data.rules || [];
+    // Merge locally-stored overrides (e.g. overrideCategoryRates, applyToAllLabor)
+    // that the production server may not yet preserve
+    const stored = await new Promise(resolve =>
+      chrome.storage.local.get(['laborRateRuleOverrides'], resolve)
+    );
+    const overrides = stored.laborRateRuleOverrides || {};
+    laborRateRules = serverRules.map(r =>
+      overrides[r.id] ? Object.assign({}, r, overrides[r.id]) : r
+    );
     laborRateRulesLastFetch = now;
     console.log(`[LaborRate] Fetched ${laborRateRules.length} rules for shop ${tekmetricShopId || 'default'}`);
     return laborRateRules;
