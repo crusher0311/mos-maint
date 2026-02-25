@@ -1,0 +1,267 @@
+Get a list of all customer
+get
+/api/v1/tenants/{tenant_id}/customers
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+email
+string
+Filter response to include only customers with contact_email containing the corresponding character sequence.
+
+Examples:
+null
+last_name
+string
+Filter response to include only customers with a last_name containing the corresponding characters sequence.
+
+Examples:
+null
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+phone_number
+string
+Filter response to include only customers with phone numbers containing the corresponding digit sequence.
+
+Examples:
+null
+phone_number_preferred_only
+boolean
+Toggle to include only preferred phone numbers according to the search given in phone_number
+
+Examples:
+null
+type
+string
+Filter response to include only corporate or individual (null including) customers. Possible values: 'corporate' and 'individual'.
+
+Examples:
+individual
+updated_after
+string
+Filter response to only include records updated after a given time
+
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+/
+total_pages
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+first_name
+string
+First name.
+
+last_name
+string
+Last name.
+
+email
+string
+Email.
+
+phone
+string
+[Deprecated] Customer`s phone number in the format of (###) ###-#### for US numbers, otherwise E.164 format.
+
+phones
+array[object]
+detail
+string
+Notes made by the staff about this customer.
+
+address
+string
+Customer`s adress.
+
+city
+string
+City.
+
+state
+string
+State.
+
+zip
+string
+Zip.
+
+marketing_ok
+boolean
+true if the customer has opted-in to marketing, false otherwise.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+shop_ids
+array[integer]
+A list of the shops a customer had service history.
+
+origin_shop_id
+integer or null
+A foreign key which points to a Shop.id. Represents the origin shop for this Customer.
+
+integrator_tags
+array[object]
+customer_type
+string
+Customer type.
+
+Allowed values:
+individual
+corporate
+null
+date_of_birth
+string<date> or null
+Customer birthday date.
+
+business_name
+string or null
+Business name.
+
+fleet_id
+string or null
+Fleet identifier.
+
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/customers \
+  --header 'Accept: application/json'
+without filteringfiltering by email - `eef`filtering by last_name - `fleet`filtering by phone - `phone`filter by type - `corporate`filter by type - 'individual`
+{
+  "results": [
+    {
+      "id": 2,
+      "created_at": "2026-02-18T13:14:35Z",
+      "updated_at": "2026-02-18T13:14:35Z",
+      "first_name": "",
+      "last_name": "Fleet #01",
+      "phone": "+14158900901",
+      "detail": "New customer",
+      "address": "321 Main Street",
+      "city": "San Diego",
+      "state": "CA",
+      "zip": "92111",
+      "marketing_ok": true,
+      "shop_ids": [
+        2
+      ],
+      "origin_shop_id": null,
+      "customer_type": "corporate",
+      "fleet_id": "FLEET01",
+      "business_name": "Fleet #01",
+      "email": "darkside@example.com",
+      "integrator_tags": [
+        {
+          "id": 2,
+          "created_at": "2026-02-18T13:14:35Z",
+          "updated_at": "2026-02-18T13:14:35Z",
+          "taggable_type": "Customer",
+          "taggable_id": 2,
+          "name": "tag_name",
+          "value": "tag_value"
+        }
+      ],
+      "phones": [
+        {
+          "number": "+14158900901",
+          "international": "+1 415-890-0901",
+          "national": "(415) 890-0901",
+          "country_code": "1",
+          "label": null,
+          "preferred": true,
+          "show_on_ro": false
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:34Z",
+      "updated_at": "2026-02-18T13:14:34Z",
+      "first_name": "Connor",
+      "last_name": "McGregor",
+      "phone": "+17722277777",
+      "detail": "New customer",
+      "address": "123 Main Street",
+      "city": "San Diego",
+      "state": "CA",
+      "zip": "92111",
+      "marketing_ok": true,
+      "shop_ids": [
+        1,
+        2
+      ],
+      "origin_shop_id": 1,
+      "customer_type": "individual",
+      "fleet_id": null,
+      "date_of_birth": "2024-08-16",
+      "email": "keeF@example.com",
+      "integrator_tags": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:35Z",
+          "updated_at": "2026-02-18T13:14:35Z",
+          "taggable_type": "Customer",
+          "taggable_id": 1,
+          "name": "tag_name",
+          "value": "tag_value"
+        }
+      ],
+      "phones": [
+        {
+          "number": "+17722277777",
+          "international": "+1 772-227-7777",
+          "national": "(772) 227-7777",
+          "country_code": "1",
+          "label": "Office",
+          "preferred": true,
+          "show_on_ro": true
+        }
+      ]
+    }
+  ],
+  "limit": 2,
+  "limited": false,
+  "total_count": 2,
+  "current_page": 1,
+  "total_pages": 1
+}
