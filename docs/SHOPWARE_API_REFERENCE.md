@@ -1194,6 +1194,14 @@ Tenant-wide. A single staff member can be both `advisor: true` and `technician: 
 }
 ```
 
+### `POST /api/v1/tenants/{tenant_id}/staffs`
+
+**Required:** `first_name`, `last_name`, `email`, `shop_id`
+
+**Optional:** `employee_id`, `advisor` (boolean), `technician` (boolean), `active` (boolean)
+
+Returns `201` with same shape as list item.
+
 ### `GET /api/v1/tenants/{tenant_id}/staffs/{id}` `[NEEDS DOCS]`
 
 ---
