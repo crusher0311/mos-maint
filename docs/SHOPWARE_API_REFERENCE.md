@@ -499,17 +499,22 @@ Expected fields based on references in canned jobs / services:
 
 ---
 
-## Labels `[NEEDS DOCS]`
+## Labels
 
-Visual color-coded tags applied to ROs.
+Visual color-coded tags applied to ROs. No `updated_after` filter — not incrementally synced.
 
-### `GET /api/v1/tenants/{tenant_id}/labels` `[NEEDS DOCS]`
-### `GET /api/v1/tenants/{tenant_id}/labels/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/labels`
 
-Known fields from RO response:
+**Query filters:** `page`, `per_page` (no `updated_after`)
+
+**Response:**
 ```json
-{ "id": 1, "text": "Test", "color_code": "#FFFFFF", "row_order": 1, "created_at": "...", "updated_at": "..." }
+{ "id": 1, "text": "Some Label", "color_code": "#FFFFFF", "row_order": 1 }
 ```
+
+Note: No `created_at`/`updated_at` on list items. Fetch full list at setup time and cache.
+
+### `GET /api/v1/tenants/{tenant_id}/labels/{id}` `[NEEDS DOCS]`
 
 ---
 
