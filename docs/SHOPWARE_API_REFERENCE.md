@@ -544,6 +544,10 @@ Returns `201` with created note.
 
 Same shape as list item.
 
+### `PUT /api/v1/tenants/{tenant_id}/notes/{id}`
+
+All fields optional: `repair_order_id`, `description`. Returns `200` with updated note.
+
 ---
 
 ## Past Recommendations `[NEEDS DOCS]`
