@@ -126,7 +126,25 @@ Consistent tag schema across all entities:
 }
 ```
 
-### `GET /api/v1/tenants/{tenant_id}/integrator_tags` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/integrator_tags`
+
+**Query filters:** `page`, `per_page`, `updated_after`
+
+**Response:**
+```json
+{
+  "id": 2,
+  "taggable_type": "Shop",
+  "taggable_id": 1,
+  "name": "tag_name",
+  "value": "tag_value",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Note: `taggable_type` can be any entity type — `Customer`, `Shop`, `Vehicle`, `CannedJob`, `RepairOrder`, `Assignment`, `Category`, etc.
+
 ### `POST /api/v1/tenants/{tenant_id}/integrator_tags` `[NEEDS DOCS]`
 ### `GET /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
