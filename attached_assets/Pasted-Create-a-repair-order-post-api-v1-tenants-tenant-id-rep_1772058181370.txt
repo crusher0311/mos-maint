@@ -1,0 +1,619 @@
+Create a repair order
+post
+/api/v1/tenants/{tenant_id}/repair_orders
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+number
+integer or null
+Repair order number
+
+odometer
+integer or null
+Mileage value when car is dropped off
+
+customer_id
+integer
+required
+A foreign key which points to a Vehicle.id. Represents the vehicle for this RO. The vehicle must be owned by the customer (the Customer.id must be in the Vehicle.customer_ids list).
+
+technician_id
+integer or null
+A foreign key which points to a Staff.id. Represents the technician assigned to this RO.
+
+advisor_id
+integer or null
+A foreign key which points to a Staff.id. Represents the service advisor assigned to this RO.
+
+vehicle_id
+integer or null
+A foreign key which points to a Vehicle.id. Represents the vehicle for this RO.
+
+label_id
+integer or null
+A foreign key which points to a Label.id. Represents the label for this RO.
+
+detail
+string or null
+Notes made by the staff about this RO.
+
+preferred_contact_type
+string
+How the customer prefers to receive progress updates about this RO. One of 'Waiting', 'Phone', 'Email', 'Text'. More contact types may be added.
+
+Allowed values:
+waiting
+phone
+email
+text
+null
+shop_id
+integer
+required
+A foreign key which points to a Shop.id. Represents the Shop for this RO.
+
+taxable
+boolean or null
+Determines if tax rates will apply on this RO.
+
+due_in_at
+string<date-tiem> or null
+The datetime the vehicle was scheduled to be dropped off.
+
+customer_source
+string or null
+The marketing source of the customer for this RO. Example: "Repeat", "Referral", "Website", etc.
+
+fleet_po
+string or null
+Fleet purchase order number. Will be ignored if specified customer is not corporate.
+
+part_discount_percentage
+number or null
+RO parts discount in percents. If this parameter has non-null value, part_discount_cents must be ommited or null.
+
+>= 0
+<= 100
+part_discount_cents
+integer or null
+RO parts discount in cents. If this parameter has non-null value, part_discount_percentage must be ommited or null.
+
+> 0
+labor_discount_percentage
+number or null
+RO labors discount in percents. If this parameter has non-null value, labor_discount_cents must be ommited or null.
+
+>= 0
+<= 100
+labor_discount_cents
+integer or null
+RO labors discount in cents. If this parameter has non-null value, labor_discount_percentage must be ommited or null.
+
+> 0
+part_tax_rate
+number or null
+Part tax rate.
+
+>= 0
+labor_tax_rate
+number or null
+Labor tax rate.
+
+>= 0
+sublet_tax_rate
+number or null
+Sublet tax rate.
+
+>= 0
+hazmat_tax_rate
+number or null
+Hazmat tax rate.
+
+>= 0
+customer_concern
+string or null
+Represents the reason for Customer's Visit
+
+vehicle_use
+string or null
+Represents the primary use of vehicle
+
+Responses
+201
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+201
+id
+integer
+Unique identifier of this record.
+
+number
+integer
+The RO number.
+
+odometer
+integer or null
+odometer_out
+integer or null
+state
+string
+One of 'estimate', 'in_progress', or 'invoice'.
+
+status_id
+integer or null
+A foreign key which points to a Status.id. Represents the Status for this RO.
+
+customer_id
+integer
+A foreign key which points to a Customer.id. Represents the Customer for this RO.
+
+technician_id
+integer or null
+A foreign key which points to a Staff.id. Represents the technician assigned to this RO.
+
+advisor_id
+integer or null
+A foreign key which points to a Staff.id. Represents the service advisor assigned to this RO.
+
+vehicle_id
+integer
+A foreign key which points to a Vehicle.id. Represents the vehicle for this RO.
+
+shop_id
+integer
+A foreign key which points to a Shop.id. Represents the Shop for this RO.
+
+detail
+string or null
+Notes made by the staff about this RO.
+
+preferred_contact_type
+string or null
+How the customer prefers to receive progress updates about this RO. One of 'Waiting', 'Phone', 'Email', 'Text'. More contact types may be added.
+
+part_discount_cents
+integer or null
+The total amount in cents parts are discounted on this RO, subtracted from the parts subtotal before tax. This will be null if part_discount_percentage is non-null.
+
+labort_discount_cents
+integer or null
+The total amount in cents labor is discounted on this RO, subtracted from the labor subtotal before tax. This will be null if labor_discount_percentage is non-null.
+
+part_discount_percentage
+number or null
+RO parts discount in percents. This will be null if part_discount_cents is non-null.
+
+labor_discount_percentage
+number or null
+RO labors discount in percents. This will be null if labor_discount_cents is non-null.
+
+started_at
+string<date-time> or null
+The datetime the RO was started and transitioned to 'in_progress' state, or null if the RO is still an estimate.
+
+closed_at
+string<date-time> or null
+The datetime the RO was closed and transitioned to 'invoice' state, or null if the RO is not yet an invoice.
+
+picked_up_at
+string<date-time> or null
+The datetime the vehicle was marked as 'picked up', or null if the vehicle is still in the shop.
+
+due_in_at
+string<date-time> or null
+The datetime the vehicle was scheduled to be dropped off.
+
+due_out_at
+string<date-time> or null
+The datetime the vehicle was scheduled to be picked up.
+
+part_tax_rate
+number
+The tax rate applied to parts on this RO.
+
+labor_tax_rate
+number
+The tax rate applied to labor on this RO.
+
+sublet_tax_rate
+number
+The tax rate applied to sublets on this RO.
+
+hazmat_tax_rate
+number
+The tax rate applied to hazmats and fees on this RO.
+
+taxable
+boolean
+Determines if tax rates will apply on this RO.
+
+customer_concern
+string or null
+Represents the reason for Customer's Visit
+
+vehicle_use
+string or null
+Represents the primary use of vehicle
+
+customer_source
+string or null
+The marketing source of the customer for this RO. Example: "Repeat", "Referral", "Website", etc.
+
+supply_fee_cents
+integer or null
+Shop supplies fee, if manually entered. After the RO is closed, reflects the total amount of supply fees from parts and labor after discounts and caps. This may be null if the RO is not yet closed.
+
+fleet_po
+string or null
+Fleet purchase order number.
+
+services
+array[object]
+id
+integer
+The service primary key.
+
+title
+string
+completed
+boolean
+True if the service has been marked as completed by a staff member, false otherwise.
+
+category_id
+integer
+labor_rate_cents
+integer or null
+The rate in cents that labor on this service is charged at.
+
+fixed_price_cents
+integer or null
+The price in cents that this service will be charged at.
+
+fixed_price_labor_total_cents
+integer or null
+The total price in cents that labors on this service will be charged at.
+
+is_fixed_price_service
+boolean
+Determines if this service has a fixed price.
+
+canned_job_id
+integer or null
+A foreign key which points to a CannedJob.id. Represents the canned job assigned to this specific service item.
+
+comment
+any
+Service comments.
+
+completed_at
+string<date-time> or null
+The datetime the service was marked completed
+
+last_completed_at
+string<date-time> or null
+The datetime the service was last marked completed. This may occur if the service had been marked completed then restarted and marked completed again.
+
+row_order
+integer
+Sequence number of service.
+
+labors
+array[object]
+parts
+array[object]
+If you hit a guardrail on a fixed price service, you will get two lines for the part as they could have separate prices
+
+hazmats
+array[object]
+sublets
+array[object]
+inspections
+array[object]
+created_at
+string<date-time>
+The date and time when service was created.
+
+updated_at
+string<date-time>
+The date and time when service was last updated.
+
+payments
+array[object]
+id
+integer
+The payment primary key.
+
+repair_order_id
+integer
+A foreign key which points to a RepairOrder.id
+
+payment_type
+string
+The display name of the payment type. Payment types are customizable for each shop. Examples: "Other", "Credit Card", "Check", "Cash", "Credit Card - Visa", and "Other - Warranty".
+
+payment_type_details
+object
+notes
+string
+Staff-entered notes about this payment.
+
+amount_cents
+integer
+The total payment amount, in cents.
+
+integrator_tags
+array[object]
+created_at
+string<date-time>
+The date and time when payment was created.
+
+updated_at
+string<date-time>
+The date and time when payment was last updated.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+label
+object or null
+id
+integer
+Unique identifier of this record.
+
+text
+string or null
+The description of the label.
+
+color_code
+string or null
+The color code of which the label is represented.
+
+row_order
+integer or null
+Order of this specific label.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request POST \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/repair_orders \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "number": 982581647,
+  "odometer": 90321,
+  "customer_id": 1,
+  "technician_id": 2,
+  "advisor_id": 3,
+  "vehicle_id": 1,
+  "detail": "Key tag 84, customer waiting",
+  "preferred_contact_type": "text",
+  "shop_id": 2,
+  "label_id": 1,
+  "taxable": true,
+  "due_in_at": "2026-02-21T13:14:53Z",
+  "customer_source": "Repeat",
+  "fleet_po": "PO#123",
+  "part_discount_percentage": 50,
+  "labor_discount_cents": 5000,
+  "part_tax_rate": 10,
+  "labor_tax_rate": 20,
+  "sublet_tax_rate": 30,
+  "hazmat_tax_rate": 40,
+  "customer_concern": "example of reason for customers to visit",
+  "vehicle_use": "example of primary use of vehicle"
+}'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:53Z",
+  "updated_at": "2026-02-18T13:14:53Z",
+  "number": 982581646,
+  "odometer": null,
+  "odometer_out": null,
+  "state": "estimate",
+  "customer_id": 1,
+  "technician_id": null,
+  "advisor_id": null,
+  "vehicle_id": 1,
+  "detail": null,
+  "preferred_contact_type": null,
+  "part_discount_cents": null,
+  "labor_discount_cents": 5000,
+  "shop_id": 1,
+  "status_id": null,
+  "taxable": true,
+  "customer_source": null,
+  "supply_fee_cents": null,
+  "part_discount_percentage": 50,
+  "labor_discount_percentage": null,
+  "customer_concern": "example of reason for customers to visit",
+  "vehicle_use": "example of primary use of vehicle",
+  "fleet_po": "PO#123",
+  "started_at": null,
+  "closed_at": null,
+  "picked_up_at": null,
+  "due_in_at": null,
+  "due_out_at": null,
+  "part_tax_rate": 10,
+  "labor_tax_rate": 20,
+  "hazmat_tax_rate": 40,
+  "sublet_tax_rate": 30,
+  "services": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:53Z",
+      "updated_at": "2026-02-18T13:14:53Z",
+      "title": "Warning Light On",
+      "completed": false,
+      "category_id": 4,
+      "row_order": 1,
+      "fixed_price_cents": null,
+      "canned_job_id": 1,
+      "comment": "",
+      "fixed_price_labor_total_cents": null,
+      "is_fixed_price_service": false,
+      "labor_rate_cents": 10000,
+      "completed_at": null,
+      "last_completed_at": null,
+      "labors": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:53Z",
+          "updated_at": "2026-02-18T13:14:53Z",
+          "name": "Advise on proper course of action",
+          "technician_id": 2,
+          "taxable": false,
+          "hours": 0.13,
+          "row_order": 1
+        }
+      ],
+      "parts": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:53Z",
+          "updated_at": "2026-02-18T13:14:53Z",
+          "brand": "Superbright",
+          "description": "194 LED - AMBER 120*",
+          "number": "WLED-A-120",
+          "quoted_price_cents": 395,
+          "cost_cents": 85,
+          "part_inventory_id": 1,
+          "taxable": false,
+          "sell_price_cents": 395,
+          "quantity": 1,
+          "quantity_needed": 1
+        },
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:53Z",
+          "updated_at": "2026-02-18T13:14:53Z",
+          "brand": "Superbright",
+          "description": "194 LED - AMBER 120*",
+          "number": "WLED-A-120",
+          "quoted_price_cents": 500,
+          "cost_cents": 85,
+          "part_inventory_id": 1,
+          "taxable": false,
+          "sell_price_cents": 500,
+          "quantity": 1,
+          "quantity_needed": 0
+        }
+      ],
+      "hazmats": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:53Z",
+          "updated_at": "2026-02-18T13:14:53Z",
+          "name": "Recycling fee",
+          "fee_cents": 2000,
+          "taxable": true,
+          "quantity": 1
+        }
+      ],
+      "sublets": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:53Z",
+          "updated_at": "2026-02-18T13:14:53Z",
+          "name": "Windshield repair",
+          "price_cents": 1999,
+          "cost_cents": 999,
+          "provider": "Windshield Bros.",
+          "invoice_number": "1111",
+          "description": "windshield provider",
+          "taxable": true,
+          "vendor_id": 1,
+          "invoice_date": "2026-02-19T13:14:53Z"
+        }
+      ],
+      "inspections": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:53Z",
+          "updated_at": "2026-02-18T13:14:53Z",
+          "name": "Measure tire tread depth",
+          "state": "red"
+        }
+      ]
+    }
+  ],
+  "payments": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:53Z",
+      "updated_at": "2026-02-18T13:14:53Z",
+      "payment_type": "Credit Card - Visa",
+      "payment_type_details": {
+        "type": "Credit Card",
+        "name": "Visa"
+      },
+      "notes": "Customer made partial payment",
+      "amount_cents": 21849
+    }
+  ],
+  "integrator_tags": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:53Z",
+      "updated_at": "2026-02-18T13:14:53Z",
+      "taggable_type": "RepairOrder",
+      "taggable_id": 1,
+      "name": "tag_name",
+      "value": "tag_value"
+    }
+  ],
+  "label": {
+    "id": 1,
+    "text": null,
+    "color_code": null,
+    "row_order": null
+  }
+}

@@ -853,7 +853,10 @@ Services recommended to a customer on an active RO (live, not yet closed). When 
 
 Returns `201` with full recommendation including embedded `service` object with complete line items (`labors`, `parts`, `hazmats`, `sublets`, `inspections`).
 
-### `GET /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/recommendations/{id}`
+
+Same shape as list item — full embedded `service` object with all line item arrays.
+
 ### `PUT /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
 ### `DELETE /api/v1/tenants/{tenant_id}/recommendations/{id}` `[NEEDS DOCS]`
 
@@ -951,7 +954,27 @@ Service line items on RO:
 }
 ```
 
+### `POST /api/v1/tenants/{tenant_id}/repair_orders/{id}/start`
+
+Transitions an RO from `estimate` → `in_progress`. Returns the full RO (same schema as list/GET).
+
+**Required body:**
+```json
+{
+  "initial_assignee_id": 1,
+  "send_estimate_email": true
+}
+```
+- `initial_assignee_id` — Staff.id to assign the RO to
+- `send_estimate_email` — sends email to customer's address; ignored if customer has no email
+
+**Notes:**
+- `labort_discount_cents` is a **typo in the API spec** — the field is actually `labor_discount_cents` in real responses
+- Fixed-price service guardrail: a single part may appear **twice** in `parts` with different `quoted_price_cents`/`sell_price_cents` (one at guardrail price, one at list)
+- `inspection.state` values: `"red"`, `"yellow"`, `"green"`, or `null`
+
 ### `GET /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{id}` `[NEEDS DOCS]`
 
