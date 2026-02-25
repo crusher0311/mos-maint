@@ -1253,6 +1253,14 @@ Returns standard paginated envelope. Each result has minimal fields — no `id` 
 - Use `start_after`/`end_before` to fetch shifts for a payroll period
 - A staff member may have multiple clock-in/out pairs per day (e.g., lunch break)
 
+### `GET /api/v1/tenants/{tenant_id}/time_clocks`
+
+Tenant-wide variant — returns clocks for **all staff** at the tenant. Same response shape and filters as the staff-scoped endpoint, but `staff_id` in each result tells you which staff member the entry belongs to.
+
+**Query filters:** `start_after`, `end_before`, `page`, `per_page` (identical to staff-scoped endpoint)
+
+Use this endpoint to pull a full payroll report across all staff in one request, rather than looping over each staff member individually.
+
 ---
 
 ## Statuses
