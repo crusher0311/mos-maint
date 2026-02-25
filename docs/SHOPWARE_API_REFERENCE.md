@@ -1218,6 +1218,18 @@ Returns `200` with same shape as list item.
 
 Same shape as list item.
 
+### `POST /api/v1/tenants/{tenant_id}/staffs/notification`
+
+Sends an in-app push notification to staff members.
+
+**Required:** `title`, `body`
+
+**Optional:**
+- `url` — opens in a new window when the notification is clicked
+- `recipients` — array of Staff IDs to notify; if omitted or null, sent to **all currently logged-in staff**
+
+Returns `200` with no body.
+
 ---
 
 ## Staff Shift Clocks `[NEEDS DOCS]`
