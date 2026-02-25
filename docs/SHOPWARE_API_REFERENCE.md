@@ -591,9 +591,31 @@ Same shape as list item.
 
 ---
 
-## Pay Rates `[NEEDS DOCS]`
+## Pay Rates
 
-### `GET /api/v1/tenants/{tenant_id}/pay_rates` `[NEEDS DOCS]`
+Staff compensation rates. Low priority for MOS integration.
+
+### `GET /api/v1/tenants/{tenant_id}/pay_rates`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{
+  "id": 1,
+  "staff_id": 1,
+  "pay_type": "Flat Rate",
+  "hourly_rate_cents": 1000,
+  "hourly_rate_currency": "USD",
+  "commission_percent": null,
+  "loaded_cost_percent": "0.1",
+  "effective_date": "2023-01-01",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+### `GET /api/v1/tenants/{tenant_id}/pay_rates/{id}` `[NEEDS DOCS]`
 
 ---
 
