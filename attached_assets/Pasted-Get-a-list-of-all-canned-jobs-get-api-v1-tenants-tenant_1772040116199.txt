@@ -1,0 +1,221 @@
+Get a list of all canned jobs
+get
+/api/v1/tenants/{tenant_id}/canned_jobs
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Query Parameters
+page
+integer
+Examples:
+1
+per_page
+integer
+Examples:
+30
+updated_after
+string
+Examples:
+2022-10-24T12%3A00%3A00%2B08%3A00
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+/
+total_pages
+results
+array[object]
+id
+integer
+Unique identifier of this record.
+
+title
+string
+Labor title.
+
+category_id
+integer
+A foreign key that points to the Category that this CannedJob belongs to.
+
+frequency
+number
+The popularity of this canned job. The most used canned jobs will have the highest frequency.
+
+all_vehicles
+boolean
+True if this canned job applies to all vehicles (rather than only specific vehicles), false otherwise.
+
+auto_applied
+boolean
+True if this canned job should be applied to every new estimate automatically, false otherwise.
+
+optimizer_enabled
+boolean
+deprecated
+True if the AI Parts Matrix should be used when pricing parts on this canned job, false otherwise.
+
+ai_parts_matrix_enabled
+boolean
+True if the AI Parts Matrix should be used when pricing parts on this canned job, false otherwise.
+
+shop_id
+integer
+A foreign key that points to the Shop that this CannedJob belongs to
+
+labor_rate_cents
+integer or null
+Labor rate in cents
+
+fixed_price_cents
+integer or null
+The price in cents that this service will be charged at.
+
+is_fixed_price_service
+boolean
+Determines if this service has a fixed price.
+
+sublets
+array[object]
+hazmats
+array[object]
+parts
+array[object]
+integrator_tags
+array[object]
+inspections
+array[object]
+labors
+array[object]
+vehicles
+array[object]
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+limit
+integer
+limited
+boolean
+total_count
+integer
+current_page
+integer
+total_pages
+integer
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/canned_jobs \
+  --header 'Accept: application/json'
+{
+  "results": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:32Z",
+      "updated_at": "2026-02-18T13:14:32Z",
+      "title": "Fake Canned Job Name",
+      "all_vehicles": false,
+      "frequency": 3360,
+      "category_id": 4,
+      "auto_applied": false,
+      "shop_id": 2,
+      "fixed_price_cents": null,
+      "labor_rate_cents": 10000,
+      "is_fixed_price_service": false,
+      "optimizer_enabled": true,
+      "ai_parts_matrix_enabled": true,
+      "integrator_tags": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "taggable_type": "CannedJob",
+          "taggable_id": 1,
+          "name": "987 zyx",
+          "value": "abc 123"
+        }
+      ],
+      "sublets": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "name": "MFD Repair",
+          "price_cents": 70000,
+          "taxable": true
+        }
+      ],
+      "inspections": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "name": "Confirm proper operation of instruments and warning lights"
+        }
+      ],
+      "vehicles": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "year": "2006",
+          "make": "Toyota",
+          "model": "Prius",
+          "engine": "1.5L L4 (1NZFXE) ELECTRIC/GAS FI"
+        }
+      ],
+      "hazmats": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "name": "Qt Motor Oil Recycling",
+          "fee_cents": 75,
+          "taxable": true,
+          "quantity": 4
+        }
+      ],
+      "parts": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "part_inventory_id": 1,
+          "taxable": true,
+          "quoted_price_cents": 10000,
+          "msrp_cents": 10000,
+          "quantity": 4
+        }
+      ],
+      "labors": [
+        {
+          "id": 1,
+          "created_at": "2026-02-18T13:14:32Z",
+          "updated_at": "2026-02-18T13:14:32Z",
+          "name": "Drain and fill engine oil",
+          "taxable": true,
+          "hours": 0.1
+        }
+      ]
+    }
+  ],
+  "limit": 1,
+  "limited": false,
+  "total_count": 1,
+  "current_page": 1,
+  "total_pages": 1
+}
