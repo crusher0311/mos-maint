@@ -1,0 +1,69 @@
+Webhooks
+Shop-Ware supports webhooks, which allow a callback URL to be configured for asynchronous notification of certain events. API clients may register to receive specific webhook events using the POST /api/v1/webhooks endpoint, and may also list, update, and delete webhooks using related endpoints. Shop-Ware will send a POST request containing information about the event. Each event type shares a common JSON object structure with an event-specific “data” attribute. The data attributes are serialized using identical format to the REST API, and the endpoint documentation for each resource may be used to understand available attributes. For example, registering for the customer.created webhook event would result in receiving Customer resource data objects, as documented in the REST API /customer/api/v1/:tenant_id/customers endpoint.
+
+Webhooks will generally be delivered immediately following the triggering event. However, there are cases where events will be queued and delivered some time later. Further, events may be delivered simultaneously or out of order, in particular if the events are triggered very close in time.
+
+Up to 20 webhooks can be configured per Partner ID. Shop-Ware webhooks will only deliver to HTTPS URLs, and will not follow redirects. Self-signed certificates are not supported.
+
+Webhook requests may be authenticated by verifying the X-Api-Secret request header, which will be set to the client’s API secret. Your server should respond with a 2XX response within 3 seconds of receiving a webhook delivery. If your server takes longer than that to respond, then Shop-Ware terminates the connection and considers the delivery a failure.
+
+Shop-Ware will attempt to call the payload URL up to 10 times over a 7-day period before removing the webhook. The duration between attempts will increase exponentially to give your service time to recover.
+
+Shop-Ware will try to inform API Partners after deleting their webhook if they have a contact email registered in their account.
+
+Example Webhook Event Request Body for created and updated
+{
+      'id': '484050ea-df1b-466f-9830-c7c940e73932',
+      'timestamp': '2019-10-04T15:06:10Z',
+      'event': 'customer.created',
+      'payload': {
+        'type': 'Customer',
+        'id': 10,
+        'tenant_id': 69,
+        'data': {
+          'id': 10,
+          'created_at': '2019-10-04T15:06:09Z',
+          'updated_at': '2019-10-04T15:06:09Z',
+          'first_name': 'Keith',
+          'last_name': 'Richards',
+          'phone': '(555) 555-1234',
+          'detail': 'New customer',
+          'address': '123 Main Street',
+          'city': 'San Diego',
+          'state': 'CA',
+          'zip': '92111',
+          'marketing_ok': true,
+          'shop_ids': [],
+          'email': 'keef2@example.com',
+          'integrator_tags': []
+        }
+      }
+    }
+Attribute	Type	Description
+id	string	Unique identifier for this event.
+timestamp	string	Date the event was triggered.
+event	string	The event type which triggered this webhook (ex. “assignment.updated”). This attribute will use the same syntax as the POST /webhooks events array.
+payload	object	The payload object of the event. The contents of this object are determined by the type of the event, as specified by the event attribute.
+payload.type	string	The resource type that triggered this event. One of 'Assignment', 'Category', 'Customer', 'Staff', 'Inventory', 'PastRecommendation', 'Shop', 'Vehicle', 'Category', 'PaymentTransaction', 'Status', 'RepairOrder' or 'PurchaseRecord'.
+payload.id	integer	The unique primary key of this resource record.
+payload.tenant_id	integer	The id of the tenant related to this record.
+payload.data	object	The object representation of the resource record that triggered this event, which will be identical to what would be received by directly requesting the resource via the REST API. See appropriate REST API endpoint documentation for details.
+Example Webhook Event Request Body for deleted
+{
+      'id': '484050ea-df1b-466f-9830-c7c940e73932',
+      'timestamp': '2019-10-04T15:06:10Z',
+      'event': 'status.deleted',
+      'payload': {
+        'type': 'Status',
+        'id': 103,
+        'tenant_id': 69
+      }
+    }
+Attribute	Type	Description
+id	string	Unique identifier for this event.
+timestamp	string	Date the event was triggered.
+event	string	The event type which triggered this webhook (ex. “assignment.deleted”). This attribute will use the same syntax as the POST /webhooks events array.
+payload	object	The payload object of the event.
+payload.type	string	The resource type that triggered this event. One of 'Assignment', 'Category', 'Customer', 'Staff', 'Inventory', 'PastRecommendation', 'Shop', 'Vehicle', 'Category', 'PaymentTransaction', 'Status', 'RepairOrder' or 'PurchaseRecord'.
+payload.id	integer	The unique primary key of this resource record.
+payload.tenant_id	integer	The id of the tenant related to this record.
