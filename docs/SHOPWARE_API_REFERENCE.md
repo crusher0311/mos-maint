@@ -158,7 +158,9 @@ Same shape as list item. Returns single tag by ID.
 ### `PUT /api/v1/tenants/{tenant_id}/integrator_tags/{id}`
 
 All fields optional on update: `taggable_type`, `taggable_id`, `name`, `value`. Returns `200` with updated tag.
-### `DELETE /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
+### `DELETE /api/v1/tenants/{tenant_id}/integrator_tags/{id}`
+
+Returns `200` with empty `{}`.
 
 ---
 
