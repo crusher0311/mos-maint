@@ -1475,6 +1475,170 @@ function AutoflowSection({ status, onUpdate }: { status: { configured: boolean }
   );
 }
 
+function ShopWareWebhookPanel() {
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [webhookStatus, setWebhookStatus] = useState<{
+    registered: boolean;
+    webhookId?: string | number;
+    webhookUrl?: string;
+    registeredAt?: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [customUrl, setCustomUrl] = useState("");
+  const [showCustomUrl, setShowCustomUrl] = useState(false);
+
+  async function loadStatus() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/settings/shopware/webhook");
+      const data = await res.json();
+      if (res.ok) {
+        setWebhookStatus({
+          registered: data.registered,
+          webhookId: data.webhookId,
+          webhookUrl: data.webhookUrl,
+          registeredAt: data.registeredAt,
+        });
+        if (!data.registered) setShowCustomUrl(false);
+      } else {
+        setError(data.error || "Failed to load webhook status");
+      }
+    } catch {
+      setError("Failed to load webhook status");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadStatus(); }, []);
+
+  async function handleRegister() {
+    setWorking(true);
+    setError(null);
+    try {
+      const body: any = {};
+      if (customUrl.trim()) body.url = customUrl.trim();
+      const res = await fetch("/api/settings/shopware/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadStatus();
+      } else {
+        setError(data.error || "Registration failed");
+        if (data.error?.includes("HTTPS")) setShowCustomUrl(true);
+      }
+    } catch {
+      setError("Registration failed");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleUnregister() {
+    if (!confirm("Unregister the Shop-Ware webhook?")) return;
+    setWorking(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/settings/shopware/webhook", { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) {
+        await loadStatus();
+      } else {
+        setError(data.error || "Failed to unregister");
+      }
+    } catch {
+      setError("Failed to unregister");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">Webhook</span>
+        {loading ? (
+          <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+        ) : webhookStatus?.registered ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            <CheckCircle className="w-3 h-3" /> Active
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+            Not registered
+          </span>
+        )}
+      </div>
+
+      {webhookStatus?.registered && (
+        <div className="text-xs text-gray-500 break-all">
+          {webhookStatus.webhookUrl}
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 rounded p-2">
+          <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {!loading && !webhookStatus?.registered && (
+        <div className="space-y-2">
+          {showCustomUrl && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Custom HTTPS URL
+              </label>
+              <input
+                type="text"
+                value={customUrl}
+                onChange={(e) => setCustomUrl(e.target.value)}
+                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500"
+                placeholder="https://your-domain.com/api/webhooks/shopware"
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRegister}
+              disabled={working}
+              className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
+            >
+              {working && <Loader2 className="w-3 h-3 animate-spin" />}
+              Register Webhook
+            </button>
+            {!showCustomUrl && (
+              <button
+                onClick={() => setShowCustomUrl(true)}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Custom URL
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!loading && webhookStatus?.registered && (
+        <button
+          onClick={handleUnregister}
+          disabled={working}
+          className="w-full px-3 py-1.5 bg-red-50 text-red-700 text-xs rounded-lg hover:bg-red-100 disabled:opacity-50 flex items-center justify-center gap-1"
+        >
+          {working ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+          Unregister
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ShopWareSection({
   status,
   onUpdate,
@@ -1542,6 +1706,8 @@ function ShopWareSection({
             )}
           </div>
         </div>
+
+        <ShopWareWebhookPanel />
 
         {message && (
           <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
