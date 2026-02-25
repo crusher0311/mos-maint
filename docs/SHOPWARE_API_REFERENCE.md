@@ -1417,7 +1417,22 @@ Register a new webhook. Up to 20 per Partner ID.
 
 **Priority events for MOS:** `repair_order.created`, `repair_order.updated`, `vehicle.updated`, `customer.updated`
 
-### `GET /api/v1/webhooks` `[NEEDS DOCS]`
+### `GET /api/v1/webhooks`
+
+Lists all registered webhooks for this Partner ID. Lives at the **partner level** (no `tenant_id`).
+
+**Returns a plain array** (not a paginated envelope):
+```json
+[
+  {
+    "id": 1,
+    "url": "https://www.example.com/webhook_1",
+    "events": ["assignment.created", "assignment.deleted", "assignment.updated"],
+    "format": null
+  }
+]
+```
+
 ### `PUT /api/v1/webhooks/{id}` `[NEEDS DOCS]`
 ### `DELETE /api/v1/webhooks/{id}` `[NEEDS DOCS]`
 
