@@ -1,0 +1,183 @@
+Update a specific staff member by ID
+put
+/api/v1/tenants/{tenant_id}/staffs/{id}
+Request
+Path Parameters
+id
+integer
+required
+Examples:
+1
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+first_name
+string
+required
+Staff`s first name.
+
+>= 1 characters
+last_name
+string
+required
+Staff`s last name
+
+>= 1 characters
+email
+string
+required
+Staff`s email
+
+>= 1 characters
+employee_id
+integer or null
+Staff`s employee identifier
+
+shop_id
+integer
+required
+A foreign key which points to shop this staff will be assigned to.
+
+advisor
+boolean
+true if the staff member is a service advisor, false otherwise.
+
+technician
+boolean
+true if the staff member is a technician, false otherwise.
+
+active
+boolean
+true if the staff member is an active Shop-Ware user, false if they have been deactivated.
+
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+id
+integer
+Unique identifier of this record.
+
+first_name
+string
+Staff`s first name.
+
+last_name
+string
+Staff`s last name
+
+advisor
+boolean
+true if the staff member is a service advisor, false otherwise.
+
+technician
+boolean
+true if the staff member is a technician, false otherwise.
+
+active
+boolean
+true if the staff member is an active Shop-Ware user, false if they have been deactivated.
+
+assigned_shop_id
+integer
+A foreign key that points to the Shop this staff is currently assigned to.
+
+employee_id
+integer
+Staff`s employee identifier.
+
+email
+string
+Staff`s email.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+curl --request PUT \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/staffs/1 \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "first_name": "James",
+  "last_name": "Brown",
+  "email": "mrdynamite@example.com",
+  "employee_id": 1,
+  "shop_id": 1,
+  "advisor": true,
+  "technician": true,
+  "active": true
+}'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:59Z",
+  "updated_at": "2026-02-18T13:14:59Z",
+  "first_name": "James",
+  "last_name": "Brown",
+  "advisor": true,
+  "technician": true,
+  "active": true,
+  "assigned_shop_id": 1,
+  "employee_id": 1,
+  "email": "mrdynamite@example.com",
+  "integrator_tags": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:59Z",
+      "updated_at": "2026-02-18T13:14:59Z",
+      "taggable_type": "Staff",
+      "taggable_id": 1,
+      "name": "tag_name",
+      "value": "tag_value"
+    }
+  ]
+}

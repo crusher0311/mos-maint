@@ -1204,7 +1204,15 @@ Returns `201` with same shape as list item.
 
 ### `PUT /api/v1/tenants/{tenant_id}/staffs`
 
-**Anomaly:** PUT operates on the **collection URL** (no `{id}` in path) — same pattern as Pay Rates. Same required/optional fields as POST. Returns `200` with same shape.
+**Anomaly:** There is also a collection-level PUT (no `{id}`) with the same body — behavior unclear, may be an API quirk. Use `PUT /staffs/{id}` for targeted updates.
+
+### `PUT /api/v1/tenants/{tenant_id}/staffs/{id}`
+
+**Required:** `first_name`, `last_name`, `email`, `shop_id`
+
+**Optional:** `employee_id`, `advisor` (boolean), `technician` (boolean), `active` (boolean)
+
+Returns `200` with same shape as list item.
 
 ### `GET /api/v1/tenants/{tenant_id}/staffs/{id}`
 
