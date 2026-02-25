@@ -1336,7 +1336,18 @@ Same shape as list item.
 - No `odometer` on the vehicle record — mileage lives on the RO
 
 ### `GET /api/v1/tenants/{tenant_id}/vehicles/{id}` `[NEEDS DOCS]`
-### `POST /api/v1/tenants/{tenant_id}/vehicles` `[NEEDS DOCS]`
+### `POST /api/v1/tenants/{tenant_id}/vehicles`
+
+**Required:** `make` only (min 1 character)
+
+**Optional:** `vin`, `year`, `model`, `engine`, `color`, `plate`, `detail`, `fleet_number`, `customer_ids` (array of Customer IDs), `production_date` (YYYY-MM-DD), `registration_exp_date` (YYYY-MM-DD)
+
+**Notes:**
+- `color` is stored and returned uppercased ("Black" → `"BLACK"`)
+- Dates sent as `date` strings (`"2022-10-24"`) are returned as full ISO datetime strings (`"2022-10-24T08:00:00.000Z"`)
+
+Returns `201` with same shape as list item.
+
 ### `PUT /api/v1/tenants/{tenant_id}/vehicles/{id}` `[NEEDS DOCS]`
 
 ---
