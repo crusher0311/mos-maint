@@ -721,7 +721,27 @@ Returns a flat array of custom payment type strings configured for this tenant.
 ["Coupon", "Special Offer"]
 ```
 
-### `GET /api/v1/tenants/{tenant_id}/payments` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/payments`
+
+**Query filters:** `updated_after`, `page`, `per_page`
+
+**Response:**
+```json
+{
+  "id": 1,
+  "repair_order_id": 1,
+  "payment_type": "Credit Card - Visa",
+  "payment_type_details": { "type": "Credit Card", "name": "Visa" },
+  "notes": "Customer made partial payment",
+  "amount_cents": 21849,
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+Note: `payment_type_details` is an object with `{ type, name }` — the display string `payment_type` combines them as `"<type> - <name>"`.
+
 ### `GET /api/v1/tenants/{tenant_id}/payments/{id}` `[NEEDS DOCS]`
 
 ---
