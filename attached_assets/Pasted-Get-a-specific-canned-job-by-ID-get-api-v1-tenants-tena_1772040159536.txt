@@ -1,0 +1,371 @@
+Get a specific canned job by ID
+get
+/api/v1/tenants/{tenant_id}/canned_jobs/{id}
+Request
+Path Parameters
+id
+integer
+required
+Examples:
+1
+tenant_id
+integer
+required
+Examples:
+1
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+/
+updated_at
+id
+integer
+Unique identifier of this record.
+
+title
+string
+Labor title.
+
+category_id
+integer
+A foreign key that points to the Category that this CannedJob belongs to.
+
+frequency
+number
+The popularity of this canned job. The most used canned jobs will have the highest frequency.
+
+all_vehicles
+boolean
+True if this canned job applies to all vehicles (rather than only specific vehicles), false otherwise.
+
+auto_applied
+boolean
+True if this canned job should be applied to every new estimate automatically, false otherwise.
+
+optimizer_enabled
+boolean
+deprecated
+True if the AI Parts Matrix should be used when pricing parts on this canned job, false otherwise.
+
+ai_parts_matrix_enabled
+boolean
+True if the AI Parts Matrix should be used when pricing parts on this canned job, false otherwise.
+
+shop_id
+integer
+A foreign key that points to the Shop that this CannedJob belongs to
+
+labor_rate_cents
+integer or null
+Labor rate in cents
+
+fixed_price_cents
+integer or null
+The price in cents that this service will be charged at.
+
+is_fixed_price_service
+boolean
+Determines if this service has a fixed price.
+
+sublets
+array[object]
+id
+integer
+The sublet primary key.
+
+name
+string
+The name of this sublet as it will appear on the RO.
+
+price_cents
+integer
+The price in cents of sublet being sold to customer.
+
+taxable
+boolean
+Determines if sublet tax rate will be applied to this sublet.
+
+created_at
+string<date-time>
+The date and time when sublet was created.
+
+updated_at
+string<date-time>
+The date and time when sublet was last updated.
+
+hazmats
+array[object]
+id
+integer
+The hazmat primary key.
+
+name
+string
+The name of this hazmat as it will appear on the RO.
+
+fee_cents
+integer
+The price of this fee or hazmat in cents per unit.
+
+quantity
+number
+The number of units.
+
+taxable
+boolean
+Determines if hazmat tax rate will be applied to this hazmat.
+
+created_at
+string<date-time>
+The date and time when hazmat was created.
+
+updated_at
+string<date-time>
+The date and time when hazmat was last updated.
+
+parts
+array[object]
+id
+integer
+The part primary key.
+
+part_inventory_id
+integer
+A foreign key which points to an Inventory.id. Represents the associated inventory and quantity information for this part.
+
+quantity
+number
+The number of units this part line item represents.
+
+quoted_price_cents
+integer or null
+deprecated
+MSRP in cents.
+
+msrp_cents
+integer or null
+MSRP in cents.
+
+taxable
+boolean
+Determines if part tax rate will be applied to this part.
+
+created_at
+string<date-time>
+The date and time when part was created.
+
+updated_at
+string<date-time>
+The date and time when part was last updated.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+inspections
+array[object]
+id
+integer
+The inspection primary key.
+
+name
+string
+The name of this inspection as it will appear on the RO.
+
+created_at
+string<date-time>
+The date and time when inspection was created.
+
+updated_at
+string<date-time>
+The date and time when inspection was last updated.
+
+labors
+array[object]
+id
+integer
+The labor primary key.
+
+name
+string
+The name of this labor as it will appear on the RO.
+
+taxable
+boolean
+Determines if labor tax rate will be applied to this labor.
+
+hours
+number
+created_at
+string<date-time>
+The date and time when labor was created.
+
+updated_at
+string<date-time>
+The date and time when labor was last updated.
+
+vehicles
+array[object]
+id
+integer
+The vehicle primary key.
+
+year
+string
+Vehicle year.
+
+make
+string
+Vehicle make.
+
+model
+string
+Vehicle model.
+
+engine
+string
+Vehicle engine.
+
+created_at
+string<date-time>
+The date and time when vehicle was created.
+
+updated_at
+string<date-time>
+The date and time when vehicle was last updated.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request GET \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/canned_jobs/1 \
+  --header 'Accept: application/json'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:33Z",
+  "updated_at": "2026-02-18T13:14:33Z",
+  "title": "Fake Canned Job Name",
+  "all_vehicles": false,
+  "frequency": 3360,
+  "category_id": 4,
+  "auto_applied": false,
+  "shop_id": 2,
+  "fixed_price_cents": null,
+  "labor_rate_cents": 10000,
+  "is_fixed_price_service": false,
+  "optimizer_enabled": true,
+  "ai_parts_matrix_enabled": true,
+  "integrator_tags": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "taggable_type": "CannedJob",
+      "taggable_id": 1,
+      "name": "987 zyx",
+      "value": "abc 123"
+    }
+  ],
+  "sublets": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "name": "MFD Repair",
+      "price_cents": 70000,
+      "taxable": true
+    }
+  ],
+  "inspections": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "name": "Confirm proper operation of instruments and warning lights"
+    }
+  ],
+  "vehicles": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "year": "2006",
+      "make": "Toyota",
+      "model": "Prius",
+      "engine": "1.5L L4 (1NZFXE) ELECTRIC/GAS FI"
+    }
+  ],
+  "hazmats": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "name": "Qt Motor Oil Recycling",
+      "fee_cents": 75,
+      "taxable": true,
+      "quantity": 4
+    }
+  ],
+  "parts": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "part_inventory_id": 1,
+      "taxable": true,
+      "quoted_price_cents": 10000,
+      "msrp_cents": 10000,
+      "quantity": 4
+    }
+  ],
+  "labors": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:33Z",
+      "updated_at": "2026-02-18T13:14:33Z",
+      "name": "Drain and fill engine oil",
+      "taxable": true,
+      "hours": 0.1
+    }
+  ]
+}
