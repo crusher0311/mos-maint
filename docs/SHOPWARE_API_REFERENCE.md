@@ -1376,14 +1376,41 @@ Same fields as POST. `make` is required (min 1 character); all other fields opti
 
 ---
 
-## Vendors `[NEEDS DOCS]`
+## Vendors
 
-Shop-specific parts vendors.
+Shop-specific parts vendors. Referenced by `primary_vendor_id` / `last_vendor_id` on inventory items, and `vendor_id` on sublets.
 
-### `GET /api/v1/tenants/{tenant_id}/vendors` `[NEEDS DOCS]`
-### `GET /api/v1/tenants/{tenant_id}/vendors/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/vendors`
 
-Expected fields: `id`, `shop_id`, `name`, `account_number`, `contact`, `phone`, `email`
+**Query filters:** `updated_after`, `page`, `per_page`
+
+```json
+{
+  "id": 1,
+  "name": "Vendor 3",
+  "phone": null,
+  "account_number": null,
+  "info": null,
+  "notes": null,
+  "website": "vendor19.com",
+  "shop_id": 1,
+  "active": true,
+  "preferred": false,
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+**Notes:**
+- `active: false` = archived vendor; filter these out for UI pickers but keep for historical data
+- `preferred: true` = marked as a frequently-used vendor by shop staff
+- `notes` is always `null` in observed responses (appears unused despite being in schema)
+- No `email` or `contact` fields — contact info is `phone` and `website` only
+
+### `GET /api/v1/tenants/{tenant_id}/vendors/{id}`
+
+Same shape as list item. Returns vendor record directly (not wrapped in `results`).
 
 ---
 
