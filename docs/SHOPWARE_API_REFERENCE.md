@@ -1076,11 +1076,48 @@ Returns `200` with full RO schema.
 
 ---
 
-## Services `[NEEDS DOCS]`
+## Services
 
-Individual service lines on an RO (outside the estimate-specific routes).
+Individual service lines. Can be queried tenant-wide or scoped to an RO.
 
-### `GET /api/v1/tenants/{tenant_id}/services` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/services`
+
+**Query filters:** `repair_order_id`, `technician_id`, `updated_after`, `page`, `per_page`
+
+**Response:** Same structure as services embedded in an RO, with two differences:
+- `repair_order_id` appears as a **top-level field** on each service item
+- Parts have `quantity` but **no `quantity_needed`** (that field only appears when services are embedded in an RO response)
+- Labors have `hours` but **no `row_order`** in this standalone context
+
+```json
+{
+  "id": 1,
+  "title": "Test Service",
+  "repair_order_id": 1,
+  "completed": false,
+  "category_id": null,
+  "canned_job_id": null,
+  "is_fixed_price_service": false,
+  "fixed_price_cents": null,
+  "fixed_price_labor_total_cents": null,
+  "labor_rate_cents": 10000,
+  "comment": "No comment",
+  "completed_at": null,
+  "last_completed_at": null,
+  "labors": [{ "id": 1, "name": "...", "technician_id": null, "hours": 1, "taxable": true }],
+  "parts": [{ "id": 1, "brand": null, "description": null, "number": null, "quoted_price_cents": null, "sell_price_cents": null, "cost_cents": null, "part_inventory_id": 1, "taxable": true, "quantity": 1 }],
+  "hazmats": [{ "id": 1, "name": "...", "fee_cents": 25, "taxable": true, "quantity": 1 }],
+  "sublets": [{ "id": 1, "name": "...", "price_cents": 50, "cost_cents": null, "provider": "", "invoice_number": "1111", "taxable": true, "vendor_id": null, "invoice_date": null }],
+  "inspections": [{ "id": 1, "name": "...", "state": null }],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+### `GET /api/v1/tenants/{tenant_id}/services/{id}`
+
+Same shape as list item. Official `inspection.state` values: `"red"`, `"yellow"`, `"green"`, `"unchecked"`, or `null`. Note: `quoted_price_cents` on parts is **deprecated** — use `sell_price_cents`.
+
 ### `POST /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/services` `[NEEDS DOCS]`
 ### `PUT /api/v1/tenants/{tenant_id}/repair_orders/{repair_order_id}/services/{id}` `[NEEDS DOCS]`
 
