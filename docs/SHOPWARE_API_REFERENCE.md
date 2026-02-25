@@ -152,7 +152,9 @@ Note: `taggable_type` can be any entity type — `Customer`, `Shop`, `Vehicle`, 
 **Valid `taggable_type` values:** `Appointment`, `Assignment`, `CannedJob`, `Category`, `Customer`, `GpException`, `Inventory`, `Payment`, `PaymentTransaction`, `PurchaseRecord`, `Recommendation`, `RepairOrder`, `Shop`, `Staff`, `Status`, `Vehicle`, `Vendor`
 
 Returns `201` with the created tag.
-### `GET /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/integrator_tags/{id}`
+
+Same shape as list item. Returns single tag by ID.
 ### `PUT /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
 ### `DELETE /api/v1/tenants/{tenant_id}/integrator_tags/{id}` `[NEEDS DOCS]`
 
