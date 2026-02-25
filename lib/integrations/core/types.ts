@@ -1,6 +1,6 @@
 import type { SourceSystem } from '@/lib/normalized-schema';
 
-export type SMSProvider = 'protractor' | 'tekmetric' | 'autoflow';
+export type SMSProvider = 'protractor' | 'tekmetric' | 'autoflow' | 'shopware';
 
 export type Result<T> = 
   | { ok: true; data: T }
