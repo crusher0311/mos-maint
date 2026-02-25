@@ -794,7 +794,9 @@ Parts purchase orders from vendors (including eComm integrators like PartsTech).
 }
 ```
 
-### `GET /api/v1/tenants/{tenant_id}/purchase_records/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/purchase_records/{id}`
+
+Same shape as list item. Note: `list_price_cents` on line items is **deprecated** — use `msrp_cents`.
 
 ---
 

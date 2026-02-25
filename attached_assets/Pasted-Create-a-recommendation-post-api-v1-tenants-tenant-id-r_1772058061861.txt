@@ -1,0 +1,295 @@
+Create a recommendation
+post
+/api/v1/tenants/{tenant_id}/recommendations
+Request
+Path Parameters
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+repair_order_id
+integer
+required
+A foreign key which points to a RepairOrder.id. Represents the repair order related to this recommendation.
+
+description
+string or null
+The title of the recommended service. Either this field or canned_job_id must be present. If canned_job_id is provided, this field will be ignored.
+
+canned_job_id
+integer or null
+A foreign key which points to a CannedJob.id. Represents the canned job related to this recommendation. Either this field or description must be present.
+
+Responses
+201
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+201
+id
+integer
+Unique identifier of this record.
+
+description
+string or null
+The title of the recommended service
+
+approved
+string or null
+"true" if the recommendation has been approved by the customer, "false" if it has been declined, and null otherwise.
+
+approver_id
+integer or null
+A foreign key that points to a Staff or Customer ID. This represents the person who approved the recommendation (if it has been approved, null otherwise).
+
+approval_type
+string or null
+Type of approval: One of "customer", "email", "person", and "phone". Null if unapproved or declined.
+
+imported
+boolean
+True if the recommendation has been added as a service on a Repair Order, false otherwise.
+
+quick_price_cents
+number or null
+Quick price in cents
+
+service
+object
+id
+integer
+The service primary key.
+
+title
+string
+completed
+boolean
+True if the service has been marked as completed by a staff member, false otherwise.
+
+category_id
+integer or null
+labor_rate_cents
+integer or null
+The rate in cents that labor on this service is charged at.
+
+fixed_price_cents
+integer or null
+The price in cents that this service will be charged at.
+
+fixed_price_labor_total_cents
+integer or null
+The total price in cents that labors on this service will be charged at.
+
+is_fixed_price_service
+boolean
+Determines if this service has a fixed price.
+
+canned_job_id
+integer or null
+A foreign key which points to a CannedJob.id. Represents the canned job assigned to this specific service item.
+
+comment
+any
+Service comments.
+
+completed_at
+string<date-time> or null
+The datetime the service was marked completed
+
+last_completed_at
+string<date-time> or null
+The datetime the service was last marked completed. This may occur if the service had been marked completed then restarted and marked completed again.
+
+row_order
+integer
+Sequence number of service.
+
+labors
+array[object]
+parts
+array[object]
+hazmats
+array[object]
+sublets
+array[object]
+inspections
+array[object]
+created_at
+string<date-time>
+The date and time when service was created.
+
+updated_at
+string<date-time>
+The date and time when service was last updated.
+
+repair_order_id
+integer
+A foreign key that points to the RepairOrder that this Recommendation belongs to
+
+approval_at
+string<date-time> or null
+Date the recommendation was approved if it has been approved, null otherwise.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request POST \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/recommendations \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "repair_order_id": 4,
+  "description": "Test Service 1",
+  "canned_job_id": 1
+}'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:50Z",
+  "updated_at": "2026-02-18T13:14:50Z",
+  "description": "Test Service 1",
+  "approved": "true",
+  "approver_id": null,
+  "approval_type": null,
+  "imported": false,
+  "quick_price_cents": null,
+  "service": {
+    "id": 1,
+    "created_at": "2026-02-18T13:14:50Z",
+    "updated_at": "2026-02-18T13:14:50Z",
+    "title": "Test Service 1",
+    "completed": false,
+    "category_id": null,
+    "row_order": 1,
+    "fixed_price_cents": null,
+    "canned_job_id": null,
+    "comment": "",
+    "fixed_price_labor_total_cents": null,
+    "is_fixed_price_service": false,
+    "labor_rate_cents": 10000,
+    "labors": [
+      {
+        "id": 1,
+        "created_at": "2026-02-18T13:14:50Z",
+        "updated_at": "2026-02-18T13:14:50Z",
+        "name": "Test labor 2",
+        "technician_id": null,
+        "taxable": true,
+        "hours": 1,
+        "row_order": 1
+      }
+    ],
+    "parts": [
+      {
+        "id": 1,
+        "created_at": "2026-02-18T13:14:50Z",
+        "updated_at": "2026-02-18T13:14:50Z",
+        "brand": null,
+        "description": null,
+        "number": null,
+        "quoted_price_cents": null,
+        "cost_cents": null,
+        "part_inventory_id": 1,
+        "taxable": true,
+        "sell_price_cents": null,
+        "quantity": 1,
+        "quantity_needed": 0
+      }
+    ],
+    "hazmats": [
+      {
+        "id": 1,
+        "created_at": "2026-02-18T13:14:50Z",
+        "updated_at": "2026-02-18T13:14:50Z",
+        "name": "Test hazmat fee 2",
+        "fee_cents": 25,
+        "taxable": true,
+        "quantity": 1
+      }
+    ],
+    "sublets": [
+      {
+        "id": 1,
+        "created_at": "2026-02-18T13:14:50Z",
+        "updated_at": "2026-02-18T13:14:50Z",
+        "name": "Test sublet 2",
+        "price_cents": 50,
+        "cost_cents": null,
+        "provider": "",
+        "invoice_number": "1111",
+        "description": null,
+        "taxable": true,
+        "vendor_id": null,
+        "invoice_date": null
+      }
+    ],
+    "inspections": [
+      {
+        "id": 1,
+        "created_at": "2026-02-18T13:14:50Z",
+        "updated_at": "2026-02-18T13:14:50Z",
+        "name": "Test inspection 2",
+        "state": null
+      }
+    ]
+  },
+  "repair_order_id": 2,
+  "approval_at": null,
+  "integrator_tags": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:50Z",
+      "updated_at": "2026-02-18T13:14:50Z",
+      "taggable_type": "Recommendation",
+      "taggable_id": 1,
+      "name": "tag_name",
+      "value": "tag_value"
+    }
+  ]
+}
