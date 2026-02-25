@@ -1351,7 +1351,9 @@ Same shape as list item.
 
 Returns `201` with same shape as list item.
 
-### `PUT /api/v1/tenants/{tenant_id}/vehicles/{id}` `[NEEDS DOCS]`
+### `PUT /api/v1/tenants/{tenant_id}/vehicles/{id}`
+
+Same fields as POST. `make` is required (min 1 character); all other fields optional. Same date and color-casing behavior applies. Returns `200` with same shape as list item.
 
 ---
 
