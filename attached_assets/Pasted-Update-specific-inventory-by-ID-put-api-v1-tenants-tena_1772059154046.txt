@@ -1,0 +1,292 @@
+Update specific inventory by ID
+put
+/api/v1/tenants/{tenant_id}/inventories/{id}
+Request
+Path Parameters
+id
+integer
+required
+Examples:
+1
+tenant_id
+integer
+required
+Examples:
+1
+Body
+
+application/json
+
+application/json
+cost_cents
+integer
+Cost in cents.
+
+>= 0
+list_price_cents
+integer
+deprecated
+MSRP in cents.
+
+>= 0
+msrp_cents
+integer
+MSRP in cents.
+
+>= 0
+location
+string
+Location.
+
+min_stock
+number or null
+Min stock.
+
+>= 0
+< 1000000
+max_stock
+number or null
+Max stock.
+
+>= 0
+< 1000000
+Responses
+200
+successful
+
+Body
+
+application/json
+
+application/json
+responses
+/
+200
+id
+integer
+Unique identifier of this record.
+
+type
+string
+One of 'PartInventory' or 'CoreInventory'. More types may be added. PartInventory may have an associated CoreInventory, which represents the core associated with an inventory item.
+
+brand
+string
+The inventory brand.
+
+description
+string
+The inventory description.
+
+number
+string
+The inventory number.
+
+list_price_cents
+integer
+deprecated
+The MSRP in cents per unit.
+
+msrp_cents
+integer
+The MSRP in cents per unit.
+
+cost_cents
+integer
+The cost of this inventory item to the shop, in cents per unit.
+
+gp_price_cents
+integer or null
+The GP Optimized price, in cents per unit.
+
+gp_optimizer_active
+boolean
+deprecated
+true if the AI Parts Matrix is enabled for this inventory item, false otherwise.
+
+ai_parts_matrix_enabled
+boolean
+true if the AI Parts Matrix is enabled for this inventory item, false otherwise.
+
+min_stock
+number
+The minimum number of units to stock.
+
+max_stock
+number
+The maximum number of units to stock
+
+hazmat_rating
+string
+One of 'caution', 'danger', 'warning', or 'none'. More values may be added.
+
+location
+string
+The physical location in the shop of this inventory, such as shelf or bin number.
+
+misc_info
+string
+Miscellaneous staff-entered information about this inventory.
+
+part_terminology_id
+string
+Part Terminology Code from AAIA Parts Classification Database. This value is populated from eComm parts orders.
+
+core_inventory_id
+integer or null
+A foreign key which points to a CoreInventory.id.Represents a core associated with this inventory item.
+
+bosch_extra_points
+integer
+tags
+array[string]
+A list of free-form tags that a staff member has applied to this inventory item.
+
+integrator_tags
+array[object]
+id
+integer
+The tag primary key.
+
+taggable_id
+integer
+Entity identifier the tag attached to.
+
+taggable_type
+string
+Entity type the tag attached to.
+
+name
+string
+Tag Name.
+
+value
+string
+Tag Value.
+
+created_at
+string<date-time>
+The date and time when tag was created.
+
+updated_at
+string<date-time>
+The date and time when tag was last updated.
+
+primary_vendor_id
+integer
+A foreign key which points to the primary vendor ID. Represents the primary vendor associated with the inventory item.
+
+last_vendor_id
+integer
+A foreign key which points to the last vendor ID. Represents the last vendor associated with the inventory item.
+
+shop_id
+integer
+A foreign key that points to the Shop ID that this Inventory belongs to.
+
+gp_exception_id
+integer
+A foreign key that points to the GP Exception that fixes the sell price markup of this Inventory resource, or null if none.
+
+partstech_part_id
+string
+An identifier assigned to this inventory by PartsTech.
+
+quantity_on_hand
+number
+quantity_in_progress
+number
+The number of units of this inventory item allocated to in-progress work orders.
+
+quantity_needed
+number
+The number of units this inventory item needed for in-progress work orders.
+
+quantity_ordered
+number
+The number of units of this inventory item ordered for in-progress work orders.
+
+quantity_ordered_for_stock
+number
+The number of units of this inventory item ordered for stock.
+
+quantity_returned
+number
+The number of units of this inventory item currently on return orders.
+
+created_at
+string<date-time>
+Date and time when record was created.
+
+updated_at
+string<date-time>
+Date and time when record was last updated.
+
+curl --request PUT \
+  --url https://shop-ware.stoplight.io/api/v1/tenants/1/inventories/1 \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "cost_cents": 179,
+  "list_price_cents": 439,
+  "location": "C4",
+  "min_stock": 1,
+  "max_stock": 2
+}'
+{
+  "id": 1,
+  "created_at": "2026-02-18T13:14:41Z",
+  "updated_at": "2026-02-18T13:14:41Z",
+  "type": "PartInventory",
+  "brand": "Honda",
+  "description": "Throttle Body Gasket",
+  "number": "16176-RTA-004",
+  "list_price_cents": 439,
+  "cost_cents": 179,
+  "gp_price_cents": 757,
+  "quantity_on_hand": 1,
+  "location": "C4",
+  "hazmat_rating": "none",
+  "misc_info": "Back of shelf, left side",
+  "part_terminology_id": "14999",
+  "core_inventory_id": null,
+  "bosch_extra_points": 0,
+  "primary_vendor_id": 1,
+  "last_vendor_id": 2,
+  "shop_id": 2,
+  "gp_exception_id": 1,
+  "partstech_part_id": "A1B2C3",
+  "quantity_in_progress": 0,
+  "quantity_needed": 0,
+  "quantity_ordered": 0,
+  "quantity_ordered_for_stock": 0,
+  "quantity_returned": 0,
+  "part_type": "Part Type 3",
+  "reporting_category": null,
+  "part_type_metadata": [
+    {
+      "tire_size": "P205/95B12 70V LL",
+      "manufacturer": "element"
+    }
+  ],
+  "gp_optimizer_active": true,
+  "ai_parts_matrix_enabled": true,
+  "msrp_cents": 439,
+  "min_stock": 1,
+  "max_stock": 2,
+  "tags": [
+    "a4",
+    "taxi_part"
+  ],
+  "integrator_tags": [
+    {
+      "id": 1,
+      "created_at": "2026-02-18T13:14:41Z",
+      "updated_at": "2026-02-18T13:14:41Z",
+      "taggable_type": "Inventory",
+      "taggable_id": 1,
+      "name": "tag_name",
+      "value": "tag_value"
+    }
+  ]
+}

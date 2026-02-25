@@ -487,15 +487,64 @@ Same shape as list item.
 
 ---
 
-## Inventory `[NEEDS DOCS]`
+## Inventory
 
-Shop-specific. Parts and supplies stock.
+**URL path is `/inventories`** (not `/inventory`). Shop-scoped parts and core inventory.
 
-### `GET /api/v1/tenants/{tenant_id}/inventory` `[NEEDS DOCS]`
-### `GET /api/v1/tenants/{tenant_id}/inventory/{id}` `[NEEDS DOCS]`
+### `GET /api/v1/tenants/{tenant_id}/inventories`
 
-Expected fields based on references in canned jobs / services:
-`id`, `shop_id`, `part_number`, `brand`, `description`, `cost_cents`, `sell_price_cents`, `quantity_on_hand`, `vendor_id`
+**Query filters:** `updated_after`, `page`, `per_page`
+- `in_stock` — include key (any value) to filter to items with `min_stock > 0`
+- `on_hand` — include key to filter to items with `quantity_on_hand > 0`
+
+```json
+{
+  "id": 1,
+  "type": "PartInventory",
+  "brand": "Honda",
+  "description": "Throttle Body Gasket",
+  "number": "16176-RTA-004",
+  "msrp_cents": 439,
+  "cost_cents": 179,
+  "gp_price_cents": 757,
+  "shop_id": 2,
+  "location": "C4",
+  "hazmat_rating": "none",
+  "misc_info": "Back of shelf, left side",
+  "part_terminology_id": "14999",
+  "part_type": "Part Type 1",
+  "part_type_metadata": [{ "tire_size": "P205/95B12 70V LL", "manufacturer": "element" }],
+  "core_inventory_id": null,
+  "primary_vendor_id": 1,
+  "last_vendor_id": 2,
+  "gp_exception_id": 1,
+  "partstech_part_id": "A1B2C3",
+  "bosch_extra_points": 0,
+  "min_stock": 1,
+  "max_stock": 2,
+  "quantity_on_hand": 1,
+  "quantity_in_progress": 0,
+  "quantity_needed": 0,
+  "quantity_ordered": 0,
+  "quantity_ordered_for_stock": 0,
+  "quantity_returned": 0,
+  "ai_parts_matrix_enabled": true,
+  "tags": ["a4", "taxi_part"],
+  "integrator_tags": [...],
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+**Notes:**
+- `type` values: `"PartInventory"`, `"CoreInventory"` (a PartInventory may have an associated CoreInventory via `core_inventory_id`)
+- `hazmat_rating` values: `"caution"`, `"danger"`, `"warning"`, `"none"`
+- `list_price_cents` and `gp_optimizer_active` are **deprecated** — use `msrp_cents` and `ai_parts_matrix_enabled`
+- `reporting_category` is **deprecated**
+- `tags` is a free-form string array (staff-applied labels)
+- `part_type_metadata` is an array of arbitrary key-value objects (varies by part type, e.g. tire size)
+
+### `GET /api/v1/tenants/{tenant_id}/inventories/{id}` `[NEEDS DOCS]`
 
 ---
 
