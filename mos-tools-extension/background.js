@@ -1014,6 +1014,7 @@ async function autoApplyLaborRate(context, options = {}) {
         const custData = await custRes.json();
         console.log('[LaborRate] Raw customer API response keys:', Object.keys(custData).join(', '));
         console.log('[LaborRate] Raw customer tags fields:', JSON.stringify({
+          tag: custData.tag,
           tags: custData.tags,
           labels: custData.labels,
           tagList: custData.tagList,
@@ -1021,7 +1022,7 @@ async function autoApplyLaborRate(context, options = {}) {
           customerTags: custData.customerTags,
         }));
         customerType = extractCustomerType(custData.customerType) || customerType;
-        const rawTags = custData.tags || custData.labels || custData.tagList || custData.tagNames || custData.customerTags || [];
+        const rawTags = custData.tag || custData.tags || custData.labels || custData.tagList || custData.tagNames || custData.customerTags || [];
         customerTags = rawTags.map(t => typeof t === 'string' ? t : (t.name || t.label || t.value || ''));
         console.log(`[LaborRate] Customer details: type="${customerType}", tags=[${customerTags.join(', ')}]`);
       } else {
