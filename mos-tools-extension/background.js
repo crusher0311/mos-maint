@@ -1087,7 +1087,11 @@ async function autoApplyLaborRate(context, options = {}) {
   const jobsHandledByPerJobRules = new Set();
 
   // Apply all matching per-job rules (category-based rules)
-  if (perJobRules.length > 0 && vehicleData.jobCategories.length > 0) {
+  // Skip if the matched RO-level rule is set to override all category rates
+  if (matchedRoRule?.overrideCategoryRates) {
+    console.log(`[LaborRate] Rule "${matchedRoRule.name}" has overrideCategoryRates — skipping per-job category rules`);
+  }
+  if (perJobRules.length > 0 && vehicleData.jobCategories.length > 0 && !matchedRoRule?.overrideCategoryRates) {
     const sorted = [...perJobRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
     for (const rule of sorted) {
       const matchMode = rule.matchMode || 'all';

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, rate, priority, conditions, matchMode } = body;
+  const { name, rate, priority, conditions, matchMode, overrideCategoryRates } = body;
 
   if (!name || rate == null || !Array.isArray(conditions)) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       values: Array.isArray(c.values) ? c.values : [],
     })),
     matchMode: matchMode === "any" ? "any" : "all",
+    overrideCategoryRates: Boolean(overrideCategoryRates),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -60,7 +61,7 @@ export async function PUT(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { id, name, rate, priority, conditions, matchMode } = body;
+  const { id, name, rate, priority, conditions, matchMode, overrideCategoryRates } = body;
 
   if (!id) return NextResponse.json({ error: "Rule ID required" }, { status: 400 });
 
@@ -81,6 +82,7 @@ export async function PUT(req: NextRequest) {
           values: Array.isArray(c.values) ? c.values : [],
         })),
         "laborRateRules.$.matchMode": matchMode === "any" ? "any" : "all",
+        "laborRateRules.$.overrideCategoryRates": Boolean(overrideCategoryRates),
         "laborRateRules.$.updatedAt": new Date(),
       },
     }

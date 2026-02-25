@@ -38,6 +38,7 @@ type LaborRateRule = {
   priority: number;
   conditions: RuleCondition[];
   matchMode: "all" | "any";
+  overrideCategoryRates?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -336,6 +337,11 @@ export default function LaborRatesPage() {
                     <span className="text-xs text-gray-400">
                       {rule.conditions.length} condition{rule.conditions.length !== 1 ? "s" : ""} • Match {rule.matchMode}
                     </span>
+                    {rule.overrideCategoryRates && (
+                      <span className="bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                        Overrides categories
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -511,6 +517,23 @@ function RuleEditor({
             <span>ANY condition can match</span>
           </label>
         </div>
+      </div>
+
+      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!rule.overrideCategoryRates}
+            onChange={(e) => onChange({ ...rule, overrideCategoryRates: e.target.checked })}
+            className="mt-0.5 text-blue-600 rounded"
+          />
+          <div>
+            <span className="text-sm font-medium text-gray-800">Override per-job category rates</span>
+            <p className="text-xs text-gray-500 mt-0.5">
+              When enabled, this rule's rate applies to all jobs — including those that would normally be handled by a category-specific rule (e.g., Diag or Maint). Use this for fleet or wholesale accounts that get a flat rate regardless of job type.
+            </p>
+          </div>
+        </label>
       </div>
 
       <div className="space-y-3">
