@@ -635,7 +635,7 @@ async function handleMosLogin(email, password, apiUrl) {
 
     // Verify token works immediately
     try {
-      const verifyRes = await fetch(`${mosApiUrl}/api/extension/features?shopId=${data.user?.shopId || ''}`, {
+      const verifyRes = await fetch(`${mosApiUrl}/api/extension/features?shopId=${data.user?.shopId || ''}&_token=${encodeURIComponent(data.token)}`, {
         headers: { 'Authorization': `Bearer ${data.token}` }
       });
       console.log("[MOS] Token verify:", verifyRes.status);
@@ -661,7 +661,10 @@ async function handleMosApiRequest(endpoint, options = {}, _retried = false) {
 
   const tokenUsed = mosApiToken;
 
-  const response = await fetch(`${mosApiUrl}${endpoint}`, {
+  const separator = endpoint.includes('?') ? '&' : '?';
+  const urlWithToken = `${mosApiUrl}${endpoint}${separator}_token=${encodeURIComponent(tokenUsed)}`;
+
+  const response = await fetch(urlWithToken, {
     ...options,
     headers: {
       'Authorization': `Bearer ${tokenUsed}`,

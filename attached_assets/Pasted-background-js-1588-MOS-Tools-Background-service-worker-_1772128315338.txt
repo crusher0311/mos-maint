@@ -1,0 +1,37 @@
+background.js:1588 [MOS Tools] Background service worker loaded
+background.js:40 [MOS] Restored API URL: https://qa.mos.tools
+background.js:141 [MOS] Side panel opens on action click
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: GET_MOS_AUTH
+background.js:164 [MOS] Message received: MOS_LOGIN
+background.js:634 [MOS] Login successful: brandoncrusha+shopware@gmail.com | token: ext_69a07ea61c7cfa36...
+background.js:641 [MOS] Token verify: 401
+background.js:644 [MOS] Token INVALID immediately after login! Object
+handleMosLogin @ background.js:644
+background.js:164 [MOS] Message received: GET_SMS_CONTEXT
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:676 [MOS] 401 on /api/extension/plan?shopId=sandbox-shop&roId=66772&provider=shopware | server: Missing authorization | token match: true | retried: false
+handleMosApiRequest @ background.js:676
+background.js:682 [MOS] 401 received, attempting silent re-auth...
+background.js:676 [MOS] 401 on /api/extension/features?shopId=sandbox-shop&provider=shopware | server: Missing authorization | token match: true | retried: false
+handleMosApiRequest @ background.js:676
+background.js:682 [MOS] 401 received, attempting silent re-auth...
+background.js:634 [MOS] Login successful: brandoncrusha+shopware@gmail.com | token: ext_69a07ea61c7cfa36...
+background.js:634 [MOS] Login successful: brandoncrusha+shopware@gmail.com | token: ext_69a07ea61c7cfa36...
+background.js:641 [MOS] Token verify: 401
+background.js:644 [MOS] Token INVALID immediately after login! Object
+handleMosLogin @ background.js:644
+background.js:641 [MOS] Token verify: 401
+background.js:644 [MOS] Token INVALID immediately after login! Object
+handleMosLogin @ background.js:644
+background.js:676 [MOS] 401 on /api/extension/features?shopId=sandbox-shop&provider=shopware | server: Missing authorization | token match: true | retried: true
+handleMosApiRequest @ background.js:676
+sidepanel.js:570 [MOS] Features API error: Session expired. Please login again.
+fetchShopFeatures @ sidepanel.js:570
+background.js:676 [MOS] 401 on /api/extension/plan?shopId=sandbox-shop&roId=66772&provider=shopware | server: Missing authorization | token match: false | retried: true
+handleMosApiRequest @ background.js:676
+sidepanel.js:729 [MOS] Error loading plan: Error: Session expired. Please login again.
+    at loadPlan (sidepanel.js:725:29)
+loadPlan @ sidepanel.js:729

@@ -11,14 +11,19 @@ export async function validateExtensionToken(
   request: NextRequest, 
   requiredShopId?: string
 ): Promise<ExtensionAuthResult> {
+  let token: string | null = null;
+
   const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return { user: null, authorized: false, error: "Missing authorization" };
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.substring(7);
   }
 
-  const token = authHeader.substring(7);
-  if (!token.startsWith("ext_")) {
-    return { user: null, authorized: false, error: "Invalid token format" };
+  if (!token) {
+    token = request.nextUrl.searchParams.get("_token");
+  }
+
+  if (!token || !token.startsWith("ext_")) {
+    return { user: null, authorized: false, error: "Missing authorization" };
   }
 
   const db = await getDb();
