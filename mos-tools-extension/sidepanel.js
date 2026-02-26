@@ -1614,12 +1614,7 @@ async function handleSwAddFinding(service, isDraft = false) {
   }
 
   const serviceName = service.service || service.name || service.title || service.repair || service.jobTitle || 'Unknown Service';
-  const details = [];
-  if (service.laborHours) details.push(`${service.laborHours} hrs labor`);
-  if (service.parts?.length) details.push(`${service.parts.length} part(s)`);
-  const findingText = details.length > 0 
-    ? `${serviceName} — ${details.join(', ')}`
-    : serviceName;
+  const findingText = serviceName;
 
   try {
     const result = await sendMessage({
