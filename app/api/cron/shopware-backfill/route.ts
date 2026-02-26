@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import {
   getRepairOrders,
+  shopWareRequest,
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
-import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
+import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,6 +102,28 @@ async function backfillShopChunk(
     rosFetched = filteredRos.length;
 
     for (const ro of filteredRos) {
+      let vehicle = ro.vehicle ?? null;
+      let customer = ro.customer ?? null;
+
+      if (!vehicle && ro.vehicle_id) {
+        try {
+          vehicle = await shopWareRequest<ShopWareVehicle>(
+            `/tenants/${tenantId}/vehicles/${ro.vehicle_id}`,
+            {},
+            mosShopId
+          );
+        } catch {}
+      }
+      if (!customer && ro.customer_id) {
+        try {
+          customer = await shopWareRequest<ShopWareCustomer>(
+            `/tenants/${tenantId}/customers/${ro.customer_id}`,
+            {},
+            mosShopId
+          );
+        } catch {}
+      }
+
       await db.collection("shopware_repair_orders").updateOne(
         { mosShopId, roId: ro.id },
         {
@@ -111,21 +134,21 @@ async function backfillShopChunk(
             swShopId: ro.shop_id,
             number: ro.number,
             state: ro.state,
-            vin: ro.vehicle?.vin?.toUpperCase() ?? null,
+            vin: vehicle?.vin?.toUpperCase() ?? null,
             customerId: ro.customer_id,
             vehicleId: ro.vehicle_id,
-            customerName: ro.customer
-              ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim()
+            customerName: customer
+              ? `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
               : null,
-            vehicleYear: ro.vehicle?.year ? parseInt(ro.vehicle.year, 10) : null,
-            vehicleMake: ro.vehicle?.make ?? null,
-            vehicleModel: ro.vehicle?.model ?? null,
+            vehicleYear: vehicle?.year ? parseInt(String(vehicle.year), 10) : null,
+            vehicleMake: vehicle?.make ?? null,
+            vehicleModel: vehicle?.model ?? null,
             odometer: ro.odometer ?? null,
             serviceCount: ro.services?.length ?? 0,
             createdAt: ro.created_at ? new Date(ro.created_at) : null,
             updatedAt: ro.updated_at ? new Date(ro.updated_at) : null,
             closedAt: ro.closed_at ? new Date(ro.closed_at) : null,
-            raw: ro,
+            raw: { ...ro, vehicle, customer },
             syncedAt: new Date(),
           },
         },
@@ -133,7 +156,7 @@ async function backfillShopChunk(
       );
       rosStored++;
 
-      if (ro.customer) {
+      if (customer) {
         await db.collection("shopware_customers").updateOne(
           { mosShopId, customerId: ro.customer_id },
           {
@@ -141,12 +164,12 @@ async function backfillShopChunk(
               mosShopId,
               tenantId,
               customerId: ro.customer_id,
-              firstName: ro.customer.first_name ?? null,
-              lastName: ro.customer.last_name ?? null,
-              name: `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim(),
-              email: ro.customer.email ?? null,
-              phone: ro.customer.phone_number ?? ro.customer.mobile_number ?? null,
-              updatedAt: ro.customer.updated_at ? new Date(ro.customer.updated_at) : null,
+              firstName: customer.first_name ?? null,
+              lastName: customer.last_name ?? null,
+              name: `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim(),
+              email: customer.email ?? null,
+              phone: customer.phone_number ?? customer.mobile_number ?? null,
+              updatedAt: customer.updated_at ? new Date(customer.updated_at) : null,
               syncedAt: new Date(),
             },
           },
@@ -155,7 +178,7 @@ async function backfillShopChunk(
         customersStored++;
       }
 
-      if (ro.vehicle) {
+      if (vehicle) {
         await db.collection("shopware_vehicles").updateOne(
           { mosShopId, vehicleId: ro.vehicle_id },
           {
@@ -163,12 +186,12 @@ async function backfillShopChunk(
               mosShopId,
               tenantId,
               vehicleId: ro.vehicle_id,
-              vin: ro.vehicle.vin?.toUpperCase() ?? null,
-              year: ro.vehicle.year ? parseInt(ro.vehicle.year, 10) : null,
-              make: ro.vehicle.make ?? null,
-              model: ro.vehicle.model ?? null,
-              licensePlate: ro.vehicle.plate_number ?? null,
-              updatedAt: ro.vehicle.updated_at ? new Date(ro.vehicle.updated_at) : null,
+              vin: vehicle.vin?.toUpperCase() ?? null,
+              year: vehicle.year ? parseInt(String(vehicle.year), 10) : null,
+              make: vehicle.make ?? null,
+              model: vehicle.model ?? null,
+              licensePlate: vehicle.plate_number ?? null,
+              updatedAt: vehicle.updated_at ? new Date(vehicle.updated_at) : null,
               syncedAt: new Date(),
             },
           },
@@ -178,8 +201,9 @@ async function backfillShopChunk(
       }
 
       const isInvoiced = ro.state === "invoice" || Boolean(ro.closed_at);
-      if (isInvoiced && ro.vehicle?.vin) {
-        const entries = extractJobEntries(mosShopId, ro, tenantId);
+      const enrichedRo = { ...ro, vehicle: vehicle ?? ro.vehicle, customer: customer ?? ro.customer };
+      if (isInvoiced && (vehicle?.vin || ro.vehicle?.vin)) {
+        const entries = extractJobEntries(mosShopId, enrichedRo, tenantId);
         for (const entry of entries) {
           const contentHash = computeJobHash(entry as any);
           const filter = {

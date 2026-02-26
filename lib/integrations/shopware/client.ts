@@ -230,15 +230,25 @@ export async function getRepairOrders(
     associations?: string;
   }
 ): Promise<ShopWareRepairOrder[]> {
-  const extra: Record<string, string> = {
-    associations: params?.associations ?? 'services,services.labors,services.parts,customer,vehicle',
-  };
+  const extra: Record<string, string> = {};
+  const associations = params?.associations ?? 'services,services.labors,services.parts,customer,vehicle';
+  if (associations) extra.associations = associations;
   if (params?.updated_after) extra.updated_after = params.updated_after;
   if (params?.closed_after) extra.closed_after = params.closed_after;
   if (params?.shop_id) extra.shop_id = String(params.shop_id);
   if (params?.customer_id) extra.customer_id = String(params.customer_id);
   if (params?.vehicle_id) extra.vehicle_id = String(params.vehicle_id);
-  return getAllPages<ShopWareRepairOrder>(`/tenants/${tenantId}/repair_orders`, shopId, extra);
+
+  try {
+    return await getAllPages<ShopWareRepairOrder>(`/tenants/${tenantId}/repair_orders`, shopId, extra);
+  } catch (err: any) {
+    const isServerError = err.message?.includes('500') || err.message?.includes('502') || err.message?.includes('503');
+    if (!isServerError || !associations) throw err;
+
+    console.warn(`[Shop-Ware] List ROs with associations failed, retrying without associations`);
+    const { associations: _, ...extraNoAssoc } = extra;
+    return getAllPages<ShopWareRepairOrder>(`/tenants/${tenantId}/repair_orders`, shopId, extraNoAssoc);
+  }
 }
 
 export async function getCannedJobs(tenantId: number, shopId?: number): Promise<ShopWareCannedJob[]> {

@@ -1,0 +1,43 @@
+background.js:1550 [MOS Tools] Background service worker loaded
+background.js:40 [MOS] Restored API URL: https://qa.mos.tools
+background.js:141 [MOS] Side panel opens on action click
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: GET_MOS_AUTH
+background.js:164 [MOS] Message received: MOS_LOGIN
+background.js:632 [MOS] Login successful: brandoncrusha+shopware@gmail.com
+background.js:164 [MOS] Message received: GET_SMS_CONTEXT
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:570 [MOS] Features API error: Session expired. Please login again.
+fetchShopFeatures @ sidepanel.js:570
+sidepanel.js:729 [MOS] Error loading plan: Error: Session expired. Please login again.
+    at loadPlan (sidepanel.js:725:29)
+loadPlan @ sidepanel.js:729
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:729 [MOS] Error loading plan: Error: Not authenticated with MOS
+    at loadPlan (sidepanel.js:725:29)
+loadPlan @ sidepanel.js:729
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:729 [MOS] Error loading plan: Error: Not authenticated with MOS
+    at loadPlan (sidepanel.js:725:29)
+loadPlan @ sidepanel.js:729
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:729 [MOS] Error loading plan: Error: Not authenticated with MOS
+    at loadPlan (sidepanel.js:725:29)
+loadPlan @ sidepanel.js:729
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:729 [MOS] Error loading plan: Error: Not authenticated with MOS
+    at loadPlan (sidepanel.js:725:29)
+loadPlan @ sidepanel.js:729

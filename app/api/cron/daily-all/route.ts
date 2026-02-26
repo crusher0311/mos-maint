@@ -102,6 +102,25 @@ export async function GET(req: NextRequest) {
     console.error(`[Cron] Shop-Ware sync error:`, error);
   }
 
+  try {
+    console.log(`[Cron] Running Shop-Ware enrich...`);
+    const shopwareEnrichResponse = await fetch(`${baseUrl}/api/cron/shopware-enrich?batch=500`, {
+      headers: CRON_SECRET ? { Authorization: `Bearer ${CRON_SECRET}` } : {},
+    });
+    if (shopwareEnrichResponse.ok) {
+      results.shopwareEnrich = await shopwareEnrichResponse.json();
+    } else {
+      results.shopwareEnrich = {
+        error: `HTTP ${shopwareEnrichResponse.status}`,
+        details: await shopwareEnrichResponse.text(),
+      };
+      console.error(`[Cron] Shop-Ware enrich failed:`, results.shopwareEnrich);
+    }
+  } catch (error: any) {
+    results.shopwareEnrich = { error: error.message };
+    console.error(`[Cron] Shop-Ware enrich error:`, error);
+  }
+
   const duration = Date.now() - startTime;
   console.log(`[Cron] Daily-all completed in ${duration}ms`);
 
