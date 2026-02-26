@@ -113,6 +113,18 @@ export async function GET(request: NextRequest) {
             if (!vehicleYear && ro.vehicle?.year) vehicleYear = parseInt(ro.vehicle.year, 10);
             if (!vehicleMake) vehicleMake = ro.vehicle?.make ?? null;
             if (!vehicleModel) vehicleModel = ro.vehicle?.model ?? null;
+
+            if (vin) {
+              const updateFields: any = { vin };
+              if (ro.vehicle?.year) updateFields.vehicleYear = parseInt(ro.vehicle.year, 10);
+              if (ro.vehicle?.make) updateFields.vehicleMake = ro.vehicle.make;
+              if (ro.vehicle?.model) updateFields.vehicleModel = ro.vehicle.model;
+              if (ro.odometer) updateFields.odometer = ro.odometer;
+              db.collection("shopware_repair_orders").updateOne(
+                { mosShopId, $or: [{ roId: parseInt(roId) }, { roId: String(roId) }] },
+                { $set: updateFields }
+              ).catch((e: any) => console.warn(`[ro-context] Failed to backfill VIN to cache:`, e.message));
+            }
           }
         } catch (e: any) {
           console.error(`[ro-context] Shop-Ware API fallback failed:`, e.message);

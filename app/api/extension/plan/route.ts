@@ -670,6 +670,18 @@ export async function GET(request: NextRequest) {
                 ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim()
                 : null;
               console.log(`[Extension] Fetched from Shop-Ware API: vin=${vin}, odometer=${mileage}, roNumber=${repairOrderNumber}, customer=${customerName}`);
+
+              if (vin) {
+                const updateFields: any = { vin };
+                if (ro.vehicle?.year) updateFields.vehicleYear = parseInt(ro.vehicle.year, 10);
+                if (ro.vehicle?.make) updateFields.vehicleMake = ro.vehicle.make;
+                if (ro.vehicle?.model) updateFields.vehicleModel = ro.vehicle.model;
+                if (ro.odometer) updateFields.odometer = ro.odometer;
+                db.collection("shopware_repair_orders").updateOne(
+                  { mosShopId, $or: [{ roId: String(roId) }, { roId: parseInt(roId) }] },
+                  { $set: updateFields }
+                ).catch((e: any) => console.warn(`[Extension] Failed to backfill VIN to cache:`, e.message));
+              }
             }
           } catch (e: any) {
             console.error(`[Extension] Shop-Ware API fetch failed:`, e.message);
