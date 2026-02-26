@@ -343,8 +343,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.tabs.sendMessage(tabId, {
           action: 'SW_ADD_FINDING',
           text: message.text,
+          serviceName: message.serviceName || null,
           workOrderId: message.workOrderId,
-          isDraft: message.isDraft
+          isDraft: message.isDraft,
+          vehicle: message.vehicle || null
         }, (res) => {
           sendResponse(res || { success: false, error: 'No response from content script' });
         });

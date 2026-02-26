@@ -688,8 +688,16 @@ async function importServiceToRO(workOrderId, serviceId) {
       return { success: false, error: `Import failed (${res.status})` };
     }
 
-    console.log(`[MOS Tools] Service ${serviceId} imported to WO ${workOrderId}`);
-    return { success: true };
+    let serviceTemplateId = null;
+    try {
+      const data = await res.json();
+      serviceTemplateId = data?.id || data?.work_order_service?.id || null;
+    } catch (e) {
+      console.warn('[MOS Tools] Could not parse import response as JSON');
+    }
+
+    console.log(`[MOS Tools] Service ${serviceId} imported to WO ${workOrderId}, templateId: ${serviceTemplateId}`);
+    return { success: true, serviceTemplateId };
   } catch (err) {
     console.error('[MOS Tools] Import service error:', err);
     return { success: false, error: err.message };
@@ -742,7 +750,68 @@ async function addServiceToRO(serviceName, workOrderId, vehicle) {
 
 // ==================== ADD FINDING TO RO ====================
 
-async function addFindingToRO(text, workOrderId, isDraft = false) {
+async function createNote(workOrderId, text, isDraft, csrfToken) {
+  const res = await fetch(`/work_orders/${workOrderId}/notes/`, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json, text/javascript, */*; q=0.01',
+      'content-type': 'application/json',
+      'x-csrf-token': csrfToken,
+      'x-requested-with': 'XMLHttpRequest'
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      note: { text },
+      is_draft: isDraft
+    })
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    console.warn('[MOS Tools] Create note failed:', res.status, errBody.substring(0, 200));
+    return null;
+  }
+
+  try {
+    const data = await res.json();
+    return data?.id || data?.note?.id || null;
+  } catch (e) {
+    console.warn('[MOS Tools] Could not parse note response');
+    return null;
+  }
+}
+
+async function addRecommendationToNote(workOrderId, noteId, templateId, csrfToken) {
+  const res = await fetch(`/work_orders/${workOrderId}/notes/${noteId}/recommendations/`, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json, text/javascript, */*; q=0.01',
+      'content-type': 'application/json',
+      'x-csrf-token': csrfToken,
+      'x-requested-with': 'XMLHttpRequest'
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      recommendation: {
+        note_id: noteId,
+        template_id: templateId
+      },
+      template: null,
+      part_summary: null,
+      work_order: null,
+      past_recommendation: []
+    })
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    console.warn('[MOS Tools] Add recommendation failed:', res.status, errBody.substring(0, 200));
+    return false;
+  }
+  return true;
+}
+
+async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = null, vehicle = null) {
   if (!workOrderId) {
     showToast('No work order detected. Navigate to a work order first.', 'error');
     return { success: false, error: 'No work order ID' };
@@ -757,37 +826,83 @@ async function addFindingToRO(text, workOrderId, isDraft = false) {
   }
 
   const statusLabel = isDraft ? 'Draft' : 'Published';
+
+  if (serviceName) {
+    showToast(`Adding finding with service "${serviceName}"...`, 'info');
+
+    try {
+      const searchResult = await searchShopWareCannedJobs(serviceName, vehicle, workOrderId);
+      if (!searchResult.success || searchResult.results.length === 0) {
+        console.warn('[MOS Tools] No canned job found, falling back to text-only finding');
+        return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
+      }
+
+      const nameLower = serviceName.toLowerCase();
+      let bestMatch = searchResult.results[0];
+      for (const job of searchResult.results) {
+        const title = (job.title || job.name || '').toLowerCase();
+        if (title === nameLower) { bestMatch = job; break; }
+        if (title.includes(nameLower) || nameLower.includes(title)) { bestMatch = job; }
+      }
+
+      const jobId = bestMatch.id;
+      const jobTitle = bestMatch.title || bestMatch.name || serviceName;
+      showToast(`Importing "${jobTitle}" and creating finding...`, 'info');
+
+      const importResult = await importServiceToRO(workOrderId, jobId);
+      if (!importResult.success) {
+        console.warn('[MOS Tools] Import failed, falling back to text-only finding');
+        return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
+      }
+
+      const noteId = await createNote(workOrderId, text, isDraft, csrfToken);
+      if (!noteId) {
+        showToast(`Service imported but note creation failed. Reload the page.`, 'warning');
+        setTimeout(() => window.location.reload(), 1500);
+        return { success: true, status: statusLabel, partial: true };
+      }
+
+      if (importResult.serviceTemplateId) {
+        const recOk = await addRecommendationToNote(workOrderId, noteId, importResult.serviceTemplateId, csrfToken);
+        if (recOk) {
+          console.log(`[MOS Tools] Full finding added: note ${noteId} + recommendation (template ${importResult.serviceTemplateId})`);
+          showToast(`Finding added (${statusLabel}): "${jobTitle}" with pricing`, 'success');
+        } else {
+          console.warn('[MOS Tools] Recommendation link failed, but note + service were created');
+          showToast(`Finding added (${statusLabel}): "${jobTitle}" — pricing link may need manual review`, 'warning');
+        }
+      } else {
+        console.log(`[MOS Tools] Finding added with note but no template ID to link recommendation`);
+        showToast(`Finding added (${statusLabel}): "${jobTitle}"`, 'success');
+      }
+
+      setTimeout(() => window.location.reload(), 1500);
+      return { success: true, status: statusLabel, jobName: jobTitle };
+    } catch (err) {
+      console.error('[MOS Tools] Structured finding error:', err);
+      return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
+    }
+  } else {
+    return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
+  }
+}
+
+async function addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel) {
   showToast(`Adding finding as ${statusLabel}...`, 'info');
 
   try {
-    const res = await fetch(`/work_orders/${workOrderId}/notes/`, {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json, text/javascript, */*; q=0.01',
-        'content-type': 'application/json',
-        'x-csrf-token': csrfToken,
-        'x-requested-with': 'XMLHttpRequest'
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
-        note: { text },
-        is_draft: isDraft
-      })
-    });
-
-    if (res.ok) {
-      console.log(`[MOS Tools] Finding added to WO ${workOrderId} (${statusLabel})`);
+    const noteId = await createNote(workOrderId, text, isDraft, csrfToken);
+    if (noteId !== null) {
+      console.log(`[MOS Tools] Text finding added to WO ${workOrderId} (${statusLabel}), noteId: ${noteId}`);
       showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
       setTimeout(() => window.location.reload(), 1500);
       return { success: true, status: statusLabel };
     } else {
-      const errBody = await res.text().catch(() => '');
-      console.warn('[MOS Tools] Add finding failed:', res.status, errBody.substring(0, 200));
-      showToast(`Failed to add finding (${res.status}). Try adding it manually.`, 'error');
-      return { success: false, error: `Failed (${res.status})` };
+      showToast(`Failed to add finding. Try adding it manually.`, 'error');
+      return { success: false, error: 'Note creation failed' };
     }
   } catch (err) {
-    console.error('[MOS Tools] Add finding error:', err);
+    console.error('[MOS Tools] Add text finding error:', err);
     showToast(`Error adding finding: ${err.message}`, 'error');
     return { success: false, error: err.message };
   }
@@ -832,7 +947,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'SW_ADD_FINDING') {
-    addFindingToRO(message.text, message.workOrderId, message.isDraft)
+    addFindingToRO(message.text, message.workOrderId, message.isDraft, message.serviceName, message.vehicle)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;

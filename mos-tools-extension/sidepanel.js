@@ -1562,12 +1562,15 @@ async function handleSwAddFinding(service, isDraft = false) {
     const result = await sendMessage({
       action: 'SW_ADD_FINDING',
       text: findingText,
+      serviceName: serviceName,
       workOrderId: currentContext.roId,
-      isDraft
+      isDraft,
+      vehicle: currentContext.vehicle || null
     });
     if (result.success) {
       const status = isDraft ? 'Draft' : 'Published';
-      showNotification(`Finding added (${status}): ${serviceName}`, 'success');
+      const name = result.jobName || serviceName;
+      showNotification(`Finding added (${status}): ${name}`, 'success');
     } else {
       throw new Error(result.error || 'Failed to add finding');
     }
