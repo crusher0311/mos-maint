@@ -1163,7 +1163,7 @@ function injectFAB() {
       const dy = e.clientY - dragStartY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging = true;
       const newRight = Math.max(0, fabStartRight - dx);
-      const newBottom = Math.max(0, fabStartBottom + dy);
+      const newBottom = Math.max(0, fabStartBottom - dy);
       fab.style.right = newRight + 'px';
       fab.style.bottom = newBottom + 'px';
     };
