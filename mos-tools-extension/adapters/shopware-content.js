@@ -811,6 +811,50 @@ async function addRecommendationToNote(workOrderId, noteId, templateId, csrfToke
   return true;
 }
 
+async function importProposedService(workOrderId, cannedJobId, csrfToken) {
+  try {
+    const res = await fetch(`/work_order_services/?proposed=true&service_id=${cannedJobId}`, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json, text/javascript, */*; q=0.01',
+        'x-csrf-token': csrfToken,
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin'
+    });
+
+    if (!res.ok) {
+      console.warn('[MOS Tools] Import proposed service failed:', res.status);
+      return { success: false, error: `Import proposed failed (${res.status})` };
+    }
+
+    const data = await res.json();
+
+    let templateId = null;
+    if (data?.work_order?.services && Array.isArray(data.work_order.services)) {
+      const matchByCannedJob = data.work_order.services.find(svc => svc.canned_job_id === cannedJobId);
+      if (matchByCannedJob) {
+        templateId = matchByCannedJob.id;
+      } else {
+        const newest = data.work_order.services.reduce((best, svc) => {
+          if (!best || (svc.id && svc.id > best.id)) return svc;
+          return best;
+        }, null);
+        templateId = newest?.id || null;
+      }
+    }
+    if (!templateId) {
+      templateId = data?.id || null;
+    }
+
+    console.log(`[MOS Tools] Proposed service imported, templateId: ${templateId}`);
+    return { success: true, serviceTemplateId: templateId };
+  } catch (err) {
+    console.error('[MOS Tools] Import proposed service error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = null, vehicle = null) {
   if (!workOrderId) {
     showToast('No work order detected. Navigate to a work order first.', 'error');
@@ -847,11 +891,11 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
 
       const jobId = bestMatch.id;
       const jobTitle = bestMatch.title || bestMatch.name || serviceName;
-      showToast(`Importing "${jobTitle}" and creating finding...`, 'info');
+      showToast(`Importing "${jobTitle}" as proposed service...`, 'info');
 
-      const importResult = await importServiceToRO(workOrderId, jobId);
+      const importResult = await importProposedService(workOrderId, jobId, csrfToken);
       if (!importResult.success) {
-        console.warn('[MOS Tools] Import failed, falling back to text-only finding');
+        console.warn('[MOS Tools] Proposed import failed, falling back to text-only finding');
         return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
       }
 
