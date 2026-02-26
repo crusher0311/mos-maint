@@ -157,7 +157,7 @@ const PREFETCH_LOCK_TTL_MS = 10 * 60 * 1000;
 const shopPrefetchInProgress = new Set<number>();
 
 const tekmetricRoCache = new Map<string, { data: any; fetchedAt: number }>();
-const TEKMETRIC_RO_CACHE_TTL = 5 * 60 * 1000;
+const TEKMETRIC_RO_CACHE_TTL = 60 * 60 * 1000;
 
 async function fetchTekmetricRoCached(roId: string): Promise<any | null> {
   const cached = tekmetricRoCache.get(roId);
