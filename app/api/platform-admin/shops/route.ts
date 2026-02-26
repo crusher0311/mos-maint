@@ -114,6 +114,7 @@ export async function GET() {
       if (shop.autoflow?.apiKey || shop.autoflow?.configured || shop.autoflowApiKey) integrations.push("AutoFlow");
       if (shop.carfax?.locationId || shop.carfax?.serviceId || shop.carfaxLocationId) integrations.push("CARFAX");
       if (shop.autovitals?.apiKey || shop.autovitals?.configured || shop.autovitalsApiKey) integrations.push("AutoVitals");
+      if (shop.shopware?.tenantId) integrations.push("Shop-Ware");
       
       const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro" || shop.billing?.plan === "demo";
       const vinLimit = shop.billing?.vinLimit ?? shop.trialVinLimit ?? defaultVinLimit;

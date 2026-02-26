@@ -605,6 +605,7 @@ export default function PlatformShopsPage() {
                               "Tekmetric": "/tekmetric-logo.png",
                               "CARFAX": "/icons/carfax.png",
                               "AutoFlow": "/icons/autoflow.png",
+                              "Shop-Ware": "/logos/shopware.png",
                             };
                             const icon = iconMap[int];
                             return icon ? (
@@ -887,6 +888,7 @@ export default function PlatformShopsPage() {
                           "Tekmetric": "/tekmetric-logo.png",
                           "CARFAX": "/icons/carfax.png",
                           "AutoFlow": "/icons/autoflow.png",
+                          "Shop-Ware": "/logos/shopware.png",
                         };
                         const icon = iconMap[int];
                         return icon ? (

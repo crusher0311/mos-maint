@@ -5,9 +5,10 @@ import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
 
 export const dynamic = "force-dynamic";
 
-function detectIntegrationType(shop: any): "protractor" | "tekmetric" | null {
+function detectIntegrationType(shop: any): "protractor" | "tekmetric" | "shopware" | null {
   if (shop.integrationProvider === "tekmetric") return "tekmetric";
   if (shop.integrationProvider === "protractor") return "protractor";
+  if (shop.integrationProvider === "shopware") return "shopware";
 
   const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
   const hasProtractor = !!(
@@ -17,10 +18,50 @@ function detectIntegrationType(shop: any): "protractor" | "tekmetric" | null {
     shop.protractorApiKey ||
     shop.protractorConnectionId
   );
+  const hasShopWare = !!(shop.shopware?.tenantId);
   
   if (hasTekmetric) return "tekmetric";
   if (hasProtractor) return "protractor";
+  if (hasShopWare) return "shopware";
   return null;
+}
+
+async function triggerShopWareBackfill(shopId: number): Promise<{ ok: boolean; message: string }> {
+  const db = await getDb();
+
+  await db.collection("shopware_backfill_progress").updateOne(
+    { shopId },
+    {
+      $set: {
+        shopId,
+        completed: false,
+        inProgress: false,
+        currentCursor: null,
+        queuedAt: new Date(),
+      },
+      $setOnInsert: { startedAt: null },
+    },
+    { upsert: true }
+  );
+
+  try {
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
+
+    fetch(`${baseUrl}/api/cron/shopware-backfill?shopId=${shopId}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
+      },
+    }).catch((err) => {
+      console.log(`[Backfill] Shop-Ware cron trigger note: ${err.message}`);
+    });
+  } catch (e) {
+    // fire-and-forget
+  }
+
+  return { ok: true, message: `Shop-Ware backfill triggered for shop ${shopId}` };
 }
 
 async function triggerTekmetricBackfill(shopId: number): Promise<{ ok: boolean; message: string }> {
@@ -92,7 +133,7 @@ export async function POST(
 
     if (!integrationType) {
       return NextResponse.json(
-        { error: "Shop does not have any SMS integration configured (Protractor or Tekmetric)" },
+        { error: "Shop does not have any SMS integration configured (Protractor, Tekmetric, or Shop-Ware)" },
         { status: 400 }
       );
     }
@@ -107,6 +148,9 @@ export async function POST(
         .catch((err) => {
           console.error(`[Platform Admin] Protractor backfill failed for shop ${shopId}:`, err.message);
         });
+    } else if (integrationType === "shopware") {
+      const result = await triggerShopWareBackfill(shopId);
+      console.log(`[Platform Admin] ${result.message}`);
     } else {
       const result = await triggerTekmetricBackfill(shopId);
       console.log(`[Platform Admin] ${result.message}`);
@@ -121,9 +165,10 @@ export async function POST(
       createdAt: new Date(),
     });
 
+    const providerName = integrationType === "protractor" ? "Protractor" : integrationType === "shopware" ? "Shop-Ware" : "Tekmetric";
     return NextResponse.json({
       ok: true,
-      message: `${integrationType === "protractor" ? "Protractor" : "Tekmetric"} backfill started for shop ${shopId}. Check logs for progress.`,
+      message: `${providerName} backfill started for shop ${shopId}. Check logs for progress.`,
       source: integrationType,
     });
   } catch (error) {

@@ -150,6 +150,48 @@ async function syncShop(
     );
     upserted++;
 
+    if (ro.customer) {
+      await db.collection("shopware_customers").updateOne(
+        { mosShopId, customerId: ro.customer_id },
+        {
+          $set: {
+            mosShopId,
+            tenantId,
+            customerId: ro.customer_id,
+            firstName: ro.customer.first_name ?? null,
+            lastName: ro.customer.last_name ?? null,
+            name: `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim(),
+            email: ro.customer.email ?? null,
+            phone: ro.customer.phone_number ?? ro.customer.mobile_number ?? null,
+            updatedAt: ro.customer.updated_at ? new Date(ro.customer.updated_at) : null,
+            syncedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    }
+
+    if (ro.vehicle) {
+      await db.collection("shopware_vehicles").updateOne(
+        { mosShopId, vehicleId: ro.vehicle_id },
+        {
+          $set: {
+            mosShopId,
+            tenantId,
+            vehicleId: ro.vehicle_id,
+            vin: ro.vehicle.vin?.toUpperCase() ?? null,
+            year: ro.vehicle.year ? parseInt(ro.vehicle.year, 10) : null,
+            make: ro.vehicle.make ?? null,
+            model: ro.vehicle.model ?? null,
+            licensePlate: ro.vehicle.plate_number ?? null,
+            updatedAt: ro.vehicle.updated_at ? new Date(ro.vehicle.updated_at) : null,
+            syncedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    }
+
     const isInvoiced = ro.state === "invoice" || Boolean(ro.closed_at);
     if (isInvoiced && ro.vehicle?.vin) {
       const entries = extractJobEntries(mosShopId, ro, tenantId);
