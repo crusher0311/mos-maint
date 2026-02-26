@@ -1200,28 +1200,17 @@ async function checkAutoOpenRecommend() {
   const { serviceName } = data;
   if (!serviceName) return;
 
-  console.log(`[MOS Tools] Auto-opening Recommend a Service for "${serviceName}"`);
-  showToast(`Opening "Recommend a Service" for "${serviceName}"...`, 'info');
+  console.log(`[MOS Tools] Auto-opening Recommend Service for "${serviceName}"`);
 
   await new Promise(r => setTimeout(r, 2500));
 
-  const clickAddService = () => {
-    const allBtns = document.querySelectorAll('button, a, [role="button"], span');
-    for (const btn of allBtns) {
-      const txt = (btn.textContent || '').trim().toLowerCase();
-      if (txt === 'add service' || txt === 'recommend a service' || txt === 'recommend service') {
-        btn.click();
-        return true;
-      }
-    }
-    return false;
-  };
-
-  if (clickAddService()) {
-    console.log(`[MOS Tools] Clicked "Add Service" / "Recommend a Service" button`);
+  const recommendBtn = document.querySelector('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
+  if (recommendBtn) {
+    recommendBtn.click();
+    console.log(`[MOS Tools] Clicked "Recommend Service" button`);
   } else {
-    console.warn('[MOS Tools] Could not find "Add/Recommend Service" button');
-    showToast(`Finding added. Use Shop-Ware's "Add Service" to attach "${serviceName}".`, 'info');
+    console.warn('[MOS Tools] Could not find "Recommend Service" button');
+    showToast(`Finding added. Click "Recommend Service" to attach "${serviceName}".`, 'info');
   }
 }
 
