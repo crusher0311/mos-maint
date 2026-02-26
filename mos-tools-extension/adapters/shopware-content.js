@@ -342,9 +342,55 @@ function setFieldValue(el, text) {
 }
 
 // ==================== CONCERN TEXT INJECTION ====================
-function injectConcernText(text) {
-  // Shop-Ware shows "Reason for Customer's Visit" section with a textarea/editable area.
-  // Strategy 1: Find the "Reason for Customer's Visit" section and its textarea
+
+function getCsrfToken() {
+  // Rails apps store CSRF token in a <meta name="csrf-token"> tag
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta) return meta.getAttribute('content');
+  // Fallback: look for it in a cookie or hidden input
+  const input = document.querySelector('input[name="authenticity_token"]');
+  if (input) return input.value;
+  return null;
+}
+
+async function injectConcernViaApi(roId, text) {
+  const csrfToken = getCsrfToken();
+  if (!csrfToken) {
+    console.warn('[MOS Tools] No CSRF token found, cannot use API');
+    return false;
+  }
+
+  try {
+    const res = await fetch(`/work_orders/${roId}`, {
+      method: 'PATCH',
+      headers: {
+        'accept': 'application/json, text/javascript, */*; q=0.01',
+        'content-type': 'application/json',
+        'x-csrf-token': csrfToken,
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        work_order: {
+          customer_concern: text
+        }
+      })
+    });
+
+    if (res.ok) {
+      console.log('[MOS Tools] Concern injected via Shop-Ware API');
+      return true;
+    } else {
+      console.warn('[MOS Tools] Shop-Ware API concern update failed:', res.status);
+      return false;
+    }
+  } catch (err) {
+    console.warn('[MOS Tools] Shop-Ware API concern error:', err.message);
+    return false;
+  }
+}
+
+function injectConcernViaDom(text) {
   const reasonSection = findSectionByHeading(/Reason\s+for\s+Customer/i);
   if (reasonSection) {
     const textarea = reasonSection.querySelector('textarea, [contenteditable="true"], input[type="text"]');
@@ -353,21 +399,14 @@ function injectConcernText(text) {
     }
   }
 
-  // Strategy 2: Try common concern/complaint textareas
   const selectors = [
     'textarea[placeholder*="reason" i]',
     'textarea[placeholder*="concern" i]',
-    'textarea[placeholder*="complaint" i]',
-    'textarea[placeholder*="customer" i]',
     'textarea[name*="concern" i]',
     'textarea[name*="reason" i]',
-    'textarea[name*="complaint" i]',
-    'textarea[aria-label*="concern" i]',
-    'textarea[aria-label*="reason" i]',
     '[contenteditable="true"]',
     'textarea'
   ];
-
   for (const sel of selectors) {
     const els = document.querySelectorAll(sel);
     for (const el of els) {
@@ -377,14 +416,31 @@ function injectConcernText(text) {
         const nearby = getNearbyText(el);
         if (!/(reason|concern|complaint|customer|visit|note|description)/i.test(nearby)) continue;
       }
-
       if (setFieldValue(el, text)) {
-        console.log('[MOS Tools] Concern injected into:', sel);
+        console.log('[MOS Tools] Concern injected via DOM:', sel);
         return true;
       }
     }
   }
   return false;
+}
+
+async function injectConcernText(text) {
+  const context = detectContext();
+
+  // Primary: Use the internal Shop-Ware API (PATCH /work_orders/{id})
+  if (context.roId) {
+    const apiSuccess = await injectConcernViaApi(context.roId, text);
+    if (apiSuccess) {
+      showToast('Customer concern saved', 'success');
+      setTimeout(() => window.location.reload(), 1000);
+      return true;
+    }
+  }
+
+  // Fallback: DOM injection (requires Edit Mode to be active)
+  console.log('[MOS Tools] API injection failed, falling back to DOM injection');
+  return injectConcernViaDom(text);
 }
 
 // ==================== TOAST NOTIFICATIONS ====================
@@ -575,9 +631,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'INJECT_CONCERN_TEXT') {
-    const injected = injectConcernText(message.text);
-    sendResponse({ success: injected });
-    return false;
+    injectConcernText(message.text).then(injected => {
+      sendResponse({ success: !!injected });
+    }).catch(err => {
+      console.error('[MOS Tools] Concern injection error:', err);
+      sendResponse({ success: false, error: err.message });
+    });
+    return true;
   }
 
   if (message.action === 'SHOW_TOAST') {

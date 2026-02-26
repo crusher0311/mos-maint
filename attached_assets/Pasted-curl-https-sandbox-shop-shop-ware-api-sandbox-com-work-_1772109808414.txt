@@ -1,0 +1,19 @@
+curl ^"https://sandbox-shop.shop-ware-api-sandbox.com/work_orders/66772^" ^
+  -X ^"PATCH^" ^
+  -H ^"accept: application/json, text/javascript, */*; q=0.01^" ^
+  -H ^"accept-language: en-US,en;q=0.9^" ^
+  -H ^"content-type: application/json^" ^
+  -b ^"_cookie_remember_token=13511_OyC-uv0zWTfTglK4_rVVWAvTaa6nFr_g-Ncsw9oLMvX7vXeYV0LxcpZyHDmXaomj5neTiQqKau_-w1gDCcQA2Q; _cookie_session_id=VqXYSEGSaeirg^%^2BK5VTTcmfL^%^2Bkwwl2tt68WikXmdLOZwCNhZIDBPLUTqiEIBH0oxy9kYw6XRemx6YftB1Lja2wM4t^%^2FFBj3aGHIDIbeWG8HTjRVG1viJamuLQG^%^2FhWRlCXrMCkodSUNOiFTc55B4rmW^%^2B8I9IQbgLpa1KgY6Kegfc^%^2FwIJ54hje61Sd3tHDL^%^2F4FP1hH8OZAHyq7PaddG5LNiMqIdrq2eV28^%^2BFNHXT8tPN8cHHmZN5i4WT38SNrPcMSeP7JkNEBTDAjN5ARhuan3s1qC3pzM5ZamqYX^%^2BsGg3Skn^%^2BQaBrERePEmKcjhHPtTzprwLPKRZdQCFlu5hFTz5oSt7pjxHR4p5AgpmJv5^%^2FacfjrCh7wz2TNIDo^%^2Bjtdw8Tw1RKTbYdvJcSsrcxIdJgms12XW^%^2BO^%^2BRnuPMDBCKKYt4EWJlGqIsAAQWM4xRLpKqeRqH9H1Tjt1DJ52QiwLzWZjUkP6^%^2FImapRi^%^2FKTq3QbTRYQy19deE77KXEJMmZVkbOPfh3J4uETU847RY^%^2B^%^2FeDZ04HKcRLUanPoP0r31opGws3h^%^2F^%^2BTfKgCjakhZ7vk^%^2BsqA^%^2BXQarDueVTMdzOLwFDRecjN0t5fi^%^2B9FA1Y3TvmeNnNqHmimNfq0UqpE2H0vT4iWNYTfYJCp5kZtiywg2zv4drkBKwHL9fVYvJhtaeLl86lwWwxkaDoqYQ8wMHdmchYChi6y58Vw0NB41iANtsQCcDA3W4ug6vcdzovf2kBWofDrAtodMlUGG08eQzY6d7EQ49ZCuWmpNBi11^%^2F0hrIy^%^2Fv8GGP9^%^2Fj3yhlv7L5ge^%^2BFb9l^%^2B4ygwaJTY6J8peYG7VCXMpVzfbNYJ^%^2FRKJtiICYQs4luFjHPzfVAmcAAVmLT1EABjJTx9h8z9EfXPIy8Ml9myFJC^%^2BiO^%^2BB2NBwVE6jX^%^2BtnPT3^%^2FsTXqAyGT3U45uJHluuSg63TrkOfI^%^2BkQM^%^2FOJrBKHUAKuuUMZZbXOPGdsEAi3ss9FnY8ZNQ3eCiZvf3gQuAXBmUGWyEbPvwaHP^%^2BMAuUkiMl5wPadAa^%^2Fw7aPlEFMzY8aDBfSyclDV2J^%^2FaoyUhIQfrTNdWiy8u8lCRlpz4ApyXsPFm0WOFSHZ9QoiRy4AuzeJVwvopmH6qFSvLA0xFN^%^2F14HXmSMCsF7lJvSlHT80t^%^2BbZ8Z9iWmspqIpM8m54haPCvqFPLMCQ8atM^%^2Bu0xuTodEMBKc^%^2FYUp7NWvf9H0l4ZZUVr43mZLAwzcoSVsrbySRN11MMj6Kt8zCl8qOKVPFyijGWV4nJSQaQRFu7R44ROt3q5hp2Oa^%^2B3xoawFmT^%^2BZVU3Ow9^%^2F241v7Cd2l^%^2BR^%^2FIqRNktZ6TsFzPL4YYdizdeLCo0Y20t8GLFnEUcGM2VMQjsm6PoQZKL6NOWR6xFNrl4KGml^%^2FufEfxMT5Skd3Nh3JIDnNMDU6kOEPpHRewTd4NAarnklOjhYymZw5ChoZXO6rUqOR9m5HhLNXgN8o07QzmNKMChoY53LONtLzN9vfgTz4KSxiZQ6AeUIs5RtODbotf1o^%^2Fi69WfsDs5l^%^2FY5bLh2aSNgjy19wlcj9V7^%^2FiQYTSuB2TADaOAXWlQV4j9VoCKPkMF1Pns0wZzcmchZ^%^2FVFWoDIXzee0qUN4b9hqPn29pltnQGjq15sy32nE^%^2Bd8ko1Lc3k9N7^%^2Fi75bLp8^%^2BbSL95cd5WrW^%^2FCrbyU4hOqiSSBsqAEgeeoOf2pSAjVJx8nJoqThqeUwp6UryZVr1OPqsHWvdhJxd5mrcbzPPh43yUdEkPDVMRVV4HJso9Zy4zm1UeBig7eG99QVEzOFnT^%^2BTKreaxKB0^%^2BZ^%^2Fr6CtETRZdHPCd46sjW9DMPhmKVuX9rNa21nzZ5GedvW7ZB65yQVHZdjux0vysVUHqt121urH9ADFne^%^2FvrrmPu5aPvwtG8^%^2F2n4KNG8UcKYS0WWgmucD7jeylkDmylaDaAyTJtAYDKb1eb00B^%^2Bskv24sqwNaPF2^%^2FUnB3Cs6KbN7yphKmUaEGRkhyXpj6WlT9u90tb1KwZm0RRXrTKdkp9qE8COeSjXA2BE312Eoq7LHxxvQM8L8fIfcI14cSugs09n1J2cXzI^%^2Bx4cJ^%^2FmRRnFofJRfTEivkQ8h0Di6pzrEnNJ5wKXDejbKr8aI9KgRqS^%^2BOGDAADhPwhhBT3o8wOc8xzSK8nxOb7THJV66a105XbIZrJ9RpO0kf9aHDB2J^%^2B^%^2Fnpixbw8BMdnbOd6oBJ^%^2BpXSKw5fe5OAK3Ie6Aiex4SUmmY6bMnvbV6s5ZoOh^%^2BqVWfsv6oRPBiF4V2vYp8f9yFjnuBlWHggQmO0SWpWBUzme92heBRSvVyVyb^%^2FCgDENtPuJtOnIqz62A^%^3D^%^3D--PI06ohjnDBqhl4LS--HmofGy4O0^%^2BRFbd7ZkkobfQ^%^3D^%^3D^" ^
+  -H ^"origin: https://sandbox-shop.shop-ware-api-sandbox.com^" ^
+  -H ^"priority: u=1, i^" ^
+  -H ^"referer: https://sandbox-shop.shop-ware-api-sandbox.com/work_orders/66772^" ^
+  -H ^"sec-ch-ua: ^\^"Not:A-Brand^\^";v=^\^"99^\^", ^\^"Google Chrome^\^";v=^\^"145^\^", ^\^"Chromium^\^";v=^\^"145^\^"^" ^
+  -H ^"sec-ch-ua-mobile: ?1^" ^
+  -H ^"sec-ch-ua-platform: ^\^"Android^\^"^" ^
+  -H ^"sec-fetch-dest: empty^" ^
+  -H ^"sec-fetch-mode: cors^" ^
+  -H ^"sec-fetch-site: same-origin^" ^
+  -H ^"user-agent: Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36^" ^
+  -H ^"x-csrf-token: bTozjZIuAgQiKyl8zZ3p65tKGTJ2lO5gA9orBtNe703lhUx7LYt56ZH0_RWp2fbdTWHZycyhcXEQSYW4Ra-gPA^" ^
+  -H ^"x-requested-with: XMLHttpRequest^" ^
+  --data-raw ^"^{^\^"work_order^\^":^{^\^"vehicle_use^\^":^\^"^\^",^\^"customer_concern^\^":^\^"test^\^"^}^}^"

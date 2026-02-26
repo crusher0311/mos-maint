@@ -364,8 +364,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const concernText = message.text;
 
         if (provider === 'shopware') {
-          console.log('[Concern] Shop-Ware does not support API-based concern injection. Falling back to DOM injection via content script.');
-          const tabs = await chrome.tabs.query({ url: ["*://app.shop-ware.com/*"] });
+          console.log('[Concern] Injecting concern via Shop-Ware content script (internal API + DOM fallback)');
+          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
           for (const tab of tabs) {
             chrome.tabs.sendMessage(tab.id, {
               action: 'INJECT_CONCERN_TEXT',
