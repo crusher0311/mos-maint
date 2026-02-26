@@ -47,9 +47,9 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
   const startTime = Date.now();
   
   try {
-    // Use the dev domain for the logo URL (publicly accessible)
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
-    const defaultLogoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    const prodDomain = process.env.NEXT_PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || "https://mos.tools";
+    const baseDomain = prodDomain.startsWith("http") ? prodDomain : `https://${prodDomain}`;
+    const defaultLogoUrl = `${baseDomain}/appointment-logo.png`;
     
     const requestBody: Record<string, any> = {
       workspace: workspaceId,
