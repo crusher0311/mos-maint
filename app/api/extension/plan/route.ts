@@ -73,24 +73,50 @@ type LastPerformedInfo = {
   mileage?: number;
 };
 
+type ServiceMappings = Record<string, string>;
+
+let _serviceMappingsCache: { data: ServiceMappings; fetchedAt: number } | null = null;
+const SERVICE_MAPPINGS_TTL = 10 * 60 * 1000;
+
+async function getServiceMappings(db: any): Promise<ServiceMappings> {
+  if (_serviceMappingsCache && Date.now() - _serviceMappingsCache.fetchedAt < SERVICE_MAPPINGS_TTL) {
+    return _serviceMappingsCache.data;
+  }
+  try {
+    const docs = await db.collection("oem_carfax_mappings").find({}).toArray();
+    const map: ServiceMappings = {};
+    for (const doc of docs) {
+      if (doc.oemName && doc.carfaxName) {
+        map[doc.oemName.toLowerCase()] = doc.carfaxName.toLowerCase();
+      }
+    }
+    _serviceMappingsCache = { data: map, fetchedAt: Date.now() };
+    return map;
+  } catch (err) {
+    console.warn('[Extension] Failed to load service mappings:', err);
+    return {};
+  }
+}
+
 function getLastPerformedInfo(
   serviceName: string,
   shopWorkOrders: any[],
-  carfaxRecords: any[] | null
+  carfaxRecords: any[] | null,
+  adminMappings?: ServiceMappings
 ): LastPerformedInfo {
   const serviceKey = mapServiceToKey(serviceName);
-  if (!serviceKey) {
+  const adminCarfaxName = adminMappings?.[serviceName.toLowerCase()];
+  
+  if (!serviceKey && !adminCarfaxName) {
     return { source: 'unknown' };
   }
   
   let shopLastDone: { date?: Date; mileage?: number } | null = null;
   let carfaxLastDone: { date?: Date; mileage?: number } | null = null;
   
-  // Check shop work orders for this service (already preloaded)
-  const servicePatterns = SERVICE_KEY_PATTERNS[serviceKey];
+  const servicePatterns = serviceKey ? SERVICE_KEY_PATTERNS[serviceKey] : null;
   if (servicePatterns && shopWorkOrders.length > 0) {
     for (const wo of shopWorkOrders) {
-      // Jobs are stored in wo.data.jobs (canonical) or wo.jobs (fallback for legacy documents)
       const jobs = wo.data?.jobs ?? wo.jobs ?? [];
       for (const job of jobs) {
         const jobName = job.name || job.description || '';
@@ -106,11 +132,15 @@ function getLastPerformedInfo(
     }
   }
   
-  // Check CARFAX records
-  if (carfaxRecords?.length && servicePatterns) {
+  if (carfaxRecords?.length) {
     for (const record of carfaxRecords) {
       const desc = record.description || '';
-      if (servicePatterns.some(p => p.test(desc))) {
+      const descLower = desc.toLowerCase();
+      
+      const regexMatch = servicePatterns?.some(p => p.test(desc));
+      const adminMatch = adminCarfaxName && descLower.includes(adminCarfaxName);
+      
+      if (regexMatch || adminMatch) {
         carfaxLastDone = {
           date: record.date ? new Date(record.date) : undefined,
           mileage: record.odometer
@@ -120,7 +150,6 @@ function getLastPerformedInfo(
     }
   }
   
-  // Determine which is more recent
   if (shopLastDone && carfaxLastDone) {
     if (shopLastDone.date && carfaxLastDone.date) {
       if (shopLastDone.date >= carfaxLastDone.date) {
@@ -129,7 +158,6 @@ function getLastPerformedInfo(
         return { source: 'external', ...carfaxLastDone };
       }
     }
-    // If no dates, prefer shop
     return { source: 'shop', ...shopLastDone };
   } else if (shopLastDone) {
     return { source: 'shop', ...shopLastDone };
@@ -369,6 +397,7 @@ async function runOnDemandAnalysis(
     console.log(`[Extension] OEM data: ${oemResult.count} items, source: ${oemResult.source}`);
     
     if (oemResult.ok && oemResult.items?.length > 0) {
+      const adminMappings = await getServiceMappings(db);
       let skippedNoInterval = 0;
       let skippedInspect = 0;
       let skippedExcluded = 0;
@@ -399,7 +428,7 @@ async function runOnDemandAnalysis(
         }
         
         // Determine where service was last performed (uses preloaded data)
-        const lastPerformed = getLastPerformedInfo(item.maintenance_name, shopWorkOrders, carfaxRecords);
+        const lastPerformed = getLastPerformedInfo(item.maintenance_name, shopWorkOrders, carfaxRecords, adminMappings);
         
         // Decide which interval to use based on last performed location
         let intervalMiles = oemIntervalMiles;

@@ -26,7 +26,8 @@ import {
   Package,
   Grid3X3,
   Megaphone,
-  BookOpen
+  BookOpen,
+  ArrowRightLeft
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -50,7 +51,8 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const isSettingsSection = pathname?.startsWith("/platform-admin/settings") || 
                             pathname?.startsWith("/platform-admin/announcements") ||
                             pathname?.startsWith("/platform-admin/features") ||
-                            pathname?.startsWith("/platform-admin/plan-features");
+                            pathname?.startsWith("/platform-admin/plan-features") ||
+                            pathname?.startsWith("/platform-admin/service-mappings");
   const isEnterprisesSection = pathname?.startsWith("/platform-admin/enterprises") ||
                                pathname?.startsWith("/platform-admin/shops") ||
                                pathname?.startsWith("/platform-admin/users") ||
@@ -516,6 +518,20 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                   >
                     <Grid3X3 className="w-4 h-4" />
                     <span>Plan Features</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/service-mappings"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/service-mappings")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    <span>Service Mappings</span>
                   </Link>
                 </li>
               </ul>
