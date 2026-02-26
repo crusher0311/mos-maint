@@ -29,6 +29,10 @@ export async function findShopBySmsId(
       { protractorConnectionId: smsShopId },
       { "autoflow.shopId": smsShopId },
       { "autoflow.domain": smsShopId },
+      { "autoflow.domain": `${smsShopId}.autotext.me` },
+      { "autoflow.subdomain": smsShopId },
+      { autoflowDomain: smsShopId },
+      { autoflowDomain: `${smsShopId}.autotext.me` },
       { "shopware.tenantSubdomain": smsShopId },
     ]
   };

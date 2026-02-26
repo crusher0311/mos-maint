@@ -506,7 +506,7 @@ function updateContext(context) {
       } else {
         elements.vehicleDisplay.textContent = 'Vehicle';
       }
-      const roLabel = context.provider === 'protractor' ? 'WO' : 'RO';
+      const roLabel = context.provider === 'protractor' ? 'WO' : (context.provider === 'autoflow' ? 'Ticket' : 'RO');
       elements.roDisplay.textContent = `${roLabel} #${context.roNumber || context.roId}`;
       
       if (context.mileage) {

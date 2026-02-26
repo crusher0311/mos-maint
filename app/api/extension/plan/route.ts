@@ -553,6 +553,11 @@ export async function GET(request: NextRequest) {
         { protractorConnectionId: smsShopId },
         // AutoFlow
         { "autoflow.shopId": smsShopId },
+        { "autoflow.domain": smsShopId },
+        { "autoflow.domain": `${smsShopId}.autotext.me` },
+        { "autoflow.subdomain": smsShopId },
+        { autoflowDomain: smsShopId },
+        { autoflowDomain: `${smsShopId}.autotext.me` },
         // Shop-Ware (tenant subdomain)
         { "shopware.tenantSubdomain": smsShopId },
       ]

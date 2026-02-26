@@ -98,6 +98,33 @@ export async function GET(request: NextRequest) {
         vehicleMake = swRo.vehicleMake || null;
         vehicleModel = swRo.vehicleModel || null;
       }
+    } else if (resolvedProvider === "autoflow") {
+      const dvi = await db.collection("dvi_results").findOne({
+        shopId: { $in: [mosShopId, String(mosShopId)] },
+        roNumber: { $in: [roId, String(roId)] },
+      });
+
+      if (dvi) {
+        vin = dvi.vin || null;
+        mileage = dvi.mileage || null;
+        repairOrderNumber = dvi.roNumber ? String(dvi.roNumber) : null;
+      }
+
+      if (vinHint || vin) {
+        const lookupVin = (vinHint || vin || "").toUpperCase();
+        const customer = await db.collection("customers").findOne({
+          shopId: { $in: [mosShopId, Number(mosShopId)] },
+          "vehicle.vin": lookupVin,
+        });
+        if (customer) {
+          customerName = customerName || customer.name || null;
+          if (!vin) vin = customer.vehicle?.vin || null;
+          if (!mileage) mileage = customer.vehicle?.odometer || null;
+          vehicleYear = customer.vehicle?.year || null;
+          vehicleMake = customer.vehicle?.make || null;
+          vehicleModel = customer.vehicle?.model || null;
+        }
+      }
     } else {
       const wo = await db.collection("work_orders").findOne({
         shopId: mosShopId,
