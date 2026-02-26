@@ -8,6 +8,7 @@ import {
 } from "@/lib/integrations/shopware/transform";
 import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
 import { computeJobHash } from "@/lib/job-index";
+import { prefetchPlanData, isPlanPrefetched } from "@/lib/plan-builder";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -161,6 +162,27 @@ async function handleRepairOrderEvent(
   );
 
   console.log(`[SW Webhook] Upserted RO ${roId} (${ro.number}) for shop ${mosShopId} — state: ${ro.state}`);
+
+  // Prefetch maintenance plan for active ROs with VIN + odometer
+  const vin = ro.vehicle?.vin?.toUpperCase() ?? null;
+  const odometer = ro.odometer ?? null;
+  if (vin && vin.length === 17 && odometer && odometer > 0) {
+    setImmediate(async () => {
+      try {
+        const pfDb = await getDb();
+        const alreadyCached = await isPlanPrefetched(pfDb, vin, mosShopId);
+        if (!alreadyCached) {
+          console.log(`[SW Webhook] Prefetching plan for ${vin} at ${odometer} mi (RO ${roId})`);
+          const result = await prefetchPlanData(pfDb, mosShopId, vin, odometer);
+          console.log(`[SW Webhook] Prefetch complete for ${vin} in ${result.duration}ms`);
+        } else {
+          console.log(`[SW Webhook] Plan already cached for ${vin}, skipping prefetch`);
+        }
+      } catch (err: any) {
+        console.warn(`[SW Webhook] Prefetch failed for ${vin}:`, err.message);
+      }
+    });
+  }
 
   const isInvoiced = ro.state === "invoice" || Boolean(ro.closed_at);
 
