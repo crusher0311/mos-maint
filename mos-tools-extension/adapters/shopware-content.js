@@ -1204,9 +1204,31 @@ async function checkAutoOpenRecommend() {
 
   await new Promise(r => setTimeout(r, 2500));
 
-  const noteEditBtn = document.querySelector(`[data-note-id="${data.noteId}"] .js-note-edit-btn, .js-note-edit-btn`);
+  let noteEditBtn = null;
+  const allEditBtns = document.querySelectorAll('.js-note-edit-btn');
+  console.log(`[MOS Tools] Found ${allEditBtns.length} note edit buttons, looking for note with text: "${data.noteText?.substring(0, 30)}"`);
+
+  if (data.noteText) {
+    for (const btn of allEditBtns) {
+      const noteContainer = btn.closest('[class*="note"], [id*="note"], tr, .row, div') || btn.parentElement?.parentElement;
+      if (noteContainer) {
+        const containerText = noteContainer.textContent || '';
+        if (containerText.includes(data.noteText.substring(0, 30))) {
+          noteEditBtn = btn;
+          console.log('[MOS Tools] Found matching note by text content');
+          break;
+        }
+      }
+    }
+  }
+
+  if (!noteEditBtn && allEditBtns.length > 0) {
+    noteEditBtn = allEditBtns[allEditBtns.length - 1];
+    console.log('[MOS Tools] Falling back to last note edit button');
+  }
+
   if (!noteEditBtn) {
-    console.warn('[MOS Tools] Could not find note edit button');
+    console.warn('[MOS Tools] Could not find any note edit button');
     showToast(`Finding added. Click the pencil icon on your finding, then "Recommend Service".`, 'info');
     return;
   }
