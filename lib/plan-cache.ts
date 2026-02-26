@@ -97,7 +97,11 @@ export async function getCachedPlan(
   }
   
   // If mileage provided, check if cache is still valid (within tolerance)
-  if (currentMiles != null && anyEntry.mileage != null) {
+  if (currentMiles != null && currentMiles > 0) {
+    if (anyEntry.mileage == null || anyEntry.mileage <= 0) {
+      console.log(`[PlanCache] MISS: Cache has no mileage but current is ${currentMiles} for ${vin}`);
+      return null;
+    }
     const mileageDiff = Math.abs(currentMiles - anyEntry.mileage);
     if (mileageDiff > MILEAGE_TOLERANCE) {
       console.log(`[PlanCache] MISS: Mileage changed ${anyEntry.mileage} -> ${currentMiles} (diff: ${mileageDiff}) for ${vin}`);
