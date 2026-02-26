@@ -642,19 +642,23 @@ async function handleMosApiRequest(endpoint, options = {}) {
     throw new Error("Not authenticated with MOS");
   }
 
+  const tokenUsed = mosApiToken;
+
   const response = await fetch(`${mosApiUrl}${endpoint}`, {
     ...options,
     headers: {
-      'Authorization': `Bearer ${mosApiToken}`,
+      'Authorization': `Bearer ${tokenUsed}`,
       'Content-Type': 'application/json',
       ...options.headers
     }
   });
 
-  // Handle 401 - token expired
+  // Handle 401 - only clear if the token hasn't changed (avoids race with fresh login)
   if (response.status === 401) {
-    mosApiToken = null;
-    chrome.storage.local.remove(['mosApiToken']);
+    if (mosApiToken === tokenUsed) {
+      mosApiToken = null;
+      chrome.storage.local.remove(['mosApiToken']);
+    }
     throw new Error("Session expired. Please login again.");
   }
 
