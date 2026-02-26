@@ -850,6 +850,8 @@ let dropdownClickHandlerRegistered = false;
 
 function setupAddDropdowns() {
   document.querySelectorAll('.btn-add-toggle').forEach(btn => {
+    if (btn._mosClickBound) return;
+    btn._mosClickBound = true;
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (currentContext?.provider === 'shopware') {
@@ -884,8 +886,9 @@ function setupAddDropdowns() {
     });
   });
 
-  // Handle dropdown item clicks
   document.querySelectorAll('.add-dropdown-item').forEach(item => {
+    if (item._mosClickBound) return;
+    item._mosClickBound = true;
     item.addEventListener('click', async (e) => {
       e.stopPropagation();
       const action = item.dataset.action;

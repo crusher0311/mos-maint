@@ -1061,12 +1061,9 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
     showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
 
     if (serviceName) {
-      const payload = JSON.stringify({ noteText: text, serviceName, noteId });
-      sessionStorage.setItem('mos_open_recommend', payload);
-      console.log('[MOS Tools] Set mos_open_recommend in sessionStorage:', payload);
+      openRecommendServiceModal(serviceName);
     }
 
-    setTimeout(() => window.location.reload(), 1200);
     return { success: true, status: statusLabel, jobName: serviceName || text };
   } catch (err) {
     console.error('[MOS Tools] Add finding error:', err);
@@ -1187,66 +1184,18 @@ function injectFAB() {
   document.body.appendChild(fab);
 }
 
-// ==================== AUTO-OPEN RECOMMEND SERVICE ====================
-async function checkAutoOpenRecommend() {
-  console.log('[MOS Tools] checkAutoOpenRecommend running, sessionStorage keys:', Object.keys(sessionStorage));
-  const raw = sessionStorage.getItem('mos_open_recommend');
-  console.log('[MOS Tools] mos_open_recommend value:', raw);
-  if (!raw) return;
-  sessionStorage.removeItem('mos_open_recommend');
+// ==================== OPEN RECOMMEND SERVICE MODAL ====================
+function openRecommendServiceModal(serviceName) {
+  console.log(`[MOS Tools] Opening Recommend Service modal for "${serviceName}"`);
 
-  let data;
-  try { data = JSON.parse(raw); } catch { return; }
-  const { serviceName } = data;
-  if (!serviceName) return;
-
-  console.log(`[MOS Tools] Auto-opening Recommend Service for "${serviceName}", noteId: ${data.noteId}`);
-
-  const waitFor = (selectorOrFn, maxWait = 3000) => new Promise((resolve) => {
-    const check = () => {
-      const el = typeof selectorOrFn === 'function' ? selectorOrFn() : document.querySelector(selectorOrFn);
-      if (el) { resolve(el); return true; }
-      return false;
-    };
-    if (check()) return;
-    const interval = setInterval(() => { if (check()) clearInterval(interval); }, 150);
-    setTimeout(() => { clearInterval(interval); resolve(null); }, maxWait);
-  });
-
-  let noteEditBtn = null;
-  if (data.noteText) {
-    noteEditBtn = await waitFor(() => {
-      const btns = document.querySelectorAll('.js-note-edit-btn');
-      for (const btn of btns) {
-        const container = btn.closest('[class*="note"], tr, .row, div') || btn.parentElement?.parentElement;
-        if (container && container.textContent.includes(data.noteText.substring(0, 30))) return btn;
-      }
-      return btns.length ? btns[btns.length - 1] : null;
-    });
+  const recommendBtn = document.querySelector('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
+  if (recommendBtn) {
+    recommendBtn.click();
+    console.log('[MOS Tools] Clicked "Recommend Service" button directly');
+  } else {
+    console.warn('[MOS Tools] "Recommend Service" button not found on page');
+    showToast(`Finding added. Use "Recommend Service" to attach "${serviceName}".`, 'info');
   }
-  if (!noteEditBtn) noteEditBtn = await waitFor('.js-note-edit-btn');
-  if (!noteEditBtn) {
-    showToast(`Finding added. Click the pencil icon, then "Recommend Service".`, 'info');
-    return;
-  }
-  noteEditBtn.click();
-  console.log('[MOS Tools] Step 1: Clicked note edit button');
-
-  const recommendIcon = await waitFor('i.icon-recommend-a-service, .icon-recommend-a-service');
-  if (!recommendIcon) {
-    showToast(`Finding opened. Click the recommend icon, then "Recommend Service".`, 'info');
-    return;
-  }
-  recommendIcon.click();
-  console.log('[MOS Tools] Step 2: Clicked recommend-a-service icon');
-
-  const recommendLink = await waitFor('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
-  if (!recommendLink) {
-    showToast(`Click "Recommend Service" to search for "${serviceName}".`, 'info');
-    return;
-  }
-  recommendLink.click();
-  console.log('[MOS Tools] Step 3: Clicked "Recommend Service" link');
 }
 
 // ==================== INIT ====================
@@ -1254,8 +1203,6 @@ function init() {
   updateContext();
   checkAndInjectButton();
   injectFAB();
-
-  setTimeout(() => checkAutoOpenRecommend(), 2000);
 
   let lastUrl = window.location.href;
   contextCheckInterval = setInterval(() => {
