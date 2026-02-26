@@ -119,21 +119,27 @@ export async function POST(req: NextRequest) {
         });
         
         if (existingWO) {
-          // Update existing work order
           const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
+          const updateFields: any = { 
+            status: statusName,
+            statusCode: statusCode,
+            label: newLabel,
+            labelColor: repairOrder.color || null,
+            updatedAt: new Date()
+          };
+          const newOdometer = repairOrder.milesIn || repairOrder.milesOut;
+          if (newOdometer && newOdometer > 0) {
+            updateFields.odometer = newOdometer;
+          }
+          if (repairOrder.customerName || (repairOrder.customer?.firstName && repairOrder.customer?.lastName)) {
+            updateFields.customerName = repairOrder.customerName || 
+              `${repairOrder.customer.firstName} ${repairOrder.customer.lastName}`.trim();
+          }
           const result = await db.collection("tekmetric_work_orders").updateOne(
             { workOrderId: String(roId) },
-            { 
-              $set: { 
-                status: statusName,
-                statusCode: statusCode,
-                label: newLabel,
-                labelColor: repairOrder.color || null,
-                updatedAt: new Date()
-              }
-            }
+            { $set: updateFields }
           );
-          console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
+          console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}, odometer=${newOdometer || 'unchanged'}, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
         } else {
           // New work order - fetch vehicle and customer details, then create
           const shop = await db.collection("shops").findOne({
