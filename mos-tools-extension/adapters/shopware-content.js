@@ -1144,7 +1144,11 @@ function injectFAB() {
   fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width:40px;height:40px;" />`;
   const saved = localStorage.getItem('mos_fab_pos');
   const pos = saved ? JSON.parse(saved) : { bottom: 20, right: 20 };
-  fab.setAttribute('style', `position:fixed !important; bottom:${pos.bottom}px !important; right:${pos.right}px !important; z-index:999998 !important; background:transparent !important; border:none !important; cursor:grab !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;`);
+  const fabBaseStyle = 'position:fixed !important; z-index:999998 !important; background:transparent !important; border:none !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;';
+  const setFabPos = (r, b, cursor) => {
+    fab.setAttribute('style', `${fabBaseStyle} right:${r}px !important; bottom:${b}px !important; cursor:${cursor || 'grab'} !important;`);
+  };
+  setFabPos(pos.right, pos.bottom);
 
   let isDragging = false;
   let dragStartX, dragStartY, fabStartRight, fabStartBottom;
@@ -1156,7 +1160,7 @@ function injectFAB() {
     const rect = fab.getBoundingClientRect();
     fabStartRight = window.innerWidth - rect.right;
     fabStartBottom = window.innerHeight - rect.bottom;
-    fab.style.cursor = 'grabbing';
+    setFabPos(fabStartRight, fabStartBottom, 'grabbing');
 
     const onMouseMove = (e) => {
       const dx = e.clientX - dragStartX;
@@ -1164,17 +1168,20 @@ function injectFAB() {
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging = true;
       const newRight = Math.max(0, fabStartRight - dx);
       const newBottom = Math.max(0, fabStartBottom - dy);
-      fab.style.right = newRight + 'px';
-      fab.style.bottom = newBottom + 'px';
+      setFabPos(newRight, newBottom, 'grabbing');
     };
 
     const onMouseUp = () => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
-      fab.style.cursor = 'grab';
       if (isDragging) {
-        const newPos = { right: parseInt(fab.style.right), bottom: parseInt(fab.style.bottom) };
-        localStorage.setItem('mos_fab_pos', JSON.stringify(newPos));
+        const rect = fab.getBoundingClientRect();
+        const finalRight = Math.round(window.innerWidth - rect.right);
+        const finalBottom = Math.round(window.innerHeight - rect.bottom);
+        setFabPos(finalRight, finalBottom);
+        localStorage.setItem('mos_fab_pos', JSON.stringify({ right: finalRight, bottom: finalBottom }));
+      } else {
+        setFabPos(fabStartRight, fabStartBottom);
       }
     };
 
