@@ -206,6 +206,15 @@ body {
   color: var(--gray-700);
 }
 
+.btn-icon.refresh-btn.spinning svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .btn-icon.logout-btn {
   color: var(--gray-400);
 }
@@ -232,8 +241,21 @@ body {
 
 .has-context {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-top-row {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
+  width: 100%;
+}
+
+.context-top-row .btn-icon.refresh-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 
 .vehicle-info {

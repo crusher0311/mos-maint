@@ -45,6 +45,7 @@ const elements = {
   loginError: document.getElementById('login-error'),
   
   // Header
+  refreshBtn: document.getElementById('refresh-btn'),
   logoutBtn: document.getElementById('logout-btn'),
   
   // Context
@@ -193,6 +194,11 @@ async function init() {
 function setupEventListeners() {
   // Login form
   elements.loginForm.addEventListener('submit', handleLogin);
+  
+  // Refresh
+  elements.refreshBtn.addEventListener('click', () => {
+    loadPlan(true);
+  });
   
   // Logout
   elements.logoutBtn.addEventListener('click', handleLogout);
@@ -696,7 +702,7 @@ async function handleLogout() {
 }
 
 // ==================== PLAN ====================
-async function loadPlan() {
+async function loadPlan(forceRefresh = false) {
   if (!currentContext || !currentContext.roId) {
     elements.planLoading.classList.add('hidden');
     elements.planEmpty.classList.remove('hidden');
@@ -704,6 +710,9 @@ async function loadPlan() {
     return;
   }
   
+  if (forceRefresh) {
+    elements.refreshBtn?.classList.add('spinning');
+  }
   elements.planLoading.classList.remove('hidden');
   elements.planEmpty.classList.add('hidden');
   elements.planContent.classList.add('hidden');
@@ -715,6 +724,7 @@ async function loadPlan() {
       provider: currentContext.provider || ''
     });
     if (currentContext.vin) params.set('vin', currentContext.vin);
+    if (forceRefresh) params.set('refresh', 'true');
     
     let result;
     let lastError;
@@ -741,6 +751,8 @@ async function loadPlan() {
     elements.planLoading.classList.add('hidden');
     elements.planEmpty.classList.remove('hidden');
     elements.planEmpty.querySelector('p').textContent = err.message;
+  } finally {
+    elements.refreshBtn?.classList.remove('spinning');
   }
 }
 
