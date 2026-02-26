@@ -6,6 +6,7 @@ let currentContext = null;
 let currentTab = 'plan';
 let userDefaultTab = null;
 let shopwareAddMode = 'finding-published';
+let keytagContextEnriched = false;
 // Removed SMS toggle - now using MOS Enriched only
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
@@ -477,6 +478,10 @@ function updateContext(context) {
   const prevContext = currentContext;
   currentContext = context;
   
+  if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId) {
+    keytagContextEnriched = false;
+  }
+  
   if (prevContext && context && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
     if (prevContext.vehicle && !context.vehicle) currentContext.vehicle = prevContext.vehicle;
     if (prevContext.vehicleDisplay && !context.vehicleDisplay) currentContext.vehicleDisplay = prevContext.vehicleDisplay;
@@ -787,7 +792,7 @@ function renderPlan(data) {
     console.log('[MOS] Updated customer name from API:', data.customerName);
   }
   
-  // Update keytag fields with the new context data
+  keytagContextEnriched = true;
   if (typeof updateKeytagFields === 'function') {
     updateKeytagFields();
   }
@@ -2136,8 +2141,7 @@ async function loadStickerConfig() {
   }
 }
 
-function loadKeytagSection() {
-  // Check if keytags feature is enabled for this shop
+async function loadKeytagSection() {
   keytagEnabled = shopFeatures.keytags === true;
   
   if (!keytagEnabled || !elements.keytagSection) {
@@ -2145,11 +2149,49 @@ function loadKeytagSection() {
     return;
   }
   
-  // Show keytag section immediately
   elements.keytagSection.classList.remove('hidden');
   
-  // Pre-fill keytag fields from current context
   updateKeytagFields();
+
+  if (!keytagContextEnriched && currentContext?.roId && currentContext?.shopId) {
+    try {
+      const params = new URLSearchParams({
+        shopId: currentContext.shopId,
+        roId: currentContext.roId,
+        provider: currentContext.provider || ''
+      });
+      if (currentContext.vin) params.set('vin', currentContext.vin);
+
+      const result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/plan?${params}`
+      });
+
+      if (result && !result.error) {
+        keytagContextEnriched = true;
+        if (result.customerName && currentContext) {
+          currentContext.customerName = result.customerName;
+        }
+        if (result.repairOrderNumber && currentContext) {
+          currentContext.roNumber = String(result.repairOrderNumber);
+        }
+        if (result.mileage && currentContext) {
+          currentContext.mileage = result.mileage;
+        }
+        if (result.vehicle && currentContext) {
+          const v = result.vehicle;
+          if (v.year && v.make && v.model) {
+            currentContext.vehicle = { year: v.year, make: v.make, model: v.model, engine: v.engine || null };
+            currentContext.vehicleDisplay = `${v.year} ${v.make} ${v.model}`;
+          }
+          if (v.vin) currentContext.vin = v.vin.toUpperCase();
+        }
+        updateKeytagFields();
+      }
+    } catch (e) {
+      console.log('[MOS] Keytag context enrichment failed:', e);
+    }
+  }
 }
 
 // Separate function to update keytag fields - can be called when context updates
