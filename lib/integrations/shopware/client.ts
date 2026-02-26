@@ -12,6 +12,11 @@ import type {
 } from './types';
 
 const SW_PROD_BASE = 'https://api.shop-ware.com/api/v1';
+const SW_SANDBOX_BASE = 'https://app.shop-ware-api-sandbox.com/api/v1';
+
+function getBaseUrl(): string {
+  return process.env.SHOPWARE_API_BASE_URL || (process.env.SHOPWARE_USE_SANDBOX === 'true' ? SW_SANDBOX_BASE : SW_PROD_BASE);
+}
 
 function getCredentials(): { partnerApiId: string; apiSecret: string } {
   const partnerApiId = process.env.SHOPWARE_PARTNER_API_ID;
@@ -33,7 +38,7 @@ export async function shopWareRequest<T = any>(
 ): Promise<T> {
   const { partnerApiId, apiSecret } = getCredentials();
   const method = options.method || 'GET';
-  const url = `${SW_PROD_BASE}${path}`;
+  const url = `${getBaseUrl()}${path}`;
   const startTime = Date.now();
   let statusCode = 0;
 
