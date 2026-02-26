@@ -4,7 +4,6 @@ import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
-import { getValidToken } from "@/lib/tekmetric-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
@@ -156,6 +155,36 @@ const ANALYSIS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const PREFETCH_LOCK_TTL_MS = 10 * 60 * 1000;
 
 const shopPrefetchInProgress = new Set<number>();
+
+const tekmetricRoCache = new Map<string, { data: any; fetchedAt: number }>();
+const TEKMETRIC_RO_CACHE_TTL = 5 * 60 * 1000;
+
+async function fetchTekmetricRoCached(roId: string): Promise<any | null> {
+  const cached = tekmetricRoCache.get(roId);
+  if (cached && Date.now() - cached.fetchedAt < TEKMETRIC_RO_CACHE_TTL) {
+    return cached.data;
+  }
+  try {
+    const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
+    const tekApiToken = await getValidToken();
+    const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
+      headers: { Authorization: `Bearer ${tekApiToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
+      if (tekmetricRoCache.size > 200) {
+        const oldest = Array.from(tekmetricRoCache.entries())
+          .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];
+        if (oldest) tekmetricRoCache.delete(oldest[0]);
+      }
+      return data;
+    }
+  } catch (e: any) {
+    console.error(`[Extension] Tekmetric RO fetch failed for ${roId}:`, e.message);
+  }
+  return null;
+}
 
 async function backgroundPrefetchShopPlans(
   mosShopId: number,
@@ -580,47 +609,36 @@ export async function GET(request: NextRequest) {
         });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
-        // If not found in cache, fetch directly from Tekmetric API
         if (!workOrder && shopDoc?.tekmetric?.shopId) {
-          console.log(`[Extension] Fetching RO ${roId} directly from Tekmetric API`);
-          try {
-            const tekApiToken = await getValidToken();
-            const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
-              headers: { Authorization: `Bearer ${tekApiToken}` }
-            });
-            console.log(`[Extension] Tekmetric API response status: ${res.status}`);
-            if (res.ok) {
-              const data = await res.json();
-              console.log(`[Extension] Tekmetric API data: vehicleId=${data?.vehicleId}, vin=${data?.vehicle?.vin || data?.vehicleVin}`);
-              if (data) {
-                let roVin = data.vehicle?.vin || data.vehicleVin;
-                const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
-                const repairOrderNumber = data.repairOrderNumber;
-                const customerName = data.customer?.firstName && data.customer?.lastName 
-                  ? `${data.customer.firstName} ${data.customer.lastName}` 
-                  : data.customer?.name;
-                
-                // If no VIN but we have vehicleId, fetch vehicle details
-                if (!roVin && data.vehicleId) {
-                  console.log(`[Extension] Fetching vehicle ${data.vehicleId} from Tekmetric API`);
-                  const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
-                    headers: { Authorization: `Bearer ${tekApiToken}` }
-                  });
-                  if (vehRes.ok) {
-                    const vehData = await vehRes.json();
-                    roVin = vehData?.vin;
-                    console.log(`[Extension] Vehicle API returned: vin=${roVin}`);
-                  }
+          console.log(`[Extension] Fetching RO ${roId} from Tekmetric API (cached)`);
+          const data = await fetchTekmetricRoCached(String(roId));
+          if (data) {
+            let roVin = data.vehicle?.vin || data.vehicleVin;
+            const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
+
+            if (!roVin && data.vehicleId) {
+              try {
+                const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
+                const tok = await getValidToken();
+                const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
+                  headers: { Authorization: `Bearer ${tok}` }
+                });
+                if (vehRes.ok) {
+                  const vehData = await vehRes.json();
+                  roVin = vehData?.vin;
                 }
-                
-                workOrder = { vin: roVin, odometer, repairOrderNumber, customerName };
-                console.log(`[Extension] Fetched from Tekmetric API: vin=${workOrder.vin}, odometer=${workOrder.odometer}, roNumber=${repairOrderNumber}, customer=${customerName}`);
-              }
-            } else {
-              console.log(`[Extension] Tekmetric API returned error: ${res.status} ${res.statusText}`);
+              } catch {}
             }
-          } catch (e) {
-            console.error(`[Extension] Tekmetric API fetch failed:`, e);
+
+            workOrder = {
+              vin: roVin,
+              odometer,
+              repairOrderNumber: data.repairOrderNumber,
+              customerName: data.customer?.firstName && data.customer?.lastName
+                ? `${data.customer.firstName} ${data.customer.lastName}`
+                : data.customer?.name
+            };
+            console.log(`[Extension] Tekmetric API (cached): vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
           }
         }
         
@@ -812,53 +830,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch RO details from Tekmetric if we have an roId but no customer/RO number yet
     if (provider === "tekmetric" && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {
-      try {
-        const tekApiToken = await getValidToken();
-        const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
-          headers: { Authorization: `Bearer ${tekApiToken}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            repairOrderNumber = data.repairOrderNumber || null;
-            
-            // Try to get customer name from the RO response
-            if (data.customer) {
-              if (data.customer.firstName && data.customer.lastName) {
-                customerName = `${data.customer.firstName} ${data.customer.lastName}`;
-              } else if (data.customer.name) {
-                customerName = data.customer.name;
-              }
-            }
-            
-            // If no customer name in RO, fetch from customer endpoint using customerId
-            if (!customerName && data.customerId) {
-              try {
-                const custRes = await fetch(`https://shop.tekmetric.com/api/v1/customers/${data.customerId}`, {
-                  headers: { Authorization: `Bearer ${tekApiToken}` }
-                });
-                if (custRes.ok) {
-                  const custData = await custRes.json();
-                  if (custData) {
-                    if (custData.firstName && custData.lastName) {
-                      customerName = `${custData.firstName} ${custData.lastName}`;
-                    } else if (custData.name) {
-                      customerName = custData.name;
-                    }
-                  }
+      const data = await fetchTekmetricRoCached(String(roId));
+      if (data) {
+        if (!repairOrderNumber) repairOrderNumber = data.repairOrderNumber || null;
+        if (!customerName) {
+          if (data.customer?.firstName && data.customer?.lastName) {
+            customerName = `${data.customer.firstName} ${data.customer.lastName}`;
+          } else if (data.customer?.name) {
+            customerName = data.customer.name;
+          } else if (data.customerId) {
+            try {
+              const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
+              const tok = await getValidToken();
+              const custRes = await fetch(`https://shop.tekmetric.com/api/v1/customers/${data.customerId}`, {
+                headers: { Authorization: `Bearer ${tok}` }
+              });
+              if (custRes.ok) {
+                const custData = await custRes.json();
+                if (custData?.firstName && custData?.lastName) {
+                  customerName = `${custData.firstName} ${custData.lastName}`;
+                } else if (custData?.name) {
+                  customerName = custData.name;
                 }
-              } catch (ce) {
-                console.log(`[Extension] Could not fetch customer ${data.customerId}:`, ce);
               }
-            }
-            
-            console.log(`[Extension] Fetched RO details: roNumber=${repairOrderNumber}, customer=${customerName}`);
+            } catch {}
           }
         }
-      } catch (e) {
-        console.error(`[Extension] Failed to fetch RO details:`, e);
+        console.log(`[Extension] RO details (cached): roNumber=${repairOrderNumber}, customer=${customerName}`);
       }
     }
 

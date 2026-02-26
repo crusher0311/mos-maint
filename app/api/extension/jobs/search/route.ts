@@ -3,7 +3,6 @@ import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
 import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
-import { getValidToken } from "@/lib/tekmetric-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 // Model variants that share platforms and should cross-reference
@@ -116,32 +115,18 @@ export async function GET(request: NextRequest) {
         engine = workOrder.vehicleEngine || null;
         console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
       } else if (provider === "tekmetric") {
-        // Work order not in sync cache - fetch directly from Tekmetric API
-        console.log(`[Jobs Search] WO ${roId} not in cache, fetching from Tekmetric API`);
-        try {
-          const tekApiToken = await getValidToken();
-          const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
-            headers: { Authorization: `Bearer ${tekApiToken}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            // If no VIN but we have vehicleId, fetch vehicle details
-            if (data?.vehicleId) {
-              const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
-                headers: { Authorization: `Bearer ${tekApiToken}` }
-              });
-              if (vehRes.ok) {
-                const vehData = await vehRes.json();
-                year = vehData?.year?.toString() || null;
-                make = vehData?.make || null;
-                model = vehData?.model || null;
-                engine = vehData?.engine || null;
-                console.log(`[Jobs Search] Resolved vehicle from Tekmetric API: ${year} ${make} ${model}`);
-              }
-            }
-          }
-        } catch (e) {
-          console.error(`[Jobs Search] Tekmetric API fetch failed:`, e);
+        console.log(`[Jobs Search] WO ${roId} not in cache, checking Tekmetric repair orders`);
+        const tekRo = await db.collection("tekmetric_repair_orders").findOne({
+          $or: [{ id: parseInt(roId) }, { id: String(roId) }]
+        });
+        if (tekRo?.vehicle) {
+          year = tekRo.vehicle.year?.toString() || null;
+          make = tekRo.vehicle.make || null;
+          model = tekRo.vehicle.model || null;
+          engine = tekRo.vehicle.engine || null;
+          console.log(`[Jobs Search] Resolved vehicle from tekmetric_repair_orders: ${year} ${make} ${model}`);
+        } else {
+          console.log(`[Jobs Search] No vehicle data found for Tekmetric RO ${roId}`);
         }
       } else {
         console.log(`[Jobs Search] No WO found for roId ${roId} in shop ${mosShopId}`);
