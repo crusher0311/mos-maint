@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
     const isAutoFlowConfigured = !!(shopConfig?.autoflow?.apiKey || shopConfig?.autoflowApiKey);
     const isProtractorPrimary = !!shopConfig?.protractor?.configured;
+    const isShopWareConfigured = !!(shopConfig?.shopware?.tenantId);
 
     // If showing archived vehicles, fetch from vehicles collection directly
     if (showArchived) {
@@ -624,6 +625,70 @@ export async function GET(request: NextRequest) {
       }
     ]).toArray();
 
+    // Fetch Shop-Ware repair orders (only if Shop-Ware is configured)
+    let shopwareRows: any[] = [];
+    if (isShopWareConfigured) {
+      const SHOPWARE_ACTIVE_STATES = ["estimate", "in_progress"];
+
+      const shopwareMatch: any = {
+        mosShopId: { $in: [String(user.shopId), Number(user.shopId)] },
+        vin: { $ne: null, $type: "string" },
+        deleted: { $ne: true },
+        state: { $in: SHOPWARE_ACTIVE_STATES },
+      };
+
+      const shopwareLabelFilter = shopPrefs?.preferences?.shopwareLabels || [];
+      if (shopwareLabelFilter.length > 0) {
+        shopwareMatch["raw.label"] = { $in: shopwareLabelFilter };
+      }
+
+      shopwareRows = await db.collection("shopware_repair_orders").aggregate([
+        { $match: shopwareMatch },
+        { $sort: { syncedAt: -1 } },
+        {
+          $project: {
+            _id: 0,
+            updatedAt: { $ifNull: ["$syncedAt", "$updatedAt"] },
+            displayName: { $ifNull: ["$customerName", "Unknown Customer"] },
+            displayVehicle: {
+              $concat: [
+                { $toString: { $ifNull: ["$vehicleYear", ""] } },
+                { $cond: [{ $ifNull: ["$vehicleYear", false] }, " ", ""] },
+                { $ifNull: ["$vehicleMake", ""] },
+                { $cond: [{ $ifNull: ["$vehicleMake", false] }, " ", ""] },
+                { $ifNull: ["$vehicleModel", ""] },
+              ],
+            },
+            displayVin: "$vin",
+            displayMiles: {
+              $cond: [{ $gt: ["$odometer", 0] }, "$odometer", null],
+            },
+            displayRo: "$number",
+            roId: "$roId",
+            dviDone: { $literal: false },
+            source: { $literal: "shopware" },
+            displayStatus: {
+              $ifNull: ["$raw.label", { $ifNull: ["$state", "Open"] }],
+            },
+            label: { $ifNull: ["$raw.label", null] },
+            af: {
+              status: { $ifNull: ["$state", "Open"] },
+              createdAt: "$createdAt",
+              miles: {
+                $cond: [{ $gt: ["$odometer", 0] }, "$odometer", null],
+              },
+            },
+            vehicle: {
+              year: { $ifNull: ["$vehicleYear", null] },
+              make: { $ifNull: ["$vehicleMake", null] },
+              model: { $ifNull: ["$vehicleModel", null] },
+              engine: null,
+            },
+          },
+        },
+      ]).toArray();
+    }
+
     // Fetch manually-added vehicles for this shop
     const manualVehicles = await db.collection("manual_vehicles")
       .find({ shopId: Number(user.shopId), archived: { $ne: true } })
@@ -660,8 +725,8 @@ export async function GET(request: NextRequest) {
     // When only AutoFlow is configured, use AutoFlow rows directly
     // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
     const rowSources = isProtractorPrimary 
-      ? [...protractorRows, ...tekmetricRows]
-      : [...autoflowRows, ...protractorRows, ...tekmetricRows];
+      ? [...protractorRows, ...tekmetricRows, ...shopwareRows]
+      : [...autoflowRows, ...protractorRows, ...tekmetricRows, ...shopwareRows];
     
     for (const row of rowSources) {
       const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
@@ -726,6 +791,8 @@ export async function GET(request: NextRequest) {
       smsType = "protractor";
     } else if (shop?.tekmetric?.configured) {
       smsType = "tekmetric";
+    } else if (shop?.shopware?.tenantId) {
+      smsType = "shopware";
     }
     
     const distanceUnit = shop?.preferences?.distanceUnit || "miles";
